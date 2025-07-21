@@ -1,55 +1,36 @@
-# Prerequisites
-*.d
+# Build directory (CMake)
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+Testing/
+DartConfiguration.tcl
 
-# Object files
+# Compiled object files
 *.o
-*.ko
 *.obj
-*.elf
 
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
+# Static and shared libraries
 *.a
+*.so
+*.so.*
+*.dll
+*.dylib
+*.lib
 *.la
 *.lo
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
 # Executables
-*.exe
 *.out
+*.elf
+*.exe
 *.app
-*.i*86
-*.x86_64
-*.hex
 
-# Debug files
+# Debug & intermediate files
+*.d
 *.dSYM/
 *.su
 *.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# debug information files
-*.dwo
+*.p*

@@ -1,0 +1,27 @@
+name: CMake CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up CMake
+      uses: jwlawson/actions-setup-cmake@v1
+
+    - name: Configure project
+      run: cmake -S . -B build
+
+    - name: Build project
+      run: cmake --build build --parallel
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure
