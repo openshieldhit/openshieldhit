@@ -1,0 +1,38 @@
+# Very simple test of new scoring system
+
+Filter
+    Name MyFilter
+    Z = 6
+    A = 12
+    E > 0.1
+
+
+Filter
+        Name Gen2
+        GEN = 0
+
+
+Geometry Mesh
+    Name MyMesh                    ! geometry type
+    X -0.5  0.5    1
+    Y -0.5  0.5    1
+    Z  0.0  40.0   10
+
+Output
+    Filename NB_msh_energy.bdo
+    Geo MyMesh
+    Quantity ENERGY
+
+Output
+    Filename NB_msh_fluence.bdo
+    Geo MyMesh
+    Quantity ENERGY
+    Quantity FLUENCE
+    Quantity FLUENCE MyFilter Gen2  ! add a second page, but with a filter applied
+
+
+#Output
+#    Filename NB_msh_fludos_z6.bdo
+#    Geo MyMesh
+#    Quantity FLUENCE MyFilter
+#    Quantity DOSE MyFilter

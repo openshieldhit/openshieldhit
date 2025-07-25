@@ -1,0 +1,16 @@
+RNDSEED   89736501	                   ! Random seed
+JPART0    25                           ! Incident particle type
+HIPROJ    12.0        6.0              ! Carbon ions
+TMAX0     400.0       0.0              ! Incident energy; (MeV/nucl)
+*
+BEAMSIGMA 0.0         0.0              ! SigmaX, SigmaY at focus point
+BEAMPOS   0.0         0.0        -3.23 ! Beam XYZ start pos
+NSTAT               10000        -1    ! NSTAT, Step of saving
+NEUTRLCUT             0.0              ! Cutoff for neutron transport
+*
+MAKELN                  0              ! 1 - Make sour file, 0 - Don't make
+DELTAE              0.005              ! Delta E (relative share ~0.1)
+DEMIN               0.025              ! Minimum Energy step 0.025 (MeV/u)
+STRAGG                  2              ! Straggling: 0-Off 1-Gauss, 2-Vavilov
+MSCAT                   2              ! Mult. scatt 0-Off 1-Gauss, 2-Moliere
+NUCRE                   1              ! Nucl.Reac. switcher: 0-Off, 1-On

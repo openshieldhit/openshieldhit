@@ -273,7 +273,7 @@ int _message_db_check(char const *s, int level) {
                 /* Message has occurred too many times, return 0 */
                 return 0;
             } else {
-                // Message count is within limit, return 1
+                /* Message count is within limit, return 1 */
                 if(message_db.count[i] == OSH_LOG_REPEAT) {
                     osh_info(
                         "The following warning message has been repeated %d times and further repetitions will be suppressed:\n",

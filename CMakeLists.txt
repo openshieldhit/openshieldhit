@@ -5,6 +5,9 @@ set(CMAKE_C_STANDARD 90)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 add_compile_options(-pedantic -Wall -Wextra)
 
+# Enable DEBUG macro in Debug builds
+add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
+
 # Global include directory
 include_directories(${CMAKE_SOURCE_DIR}/include)
 

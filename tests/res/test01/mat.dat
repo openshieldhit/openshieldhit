@@ -1,0 +1,4 @@
+MEDIUM 1
+ICRU 276
+RHO 0.9987654321  ! lighter water just to better track if rho was set proper in code
+END
