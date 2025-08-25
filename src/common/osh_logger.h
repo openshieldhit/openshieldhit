@@ -30,6 +30,8 @@
  *
  * @returns 1 if successful, 0 if logger was already setup
  *
+ * @warning This is a temporary solution, since it is not thread-safe.
+ *
  * @author Niels Bassler
  */
 int osh_setup_logger(char const *path, int log_level);
@@ -64,16 +66,13 @@ int osh_get_loglevel(void);
 
 
 /**
- * @brief Print message to STDERR and exit with status
- * /exit code
- * Write also to the logfile, if it was setup.
+ * @brief Print message to STDERR (and logfile if configured) and terminate.
  *
- * Message must be terminated with a null byte: //CHAR(0)
- * Message will automatically be terminated with a newline.
+ * Appends a newline automatically. Accepts printf-style format arguments.
  *
- * @param[in] msg - null-terminated character string
- * @param[in] exit status, as listed in "osh_exits.h"
- * @param[in] ... Optional format arguments
+ * @param[in] status Process exit code (use EX_* from osh_exit.h).
+ * @param[in] msg    Null-terminated format string.
+ * @param[in] ...    Optional printf-style arguments.
  *
  * @author Niels Bassler
  */
@@ -86,7 +85,7 @@ void osh_err(int status, char const *msg, ...);
  * Message must be terminated with a null byte: //CHAR(0)
  * Message will automatically be terminated with a newline.
  *
- * @param[in] msg - null-terminated character string
+ * @param[in] msg - Null-terminated format string.
  * @param[in] ... Optional format arguments
  *
  * @author Niels Bassler
@@ -98,7 +97,7 @@ void osh_malloc_err(char const *msg,  ...);
  *
  * Message must be terminated with a null byte: //CHAR(0)
  *
- * @param[in] msg - null-terminated character string
+ * @param[in] msg - Null-terminated format string.
  * @param[in] ... Optional format arguments
  *
  * @author Niels Bassler
@@ -109,7 +108,7 @@ void osh_warn(char const *msg, ...);
  * @brief Write a message to stdout _and_ the logfile, if it was setup.
  *
  * Message must be terminated with a null byte: //CHAR(0)
- * @param[in] msg - null-terminated character string
+ * @param[in] msg - Null-terminated format string.
  * @param[in] ... Optional format arguments
  *
  * @author Niels Bassler
@@ -120,7 +119,7 @@ void osh_info(char const *msg, ...);
  * @brief Write a message to stdout _and_ the logfile, if it was setup.
  *
  * Message must be terminated with a null byte: //CHAR(0)
- * @param[in] msg - null-terminated character string
+ * @param[in] msg - Null-terminated format string.
  * @param[in] ... Optional format arguments
  *
  * @author Niels Bassler
@@ -131,7 +130,7 @@ void osh_debug(char const *msg, ...);
  * @brief Write a message to the logfile, if it was setup. Do not output to stdout.
  *
  * Message must be terminated with a null byte: //CHAR(0)
- * @param[in] msg - null-terminated character string
+ * @param[in] msg - Null-terminated format string.
  * @param[in] ... Optional format arguments
  *
  * @author Niels Bassler

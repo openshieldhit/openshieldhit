@@ -9,6 +9,12 @@
 
 #define _MAX_LINE_LENGTH 4096   /* Consider making this global somehow */
 
+/* help GCC to tell that this function takes printf-style arguments */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 2, 3)))
+__attribute__((noreturn))
+#endif
+
 static int _log_level = 4;          /* this way, there will be printouts, even if the logger was not setup first */
 static char *_log_filename;
 static int _logger_save_active = 0; /* init FALSE. If logger was setup with an output file, then enable this. */
