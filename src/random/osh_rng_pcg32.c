@@ -12,24 +12,24 @@
  * Seed PCG32 state.
  * stream selects an independent sequence (must be distinct across lanes).
  */
-void osh_rng_pcg32_init(struct osh_rng* rng, uint64_t seed, uint64_t stream) {
+void osh_rng_pcg32_init(struct osh_rng *rng, uint64_t seed, uint64_t stream) {
     rng->u.pcg32.state = 0ULL;
     rng->u.pcg32.inc = (stream << 1u) | 1u;
 
     /* Advance once with inc set */
-    (void)_osh_rng_pcg32_u32(rng);
+    osh_rng_pcg32_u32(rng);
 
     /* Add seed */
     rng->u.pcg32.state += seed;
 
     /* Advance again to mix seed */
-    (void)_osh_rng_pcg32_u32(rng); /* test */
+    osh_rng_pcg32_u32(rng); /* test */
 }
 
 /*
  * Generate next 32-bit random number (PCG32 XSH RR).
  */
-uint32_t osh_rng_pcg32_u32(struct osh_rng* rng) {
+uint32_t osh_rng_pcg32_u32(struct osh_rng *rng) {
     uint64_t oldstate;
     uint32_t xorshifted;
     uint32_t rot;

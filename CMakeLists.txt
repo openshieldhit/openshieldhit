@@ -11,6 +11,7 @@ add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
 
 # Add subdirectories
 add_subdirectory(src/common)
+add_subdirectory(src/random)
 add_subdirectory(src/beam)
 add_subdirectory(src/particle)
 
