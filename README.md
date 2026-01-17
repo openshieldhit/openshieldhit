@@ -8,14 +8,16 @@ cmake -S . -B build && cmake --build build
 ## TODO
 - [x] logger
 - [x] vector library
-- [ ] readline for tag and key parsing
-- [ ] prng
+- [x] readline for tag and key parsing
+- [x] prng
 - [ ] geometry parser
 - [ ] beam parser
 - [ ] material parser
 - [ ] detector parser
 - [ ] raytracer
 - [ ] transport
-- [ ] particleDB
-- [ ]
-- [ ]
+- [x] particle data
+- [ ] stopping power / range / optical depths / restricted stopping power
+- [ ] ion scattering
+- [ ] vavilov straggling
+- [ ] ...
