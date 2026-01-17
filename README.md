@@ -1,7 +1,11 @@
 # OpenSHIELD-HIT
 Monte Carlo Particle Transport
 
-TODO:
+## How to build
+cmake -S . -B build && cmake --build build
+
+
+## TODO
 - [x] logger
 - [x] vector library
 - [ ] readline for tag and key parsing
@@ -13,5 +17,5 @@ TODO:
 - [ ] raytracer
 - [ ] transport
 - [ ] particleDB
-- [ ] 
-- [ ] 
+- [ ]
+- [ ]
