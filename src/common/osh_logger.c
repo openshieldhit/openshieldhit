@@ -71,8 +71,8 @@ void osh_trace(const char *fmt, ...);
 void osh_debug(const char *fmt, ...);
 void osh_info(const char *fmt, ...);
 void osh_warn(const char *fmt, ...);
-void osh_error(const char *fmt, ...);
-void osh_fatal(int exit_code, const char *fmt, ...);
+void osh_error(int exit_code, const char *fmt, ...);
+void osh_alloc_failed(size_t size);
 
 /* formatting / output helpers (file-local) */
 static unsigned _effective_flags(struct osh_logger *lg, unsigned flags_override);
@@ -677,14 +677,7 @@ void osh_warn(const char *fmt, ...) {
     va_end(ap);
 }
 
-void osh_error(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    osh_logger_logv_ex(osh_log_default(), OSH_LOG_ERROR, 0u, NULL, 0, NULL, fmt, ap);
-    va_end(ap);
-}
-
-void osh_fatal(int exit_code, const char *fmt, ...) {
+void osh_error(int exit_code, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(osh_log_default(), OSH_LOG_FATAL, 0u, NULL, 0, NULL, fmt, ap);
@@ -692,4 +685,10 @@ void osh_fatal(int exit_code, const char *fmt, ...) {
 
     osh_log_flush();
     exit(exit_code);
+}
+
+void osh_alloc_failed(size_t size) {
+    int err = errno;
+
+    osh_error(EXIT_FAILURE, "memory allocation failed (size=%zu): %s", size, err ? strerror(err) : "out of memory");
 }

@@ -81,7 +81,7 @@ void osh_vect_norm(double *u) {
     if (d > 0.0) {
         d = 1.0 / sqrt(d);
     } else {
-        osh_err(EX_SOFTWARE, "osh_vect_norm() division by zero.\n");
+        osh_error(EX_SOFTWARE, "osh_vect_norm() division by zero.\n");
     }
 
     for (i = 0; i < OSH_VECT_DIM; i++) {
@@ -101,7 +101,7 @@ void osh_vect_norm2(double const *u, double *v) {
     if (d > 0.0) {
         d = 1.0 / sqrt(d);
     } else {
-        osh_err(EX_SOFTWARE, "osh_vect_norm2() division by zero.\n");
+        osh_error(EX_SOFTWARE, "osh_vect_norm2() division by zero.\n");
     }
 
     for (i = 0; i < OSH_VECT_DIM; i++) {
@@ -163,8 +163,6 @@ void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
 }
 
 void osh_vect_eqpln(double const *p, double const *u, double *pp) {
-
-    double d;
     int i;
 
     for (i = 0; i < OSH_VECT_DIM; i++)
@@ -247,7 +245,7 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
     /* we choose STR order */
 
     /**
-       /* Lets then build a 3x3 rotation matrix M which maps
+     * Lets then build a 3x3 rotation matrix M which maps
      *    e1  --->  S
      *    e2  --->  T
      *    e3  --->  R
@@ -266,7 +264,7 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
      */
 
     /**
-       /* Affine transformation matrix has following indices
+     * Affine transformation matrix has following indices
      *     C-specific: in a double loop, col must increase faster than row, to
      use caching.
      *   t[row][col] ...

@@ -14,6 +14,8 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#include "osh_exit.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -136,16 +138,18 @@ void osh_warn(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)))
 #endif
     ;
-void osh_error(const char *fmt, ...)
+
+/* Logs then exits(exit_code). noreturn attribute is best-effort. */
+void osh_error(int exit_code, const char *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
-    __attribute__((format(printf, 1, 2)))
+    __attribute__((format(printf, 2, 3), noreturn))
 #endif
     ;
 
-/* Logs then exits(exit_code). noreturn attribute is best-effort. */
-void osh_fatal(int exit_code, const char *fmt, ...)
+/* Fatal memory allocation failure (logs and exits). */
+void osh_alloc_failed(size_t size)
 #if defined(__GNUC__) || defined(__clang__)
-    __attribute__((format(printf, 2, 3), noreturn))
+    __attribute__((noreturn))
 #endif
     ;
 

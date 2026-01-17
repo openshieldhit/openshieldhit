@@ -15,13 +15,13 @@ int osh_readline(struct oshfile *oshf, char **line, int *lineno) {
     int i;
 
     if (!oshf || !oshf->fp) {
-        osh_err(EX_SOFTWARE, "osh_readline: file pointer is NULL");
+        osh_error(EX_SOFTWARE, "osh_readline: file pointer is NULL");
     }
 
     if (*line == NULL) {
         *line = calloc(OSH_MAX_LINE_LENGTH, sizeof(char));
         if (!*line) {
-            osh_malloc_err("osh_readline() allocating line buffer");
+            osh_alloc_failed(OSH_MAX_LINE_LENGTH * sizeof(char));
         }
     }
 
@@ -78,7 +78,7 @@ int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aar
         /* Allocate and copy line */
         line = calloc(OSH_MAX_LINE_LENGTH, sizeof(char));
         if (!line) {
-            osh_malloc_err("osh_readline_key()");
+            osh_alloc_failed(OSH_MAX_LINE_LENGTH * sizeof(char));
             return -1;
         }
         strncpy(line, buff, OSH_MAX_LINE_LENGTH);
