@@ -26,12 +26,12 @@ struct oshfile *osh_fopen(const char *filename) {
 
     fp = fopen(filename, "r");
     if (!fp) {
-        osh_err(EX_IOERR, "Could not open file: %s", filename);
+        osh_error(EX_IOERR, "Could not open file: %s", filename);
     }
 
     oshf = malloc(sizeof(struct oshfile));
     if (!oshf) {
-        osh_malloc_err("osh_fopen() allocating oshfile");
+        osh_alloc_failed(sizeof(struct oshfile));
     }
 
     oshf->fp = fp;
@@ -43,7 +43,7 @@ struct oshfile *osh_fopen(const char *filename) {
 
     _mapfile(oshf);
     if (oshf->map_len < 1) {
-        osh_err(EX_IOERR, "osh_fopen: file appears to contain no newlines.");
+        osh_error(EX_IOERR, "osh_fopen: file appears to contain no newlines.");
     }
 
     return oshf;
@@ -90,7 +90,7 @@ static int _mapfile(struct oshfile *oshf) {
     long int i;
 
     if (!oshf || !oshf->fp) {
-        osh_err(EX_SOFTWARE, "osh_mapfile: null file pointer");
+        osh_error(EX_SOFTWARE, "osh_mapfile: null file pointer");
     }
 
     /* Rewind and count newlines */
@@ -110,7 +110,7 @@ static int _mapfile(struct oshfile *oshf) {
     /* Allocate and fill the map with byte address of each new line */
     oshf->map = calloc(oshf->map_len, sizeof(long int));
     if (!oshf->map) {
-        osh_malloc_err("osh_mapfile: calloc failed");
+        osh_alloc_failed(sizeof(long int) * oshf->map_len);
     }
 
     rewind(oshf->fp);

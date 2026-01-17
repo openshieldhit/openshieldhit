@@ -1,382 +1,729 @@
 #include <errno.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-#include "osh_exit.h"
 #include "osh_logger.h"
 
-#define _MAX_LINE_LENGTH 4096 /* Consider making this global somehow */
-
-/* help GCC to tell that this function takes printf-style arguments */
-#if defined(__GNUC__) || defined(__clang__)
-__attribute__((format(printf, 2, 3))) __attribute__((noreturn))
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <pthread.h>
 #endif
 
-static int _log_level = 4; /* this way, there will be printouts, even if the
-                              logger was not setup first */
-static char *_log_filename;
-static int _logger_save_active = 0; /* init FALSE. If logger was setup with an
-                                       output file, then enable this. */
-static FILE *_fplog = NULL;
+struct osh_mutex {
+#if defined(_WIN32)
+    CRITICAL_SECTION cs;
+#else
+    pthread_mutex_t m;
+#endif
+};
 
-/* warning message database only visbile inside this .c file */
-static struct message_db {
-    char **msg; /* list of unique messages */
-    int *count; /* number of times a message has been occuring */
-    int *level; /* message level */
-    int len;    /* number of unique messages */
-} message_db;
+/* -----------------------------
+ * forward declarations
+ * ----------------------------- */
 
-/* internal functions of the warning message database */
-void _message_db_init(void);
-void _message_db_summary(void);
-void _message_db_free(void);
-int _message_db_check(char const *s, int level);
+/* mutex helpers (file-local) */
+static void _mutex_init(struct osh_mutex *);
+static void _mutex_lock(struct osh_mutex *);
+static void _mutex_unlock(struct osh_mutex *);
+static void _mutex_destroy(struct osh_mutex *);
 
-int osh_setup_logger(char const *path, int log_level) {
+/* logger lifecycle (public; declared in .h, but fine to list here too) */
+struct osh_logger *osh_logger_create(int level, unsigned flags);
+void osh_logger_destroy(struct osh_logger *lg);
 
-    int len;
+/* logger config (public; declared in .h, but fine to list here too) */
+void osh_logger_set_level(struct osh_logger *lg, int level);
+int osh_logger_get_level(struct osh_logger const *lg);
+void osh_logger_set_flags(struct osh_logger *lg, unsigned flags);
+unsigned int osh_logger_get_flags(struct osh_logger const *lg);
+void osh_logger_flush(struct osh_logger *lg);
 
-    if (_logger_save_active) {
-        osh_warn("osh_setup_logger() called while logger already active. "
-                 "Ignoring.\n");
+/* default logger (public; declared in .h, but fine to list here too) */
+struct osh_logger *osh_log_default(void);
+int osh_log_init(int level, unsigned flags);
+void osh_log_close(void);
+int osh_log_set_level(int level);
+int osh_log_get_level(void);
+void osh_log_set_flags(unsigned flags);
+unsigned osh_log_get_flags(void);
+void osh_log_flush(void);
+
+/* sinks / callbacks (public) */
+int osh_log_add_file(const char *path, int append);
+int osh_log_enable_stdout(int enable);
+
+int osh_logger_add_file(struct osh_logger *lg, const char *path, int append);
+int osh_logger_enable_stdout(struct osh_logger *lg, int enable);
+int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user);
+
+/* wrappers / convenience (public) */
+const char *osh_log_level_name(int level);
+
+void osh_logger_log_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
+                       const char *function, const char *fmt, ...);
+void osh_logger_logv(struct osh_logger *lg, int level, const char *fmt, va_list ap);
+void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...);
+
+void osh_trace(const char *fmt, ...);
+void osh_debug(const char *fmt, ...);
+void osh_info(const char *fmt, ...);
+void osh_warn(const char *fmt, ...);
+void osh_error(int exit_code, const char *fmt, ...);
+void osh_alloc_failed(size_t size);
+
+/* formatting / output helpers (file-local) */
+static unsigned _effective_flags(struct osh_logger *lg, unsigned flags_override);
+static const char *_level_name(int level);
+static int _is_errorish(int level);
+
+static size_t _vsnprintf0(char *dst, size_t cap, const char *fmt, va_list ap);
+static size_t _snprintf0(char *dst, size_t cap, const char *fmt, ...);
+
+static size_t _append(char *dst, size_t cap, size_t off, const char *s);
+static size_t _append_n(char *dst, size_t cap, size_t off, const char *s, size_t n);
+static size_t _append_char(char *dst, size_t cap, size_t off, char c);
+static size_t _append_int(char *dst, size_t cap, size_t off, int v);
+static size_t _append_timestamp(char *dst, size_t cap, size_t off);
+
+static size_t _format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line,
+                             const char *function);
+
+static FILE *_open_log_file(const char *path, int append);
+
+static void _write_record_unlocked(struct osh_logger *lg, int level, const char *prefix, size_t prefix_len,
+                                   const char *fmt, va_list ap);
+
+/* -----------------------------
+ * types / state
+ * ----------------------------- */
+
+struct osh_logger {
+    /* configuration */
+    int level;
+    unsigned int flags;
+
+    /* outputs */
+    FILE *fp_file;  /* optional logfile */
+    int use_stdout; /* 0/1 */
+
+    /* callback sink */
+    void (*cb)(void *user, const char *msg, size_t len);
+    void *cb_user;
+
+    /* synchronization */
+    struct osh_mutex lock;
+
+    /* lifecycle */
+    int closed;
+};
+
+static struct osh_logger *g_default_logger = NULL;
+
+/* -----------------------------
+ * mutex helpers
+ * ----------------------------- */
+
+static void _mutex_init(struct osh_mutex *m) {
+#if defined(_WIN32)
+    InitializeCriticalSection(&m->cs);
+#else
+    /* default mutex is fine; we don't need recursive mutex if we avoid re-entry */
+    (void)pthread_mutex_init(&m->m, NULL);
+#endif
+}
+
+static void _mutex_lock(struct osh_mutex *m) {
+#if defined(_WIN32)
+    EnterCriticalSection(&m->cs);
+#else
+    (void)pthread_mutex_lock(&m->m);
+#endif
+}
+
+static void _mutex_unlock(struct osh_mutex *m) {
+#if defined(_WIN32)
+    LeaveCriticalSection(&m->cs);
+#else
+    (void)pthread_mutex_unlock(&m->m);
+#endif
+}
+
+static void _mutex_destroy(struct osh_mutex *m) {
+#if defined(_WIN32)
+    DeleteCriticalSection(&m->cs);
+#else
+    (void)pthread_mutex_destroy(&m->m);
+#endif
+}
+
+/* -----------------------------
+ * explicit logger instances
+ * ----------------------------- */
+
+struct osh_logger *osh_logger_create(int level, unsigned flags) {
+    struct osh_logger *lg = (struct osh_logger *)calloc(1, sizeof(*lg));
+    if (!lg)
+        return NULL;
+
+    lg->level = level;
+    lg->flags = flags;
+    lg->fp_file = NULL;
+    lg->use_stdout = 0;
+    lg->cb = NULL;
+    lg->cb_user = NULL;
+    lg->closed = 0;
+
+    _mutex_init(&lg->lock);
+    return lg;
+}
+
+void osh_logger_destroy(struct osh_logger *lg) {
+    if (!lg)
+        return;
+
+    _mutex_lock(&lg->lock);
+
+    if (!lg->closed) {
+        if (lg->fp_file) {
+            fclose(lg->fp_file);
+            lg->fp_file = NULL;
+        }
+        lg->closed = 1;
+    }
+
+    _mutex_unlock(&lg->lock);
+    _mutex_destroy(&lg->lock);
+    free(lg);
+}
+
+void osh_logger_set_level(struct osh_logger *lg, int level) {
+    if (!lg)
+        return;
+
+    _mutex_lock(&lg->lock);
+    lg->level = level;
+    _mutex_unlock(&lg->lock);
+}
+
+int osh_logger_get_level(struct osh_logger const *lg) {
+    int level = OSH_LOG_OFF;
+    if (!lg)
+        return level;
+
+    /* Cast away const only to use the same mutex; or store level atomically later. */
+    _mutex_lock((struct osh_mutex *)&lg->lock);
+    level = lg->level;
+    _mutex_unlock((struct osh_mutex *)&lg->lock);
+    return level;
+}
+
+void osh_logger_set_flags(struct osh_logger *lg, unsigned flags) {
+    if (!lg)
+        return;
+
+    _mutex_lock(&lg->lock);
+    lg->flags = flags;
+    _mutex_unlock(&lg->lock);
+}
+
+unsigned int osh_logger_get_flags(struct osh_logger const *lg) {
+    unsigned flags = 0u;
+    if (!lg)
+        return flags;
+
+    _mutex_lock((struct osh_mutex *)&lg->lock);
+    flags = lg->flags;
+    _mutex_unlock((struct osh_mutex *)&lg->lock);
+    return flags;
+}
+
+void osh_logger_flush(struct osh_logger *lg) {
+    if (!lg)
+        return;
+
+    _mutex_lock(&lg->lock);
+    if (lg->fp_file)
+        fflush(lg->fp_file);
+    fflush(stderr);
+    if (lg->use_stdout)
+        fflush(stdout);
+    _mutex_unlock(&lg->lock);
+}
+
+/* -----------------------------
+ * default global logger
+ * ----------------------------- */
+
+struct osh_logger *osh_log_default(void) {
+    return g_default_logger;
+}
+
+int osh_log_init(int level, unsigned flags) {
+    if (g_default_logger) {
+        /* already initialized: just update config */
+        osh_logger_set_level(g_default_logger, level);
+        osh_logger_set_flags(g_default_logger, flags);
         return 0;
     }
 
-    len = strlen(path);
-    _log_filename = calloc(len + 1, sizeof(char));
-
-    if (!_log_filename)
-        osh_malloc_err("osh_setup_logger() *_log_filename");
-    memcpy(_log_filename, path, len);
-
-    _fplog = fopen(_log_filename, "w");
-    if (_fplog == NULL) {
-        fprintf(stderr, "%scannot open >%s< for writing. %s\n", OSH_LOG_PREFIX_ERROR, _log_filename, strerror(errno));
-        free(_log_filename);
-        exit(EX_IOERR);
-    }
-
-    _log_level = log_level;
-    _logger_save_active = 1;
-
-    /* setup message database */
-    _message_db_init();
-
-    return 1;
+    g_default_logger = osh_logger_create(level, flags);
+    return g_default_logger ? 0 : -1;
 }
 
-int osh_close_logger(void) {
+void osh_log_close(void) {
+    if (!g_default_logger)
+        return;
 
-    _message_db_summary(); /* print any occuring warning messages */
+    osh_logger_destroy(g_default_logger);
+    g_default_logger = NULL;
+}
 
-    if (_fplog == NULL) {
-        fprintf(stderr, "%scannot close %s for writing.\n", OSH_LOG_PREFIX_ERROR, _log_filename);
-        exit(EX_IOERR);
-    }
-    fclose(_fplog);
-    _logger_save_active = 0;
-    free(_log_filename);
+int osh_log_set_level(int level) {
+    if (!g_default_logger)
+        return -1;
+
+    osh_logger_set_level(g_default_logger, level);
     return 0;
 }
 
-int osh_set_loglevel(int log_level) {
-    if (!_logger_save_active) {
-        return 1;
+int osh_log_get_level(void) {
+    if (!g_default_logger)
+        return OSH_LOG_OFF;
+
+    return osh_logger_get_level(g_default_logger);
+}
+
+void osh_log_set_flags(unsigned flags) {
+    if (!g_default_logger)
+        return;
+
+    osh_logger_set_flags(g_default_logger, flags);
+}
+
+unsigned osh_log_get_flags(void) {
+    if (!g_default_logger)
+        return 0u;
+
+    return osh_logger_get_flags(g_default_logger);
+}
+
+void osh_log_flush(void) {
+    if (!g_default_logger)
+        return;
+
+    osh_logger_flush(g_default_logger);
+}
+
+/* ------------------------------------------------------------
+ * helpers
+ * ------------------------------------------------------------ */
+
+static unsigned _effective_flags(struct osh_logger *lg, unsigned flags_override) {
+    return flags_override ? flags_override : lg->flags;
+}
+
+static const char *_level_name(int level) {
+    switch (level) {
+    case OSH_LOG_TRACE:
+        return "TRACE";
+    case OSH_LOG_DEBUG:
+        return "DEBUG";
+    case OSH_LOG_INFO:
+        return "INFO";
+    case OSH_LOG_WARN:
+        return "WARN";
+    case OSH_LOG_ERROR:
+        return "ERROR";
+    case OSH_LOG_FATAL:
+        return "FATAL";
+    case OSH_LOG_OFF:
+        return "OFF";
+    default:
+        return "LOG";
     }
-    _log_level = log_level;
+}
+
+static int _is_errorish(int level) {
+    return (level >= OSH_LOG_WARN);
+}
+
+static size_t _vsnprintf0(char *dst, size_t cap, const char *fmt, va_list ap) {
+    int n = vsnprintf(dst, cap, fmt, ap);
+    if (n < 0) {
+        if (cap)
+            dst[0] = '\0';
+        return 0u;
+    }
+    return (size_t)n; /* would-have length (excluding NUL) */
+}
+
+static size_t _snprintf0(char *dst, size_t cap, const char *fmt, ...) {
+    va_list ap;
+    size_t n;
+
+    va_start(ap, fmt);
+    n = _vsnprintf0(dst, cap, fmt, ap);
+    va_end(ap);
+
+    return n;
+}
+
+static size_t _append_n(char *dst, size_t cap, size_t off, const char *s, size_t n) {
+    if (!dst || cap == 0)
+        return off;
+    if (off >= cap)
+        return off;
+
+    size_t space = cap - off - 1; /* keep room for NUL */
+    size_t tocpy = (n < space) ? n : space;
+
+    if (tocpy)
+        memcpy(dst + off, s, tocpy);
+    off += tocpy;
+    dst[off] = '\0';
+    return off;
+}
+
+static size_t _append(char *dst, size_t cap, size_t off, const char *s) {
+    if (!s)
+        return off;
+    return _append_n(dst, cap, off, s, strlen(s));
+}
+
+static size_t _append_char(char *dst, size_t cap, size_t off, char c) {
+    if (!dst || cap == 0)
+        return off;
+    if (off + 1 >= cap)
+        return off;
+    dst[off++] = c;
+    dst[off] = '\0';
+    return off;
+}
+
+static size_t _append_int(char *dst, size_t cap, size_t off, int v) {
+    char tmp[32];
+    (void)_snprintf0(tmp, sizeof(tmp), "%d", v);
+    return _append(dst, cap, off, tmp);
+}
+
+static size_t _append_timestamp(char *dst, size_t cap, size_t off) {
+    /* Format: YYYY-MM-DD HH:MM:SS.mmm */
+    time_t t = time(NULL);
+
+#if defined(_WIN32)
+    struct tm tmv;
+    /* localtime_s returns 0 on success */
+    if (localtime_s(&tmv, &t) != 0) {
+        return off;
+    }
+#else
+    struct tm tmv;
+    if (localtime_r(&t, &tmv) == NULL) {
+        return off;
+    }
+#endif
+
+    char buf[64];
+    size_t n = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tmv);
+    if (n == 0) {
+        return off;
+    }
+
+    /* milliseconds */
+    unsigned ms = 0;
+
+#if defined(_WIN32)
+    {
+        /* GetSystemTimeAsFileTime: 100-ns intervals since Jan 1, 1601 */
+        FILETIME ft;
+        ULARGE_INTEGER ui;
+
+        GetSystemTimeAsFileTime(&ft);
+        ui.LowPart = ft.dwLowDateTime;
+        ui.HighPart = ft.dwHighDateTime;
+
+        /* 100-ns -> ms */
+        ms = (unsigned)((ui.QuadPart / 10000ULL) % 1000ULL);
+    }
+#else
+    {
+#if defined(CLOCK_REALTIME)
+        struct timespec ts;
+        if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
+            ms = (unsigned)(ts.tv_nsec / 1000000L);
+        }
+#endif
+    }
+#endif
+
+    off = _append_n(dst, cap, off, buf, n);
+    off = _append_char(dst, cap, off, '.');
+
+    /* print ms as 3 digits */
+    {
+        char msbuf[8];
+        (void)_snprintf0(msbuf, sizeof(msbuf), "%03u", ms);
+        off = _append(dst, cap, off, msbuf);
+    }
+
+    off = _append_char(dst, cap, off, ' ');
+    return off;
+}
+
+static size_t _format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line,
+                             const char *function) {
+    size_t off = 0;
+
+    if (flags & OSH_LOG_F_TIMESTAMP) {
+        off = _append_timestamp(dst, cap, off);
+    }
+
+    off = _append_char(dst, cap, off, '[');
+    off = _append(dst, cap, off, _level_name(level));
+    off = _append(dst, cap, off, "] ");
+
+    if ((flags & OSH_LOG_F_FILELINE) && file && *file) {
+        off = _append(dst, cap, off, file);
+        off = _append_char(dst, cap, off, ':');
+        off = _append_int(dst, cap, off, line);
+        off = _append(dst, cap, off, " ");
+    }
+
+    if ((flags & OSH_LOG_F_FUNCTION) && function && *function) {
+        off = _append_char(dst, cap, off, '(');
+        off = _append(dst, cap, off, function);
+        off = _append(dst, cap, off, "): ");
+    }
+
+    return off;
+}
+
+static void _write_record_unlocked(struct osh_logger *lg, int level, const char *prefix, size_t prefix_len,
+                                   const char *fmt, va_list ap) {
+    FILE *fp_primary = NULL;
+
+    if (_is_errorish(level)) {
+        fp_primary = stderr;
+    } else {
+        fp_primary = lg->use_stdout ? stdout : stderr;
+    }
+
+    /* Make copies BEFORE any consumption */
+    va_list ap_primary;
+    va_list ap_file;
+
+    va_copy(ap_primary, ap);
+    va_copy(ap_file, ap);
+
+    if (fp_primary) {
+        if (prefix && prefix_len)
+            (void)fwrite(prefix, 1, prefix_len, fp_primary);
+
+        (void)vfprintf(fp_primary, fmt, ap_primary);
+        (void)fputc('\n', fp_primary);
+    }
+
+    if (lg->fp_file) {
+        if (prefix && prefix_len)
+            (void)fwrite(prefix, 1, prefix_len, lg->fp_file);
+
+        (void)vfprintf(lg->fp_file, fmt, ap_file);
+        (void)fputc('\n', lg->fp_file);
+    }
+
+    va_end(ap_primary);
+    va_end(ap_file);
+
+    /* Callback — optional, bounded */
+    if (lg->cb) {
+        if (prefix && prefix_len)
+            lg->cb(lg->cb_user, prefix, prefix_len);
+
+        char tmp[512];
+        va_list ap_cb;
+        va_copy(ap_cb, ap);
+        int n = vsnprintf(tmp, sizeof(tmp), fmt, ap_cb);
+        va_end(ap_cb);
+
+        if (n > 0) {
+            lg->cb(lg->cb_user, tmp, (size_t)((n < (int)sizeof(tmp)) ? n : (int)sizeof(tmp) - 1));
+        }
+
+        const char nl = '\n';
+        lg->cb(lg->cb_user, &nl, 1);
+    }
+}
+
+/* ------------------------------------------------------------
+ * the big one: now short and readable
+ * ------------------------------------------------------------ */
+
+void osh_logger_logv_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
+                        const char *function, const char *fmt, va_list ap) {
+    char prefix[512]; /* Prefix is small; safe on stack */
+    size_t prefix_len;
+
+    if (!lg || !fmt)
+        return;
+
+    /* Fast reject (best-effort; races with setters are acceptable) */
+    if (lg->closed)
+        return;
+    if (level >= OSH_LOG_OFF)
+        return;
+    if (level < lg->level)
+        return;
+
+    unsigned flags = _effective_flags(lg, flags_override);
+
+    prefix_len = _format_prefix(prefix, sizeof(prefix), level, flags, file, line, function);
+
+    _mutex_lock(&lg->lock);
+    if (!lg->closed) {
+        _write_record_unlocked(lg, level, prefix, prefix_len, fmt, ap);
+    }
+    _mutex_unlock(&lg->lock);
+}
+
+/* -----------------------------
+ * exported helpers
+ * ----------------------------- */
+
+const char *osh_log_level_name(int level) {
+    /* Keep consistent with internal _level_name() */
+    return _level_name(level);
+}
+
+/* -----------------------------
+ * sinks / callbacks
+ * ----------------------------- */
+
+static FILE *_open_log_file(const char *path, int append) {
+    if (!path || !*path)
+        return NULL;
+
+    /* On Windows, text mode is fine; if you ever need strict \n behavior, use "ab"/"wb". */
+    return fopen(path, append ? "a" : "w");
+}
+
+int osh_logger_add_file(struct osh_logger *lg, const char *path, int append) {
+    if (!lg)
+        return -1;
+
+    FILE *fp = _open_log_file(path, append);
+    if (!fp)
+        return -1;
+
+    _mutex_lock(&lg->lock);
+    if (lg->fp_file) {
+        fclose(lg->fp_file);
+    }
+    lg->fp_file = fp;
+    _mutex_unlock(&lg->lock);
+
     return 0;
 }
 
-int osh_get_loglevel(void) { return _log_level; }
-
-void osh_err(int status, char const *msg, ...) {
-    char s[_MAX_LINE_LENGTH];
-
-    va_list args1, args2;
-    va_start(args1, msg);
-    va_copy(args2, args1);
-
-    memset(s, 0, _MAX_LINE_LENGTH);
-    snprintf(s, _MAX_LINE_LENGTH, "%s%s\n", OSH_LOG_PREFIX_ERROR, msg);
-
-    if (_log_level >= OSH_LOG_ERR) {
-        /* Print to stderr */
-        vfprintf(stderr, s, args1);
-    }
-
-    /* all ERR will be saved to logger, irrespectly of log level, if save is
-     * active */
-    if (_logger_save_active) {
-        vfprintf(_fplog, s, args2);
-        fflush(_fplog);
-    }
-
-    va_end(args1);
-    va_end(args2);
-
-    exit(status);
+int osh_log_add_file(const char *path, int append) {
+    return osh_logger_add_file(osh_log_default(), path, append);
 }
 
-void osh_malloc_err(char const *msg, ...) {
-    char s[_MAX_LINE_LENGTH];
+int osh_logger_enable_stdout(struct osh_logger *lg, int enable) {
+    if (!lg)
+        return -1;
 
-    va_list args1, args2;
-    va_start(args1, msg);
-    va_copy(args2, args1);
+    _mutex_lock(&lg->lock);
+    lg->use_stdout = enable ? 1 : 0;
+    _mutex_unlock(&lg->lock);
 
-    memset(s, 0, _MAX_LINE_LENGTH);
-    snprintf(s, _MAX_LINE_LENGTH, "%s Could not allocate memory. malloc() %s\n", OSH_LOG_PREFIX_ERROR, msg);
-
-    if (_log_level >= OSH_LOG_ERR) {
-        vfprintf(stderr, s, args1);
-    }
-
-    /* all ERR will be saved to logger, irrespectly of log level, if save is
-     * active */
-    if (_logger_save_active) {
-        vfprintf(_fplog, s, args2);
-        fflush(_fplog);
-    }
-
-    va_end(args1);
-    va_end(args2);
-
-    exit(EX_UNAVAILABLE);
+    return 0;
 }
 
-void osh_warn(char const *msg, ...) {
-    char s[_MAX_LINE_LENGTH];
-    va_list args1, args2;
-    va_start(args1, msg);
-    va_copy(args2, args1);
-
-    memset(s, 0, _MAX_LINE_LENGTH);
-    snprintf(s, _MAX_LINE_LENGTH - 2, "%s%s", OSH_LOG_PREFIX_WARN, msg);
-
-    /* check database */
-    if (!_message_db_check(s, OSH_LOG_WARN)) {
-        return;
-    }
-
-    if (_log_level >= OSH_LOG_WARN) {
-        va_start(args1, msg);
-        vfprintf(stderr, s, args1);
-    }
-
-    /* all warnings will be saved to logger, irrespectly of log level, if save
-     * is active */
-    if (_logger_save_active) {
-        va_start(args2, msg);
-        vfprintf(_fplog, s, args2);
-        fflush(_fplog);
-    }
-
-    va_end(args1);
-    va_end(args2);
+int osh_log_enable_stdout(int enable) {
+    return osh_logger_enable_stdout(osh_log_default(), enable);
 }
 
-void osh_info(char const *msg, ...) {
-    char s[_MAX_LINE_LENGTH] = "";
+int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user) {
+    if (!lg)
+        return -1;
 
-    va_list args1, args2;
-    va_start(args1, msg);
-    va_copy(args2, args1);
+    _mutex_lock(&lg->lock);
+    lg->cb = cb;
+    lg->cb_user = user;
+    _mutex_unlock(&lg->lock);
 
-    memset(s, 0, _MAX_LINE_LENGTH);
-    snprintf(s, _MAX_LINE_LENGTH - 2, "%s%s", OSH_LOG_PREFIX_INFO, msg);
-
-    if (_log_level >= OSH_LOG_INFO) {
-        va_start(args1, msg);
-        vfprintf(stdout, s, args1);
-        fflush(stdout);
-    }
-
-    /* all INFO will be saved to logger, irrespectly of log level, if save is
-     * active */
-    if (_logger_save_active) {
-        va_start(args2, msg);
-        vfprintf(_fplog, s, args2);
-        fflush(_fplog);
-    }
-
-    va_end(args1);
-    va_end(args2);
+    return 0;
 }
 
-void osh_debug(char const *msg, ...) {
-    char s[_MAX_LINE_LENGTH];
-    va_list args1, args2;
-    va_start(args1, msg);
-    va_copy(args2, args1);
+/* -----------------------------
+ * wrappers around logv_ex
+ * ----------------------------- */
 
-    memset(s, 0, _MAX_LINE_LENGTH);
-    snprintf(s, _MAX_LINE_LENGTH - 2, "%s%s", OSH_LOG_PREFIX_DEBUG, msg);
-
-    if (_log_level >= OSH_LOG_DEBUG) {
-        va_start(args1, msg);
-        vfprintf(stderr, s, args1);
-
-        /* DEBUG will be saved to logger, if log-level sufficient */
-        if (_logger_save_active) {
-            va_start(args2, msg);
-            vfprintf(_fplog, s, args2);
-            fflush(_fplog);
-        }
-    }
-
-    va_end(args1);
-    va_end(args2);
+void osh_logger_log_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
+                       const char *function, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    osh_logger_logv_ex(lg, level, flags_override, file, line, function, fmt, ap);
+    va_end(ap);
 }
 
-void osh_log(char const *msg, ...) {
-    char s[_MAX_LINE_LENGTH];
-    va_list args;
-
-    if (_logger_save_active) {
-
-        memset(s, 0, _MAX_LINE_LENGTH);
-        snprintf(s, _MAX_LINE_LENGTH - 2, "%s", msg);
-
-        va_start(args, msg);
-        vfprintf(_fplog, s, args);
-        fflush(_fplog);
-        va_end(args);
-    }
+void osh_logger_logv(struct osh_logger *lg, int level, const char *fmt, va_list ap) {
+    osh_logger_logv_ex(lg, level, 0u, NULL, 0, NULL, fmt, ap);
 }
 
-/**
- * @brief Add message to message database. If message has is known has been
- * occuring more then OSH_LOG_REPEAT times, then return 0, else 1. The database
- * will also count how many time a message has been occuring.
- *
- * @param[in] s - message string
- * @param[in] level - message level (not really used for now, but may be used in
- * future)
- *
- * @returns 1 if message is new, 0 if message has been occuring more then
- * OSH_LOG_REPEAT times
- *
- * @author Niels Bassler
- */
-int _message_db_check(char const *s, int level) {
-
-    int message_index;
-    int i;
-
-    /* Search for the message in the database */
-    for (i = 0; i < message_db.len; i++) {
-        if (strcmp(message_db.msg[i], s) == 0) {
-            /* Message found, increment count */
-            message_db.count[i]++;
-            /* Check if message has occurred more than OSH_LOG_REPEAT times */
-            if (message_db.count[i] > OSH_LOG_REPEAT) {
-                /* Message has occurred too many times, return 0 */
-                return 0;
-            } else {
-                /* Message count is within limit, return 1 */
-                if (message_db.count[i] == OSH_LOG_REPEAT) {
-                    osh_info("The following warning message has been repeated %d "
-                             "times and further repetitions will be suppressed:\n",
-                             OSH_LOG_REPEAT);
-                }
-                return 1;
-            }
-        }
-    }
-
-    /* Message not found, add new message to the database */
-    message_index = message_db.len; /* new message index */
-    message_db.len++;
-    message_db.msg = realloc(message_db.msg, message_db.len * sizeof(char *));
-    message_db.count = realloc(message_db.count, message_db.len * sizeof(int));
-    message_db.level = realloc(message_db.level, message_db.len * sizeof(int));
-
-    /*  Check for allocation errors */
-    if (!message_db.msg || !message_db.count || !message_db.level) {
-        osh_malloc_err("osh_message_db() extending database");
-    }
-
-    /* Allocate memory for the new message and copy it */
-    message_db.msg[message_index] = strdup(s);
-    if (!message_db.msg[message_index]) {
-        osh_malloc_err("osh_message_db() message_db.msg[message_index]");
-    }
-
-    /* Initialize count and level for the new message */
-    message_db.count[message_index] = 1;
-    message_db.level[message_index] = level;
-
-    /* New message added successfully, return 1 */
-    return 1;
+void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    osh_logger_logv_ex(lg, level, 0u, NULL, 0, NULL, fmt, ap);
+    va_end(ap);
 }
 
-/**
- * @brief Print summary of the messages recorded in the message database, and
- * the number of occurences.
- *
- * @author Niels Bassler
- */
-void _message_db_summary(void) {
-    int len;
-    int i;
+/* -----------------------------
+ * default logger convenience functions
+ * ----------------------------- */
 
-    if (message_db.len == 0) {
-        return;
-    }
-
-    osh_info("\n");
-    osh_info("Warning messages summary:\n");
-    for (i = 0; i < message_db.len; i++) {
-
-        /* Check if the last character is a newline */
-        len = strlen(message_db.msg[i]);
-        if (len > 0 && message_db.msg[i][len - 1] == '\n') {
-            /* Temporarily remove the newline for printing */
-            message_db.msg[i][len - 1] = '\0';
-        }
-
-        osh_info("\"%s \" - count:%d \n", message_db.msg[i], message_db.count[i]);
-
-    } /* end of for loop */
+void osh_trace(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    osh_logger_logv_ex(osh_log_default(), OSH_LOG_TRACE, 0u, __FILE__, __LINE__, __func__, fmt, ap);
+    va_end(ap);
 }
 
-/* initialize message db */
-void _message_db_init(void) {
-    message_db.msg = NULL;
-    message_db.count = NULL;
-    message_db.len = 0;
-
-    message_db.msg = calloc(1, sizeof(char *));
-    if (!message_db.msg)
-        osh_malloc_err("osh_message_db ()message_db.msg");
-    message_db.count = calloc(1, sizeof(int));
-    if (!message_db.count)
-        osh_malloc_err("osh_message_db ()message_db.count");
-    message_db.level = calloc(1, sizeof(int));
-    if (!message_db.level)
-        osh_malloc_err("osh_message_db ()message_db.level");
-
-    message_db.count[0] = 0;
+void osh_debug(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    osh_logger_logv_ex(osh_log_default(), OSH_LOG_DEBUG, 0u, __FILE__, __LINE__, __func__, fmt, ap);
+    va_end(ap);
 }
 
-void _message_db_free(void) {
-    int i;
-    /* Free each individual message string */
-    for (i = 0; i < message_db.len; i++) {
-        free(message_db.msg[i]);
-    }
+void osh_info(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    osh_logger_logv_ex(osh_log_default(), OSH_LOG_INFO, 0u, __FILE__, __LINE__, __func__, fmt, ap);
+    va_end(ap);
+}
 
-    /* Free the arrays for messages, counts, and levels */
-    free(message_db.msg);
-    free(message_db.count);
-    free(message_db.level);
+void osh_warn(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    osh_logger_logv_ex(osh_log_default(), OSH_LOG_WARN, 0u, __FILE__, __LINE__, __func__, fmt, ap);
+    va_end(ap);
+}
+void osh_error(int exit_code, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    osh_logger_logv_ex(osh_log_default(), OSH_LOG_FATAL, 0u, __FILE__, __LINE__, __func__, fmt, ap);
+    va_end(ap);
 
-    /* Reset the database structure fields */
-    message_db.msg = NULL;
-    message_db.count = NULL;
-    message_db.level = NULL;
-    message_db.len = 0;
+    osh_log_flush();
+    exit(exit_code);
+}
+
+void osh_alloc_failed(size_t size) {
+    int err = errno;
+
+    osh_error(EXIT_FAILURE, "memory allocation failed (size=%zu): %s", size, err ? strerror(err) : "out of memory");
 }
