@@ -32,7 +32,7 @@ void test_logger_basic(void) {
     remove(logfile);
 
     /* Init default logger */
-    assert(osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE) == 0);
+    assert(osh_log_init(OSH_LOG_INFO, OSH_LOG_F_TIMESTAMP | OSH_LOG_F_FILELINE) == 0);
 
     /* Add file sink */
     assert(osh_log_add_file(logfile, /*append=*/0) == 0);
