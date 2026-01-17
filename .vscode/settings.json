@@ -4,5 +4,6 @@
         "__threading_support": "c",
         "osh_beam_spotlist.h": "c"
     },
-    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json"
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "editor.defaultFormatter": null
 }

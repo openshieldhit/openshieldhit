@@ -1,0 +1,11 @@
+BasedOnStyle: LLVM
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: false
+  AfterClass: false
+  AfterControlStatement: false
+IndentWidth: 4
+UseTab: Never
+TabWidth: 4
+AlignTrailingComments: true
+PointerAlignment: Left

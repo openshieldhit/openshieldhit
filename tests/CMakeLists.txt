@@ -11,6 +11,7 @@ foreach(test_src ${TEST_SOURCES})
     target_include_directories(${test_name}
         PRIVATE
             ${PROJECT_SOURCE_DIR}/src/common
+            ${PROJECT_SOURCE_DIR}/src/random
             ${PROJECT_SOURCE_DIR}/src/beam
             ${PROJECT_SOURCE_DIR}/src/particle
     )
@@ -19,6 +20,7 @@ foreach(test_src ${TEST_SOURCES})
     target_link_libraries(${test_name}
         PRIVATE
             osh_common
+            osh_random
             osh_beam
             osh_particle
     )
