@@ -12,3 +12,5 @@ PointerAlignment: Right
 ReflowComments: true
 ColumnLimit: 120
 
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: false
