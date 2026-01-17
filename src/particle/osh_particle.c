@@ -1,7 +1,6 @@
 
-#include <stdio.h>
 #include "osh_particle.h"
-
+#include <stdio.h>
 
 /**
  * @brief Print particle struct.
@@ -22,4 +21,3 @@ void osh_particle_print(struct particle part) {
     printf("  nprim  = %i\n", part.nprim);
     printf("  weight = %f\n", part.weight);
 }
-

@@ -1,6 +1,7 @@
 #ifndef _OSH_BEAM_PARSE_KEYS
 #define _OSH_BEAM_PARSE_KEYS
 
+// clang-format off
 #define OSH_BEAM_KEY_APCORR      "apcorr"
 #define OSH_BEAM_KEY_BEAMDIR     "beamdir"
 #define OSH_BEAM_KEY_BEAMDIV     "beamdiv"
@@ -28,5 +29,6 @@
 #define OSH_BEAM_KEY_USEBMOD     "usebmod"
 #define OSH_BEAM_KEY_USECBEAM    "usecbeam"
 #define OSH_BEAM_KEY_USEPARLEV   "useparlev"
+// clang-format on
 
 #endif /* !_OSH_BEAM_PARSE_KEYS */

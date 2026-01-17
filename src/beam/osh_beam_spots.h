@@ -10,5 +10,4 @@ int osh_beam_spots_free(struct beam_spot *sl);
 int osh_beam_shared_init(struct beam_shared *shared);
 int osh_beam_shared_free(struct beam_shared *shared);
 
-
 #endif /* _OSH_BEAM_SPOTLIST */

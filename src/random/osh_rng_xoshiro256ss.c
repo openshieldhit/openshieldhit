@@ -10,12 +10,10 @@
 #include "osh_rng.h"
 
 /* rotate left */
-static uint64_t _rotl64(uint64_t x, int k) {
-    return (x << k) | (x >> (64 - k));
-}
+static uint64_t _rotl64(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
 /* splitmix64: good for seeding other generators */
-static uint64_t _splitmix64_next(uint64_t* x) {
+static uint64_t _splitmix64_next(uint64_t *x) {
     uint64_t z;
 
     *x += 0x9e3779b97f4a7c15ULL;
@@ -29,8 +27,7 @@ static uint64_t _splitmix64_next(uint64_t* x) {
  * Initialize xoshiro256** state from (seed, stream).
  * stream selects an independent lane by perturbing the splitmix input.
  */
-void osh_rng_xoshiro256ss_init(struct osh_rng* rng, uint64_t seed,
-                               uint64_t stream) {
+void osh_rng_xoshiro256ss_init(struct osh_rng *rng, uint64_t seed, uint64_t stream) {
     uint64_t x;
 
     /* Mix seed and stream into the splitmix input.
@@ -51,8 +48,8 @@ void osh_rng_xoshiro256ss_init(struct osh_rng* rng, uint64_t seed,
 /*
  * Generate next 64-bit random number (xoshiro256**).
  */
-uint64_t osh_rng_xoshiro256ss_u64(struct osh_rng* rng) {
-    uint64_t* s;
+uint64_t osh_rng_xoshiro256ss_u64(struct osh_rng *rng) {
+    uint64_t *s;
     uint64_t result;
     uint64_t t;
 

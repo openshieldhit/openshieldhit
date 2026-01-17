@@ -3,7 +3,7 @@
 #include "osh_beam_spots.h"
 #include "osh_rc.h"
 
-int osh_beam_spots_init(struct beam_spot** sl, size_t nspots) {
+int osh_beam_spots_init(struct beam_spot **sl, size_t nspots) {
     if (!sl || nspots == 0)
         return OSH_EINVAL;
 
@@ -14,14 +14,14 @@ int osh_beam_spots_init(struct beam_spot** sl, size_t nspots) {
     return OSH_OK;
 }
 
-int osh_beam_spots_free(struct beam_spot* sl) {
+int osh_beam_spots_free(struct beam_spot *sl) {
     if (!sl)
         return OSH_EINVAL;
     free(sl);
     return OSH_OK;
 }
 
-int osh_beam_shared_init(struct beam_shared* shared) {
+int osh_beam_shared_init(struct beam_shared *shared) {
     if (!shared)
         return OSH_EINVAL;
     memset(shared, 0, sizeof *shared);
@@ -41,7 +41,7 @@ int osh_beam_shared_init(struct beam_shared* shared) {
     return OSH_OK;
 }
 
-int osh_beam_shared_free(struct beam_shared* shared) {
+int osh_beam_shared_free(struct beam_shared *shared) {
     if (!shared)
         return OSH_EINVAL;
     free(shared);

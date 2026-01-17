@@ -3,24 +3,26 @@
 
 #include "osh_exit.h"
 
-#define OSH_LOG_TRACE   6
-#define OSH_LOG_DEBUG   5
-#define OSH_LOG_INFO    4  /* default level */
-#define OSH_LOG_WARN    3
-#define OSH_LOG_ERR     2
-#define OSH_LOG_FATAL   1
-#define OSH_LOG_OFF     0
+enum {
+    OSH_LOG_OFF = 0,
+    OSH_LOG_FATAL,
+    OSH_LOG_ERR,
+    OSH_LOG_WARN,
+    OSH_LOG_INFO, /* default level */
+    OSH_LOG_DEBUG,
+    OSH_LOG_TRACE
+};
 
-/* prefix will prepended any string used by the corresponding OSH_ log function */
-#define OSH_LOG_PREFIX_ERROR   "*** Error: "
-#define OSH_LOG_PREFIX_WARN    "*** Warning: "
-#define OSH_LOG_PREFIX_INFO    "  "
-#define OSH_LOG_PREFIX_DEBUG   "Debug: "
-#define OSH_LOG_PREFIX_LOG     ""
-#define OSH_LOG_HLINE          "-----------------------------------------------------\n"
+/* prefix will prepended any string used by the corresponding OSH_ log function
+ */
+#define OSH_LOG_PREFIX_ERROR "*** Error: "
+#define OSH_LOG_PREFIX_WARN "*** Warning: "
+#define OSH_LOG_PREFIX_INFO "  "
+#define OSH_LOG_PREFIX_DEBUG "Debug: "
+#define OSH_LOG_PREFIX_LOG ""
+#define OSH_LOG_HLINE "-----------------------------------------------------\n"
 
-#define OSH_LOG_REPEAT         10  /* how often a message is repeated before it is suppressed */
-
+#define OSH_LOG_REPEAT 10 /* how often a message is repeated before it is suppressed */
 
 /**
  * @brief Setup the logger for OpenShieldHIT
@@ -64,7 +66,6 @@ int osh_set_loglevel(int log_level);
  */
 int osh_get_loglevel(void);
 
-
 /**
  * @brief Print message to STDERR (and logfile if configured) and terminate.
  *
@@ -90,7 +91,7 @@ void osh_err(int status, char const *msg, ...);
  *
  * @author Niels Bassler
  */
-void osh_malloc_err(char const *msg,  ...);
+void osh_malloc_err(char const *msg, ...);
 
 /**
  * @brief Print a warning to stdout and logfile, if it was setup.
@@ -127,7 +128,8 @@ void osh_info(char const *msg, ...);
 void osh_debug(char const *msg, ...);
 
 /**
- * @brief Write a message to the logfile, if it was setup. Do not output to stdout.
+ * @brief Write a message to the logfile, if it was setup. Do not output to
+ * stdout.
  *
  * Message must be terminated with a null byte: //CHAR(0)
  * @param[in] msg - Null-terminated format string.

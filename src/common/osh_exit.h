@@ -1,9 +1,10 @@
 #ifndef _OSH_EXITS
 #define _OSH_EXITS
 
-/* Keep this file synchronized with exitcodes.inc */
-/* and be compatible to /usr/include/sysexits.h */
+/* Keep this file synchronized with exitcodes.inc and be compatible to
+ * /usr/include/sysexits.h for  Windows MSCV. */
 
+// clang-format off
 #define EX_OK       0   /* successful termination */
 
 #define EX__BASE    64  /* base value for error messages */
@@ -26,6 +27,6 @@
 #define EX_CONFIG       78  /* configuration error */
 
 #define EX__MAX 78  /* maximum listed value */
-
+// clang-format on
 
 #endif /* !_OSH_EXITS */

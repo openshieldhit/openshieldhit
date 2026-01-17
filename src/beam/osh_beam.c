@@ -12,8 +12,7 @@
 static void _wb_defaults(struct beam_workspace *wb);
 static int _wb_validate(const struct beam_workspace *wb);
 
-int osh_beam_setup(const char *filename, const char *wdir,
-                   struct beam_workspace **wb_out) {
+int osh_beam_setup(const char *filename, const char *wdir, struct beam_workspace **wb_out) {
     int rc = OSH_OK;
     struct oshfile *sf = NULL;
     struct beam_workspace *wb = NULL;

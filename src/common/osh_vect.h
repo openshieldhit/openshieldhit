@@ -126,12 +126,14 @@ void osh_vect_norm(double *u);
 void osh_vect_norm2(double const *u, double *v);
 
 /**
- * @brief For a given vector v, calculate two vectors which are perpendicular to it and each other.
+ * @brief For a given vector v, calculate two vectors which are perpendicular to
+ * it and each other.
  *
  * @details Simple replacement for GVEC90 mode 2
- *  Strategy: take x,y,z axis unit vectors and dot each of them to the input vector.
- *  The one with the lowest abs(dot product), must be "most orthogonal".
- *  This leads to more stable numerical situations for calculating the cross product later on.
+ *  Strategy: take x,y,z axis unit vectors and dot each of them to the input
+ * vector. The one with the lowest abs(dot product), must be "most orthogonal".
+ *  This leads to more stable numerical situations for calculating the cross
+ * product later on.
  *
  * @param[in] u - input unit vector
  * @param[out] v - unit vector orthogonal to <u> and <w>
@@ -143,23 +145,24 @@ void osh_vect_orthogonal_basis(double const *w, double *u, double *v);
 
 /**
  * @brief
- * Computes the coefficients (A, B, C, D) of the plane equation Ax + By + Cz + D = 0,
- * given a point `p` in the plane and a normal vector `u` orthogonal to it.
+ * Computes the coefficients (A, B, C, D) of the plane equation Ax + By + Cz + D
+ * = 0, given a point `p` in the plane and a normal vector `u` orthogonal to it.
  *
  * The output is not normalized: the vector (A, B, C) has the same direction and
  * magnitude as `u`, and D is calculated as -dot(u, p).
  *
  * @param[in]  p     A point lying in the plane (3D vector).
- * @param[in]  u     A vector orthogonal to the plane (not required to be normalized).
+ * @param[in]  u     A vector orthogonal to the plane (not required to be
+ * normalized).
  * @param[out] pp[4] Output array for the plane coefficients (A, B, C, D).
  *
  * @author Niels Bassler
  */
 void osh_vect_eqpln(double const *p, double const *u, double *pp);
 
-
 /**
- * @brief For a given vector u, rotate it clockwise by a given angle around OY axis. u is updated.
+ * @brief For a given vector u, rotate it clockwise by a given angle around OY
+ * axis. u is updated.
  *
  * @param[in] alpha - rotation angle in [radians]
  * @param[in,out] u - input vector.
@@ -169,7 +172,8 @@ void osh_vect_eqpln(double const *p, double const *u, double *pp);
 void osh_vect_rot_y(double alpha, double *u);
 
 /**
- * @brief For a given vector u, rotate it clockwise by a given angle around OZ axis. u is updated.
+ * @brief For a given vector u, rotate it clockwise by a given angle around OZ
+ * axis. u is updated.
  *
  * @param[in] phi - rotation angle in [radians]
  * @param[in,out] u - input vector.
@@ -193,12 +197,15 @@ void osh_vect_print(double const *v);
 void osh_vect_matrix4_print(double const *tm);
 
 /**
- * @brief Builds the transformation matrix osh_COORD_BZALIGN --> osh_COORD_UNIVERSE system.
+ * @brief Builds the transformation matrix osh_COORD_BZALIGN -->
+ * osh_COORD_UNIVERSE system.
  *
- * @details p will be at (0,0,0) and r will be along Z in the osh_COORD_BZALIGN system.
+ * @details p will be at (0,0,0) and r will be along Z in the osh_COORD_BZALIGN
+ * system.
  *
  * @param[in] p[3] - translation vector
- * @param[in] r[3] - vector for calculating the rotation matrix (not the rotation axis!)
+ * @param[in] r[3] - vector for calculating the rotation matrix (not the
+ * rotation axis!)
  * @param[out] tm[16] - transformation matrix, which maps e3 (0,0,1) into R
  *
  * @returns
@@ -208,4 +215,3 @@ void osh_vect_matrix4_print(double const *tm);
 void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm);
 
 #endif /* OSH_VECT_H */
-

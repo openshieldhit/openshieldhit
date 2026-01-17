@@ -1,8 +1,7 @@
 #include "osh_rng.h"
 #include <math.h>
 
-void osh_rng_init(struct osh_rng* rng, enum osh_rng_type type, uint64_t seed,
-                  uint64_t stream) {
+void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t stream) {
     rng->type = type;
     rng->gauss_has_spare = 0;
 
@@ -22,7 +21,7 @@ void osh_rng_init(struct osh_rng* rng, enum osh_rng_type type, uint64_t seed,
     }
 }
 
-uint32_t osh_rng_u32(struct osh_rng* rng) {
+uint32_t osh_rng_u32(struct osh_rng *rng) {
     switch (rng->type) {
     case OSH_RNG_TYPE_PCG32:
         return osh_rng_pcg32_u32(rng);
@@ -35,7 +34,7 @@ uint32_t osh_rng_u32(struct osh_rng* rng) {
     }
 }
 
-uint64_t osh_rng_u64(struct osh_rng* rng) {
+uint64_t osh_rng_u64(struct osh_rng *rng) {
     uint64_t hi;
     uint64_t lo;
 
@@ -53,7 +52,7 @@ uint64_t osh_rng_u64(struct osh_rng* rng) {
     }
 }
 
-float osh_rng_float(struct osh_rng* rng) {
+float osh_rng_float(struct osh_rng *rng) {
     uint32_t r;
     uint32_t mant;
 
@@ -64,7 +63,7 @@ float osh_rng_float(struct osh_rng* rng) {
     return (float)mant * (1.0f / 16777216.0f); /* 2^24 */
 }
 
-double osh_rng_double(struct osh_rng* rng) {
+double osh_rng_double(struct osh_rng *rng) {
     uint64_t r;
     uint64_t mant;
 
@@ -75,7 +74,7 @@ double osh_rng_double(struct osh_rng* rng) {
     return (double)mant * (1.0 / 9007199254740992.0); /* 2^53 */
 }
 
-double osh_rng_gauss01(struct osh_rng* rng) {
+double osh_rng_gauss01(struct osh_rng *rng) {
     double u;
     double v;
     double s;
@@ -101,13 +100,11 @@ double osh_rng_gauss01(struct osh_rng* rng) {
     return u * m;
 }
 
-double osh_rng_gauss(struct osh_rng* rng, double mu, double sigma) {
-    return mu + sigma * osh_rng_gauss01(rng);
-}
+double osh_rng_gauss(struct osh_rng *rng, double mu, double sigma) { return mu + sigma * osh_rng_gauss01(rng); }
 
 /* vectors */
 
-void osh_rng_double_vec(struct osh_rng* rng, double* restrict x, int n) {
+void osh_rng_double_vec(struct osh_rng *rng, double *restrict x, int n) {
     int i = 0;
 
     while (i + 3 < n) {
@@ -123,7 +120,7 @@ void osh_rng_double_vec(struct osh_rng* rng, double* restrict x, int n) {
     }
 }
 
-void osh_rng_float_vec(struct osh_rng* rng, float* restrict x, int n) {
+void osh_rng_float_vec(struct osh_rng *rng, float *restrict x, int n) {
     int i = 0;
 
     while (i + 3 < n) {
@@ -139,7 +136,7 @@ void osh_rng_float_vec(struct osh_rng* rng, float* restrict x, int n) {
     }
 }
 
-void osh_rng_gauss01_vec(struct osh_rng* rng, double* restrict x, int n) {
+void osh_rng_gauss01_vec(struct osh_rng *rng, double *restrict x, int n) {
     int i = 0;
 
     while (i + 3 < n) {
@@ -155,8 +152,7 @@ void osh_rng_gauss01_vec(struct osh_rng* rng, double* restrict x, int n) {
     }
 }
 
-void osh_rng_gauss_vec(struct osh_rng* rng, double mu, double sigma,
-                       double* restrict x, int n) {
+void osh_rng_gauss_vec(struct osh_rng *rng, double mu, double sigma, double *restrict x, int n) {
     int i = 0;
 
     while (i + 3 < n) {
@@ -172,7 +168,7 @@ void osh_rng_gauss_vec(struct osh_rng* rng, double mu, double sigma,
     }
 }
 
-void osh_rng_u32_vec(struct osh_rng* rng, uint32_t* restrict x, int n) {
+void osh_rng_u32_vec(struct osh_rng *rng, uint32_t *restrict x, int n) {
     int i = 0;
 
     while (i + 3 < n) {

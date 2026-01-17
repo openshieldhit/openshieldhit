@@ -33,7 +33,7 @@ struct osh_rng;
  * @param seed Seed value.
  * @param stream Stream/sequence ID.
  */
-void osh_rng_pcg32_init(struct osh_rng* rng, uint64_t seed, uint64_t stream);
+void osh_rng_pcg32_init(struct osh_rng *rng, uint64_t seed, uint64_t stream);
 
 /**
  * @brief Generate a 32-bit unsigned integer using PCG32 engine.
@@ -42,7 +42,7 @@ void osh_rng_pcg32_init(struct osh_rng* rng, uint64_t seed, uint64_t stream);
  *
  * @return 32-bit unsigned integer.
  */
-uint32_t osh_rng_pcg32_u32(struct osh_rng* rng);
+uint32_t osh_rng_pcg32_u32(struct osh_rng *rng);
 
 /**
  * @brief Initialize xoshiro256** engine.
@@ -51,8 +51,7 @@ uint32_t osh_rng_pcg32_u32(struct osh_rng* rng);
  * @param seed Seed value.
  * @param stream Stream/sequence ID.
  */
-void osh_rng_xoshiro256ss_init(struct osh_rng* rng, uint64_t seed,
-                               uint64_t stream);
+void osh_rng_xoshiro256ss_init(struct osh_rng *rng, uint64_t seed, uint64_t stream);
 
 /**
  * @brief Generate a 64-bit unsigned integer using xoshiro256** engine.
@@ -61,7 +60,7 @@ void osh_rng_xoshiro256ss_init(struct osh_rng* rng, uint64_t seed,
  *
  * @return 64-bit unsigned integer.
  */
-uint64_t osh_rng_xoshiro256ss_u64(struct osh_rng* rng);
+uint64_t osh_rng_xoshiro256ss_u64(struct osh_rng *rng);
 
 /** @} */
 
@@ -111,8 +110,7 @@ struct osh_rng {
  * @param seed Seed value.
  * @param stream Stream/sequence ID.
  */
-void osh_rng_init(struct osh_rng* rng, enum osh_rng_type type, uint64_t seed,
-                  uint64_t stream);
+void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t stream);
 
 /**
  * @brief Generate a 32-bit unsigned integer.
@@ -121,7 +119,7 @@ void osh_rng_init(struct osh_rng* rng, enum osh_rng_type type, uint64_t seed,
  *
  * @return 32-bit unsigned integer.
  */
-uint32_t osh_rng_u32(struct osh_rng* rng);
+uint32_t osh_rng_u32(struct osh_rng *rng);
 
 /**
  * @brief Generate a 64-bit unsigned integer.
@@ -130,7 +128,7 @@ uint32_t osh_rng_u32(struct osh_rng* rng);
  *
  * @return 64-bit unsigned integer.
  */
-uint64_t osh_rng_u64(struct osh_rng* rng);
+uint64_t osh_rng_u64(struct osh_rng *rng);
 
 /**
  * @brief Generate a float in the range [0, 1).
@@ -139,7 +137,7 @@ uint64_t osh_rng_u64(struct osh_rng* rng);
  *
  * @return Float in the range [0, 1).
  */
-float osh_rng_float(struct osh_rng* rng);
+float osh_rng_float(struct osh_rng *rng);
 
 /**
  * @brief Generate a double in the range [0, 1).
@@ -148,7 +146,7 @@ float osh_rng_float(struct osh_rng* rng);
  *
  * @return Double in the range [0, 1).
  */
-double osh_rng_double(struct osh_rng* rng);
+double osh_rng_double(struct osh_rng *rng);
 
 /**
  * @brief Generate a standard normal random variable (N(0,1)).
@@ -157,7 +155,7 @@ double osh_rng_double(struct osh_rng* rng);
  *
  * @return Standard normal random variable.
  */
-double osh_rng_gauss01(struct osh_rng* rng);
+double osh_rng_gauss01(struct osh_rng *rng);
 
 /**
  * @brief Generate a normal random variable (N(mu, sigma)).
@@ -168,7 +166,7 @@ double osh_rng_gauss01(struct osh_rng* rng);
  *
  * @return Normal random variable.
  */
-double osh_rng_gauss(struct osh_rng* rng, double mu, double sigma);
+double osh_rng_gauss(struct osh_rng *rng, double mu, double sigma);
 
 /**
  * @brief Generate an array of doubles in the range [0, 1).
@@ -177,7 +175,7 @@ double osh_rng_gauss(struct osh_rng* rng, double mu, double sigma);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_double_vec(struct osh_rng* rng, double* restrict x, int n);
+void osh_rng_double_vec(struct osh_rng *rng, double *restrict x, int n);
 
 /**
  * @brief Generate an array of floats in the range [0, 1).
@@ -186,7 +184,7 @@ void osh_rng_double_vec(struct osh_rng* rng, double* restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_float_vec(struct osh_rng* rng, float* restrict x, int n);
+void osh_rng_float_vec(struct osh_rng *rng, float *restrict x, int n);
 
 /**
  * @brief Generate an array of 32-bit unsigned integers.
@@ -195,7 +193,7 @@ void osh_rng_float_vec(struct osh_rng* rng, float* restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_u32_vec(struct osh_rng* rng, uint32_t* restrict x, int n);
+void osh_rng_u32_vec(struct osh_rng *rng, uint32_t *restrict x, int n);
 
 /**
  * @brief Generate an array of standard normal random variables (N(0,1)).
@@ -204,7 +202,7 @@ void osh_rng_u32_vec(struct osh_rng* rng, uint32_t* restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_gauss01_vec(struct osh_rng* rng, double* restrict x, int n);
+void osh_rng_gauss01_vec(struct osh_rng *rng, double *restrict x, int n);
 
 /**
  * @brief Generate an array of normal random variables (N(mu, sigma)).
@@ -215,8 +213,7 @@ void osh_rng_gauss01_vec(struct osh_rng* rng, double* restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_gauss_vec(struct osh_rng* rng, double mu, double sigma,
-                       double* restrict x, int n);
+void osh_rng_gauss_vec(struct osh_rng *rng, double mu, double sigma, double *restrict x, int n);
 
 /**
  * @brief Convenience alias for generating a double in the range [0, 1).
@@ -225,8 +222,6 @@ void osh_rng_gauss_vec(struct osh_rng* rng, double mu, double sigma,
  *
  * @return Double in the range [0, 1).
  */
-static inline double osh_rng(struct osh_rng* rng) {
-    return osh_rng_double(rng);
-}
+static inline double osh_rng(struct osh_rng *rng) { return osh_rng_double(rng); }
 
 #endif /* OSH_RNG_H */

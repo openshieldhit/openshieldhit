@@ -7,13 +7,14 @@
 /**
  * @brief Creates a byte-map for a given file *oshf.
  *
- * @details This function reads the file line by line, counts the number of newlines,
- *          and creates a map of byte offsets for each line in the file.
- *          The file pointer is rewound after this function is called.
+ * @details This function reads the file line by line, counts the number of
+ * newlines, and creates a map of byte offsets for each line in the file. The
+ * file pointer is rewound after this function is called.
  *
  * @param[in,out] oshf Pointer to struct oshfile struct.
  *
- * @returns 1 on success, or exits with an error if the file pointer is NULL or memory allocation fails.
+ * @returns 1 on success, or exits with an error if the file pointer is NULL or
+ * memory allocation fails.
  *
  * @author Niels Bassler
  */
@@ -35,10 +36,10 @@ struct oshfile *osh_fopen(const char *filename) {
 
     oshf->fp = fp;
     oshf->filename = strdup(filename);
-    oshf->lineno = 0;  /* current line number */
+    oshf->lineno = 0; /* current line number */
 
     oshf->map = NULL;
-    oshf->map_len = 0;  /* number of lines (entries) of the map */
+    oshf->map_len = 0; /* number of lines (entries) of the map */
 
     _mapfile(oshf);
     if (oshf->map_len < 1) {
@@ -48,19 +49,18 @@ struct oshfile *osh_fopen(const char *filename) {
     return oshf;
 }
 
-
 void osh_fclose(struct oshfile *oshf) {
-    if (!oshf) return;
+    if (!oshf)
+        return;
 
-    if (oshf->fp) fclose(oshf->fp);
+    if (oshf->fp)
+        fclose(oshf->fp);
     free(oshf->filename);
     free(oshf->map);
     free(oshf);
 }
 
-
-int osh_file_lineno(const struct oshfile *oshf)
-{
+int osh_file_lineno(const struct oshfile *oshf) {
     long int pos;
     int low = 0, high, mid;
 
@@ -84,7 +84,6 @@ int osh_file_lineno(const struct oshfile *oshf)
 
     return low + 1; /* Line numbers are 1-based */
 }
-
 
 static int _mapfile(struct oshfile *oshf) {
     char c;
@@ -128,4 +127,3 @@ static int _mapfile(struct oshfile *oshf) {
 
     return 1; /* Success */
 }
-

@@ -1,23 +1,24 @@
+#include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
-#include <errno.h>
 
 #include "osh_exit.h"
 #include "osh_logger.h"
 
-#define _MAX_LINE_LENGTH 4096   /* Consider making this global somehow */
+#define _MAX_LINE_LENGTH 4096 /* Consider making this global somehow */
 
 /* help GCC to tell that this function takes printf-style arguments */
 #if defined(__GNUC__) || defined(__clang__)
-__attribute__((format(printf, 2, 3)))
-__attribute__((noreturn))
+__attribute__((format(printf, 2, 3))) __attribute__((noreturn))
 #endif
 
-static int _log_level = 4;          /* this way, there will be printouts, even if the logger was not setup first */
+static int _log_level = 4; /* this way, there will be printouts, even if the
+                              logger was not setup first */
 static char *_log_filename;
-static int _logger_save_active = 0; /* init FALSE. If logger was setup with an output file, then enable this. */
+static int _logger_save_active = 0; /* init FALSE. If logger was setup with an
+                                       output file, then enable this. */
 static FILE *_fplog = NULL;
 
 /* warning message database only visbile inside this .c file */
@@ -34,25 +35,26 @@ void _message_db_summary(void);
 void _message_db_free(void);
 int _message_db_check(char const *s, int level);
 
-
 int osh_setup_logger(char const *path, int log_level) {
 
     int len;
 
     if (_logger_save_active) {
-        osh_warn("osh_setup_logger() called while logger already active. Ignoring.\n");
+        osh_warn("osh_setup_logger() called while logger already active. "
+                 "Ignoring.\n");
         return 0;
     }
 
     len = strlen(path);
     _log_filename = calloc(len + 1, sizeof(char));
 
-    if (!_log_filename) osh_malloc_err("osh_setup_logger() *_log_filename");
+    if (!_log_filename)
+        osh_malloc_err("osh_setup_logger() *_log_filename");
     memcpy(_log_filename, path, len);
 
-    _fplog = fopen(_log_filename,"w");
+    _fplog = fopen(_log_filename, "w");
     if (_fplog == NULL) {
-        fprintf(stderr,"%scannot open >%s< for writing. %s\n", OSH_LOG_PREFIX_ERROR, _log_filename, strerror(errno));
+        fprintf(stderr, "%scannot open >%s< for writing. %s\n", OSH_LOG_PREFIX_ERROR, _log_filename, strerror(errno));
         free(_log_filename);
         exit(EX_IOERR);
     }
@@ -66,13 +68,12 @@ int osh_setup_logger(char const *path, int log_level) {
     return 1;
 }
 
-
 int osh_close_logger(void) {
 
     _message_db_summary(); /* print any occuring warning messages */
 
     if (_fplog == NULL) {
-        fprintf(stderr,"%scannot close %s for writing.\n", OSH_LOG_PREFIX_ERROR, _log_filename);
+        fprintf(stderr, "%scannot close %s for writing.\n", OSH_LOG_PREFIX_ERROR, _log_filename);
         exit(EX_IOERR);
     }
     fclose(_fplog);
@@ -81,8 +82,7 @@ int osh_close_logger(void) {
     return 0;
 }
 
-
-int osh_set_loglevel(int log_level){
+int osh_set_loglevel(int log_level) {
     if (!_logger_save_active) {
         return 1;
     }
@@ -90,11 +90,7 @@ int osh_set_loglevel(int log_level){
     return 0;
 }
 
-
-int osh_get_loglevel(void){
-    return _log_level;
-}
-
+int osh_get_loglevel(void) { return _log_level; }
 
 void osh_err(int status, char const *msg, ...) {
     char s[_MAX_LINE_LENGTH];
@@ -111,8 +107,9 @@ void osh_err(int status, char const *msg, ...) {
         vfprintf(stderr, s, args1);
     }
 
-    /* all ERR will be saved to logger, irrespectly of log level, if save is active */
-    if(_logger_save_active) {
+    /* all ERR will be saved to logger, irrespectly of log level, if save is
+     * active */
+    if (_logger_save_active) {
         vfprintf(_fplog, s, args2);
         fflush(_fplog);
     }
@@ -122,7 +119,6 @@ void osh_err(int status, char const *msg, ...) {
 
     exit(status);
 }
-
 
 void osh_malloc_err(char const *msg, ...) {
     char s[_MAX_LINE_LENGTH];
@@ -138,8 +134,9 @@ void osh_malloc_err(char const *msg, ...) {
         vfprintf(stderr, s, args1);
     }
 
-    /* all ERR will be saved to logger, irrespectly of log level, if save is active */
-    if(_logger_save_active) {
+    /* all ERR will be saved to logger, irrespectly of log level, if save is
+     * active */
+    if (_logger_save_active) {
         vfprintf(_fplog, s, args2);
         fflush(_fplog);
     }
@@ -149,7 +146,6 @@ void osh_malloc_err(char const *msg, ...) {
 
     exit(EX_UNAVAILABLE);
 }
-
 
 void osh_warn(char const *msg, ...) {
     char s[_MAX_LINE_LENGTH];
@@ -161,7 +157,7 @@ void osh_warn(char const *msg, ...) {
     snprintf(s, _MAX_LINE_LENGTH - 2, "%s%s", OSH_LOG_PREFIX_WARN, msg);
 
     /* check database */
-    if(!_message_db_check(s, OSH_LOG_WARN)) {
+    if (!_message_db_check(s, OSH_LOG_WARN)) {
         return;
     }
 
@@ -170,8 +166,9 @@ void osh_warn(char const *msg, ...) {
         vfprintf(stderr, s, args1);
     }
 
-    /* all warnings will be saved to logger, irrespectly of log level, if save is active */
-    if(_logger_save_active) {
+    /* all warnings will be saved to logger, irrespectly of log level, if save
+     * is active */
+    if (_logger_save_active) {
         va_start(args2, msg);
         vfprintf(_fplog, s, args2);
         fflush(_fplog);
@@ -180,7 +177,6 @@ void osh_warn(char const *msg, ...) {
     va_end(args1);
     va_end(args2);
 }
-
 
 void osh_info(char const *msg, ...) {
     char s[_MAX_LINE_LENGTH] = "";
@@ -198,8 +194,9 @@ void osh_info(char const *msg, ...) {
         fflush(stdout);
     }
 
-    /* all INFO will be saved to logger, irrespectly of log level, if save is active */
-    if(_logger_save_active) {
+    /* all INFO will be saved to logger, irrespectly of log level, if save is
+     * active */
+    if (_logger_save_active) {
         va_start(args2, msg);
         vfprintf(_fplog, s, args2);
         fflush(_fplog);
@@ -208,7 +205,6 @@ void osh_info(char const *msg, ...) {
     va_end(args1);
     va_end(args2);
 }
-
 
 void osh_debug(char const *msg, ...) {
     char s[_MAX_LINE_LENGTH];
@@ -224,7 +220,7 @@ void osh_debug(char const *msg, ...) {
         vfprintf(stderr, s, args1);
 
         /* DEBUG will be saved to logger, if log-level sufficient */
-        if(_logger_save_active) {
+        if (_logger_save_active) {
             va_start(args2, msg);
             vfprintf(_fplog, s, args2);
             fflush(_fplog);
@@ -234,7 +230,6 @@ void osh_debug(char const *msg, ...) {
     va_end(args1);
     va_end(args2);
 }
-
 
 void osh_log(char const *msg, ...) {
     char s[_MAX_LINE_LENGTH];
@@ -252,15 +247,17 @@ void osh_log(char const *msg, ...) {
     }
 }
 
-
 /**
- * @brief Add message to message database. If message has is known has been occuring more then OSH_LOG_REPEAT times, then return 0, else 1.
- * The database will also count how many time a message has been occuring.
+ * @brief Add message to message database. If message has is known has been
+ * occuring more then OSH_LOG_REPEAT times, then return 0, else 1. The database
+ * will also count how many time a message has been occuring.
  *
  * @param[in] s - message string
- * @param[in] level - message level (not really used for now, but may be used in future)
+ * @param[in] level - message level (not really used for now, but may be used in
+ * future)
  *
- * @returns 1 if message is new, 0 if message has been occuring more then OSH_LOG_REPEAT times
+ * @returns 1 if message is new, 0 if message has been occuring more then
+ * OSH_LOG_REPEAT times
  *
  * @author Niels Bassler
  */
@@ -280,10 +277,10 @@ int _message_db_check(char const *s, int level) {
                 return 0;
             } else {
                 /* Message count is within limit, return 1 */
-                if(message_db.count[i] == OSH_LOG_REPEAT) {
-                    osh_info(
-                        "The following warning message has been repeated %d times and further repetitions will be suppressed:\n",
-                        OSH_LOG_REPEAT);
+                if (message_db.count[i] == OSH_LOG_REPEAT) {
+                    osh_info("The following warning message has been repeated %d "
+                             "times and further repetitions will be suppressed:\n",
+                             OSH_LOG_REPEAT);
                 }
                 return 1;
             }
@@ -316,9 +313,9 @@ int _message_db_check(char const *s, int level) {
     return 1;
 }
 
-
 /**
- * @brief Print summary of the messages recorded in the message database, and the number of occurences.
+ * @brief Print summary of the messages recorded in the message database, and
+ * the number of occurences.
  *
  * @author Niels Bassler
  */
@@ -341,13 +338,10 @@ void _message_db_summary(void) {
             message_db.msg[i][len - 1] = '\0';
         }
 
-        osh_info ("\"%s \" - count:%d \n",
-                  message_db.msg[i],
-                  message_db.count[i]);
+        osh_info("\"%s \" - count:%d \n", message_db.msg[i], message_db.count[i]);
 
     } /* end of for loop */
 }
-
 
 /* initialize message db */
 void _message_db_init(void) {
@@ -356,16 +350,17 @@ void _message_db_init(void) {
     message_db.len = 0;
 
     message_db.msg = calloc(1, sizeof(char *));
-    if (!message_db.msg) osh_malloc_err("osh_message_db ()message_db.msg");
+    if (!message_db.msg)
+        osh_malloc_err("osh_message_db ()message_db.msg");
     message_db.count = calloc(1, sizeof(int));
-    if (!message_db.count) osh_malloc_err("osh_message_db ()message_db.count");
+    if (!message_db.count)
+        osh_malloc_err("osh_message_db ()message_db.count");
     message_db.level = calloc(1, sizeof(int));
-    if (!message_db.level) osh_malloc_err("osh_message_db ()message_db.level");
+    if (!message_db.level)
+        osh_malloc_err("osh_message_db ()message_db.level");
 
     message_db.count[0] = 0;
-
 }
-
 
 void _message_db_free(void) {
     int i;

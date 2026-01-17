@@ -1,7 +1,7 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "osh_logger.h"
 
@@ -31,10 +31,11 @@ void test_logger_basic() {
     f = fopen(logfile, "r");
     assert(f != NULL);
 
-
     while (fgets(line, sizeof(line), f)) {
-        if (strstr(line, "Info message")) found_info = 1;
-        if (strstr(line, "Warning message")) found_warn = 1;
+        if (strstr(line, "Info message"))
+            found_info = 1;
+        if (strstr(line, "Warning message"))
+            found_warn = 1;
     }
     fclose(f);
 
@@ -46,10 +47,8 @@ void test_logger_basic() {
     remove(logfile);
 }
 
-
 int main() {
     test_logger_basic();
     printf("Logger test passed.\n");
     return 0;
 }
-

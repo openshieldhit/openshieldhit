@@ -37,8 +37,7 @@ uint32_t osh_rng_pcg32_u32(struct osh_rng *rng) {
     oldstate = rng->u.pcg32.state;
 
     /* Advance internal state */
-    rng->u.pcg32.state =
-        oldstate * 6364136223846793005ULL + (rng->u.pcg32.inc | 1ULL);
+    rng->u.pcg32.state = oldstate * 6364136223846793005ULL + (rng->u.pcg32.inc | 1ULL);
 
     /* Output function XSH RR */
     xorshifted = (uint32_t)(((oldstate >> 18u) ^ oldstate) >> 27u);

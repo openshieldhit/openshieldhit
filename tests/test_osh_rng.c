@@ -5,13 +5,12 @@
 
 #include "osh_rng.h"
 
-#define ASSERT_TRUE(cond)                                                      \
-    do {                                                                       \
-        if (!(cond)) {                                                         \
-            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__,    \
-                    __LINE__);                                                 \
-            exit(1);                                                           \
-        }                                                                      \
+#define ASSERT_TRUE(cond)                                                                                              \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);                                 \
+            exit(1);                                                                                                   \
+        }                                                                                                              \
     } while (0)
 
 static void test_pcg32_known_sequence(void) {
@@ -34,9 +33,8 @@ static void test_xoshiro256ss_known_sequence(void) {
     osh_rng_init(&r, OSH_RNG_TYPE_XOSHIRO256SS, 42u, 54u);
 
     const uint64_t exp[5] = {
-        9619421891339311063ull,  17143628181114060176ull,
-        17740981343507171333ull, 7781542089684599863ull,
-        309587622474537745ull,
+        9619421891339311063ull, 17143628181114060176ull, 17740981343507171333ull,
+        7781542089684599863ull, 309587622474537745ull,
     };
 
     for (int i = 0; i < 5; ++i) {

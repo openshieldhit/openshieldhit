@@ -1,6 +1,7 @@
 #ifndef _OSH_PARTICLE_PDG
 #define _OSH_PARTICLE_PDG
 
+// clang-format off
 #define OSH_PART_PDG_NEUTRON     2112    /* neutron */
 #define OSH_PART_PDG_PROTON      2212    /* proton */
 #define OSH_PART_PDG_PIMINUS     -211    /* pi- */
@@ -33,5 +34,6 @@
 /* PDG codes 81–100 are reserved for generator-specific pseudoparticles and concepts. */
 #define OSH_PART_PDG_NONE        81       /* zero-physics virtual particle for testing, currently also used if not set */
 #define OSH_PART_PDG_INVALID     100      /* for error handling */
+// clang-format on
 
 #endif /* !_OSH_PARTICLE_PDG */
