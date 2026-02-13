@@ -7,10 +7,12 @@
  * Seeding uses splitmix64 to expand (seed, stream) into 256-bit state.
  */
 
-#include "osh_rng.h"
+#include "random/osh_rng.h"
 
 /* rotate left */
-static uint64_t _rotl64(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
+static uint64_t _rotl64(uint64_t x, int k) {
+    return (x << k) | (x >> (64 - k));
+}
 
 /* splitmix64: good for seeding other generators */
 static uint64_t _splitmix64_next(uint64_t *x) {

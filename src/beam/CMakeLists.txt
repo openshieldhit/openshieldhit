@@ -9,7 +9,7 @@ add_library(osh_beam
 # Make sure consumers of the library see the headers
 target_include_directories(osh_beam
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
 )
 
 target_link_libraries(osh_beam

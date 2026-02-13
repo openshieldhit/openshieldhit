@@ -6,11 +6,13 @@ add_library(osh_common
     osh_vect.c
     osh_file.c
     osh_readline.c
+    osh_coord.c
 )
 
 # Make sure consumers of the library see the headers
 target_include_directories(osh_common
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+    PUBLIC
+    ${PROJECT_SOURCE_DIR}/src
 )
 
 # Link math library

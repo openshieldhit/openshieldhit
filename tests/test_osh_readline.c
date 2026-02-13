@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "osh_file.h"
-#include "osh_readline.h"
+#include "common/osh_file.h"
+#include "common/osh_readline.h"
 
 #define TEST_PATH "../../tests/res/test01/beam.dat"
 

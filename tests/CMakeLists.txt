@@ -10,10 +10,7 @@ foreach(test_src ${TEST_SOURCES})
     # Include all relevant source subdirectories
     target_include_directories(${test_name}
         PRIVATE
-            ${PROJECT_SOURCE_DIR}/src/common
-            ${PROJECT_SOURCE_DIR}/src/random
-            ${PROJECT_SOURCE_DIR}/src/beam
-            ${PROJECT_SOURCE_DIR}/src/particle
+            ${PROJECT_SOURCE_DIR}/src
     )
 
     # Link all needed internal libraries

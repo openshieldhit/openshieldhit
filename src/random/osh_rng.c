@@ -1,4 +1,5 @@
-#include "osh_rng.h"
+#include "random/osh_rng.h"
+
 #include <math.h>
 
 void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t stream) {
@@ -27,7 +28,7 @@ uint32_t osh_rng_u32(struct osh_rng *rng) {
         return osh_rng_pcg32_u32(rng);
 
     case OSH_RNG_TYPE_XOSHIRO256SS:
-        return (uint32_t)(osh_rng_xoshiro256ss_u64(rng) >> 32);
+        return (uint32_t) (osh_rng_xoshiro256ss_u64(rng) >> 32);
 
     default:
         return osh_rng_pcg32_u32(rng);
@@ -40,15 +41,15 @@ uint64_t osh_rng_u64(struct osh_rng *rng) {
 
     switch (rng->type) {
     case OSH_RNG_TYPE_PCG32:
-        hi = (uint64_t)osh_rng_pcg32_u32(rng);
-        lo = (uint64_t)osh_rng_pcg32_u32(rng);
+        hi = (uint64_t) osh_rng_pcg32_u32(rng);
+        lo = (uint64_t) osh_rng_pcg32_u32(rng);
         return (hi << 32) | lo;
 
     case OSH_RNG_TYPE_XOSHIRO256SS:
         return osh_rng_xoshiro256ss_u64(rng);
 
     default:
-        return ((uint64_t)osh_rng_u32(rng) << 32) | (uint64_t)osh_rng_u32(rng);
+        return ((uint64_t) osh_rng_u32(rng) << 32) | (uint64_t) osh_rng_u32(rng);
     }
 }
 
@@ -60,7 +61,7 @@ float osh_rng_float(struct osh_rng *rng) {
     r = osh_rng_u32(rng);
     mant = r >> 8; /* top 24 bits */
 
-    return (float)mant * (1.0f / 16777216.0f); /* 2^24 */
+    return (float) mant * (1.0f / 16777216.0f); /* 2^24 */
 }
 
 double osh_rng_double(struct osh_rng *rng) {
@@ -71,7 +72,7 @@ double osh_rng_double(struct osh_rng *rng) {
     r = osh_rng_u64(rng);
     mant = r >> 11; /* top 53 bits */
 
-    return (double)mant * (1.0 / 9007199254740992.0); /* 2^53 */
+    return (double) mant * (1.0 / 9007199254740992.0); /* 2^53 */
 }
 
 double osh_rng_gauss01(struct osh_rng *rng) {
@@ -100,7 +101,9 @@ double osh_rng_gauss01(struct osh_rng *rng) {
     return u * m;
 }
 
-double osh_rng_gauss(struct osh_rng *rng, double mu, double sigma) { return mu + sigma * osh_rng_gauss01(rng); }
+double osh_rng_gauss(struct osh_rng *rng, double mu, double sigma) {
+    return mu + sigma * osh_rng_gauss01(rng);
+}
 
 /* vectors */
 

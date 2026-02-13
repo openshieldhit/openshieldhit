@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "osh_logger.h"
+#include "common/osh_logger.h"
 
 static int file_contains(const char *path, const char *needle) {
     char line[1024];

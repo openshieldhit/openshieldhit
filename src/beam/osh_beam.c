@@ -1,13 +1,13 @@
+#include "beam/osh_beam.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "osh_beam.h"
-#include "osh_beam_parse.h"
-#include "osh_beam_spots.h"
-#include "osh_file.h"
-
-#include "osh_logger.h"
-#include "osh_rc.h"
+#include "beam/osh_beam_parse.h"
+#include "beam/osh_beam_spots.h"
+#include "common/osh_file.h"
+#include "common/osh_logger.h"
+#include "common/osh_rc.h"
 
 static void _wb_defaults(struct beam_workspace *wb);
 static int _wb_validate(const struct beam_workspace *wb);
@@ -25,7 +25,7 @@ int osh_beam_setup(const char *filename, const char *wdir, struct beam_workspace
     if (!sf)
         return OSH_EIO;
 
-    wb = (struct beam_workspace *)calloc(1, sizeof *wb);
+    wb = (struct beam_workspace *) calloc(1, sizeof *wb);
     if (!wb) {
         osh_fclose(sf);
         return OSH_ENOMEM;
@@ -50,7 +50,7 @@ int osh_beam_setup(const char *filename, const char *wdir, struct beam_workspace
 
     if (wdir && *wdir) {
         size_t L = strlen(wdir);
-        wb->wdir = (char *)malloc(L + 1);
+        wb->wdir = (char *) malloc(L + 1);
         if (!wb->wdir) {
             osh_fclose(sf);
             osh_beam_workspace_free(wb);

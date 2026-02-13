@@ -269,8 +269,14 @@ int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *us
  * @param[in] fmt The format string.
  * @param[in] ap The variable argument list.
  */
-void osh_logger_logv_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
-                        const char *function, const char *fmt, va_list ap);
+void osh_logger_logv_ex(struct osh_logger *lg,
+                        int level,
+                        unsigned flags_override,
+                        const char *file,
+                        int line,
+                        const char *function,
+                        const char *fmt,
+                        va_list ap);
 
 /**
  * @brief Log a message with extended options (variadic version).
@@ -284,8 +290,14 @@ void osh_logger_logv_ex(struct osh_logger *lg, int level, unsigned flags_overrid
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_logger_log_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
-                       const char *function, const char *fmt, ...)
+void osh_logger_log_ex(struct osh_logger *lg,
+                       int level,
+                       unsigned flags_override,
+                       const char *file,
+                       int line,
+                       const char *function,
+                       const char *fmt,
+                       ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 7, 8)))
 #endif
@@ -377,13 +389,17 @@ void osh_error(int exit_code, const char *fmt, ...)
     ;
 
 /**
- * @brief Log a fatal memory allocation failure and exit.
+ * @brief Log a fatal memory allocation failure and terminate the program.
  *
- * @param[in] size The size of the allocation that failed.
+ * This function logs a formatted fatal error message and then calls exit().
+ * It does not return.
+ *
+ * @param[in] fmt printf-style format string describing the failure.
+ * @param[in] ... Optional format arguments.
  */
-void osh_alloc_failed(size_t size)
+void osh_alloc_failed(const char *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
-    __attribute__((noreturn))
+    __attribute__((format(printf, 1, 2))) __attribute__((noreturn))
 #endif
     ;
 

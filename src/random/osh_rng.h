@@ -222,6 +222,8 @@ void osh_rng_gauss_vec(struct osh_rng *rng, double mu, double sigma, double *res
  *
  * @return Double in the range [0, 1).
  */
-static inline double osh_rng(struct osh_rng *rng) { return osh_rng_double(rng); }
+static inline double osh_rng(struct osh_rng *rng) {
+    return osh_rng_double(rng);
+}
 
 #endif /* OSH_RNG_H */

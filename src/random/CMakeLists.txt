@@ -6,7 +6,8 @@ add_library(osh_random
 
 # Make sure consumers of the library see the headers
 target_include_directories(osh_random
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+    PUBLIC
+    ${PROJECT_SOURCE_DIR}/src
 )
 
 # Link math library

@@ -1,10 +1,11 @@
+#include "osh_readline.h"
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "osh_logger.h"
-#include "osh_readline.h"
 
 static int _is_comment(char c);
 
@@ -21,7 +22,7 @@ int osh_readline(struct oshfile *oshf, char **line, int *lineno) {
     if (*line == NULL) {
         *line = calloc(OSH_MAX_LINE_LENGTH, sizeof(char));
         if (!*line) {
-            osh_alloc_failed(OSH_MAX_LINE_LENGTH * sizeof(char));
+            osh_alloc_failed("osh_readline: failed to allocate memory for line buffer");
         }
     }
 
@@ -35,7 +36,7 @@ int osh_readline(struct oshfile *oshf, char **line, int *lineno) {
             if (_is_comment(buff[i]) || buff[i] == '\0') {
                 break;
             }
-            if (!isspace((unsigned char)buff[i])) {
+            if (!isspace((unsigned char) buff[i])) {
                 if (pos1 == -1)
                     pos0 = i;
                 pos1 = i;
@@ -70,7 +71,7 @@ int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aar
 
         /* Skip empty lines and comments */
         i = 0;
-        while (isspace((unsigned char)buff[i]))
+        while (isspace((unsigned char) buff[i]))
             i++;
         if (buff[i] == '\0' || _is_comment(buff[i]))
             continue;
@@ -78,25 +79,25 @@ int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aar
         /* Allocate and copy line */
         line = calloc(OSH_MAX_LINE_LENGTH, sizeof(char));
         if (!line) {
-            osh_alloc_failed(OSH_MAX_LINE_LENGTH * sizeof(char));
+            osh_alloc_failed("osh_readline_key: failed to allocate memory for line buffer");
             return -1;
         }
         strncpy(line, buff, OSH_MAX_LINE_LENGTH);
 
         /* Find key */
         i = 0;
-        while (isspace((unsigned char)line[i]))
+        while (isspace((unsigned char) line[i]))
             i++;
         *kkey = line + i;
         key_end = i;
-        while (line[key_end] && !isspace((unsigned char)line[key_end]) && !_is_comment(line[key_end]))
+        while (line[key_end] && !isspace((unsigned char) line[key_end]) && !_is_comment(line[key_end]))
             key_end++;
         if (line[key_end])
             line[key_end] = '\0';
 
         /* Find args */
         args_start = key_end + 1;
-        while (line[args_start] && isspace((unsigned char)line[args_start]))
+        while (line[args_start] && isspace((unsigned char) line[args_start]))
             args_start++;
         if (line[args_start] == '\0' || _is_comment(line[args_start])) {
             *aargs = NULL;
@@ -105,7 +106,7 @@ int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aar
             j = args_start;
             last_char = j;
             while (line[j] && !_is_comment(line[j])) {
-                if (!isspace((unsigned char)line[j]))
+                if (!isspace((unsigned char) line[j]))
                     last_char = j;
                 j++;
             }

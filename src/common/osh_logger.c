@@ -1,10 +1,10 @@
+#include "osh_logger.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
-#include "osh_logger.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -62,8 +62,14 @@ int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *us
 /* wrappers / convenience (public) */
 const char *osh_log_level_name(int level);
 
-void osh_logger_log_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
-                       const char *function, const char *fmt, ...);
+void osh_logger_log_ex(struct osh_logger *lg,
+                       int level,
+                       unsigned flags_override,
+                       const char *file,
+                       int line,
+                       const char *function,
+                       const char *fmt,
+                       ...);
 void osh_logger_logv(struct osh_logger *lg, int level, const char *fmt, va_list ap);
 void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...);
 
@@ -72,7 +78,7 @@ void osh_debug(const char *fmt, ...);
 void osh_info(const char *fmt, ...);
 void osh_warn(const char *fmt, ...);
 void osh_error(int exit_code, const char *fmt, ...);
-void osh_alloc_failed(size_t size);
+void osh_alloc_failed(const char *fmt, ...);
 
 /* formatting / output helpers (file-local) */
 static unsigned _effective_flags(struct osh_logger *lg, unsigned flags_override);
@@ -88,13 +94,13 @@ static size_t _append_char(char *dst, size_t cap, size_t off, char c);
 static size_t _append_int(char *dst, size_t cap, size_t off, int v);
 static size_t _append_timestamp(char *dst, size_t cap, size_t off);
 
-static size_t _format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line,
-                             const char *function);
+static size_t
+_format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line, const char *function);
 
 static FILE *_open_log_file(const char *path, int append);
 
-static void _write_record_unlocked(struct osh_logger *lg, int level, const char *prefix, size_t prefix_len,
-                                   const char *fmt, va_list ap);
+static void _write_record_unlocked(
+    struct osh_logger *lg, int level, const char *prefix, size_t prefix_len, const char *fmt, va_list ap);
 
 /* -----------------------------
  * types / state
@@ -131,7 +137,7 @@ static void _mutex_init(struct osh_mutex *m) {
     InitializeCriticalSection(&m->cs);
 #else
     /* default mutex is fine; we don't need recursive mutex if we avoid re-entry */
-    (void)pthread_mutex_init(&m->m, NULL);
+    (void) pthread_mutex_init(&m->m, NULL);
 #endif
 }
 
@@ -139,7 +145,7 @@ static void _mutex_lock(struct osh_mutex *m) {
 #if defined(_WIN32)
     EnterCriticalSection(&m->cs);
 #else
-    (void)pthread_mutex_lock(&m->m);
+    (void) pthread_mutex_lock(&m->m);
 #endif
 }
 
@@ -147,7 +153,7 @@ static void _mutex_unlock(struct osh_mutex *m) {
 #if defined(_WIN32)
     LeaveCriticalSection(&m->cs);
 #else
-    (void)pthread_mutex_unlock(&m->m);
+    (void) pthread_mutex_unlock(&m->m);
 #endif
 }
 
@@ -155,7 +161,7 @@ static void _mutex_destroy(struct osh_mutex *m) {
 #if defined(_WIN32)
     DeleteCriticalSection(&m->cs);
 #else
-    (void)pthread_mutex_destroy(&m->m);
+    (void) pthread_mutex_destroy(&m->m);
 #endif
 }
 
@@ -164,7 +170,7 @@ static void _mutex_destroy(struct osh_mutex *m) {
  * ----------------------------- */
 
 struct osh_logger *osh_logger_create(int level, unsigned flags) {
-    struct osh_logger *lg = (struct osh_logger *)calloc(1, sizeof(*lg));
+    struct osh_logger *lg = (struct osh_logger *) calloc(1, sizeof(*lg));
     if (!lg)
         return NULL;
 
@@ -214,9 +220,9 @@ int osh_logger_get_level(struct osh_logger const *lg) {
         return level;
 
     /* Cast away const only to use the same mutex; or store level atomically later. */
-    _mutex_lock((struct osh_mutex *)&lg->lock);
+    _mutex_lock((struct osh_mutex *) &lg->lock);
     level = lg->level;
-    _mutex_unlock((struct osh_mutex *)&lg->lock);
+    _mutex_unlock((struct osh_mutex *) &lg->lock);
     return level;
 }
 
@@ -234,9 +240,9 @@ unsigned int osh_logger_get_flags(struct osh_logger const *lg) {
     if (!lg)
         return flags;
 
-    _mutex_lock((struct osh_mutex *)&lg->lock);
+    _mutex_lock((struct osh_mutex *) &lg->lock);
     flags = lg->flags;
-    _mutex_unlock((struct osh_mutex *)&lg->lock);
+    _mutex_unlock((struct osh_mutex *) &lg->lock);
     return flags;
 }
 
@@ -357,7 +363,7 @@ static size_t _vsnprintf0(char *dst, size_t cap, const char *fmt, va_list ap) {
             dst[0] = '\0';
         return 0u;
     }
-    return (size_t)n; /* would-have length (excluding NUL) */
+    return (size_t) n; /* would-have length (excluding NUL) */
 }
 
 static size_t _snprintf0(char *dst, size_t cap, const char *fmt, ...) {
@@ -405,7 +411,7 @@ static size_t _append_char(char *dst, size_t cap, size_t off, char c) {
 
 static size_t _append_int(char *dst, size_t cap, size_t off, int v) {
     char tmp[32];
-    (void)_snprintf0(tmp, sizeof(tmp), "%d", v);
+    (void) _snprintf0(tmp, sizeof(tmp), "%d", v);
     return _append(dst, cap, off, tmp);
 }
 
@@ -446,14 +452,14 @@ static size_t _append_timestamp(char *dst, size_t cap, size_t off) {
         ui.HighPart = ft.dwHighDateTime;
 
         /* 100-ns -> ms */
-        ms = (unsigned)((ui.QuadPart / 10000ULL) % 1000ULL);
+        ms = (unsigned) ((ui.QuadPart / 10000ULL) % 1000ULL);
     }
 #else
     {
 #if defined(CLOCK_REALTIME)
         struct timespec ts;
         if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
-            ms = (unsigned)(ts.tv_nsec / 1000000L);
+            ms = (unsigned) (ts.tv_nsec / 1000000L);
         }
 #endif
     }
@@ -465,7 +471,7 @@ static size_t _append_timestamp(char *dst, size_t cap, size_t off) {
     /* print ms as 3 digits */
     {
         char msbuf[8];
-        (void)_snprintf0(msbuf, sizeof(msbuf), "%03u", ms);
+        (void) _snprintf0(msbuf, sizeof(msbuf), "%03u", ms);
         off = _append(dst, cap, off, msbuf);
     }
 
@@ -473,8 +479,8 @@ static size_t _append_timestamp(char *dst, size_t cap, size_t off) {
     return off;
 }
 
-static size_t _format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line,
-                             const char *function) {
+static size_t
+_format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line, const char *function) {
     size_t off = 0;
 
     if (flags & OSH_LOG_F_TIMESTAMP) {
@@ -501,8 +507,8 @@ static size_t _format_prefix(char *dst, size_t cap, int level, unsigned flags, c
     return off;
 }
 
-static void _write_record_unlocked(struct osh_logger *lg, int level, const char *prefix, size_t prefix_len,
-                                   const char *fmt, va_list ap) {
+static void _write_record_unlocked(
+    struct osh_logger *lg, int level, const char *prefix, size_t prefix_len, const char *fmt, va_list ap) {
     FILE *fp_primary = NULL;
 
     if (_is_errorish(level)) {
@@ -520,18 +526,18 @@ static void _write_record_unlocked(struct osh_logger *lg, int level, const char 
 
     if (fp_primary) {
         if (prefix && prefix_len)
-            (void)fwrite(prefix, 1, prefix_len, fp_primary);
+            (void) fwrite(prefix, 1, prefix_len, fp_primary);
 
-        (void)vfprintf(fp_primary, fmt, ap_primary);
-        (void)fputc('\n', fp_primary);
+        (void) vfprintf(fp_primary, fmt, ap_primary);
+        (void) fputc('\n', fp_primary);
     }
 
     if (lg->fp_file) {
         if (prefix && prefix_len)
-            (void)fwrite(prefix, 1, prefix_len, lg->fp_file);
+            (void) fwrite(prefix, 1, prefix_len, lg->fp_file);
 
-        (void)vfprintf(lg->fp_file, fmt, ap_file);
-        (void)fputc('\n', lg->fp_file);
+        (void) vfprintf(lg->fp_file, fmt, ap_file);
+        (void) fputc('\n', lg->fp_file);
     }
 
     va_end(ap_primary);
@@ -549,7 +555,7 @@ static void _write_record_unlocked(struct osh_logger *lg, int level, const char 
         va_end(ap_cb);
 
         if (n > 0) {
-            lg->cb(lg->cb_user, tmp, (size_t)((n < (int)sizeof(tmp)) ? n : (int)sizeof(tmp) - 1));
+            lg->cb(lg->cb_user, tmp, (size_t) ((n < (int) sizeof(tmp)) ? n : (int) sizeof(tmp) - 1));
         }
 
         const char nl = '\n';
@@ -561,8 +567,14 @@ static void _write_record_unlocked(struct osh_logger *lg, int level, const char 
  * the big one: now short and readable
  * ------------------------------------------------------------ */
 
-void osh_logger_logv_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
-                        const char *function, const char *fmt, va_list ap) {
+void osh_logger_logv_ex(struct osh_logger *lg,
+                        int level,
+                        unsigned flags_override,
+                        const char *file,
+                        int line,
+                        const char *function,
+                        const char *fmt,
+                        va_list ap) {
     char prefix[512]; /* Prefix is small; safe on stack */
     size_t prefix_len;
 
@@ -662,8 +674,14 @@ int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *us
  * wrappers around logv_ex
  * ----------------------------- */
 
-void osh_logger_log_ex(struct osh_logger *lg, int level, unsigned flags_override, const char *file, int line,
-                       const char *function, const char *fmt, ...) {
+void osh_logger_log_ex(struct osh_logger *lg,
+                       int level,
+                       unsigned flags_override,
+                       const char *file,
+                       int line,
+                       const char *function,
+                       const char *fmt,
+                       ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(lg, level, flags_override, file, line, function, fmt, ap);
@@ -722,8 +740,14 @@ void osh_error(int exit_code, const char *fmt, ...) {
     exit(exit_code);
 }
 
-void osh_alloc_failed(size_t size) {
-    int err = errno;
+void osh_alloc_failed(const char *fmt, ...) {
+    va_list ap;
 
-    osh_error(EXIT_FAILURE, "memory allocation failed (size=%zu): %s", size, err ? strerror(err) : "out of memory");
+    va_start(ap, fmt);
+    osh_logger_logv_ex(
+        osh_log_default(), OSH_LOG_FATAL, 0u, __FILE__, __LINE__, __func__, fmt ? fmt : "memory allocation failed", ap);
+    va_end(ap);
+
+    osh_log_flush();
+    exit(EXIT_FAILURE);
 }

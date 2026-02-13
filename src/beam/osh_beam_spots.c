@@ -1,7 +1,8 @@
+#include "beam/osh_beam_spots.h"
+
 #include <string.h>
 
-#include "osh_beam_spots.h"
-#include "osh_rc.h"
+#include "common/osh_rc.h"
 
 int osh_beam_spots_init(struct beam_spot **sl, size_t nspots) {
     if (!sl || nspots == 0)

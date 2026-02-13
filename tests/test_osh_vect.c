@@ -2,7 +2,7 @@
 #include <math.h>
 #include <stdio.h>
 
-#include "osh_vect.h"
+#include "common/osh_vect.h"
 
 void test_dot_product() {
     double a[OSH_VECT_DIM] = {1.0, 2.0, 3.0};

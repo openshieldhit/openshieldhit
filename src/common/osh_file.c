@@ -1,7 +1,8 @@
+#include "osh_file.h"
+
 #include <stdlib.h>
 #include <string.h>
 
-#include "osh_file.h"
 #include "osh_logger.h"
 
 /**
@@ -31,7 +32,7 @@ struct oshfile *osh_fopen(const char *filename) {
 
     oshf = malloc(sizeof(struct oshfile));
     if (!oshf) {
-        osh_alloc_failed(sizeof(struct oshfile));
+        osh_alloc_failed("osh_fopen");
     }
 
     oshf->fp = fp;
@@ -110,7 +111,7 @@ static int _mapfile(struct oshfile *oshf) {
     /* Allocate and fill the map with byte address of each new line */
     oshf->map = calloc(oshf->map_len, sizeof(long int));
     if (!oshf->map) {
-        osh_alloc_failed(sizeof(long int) * oshf->map_len);
+        osh_alloc_failed("osh_mapfile: failed to allocate memory for line map");
     }
 
     rewind(oshf->fp);

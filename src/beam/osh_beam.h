@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "osh_particle.h"
-#include "osh_readline.h"
+#include "common/osh_readline.h"
+#include "particle/osh_particle.h"
 
 #define OSH_BEAM_STRAGG_OFF 0
 #define OSH_BEAM_STRAGG_GAUSS 1

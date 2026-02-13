@@ -1,7 +1,9 @@
 #include "osh_vect.h"
-#include "osh_logger.h"
+
 #include <math.h>
 #include <stdio.h>
+
+#include "osh_logger.h"
 
 void osh_vect_add(double const *p, double const *q, double *u) {
     int i;

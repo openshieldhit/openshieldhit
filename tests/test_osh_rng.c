@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "osh_rng.h"
+#include "random/osh_rng.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -19,7 +19,11 @@ static void test_pcg32_known_sequence(void) {
 
     /* Expected sequence for (seed=42, stream=54) with current implementation */
     const uint32_t exp[5] = {
-        2707161783u, 2068313097u, 3122475824u, 2211639955u, 3215226955u,
+        2707161783u,
+        2068313097u,
+        3122475824u,
+        2211639955u,
+        3215226955u,
     };
 
     for (int i = 0; i < 5; ++i) {
@@ -33,8 +37,11 @@ static void test_xoshiro256ss_known_sequence(void) {
     osh_rng_init(&r, OSH_RNG_TYPE_XOSHIRO256SS, 42u, 54u);
 
     const uint64_t exp[5] = {
-        9619421891339311063ull, 17143628181114060176ull, 17740981343507171333ull,
-        7781542089684599863ull, 309587622474537745ull,
+        9619421891339311063ull,
+        17143628181114060176ull,
+        17740981343507171333ull,
+        7781542089684599863ull,
+        309587622474537745ull,
     };
 
     for (int i = 0; i < 5; ++i) {
