@@ -80,7 +80,6 @@ int osh_gemca_parse(const char *filename, struct gemca_workspace *g) {
     osh_gemca_parse_media(shf, g);
 
     osh_fclose(shf);
-    free(shf);
 
     return 1;
 }

@@ -1,0 +1,26 @@
+0    0           HI 200 MeV/A, H2O 20x30 cm, step 0.1, 300 zones
+
+# Body primitves
+SPH    bbh     0.0       0.0       0.0     100.0
+SPH    bvac    0.0       0.0       0.0      95.0
+SPH    bball1  0.0       0.0       0.0       5.0
+RCC    brod    0.0       0.0      -4.3       0.0       0.0     9.0
+               3.0
+RCC    brod2   0.0       0.0      -3.5       0.0       0.0     5.0
+               2.0
+SPH    bball2  5.0       0.0       0.0       2.0
+END
+
+# Zone assignments
+BLCKHOLE    +bbh  -bvac
+VACUUM      +bvac -brod -bball1 -bball2
+BALL1       +bball1 -brod -bball2
+ROD         +brod -brod2
+BROD2       +brod2
+BALL2       +bball2
+END
+
+# Material assignments
+1    2 3 4 5 6
+0 1000 1 1 1 1
+
