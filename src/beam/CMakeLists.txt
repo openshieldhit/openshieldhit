@@ -3,7 +3,6 @@
 add_library(osh_beam
     osh_beam.c
     osh_beam_spots.c
-   # osh_beam_parse.c
 )
 
 # Make sure consumers of the library see the headers
