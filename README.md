@@ -8,6 +8,10 @@ or for debugging:
 
 `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build`
 
+# Try out the examples
+```bash
+$ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
+```
 
 ## TODO
 - [x] logger
