@@ -4,7 +4,6 @@ Lean Monte Carlo Particle Transport in C
 
 OpenShieldHIT is a modern Monte Carlo particle transport framework written entirely from scratch in C.
 
-While conceptually inspired by the application domain of the closed source [SHIELD-HIT12A](https://shieldhit.org), it shares no source code with the original SHIELD-HIT. The architecture, implementation, and code base are completely new and designed according to modern, explicit software engineering principles. OpenShieldHIT is licensed under the MIT License, permitting reuse, modification, and incorporation of its code into other software projects under compatible licensing terms.
 
 ## Philosophy
 
@@ -64,3 +63,7 @@ $ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 - [ ] ion scattering
 - [ ] vavilov straggling
 - [ ] ...
+
+
+# Disclaimer and License
+While conceptually inspired by the application domain of the closed source [SHIELD-HIT12A](https://shieldhit.org), it shares no source code with the original SHIELD-HIT. The architecture, implementation, and code base are completely new and designed according to modern, explicit software engineering principles. OpenShieldHIT is licensed under the MIT License, permitting reuse, modification, and incorporation of its code into other software projects under compatible licensing terms.
