@@ -8,7 +8,18 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            build_examples: ON
+          - os: windows-latest
+            build_examples: OFF
+          - os: macos-latest
+            build_examples: OFF
 
     steps:
     - name: Checkout code
@@ -17,11 +28,12 @@ jobs:
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.1.1
 
-    - name: Install dependencies
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
       run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
 
     - name: Configure project
-      run: cmake -S . -B build
+      run: cmake -S . -B build -DOSH_BUILD_EXAMPLES=${{ matrix.build_examples }}
 
     - name: Build project
       run: cmake --build build --parallel
