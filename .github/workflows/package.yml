@@ -57,7 +57,8 @@ jobs:
       run: |
         DEB_FILE=$(ls *.deb | head -n1)
         echo "Installing ${DEB_FILE}..."
-        sudo dpkg -i "${DEB_FILE}"
+        sudo apt-get update
+        sudo apt-get install -y "./${DEB_FILE}"
 
     - name: Test installed executable
       run: |
@@ -79,6 +80,14 @@ jobs:
       with:
         name: openshieldhit-packages-linux
 
+    - name: Find package files
+      id: find_files
+      run: |
+        DEB_FILE=$(ls *.deb | head -n1)
+        TGZ_FILE=$(ls *.tar.gz | head -n1)
+        echo "deb_file=${DEB_FILE}" >> $GITHUB_OUTPUT
+        echo "tgz_file=${TGZ_FILE}" >> $GITHUB_OUTPUT
+
     - name: Create GitHub Release
       uses: actions/create-release@v1
       id: create_release
@@ -86,7 +95,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        release_name: Release ${{ github.ref_name }}
         draft: false
         prerelease: false
 
@@ -96,8 +105,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./*.deb
-        asset_name: openshieldhit-${{ github.ref }}.deb
+        asset_path: ${{ steps.find_files.outputs.deb_file }}
+        asset_name: openshieldhit-${{ github.ref_name }}.deb
         asset_content_type: application/x-deb
 
     - name: Upload tarball to Release
@@ -106,6 +115,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./*.tar.gz
-        asset_name: openshieldhit-${{ github.ref }}.tar.gz
+        asset_path: ${{ steps.find_files.outputs.tgz_file }}
+        asset_name: openshieldhit-${{ github.ref_name }}.tar.gz
         asset_content_type: application/gzip

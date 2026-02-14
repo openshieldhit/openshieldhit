@@ -26,19 +26,6 @@ endif()
 
 message(STATUS "OpenShieldHIT version: ${GIT_VERSION}")
 
-# Generate version.h header file
-file(WRITE "${CMAKE_BINARY_DIR}/version.h"
-    "#ifndef _OSH_VERSION_H\n"
-    "#define _OSH_VERSION_H\n"
-    "\n"
-    "#define OSH_VERSION \"${GIT_VERSION}\"\n"
-    "\n"
-    "#endif /* _OSH_VERSION_H */\n"
-)
-
-# Add build directory to include path so version.h can be found
-include_directories("${CMAKE_BINARY_DIR}")
-
 # Compiler-specific warning flags
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-pedantic -Wall -Wextra)
@@ -88,6 +75,9 @@ target_link_libraries(osh_all INTERFACE
 )
 target_include_directories(osh_all INTERFACE
     ${PROJECT_SOURCE_DIR}/src
+)
+target_compile_definitions(osh_all INTERFACE
+    OSH_VERSION="${GIT_VERSION}"
 )
 
 # ---- Main executable ----

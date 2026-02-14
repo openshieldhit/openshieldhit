@@ -7,7 +7,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "version.h"
 
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"

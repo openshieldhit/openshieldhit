@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Version information generated at build time */
-#include "version.h"
-
 int main(int argc, char *argv[]) {
     /* Handle --version flag */
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {

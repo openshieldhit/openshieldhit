@@ -14,9 +14,3 @@ target_link_libraries(gemca_sdl_viewer
 if(UNIX)
     target_link_libraries(gemca_sdl_viewer PRIVATE m)
 endif()
-
-# Allow includes like "gemca/..." and "common/..."
-target_include_directories(gemca_sdl_viewer
-    PUBLIC
-        ${PROJECT_SOURCE_DIR}/src
-)

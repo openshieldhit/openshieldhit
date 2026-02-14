@@ -15,10 +15,3 @@ target_link_libraries(bnct_sdl
 if(UNIX)
     target_link_libraries(bnct_sdl PRIVATE m)
 endif()
-
-
-# Allow includes like "gemca/..." and "common/..."
-target_include_directories(bnct_sdl
-    PUBLIC
-        ${PROJECT_SOURCE_DIR}/src
-)
