@@ -1,4 +1,4 @@
-# OpenSHIELD-HIT
+# OpenShieldHIT
 Monte Carlo Particle Transport
 
 ## Requirements
