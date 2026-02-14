@@ -1,6 +1,9 @@
 # OpenSHIELD-HIT
 Monte Carlo Particle Transport
 
+## Requirements
+SDL2 is required for building examples (optional): `sudo apt-get install libsdl2-dev`
+
 ## How to build
 `cmake -S . -B build && cmake --build build`
 

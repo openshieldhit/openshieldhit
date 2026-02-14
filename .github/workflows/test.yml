@@ -17,6 +17,9 @@ jobs:
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v1
 
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+
     - name: Configure project
       run: cmake -S . -B build
 
