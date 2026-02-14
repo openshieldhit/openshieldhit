@@ -129,6 +129,9 @@ set(CPACK_PACKAGE_VERSION "${GIT_VERSION}")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY ${CPACK_PACKAGE_NAME})
 
 # Debian package specific settings
+# Sanitize version for Debian (strip leading 'v' since Debian versions must start with digit)
+string(REGEX REPLACE "^v" "" DEBIAN_VERSION "${GIT_VERSION}")
+set(CPACK_DEBIAN_PACKAGE_VERSION "${DEBIAN_VERSION}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OpenShieldHIT Contributors")
 set(CPACK_DEBIAN_PACKAGE_SECTION "science")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/openshieldhit/openshieldhit")
