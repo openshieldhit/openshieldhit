@@ -3,7 +3,7 @@ name: Package and Release
 on:
   push:
     branches: [ main ]     # Build packages on main branch commits
-    tags: [ 'v*' ]         # Create GitHub releases for version tags
+    tags: [ 'v*' ]         # Upload packages to release for version tags (release created manually on GitHub)
   workflow_dispatch:       # Allow manual triggering from Actions UI
 
 jobs:
@@ -71,11 +71,13 @@ jobs:
       run: |
         dpkg -L openshieldhit | head -20
 
-  # Create GitHub Release with package artifacts (only for version tags)
-  release:
+  # Upload packages to GitHub Release (release must be created manually on GitHub web)
+  upload-to-release:
     needs: test-package
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write  # Required to upload assets to release
+    if: startsWith(github.ref, 'refs/tags/')
 
     steps:
     - name: Download package artifacts
@@ -83,41 +85,11 @@ jobs:
       with:
         name: openshieldhit-packages-linux
 
-    - name: Find package files
-      id: find_files
+    - name: Upload artifacts to GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        DEB_FILE=$(ls *.deb | head -n1)
-        TGZ_FILE=$(ls *.tar.gz | head -n1)
-        echo "deb_file=${DEB_FILE}" >> $GITHUB_OUTPUT
-        echo "tgz_file=${TGZ_FILE}" >> $GITHUB_OUTPUT
-
-    - name: Create GitHub Release
-      uses: actions/create-release@v1
-      id: create_release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref_name }}
-        release_name: Release ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-
-    - name: Upload DEB to Release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ steps.find_files.outputs.deb_file }}
-        asset_name: openshieldhit-${{ github.ref_name }}.deb
-        asset_content_type: application/x-deb
-
-    - name: Upload tarball to Release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ${{ steps.find_files.outputs.tgz_file }}
-        asset_name: openshieldhit-${{ github.ref_name }}.tar.gz
-        asset_content_type: application/gzip
+        gh release upload ${{ github.ref_name }} \
+          openshieldhit-*-Linux.deb \
+          openshieldhit-*.tar.gz \
+          --clobber

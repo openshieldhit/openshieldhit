@@ -9,17 +9,34 @@ To update version in an existing build, reconfigure:
 cmake -B build  # Re-runs configure, updates version
 ```
 
-Create release tag:
-```bash
-git tag -a v1.0.0 -m "Release 1.0.0"
-git push origin v1.0.0
-```
+## Creating Releases
+
+1. **Create release manually on GitHub web**:
+   - Go to https://github.com/grzanka/openshieldhit/releases
+   - Click "Create a new release"
+   - Tag version: `v0.1.0`
+   - Release title: `Release v0.1.0`
+   - Click "Publish release"
+
+2. **Push the tag to GitHub**:
+   ```bash
+   git tag -a v0.1.0 -m "Release 0.1.0 - Initial release"
+   git push origin v0.1.0
+   ```
+
+3. **Workflow automatically uploads artifacts**:
+   - The **Package and Release** workflow detects the tag push
+   - Builds DEB and TGZ packages on Linux
+   - Tests the DEB package installation
+   - Uploads both artifacts to your manually-created release
+
+**Version format**: Use semantic versioning `vMAJOR.MINOR.PATCH` (e.g., `v0.1.0`, `v1.2.3`)
 
 ## GitHub Actions
 
 ### Automatic Triggers
 - **Push to main branch**: Builds packages, uploads as artifacts (retention: 3 days)
-- **Push version tag** (`v*`): Builds packages, creates GitHub Release with artifacts
+- **Push version tag** (`v*`): Builds packages and uploads artifacts to existing GitHub release
 
 ### Manual Trigger
 1. Go to: https://github.com/openshieldhit/openshieldhit/actions
