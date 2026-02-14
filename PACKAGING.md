@@ -12,7 +12,7 @@ cmake -B build  # Re-runs configure, updates version
 ## Creating Releases
 
 1. **Create release manually on GitHub web**:
-   - Go to https://github.com/grzanka/openshieldhit/releases
+   - Go to https://github.com/openshieldhit/openshieldhit/releases
    - Click "Create a new release"
    - Tag version: `v0.1.0`
    - Release title: `Release v0.1.0`
