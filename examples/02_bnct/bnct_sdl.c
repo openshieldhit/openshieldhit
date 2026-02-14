@@ -1,6 +1,6 @@
 /* simple temporary test file for playing with the new scorer */
 // gcc SDLtest.c -o dsl -lSDL2 -Wall
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
