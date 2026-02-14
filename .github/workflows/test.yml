@@ -48,10 +48,18 @@ jobs:
     - name: Run tests
       run: ctest --test-dir build --output-on-failure -C Debug
 
+    - name: Print version information (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: ./build/bin/osh --version
+
+    - name: Print version information (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: ./build/bin/Debug/osh.exe --version
+
   package-linux:
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
 
     steps:
     - name: Checkout code
@@ -89,7 +97,6 @@ jobs:
   test-package:
     needs: package-linux
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
 
     steps:
     - name: Download package artifact
