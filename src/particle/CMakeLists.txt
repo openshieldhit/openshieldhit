@@ -13,5 +13,5 @@ target_include_directories(osh_particle
 
 # Link math library (Unix/Linux only - Windows has it in the C runtime)
 if(UNIX)
-    target_link_libraries(osh_particle m)
+    target_link_libraries(osh_particle PRIVATE m)
 endif()

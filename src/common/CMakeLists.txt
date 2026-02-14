@@ -17,5 +17,5 @@ target_include_directories(osh_common
 
 # Link math library (Unix/Linux only - Windows has it in the C runtime)
 if(UNIX)
-    target_link_libraries(osh_common m)
+    target_link_libraries(osh_common PRIVATE m)
 endif()
