@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
 # ---- Version Information ----
-# Try to extract version from git tags/commits
+# Extract version from git at configure time and pass as compiler definition
 find_package(Git QUIET)
 if(GIT_FOUND)
     execute_process(
@@ -76,6 +76,7 @@ target_link_libraries(osh_all INTERFACE
 target_include_directories(osh_all INTERFACE
     ${PROJECT_SOURCE_DIR}/src
 )
+# Pass version as preprocessor definition (OSH_VERSION) to all targets
 target_compile_definitions(osh_all INTERFACE
     OSH_VERSION="${GIT_VERSION}"
 )

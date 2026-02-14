@@ -2,7 +2,12 @@
 
 ## Version Management
 
-Version is extracted from git at build time: `git describe --tags --always --dirty`
+Version is extracted from git at **CMake configure time** using `git describe --tags --always --dirty` and passed to the compiler as a preprocessor definition.
+
+To update version in an existing build, reconfigure:
+```bash
+cmake -B build  # Re-runs configure, updates version
+```
 
 Create release tag:
 ```bash

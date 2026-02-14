@@ -2,11 +2,12 @@ name: Package and Release
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
-  workflow_dispatch:
+    branches: [ main ]     # Build packages on main branch commits
+    tags: [ 'v*' ]         # Create GitHub releases for version tags
+  workflow_dispatch:       # Allow manual triggering from Actions UI
 
 jobs:
+  # Build DEB and TGZ packages on Linux
   package-linux:
     runs-on: ubuntu-latest
 
@@ -14,7 +15,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 0  # Full git history needed for version extraction (git describe)
 
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.1.1
@@ -43,6 +44,7 @@ jobs:
           build/*.tar.gz
         retention-days: 3
 
+  # Install and verify DEB package works correctly
   test-package:
     needs: package-linux
     runs-on: ubuntu-latest
@@ -69,6 +71,7 @@ jobs:
       run: |
         dpkg -L openshieldhit | head -20
 
+  # Create GitHub Release with package artifacts (only for version tags)
   release:
     needs: test-package
     runs-on: ubuntu-latest
