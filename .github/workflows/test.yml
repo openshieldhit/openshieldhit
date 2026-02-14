@@ -3,6 +3,7 @@ name: CMake CI
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -23,7 +24,9 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for git describe
 
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.1.1
@@ -44,3 +47,109 @@ jobs:
 
     - name: Run tests
       run: ctest --test-dir build --output-on-failure -C Debug
+
+  package-linux:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up CMake
+      uses: jwlawson/actions-setup-cmake@v2.1.1
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+
+    - name: Configure project (Release)
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=ON
+
+    - name: Build project
+      run: cmake --build build --parallel
+
+    - name: Create packages
+      run: cmake --build build --target package
+
+    - name: List generated packages
+      run: ls -lh build/ | grep -E '\.(deb|tar\.gz)$'
+
+    - name: Upload packages as artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: openshieldhit-packages-linux
+        path: |
+          build/*.deb
+          build/*.tar.gz
+        retention-days: 30
+
+  test-package:
+    needs: package-linux
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+
+    steps:
+    - name: Download package artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: openshieldhit-packages-linux
+
+    - name: Install DEB package
+      run: |
+        DEB_FILE=$(ls *.deb | head -n1)
+        echo "Installing ${DEB_FILE}..."
+        sudo dpkg -i "${DEB_FILE}"
+
+    - name: Test installed executable
+      run: |
+        osh --version
+        osh --help
+
+    - name: Verify installed files
+      run: |
+        dpkg -L openshieldhit | head -20
+
+  release:
+    needs: test-package
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Download package artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: openshieldhit-packages-linux
+
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload DEB to Release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./*.deb
+        asset_name: openshieldhit-${{ github.ref }}.deb
+        asset_content_type: application/x-deb
+
+    - name: Upload tarball to Release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./*.tar.gz
+        asset_name: openshieldhit-${{ github.ref }}.tar.gz
+        asset_content_type: application/gzip
