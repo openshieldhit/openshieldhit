@@ -23,5 +23,9 @@ target_include_directories(osh_gemca2
 target_link_libraries(osh_gemca2
     PRIVATE
         osh_common
-        m
 )
+
+# Link math library (Unix/Linux only - Windows has it in the C runtime)
+if(UNIX)
+    target_link_libraries(osh_gemca2 PRIVATE m)
+endif()

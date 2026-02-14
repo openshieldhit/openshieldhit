@@ -15,5 +15,9 @@ target_link_libraries(osh_beam
     PRIVATE
         osh_common
         osh_particle
-        m
 )
+
+# Link math library (Unix/Linux only - Windows has it in the C runtime)
+if(UNIX)
+    target_link_libraries(osh_beam PRIVATE m)
+endif()
