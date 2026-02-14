@@ -23,7 +23,9 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full git history needed for version extraction (git describe)
 
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.1.1
@@ -44,3 +46,12 @@ jobs:
 
     - name: Run tests
       run: ctest --test-dir build --output-on-failure -C Debug
+
+    - name: Print version information (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: ./build/bin/osh --version
+
+    - name: Print version information (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: ./build/bin/Debug/osh.exe --version

@@ -4,7 +4,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
 
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
@@ -98,12 +100,23 @@ int main(int argc, char *argv[]) {
 
     struct gemca_workspace g;
 
-    osh_rng_init(&g_rng, OSH_RNG_TYPE_XOSHIRO256SS, 1234, 0);
-
-    if (argc == 1) {
-        printf("Usage: %s geo.dat\n", argv[0]);
-        exit(0);
+    /* Handle --version flag */
+    if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
+        printf("bnct_sdl version %s\n", OSH_VERSION);
+        return 0;
     }
+
+    /* Handle --help flag or no arguments */
+    if (argc == 1 || (argc > 1 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0))) {
+        printf("Usage: %s [OPTIONS] geo.dat\n", argv[0]);
+        printf("BNCT simulation and visualization tool for OpenShieldHIT\n\n");
+        printf("OPTIONS:\n");
+        printf("  --version, -v     Print version information\n");
+        printf("  --help, -h        Show this help message\n");
+        return 0;
+    }
+
+    osh_rng_init(&g_rng, OSH_RNG_TYPE_XOSHIRO256SS, 1234, 0);
 
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);

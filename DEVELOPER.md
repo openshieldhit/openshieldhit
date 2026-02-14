@@ -49,7 +49,7 @@ and the matching closing brace:
 
 ## Porting Notes
 
-- This is a full reimplementation. No direct code copied from SH12A.
+- This is a full reimplementation. No direct code copied from SHIELD-HIT12A.
 
 ## Build
 
