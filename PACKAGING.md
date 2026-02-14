@@ -6,7 +6,7 @@ Version is extracted from git at **CMake configure time** using `git describe --
 
 To update version in an existing build, reconfigure:
 ```bash
-cmake -B build  # Re-runs configure, updates version
+cmake -B build
 ```
 
 ## Creating Releases
@@ -40,28 +40,51 @@ cmake -B build  # Re-runs configure, updates version
 ## Local Packaging
 
 ### Ubuntu/Debian
+
+Install dependencies:
 ```bash
-# Install dependencies
 sudo apt-get install cmake build-essential libsdl2-dev
+```
 
-# Build and package
+Build and package:
+```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=ON
-cmake --build build --target package
+```
 
-# Install
-sudo dpkg -i build/openshieldhit-*.deb
+```bash
+cmake --build build --target package
+```
+
+Install DEB package:
+```bash
+sudo apt-get install ./build/openshieldhit-*.deb
 ```
 
 ### macOS
+
+Install dependencies:
 ```bash
 brew install cmake sdl2
+```
+
+Build and package:
+```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=ON
+```
+
+```bash
 cmake --build build --target package
 ```
 
 ### Windows
+
+Configure (without examples):
 ```bash
 cmake -S . -B build -DOSH_BUILD_EXAMPLES=OFF
+```
+
+Build:
+```bash
 cmake --build build --config Release --target package
 ```
 
@@ -77,9 +100,18 @@ cmake --build build --config Release --target package
 
 ## Verify Installation
 
+Print version:
 ```bash
 osh --version
+```
+
+Show help:
+```bash
 osh --help
-dpkg -L openshieldhit  # List package files
+```
+
+List installed files (DEB packages):
+```bash
+dpkg -L openshieldhit
 ```
 

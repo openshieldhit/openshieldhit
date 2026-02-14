@@ -33,18 +33,24 @@ The intention is to expose the physics and the computational structure, rather t
 
 
 ## Requirements
-SDL2 is required for building examples (optional): `sudo apt-get install libsdl2-dev`
+[SDL2](https://www.libsdl.org/) is required for building examples (optional): `sudo apt-get install libsdl2-dev`
 
 ## How to build
-`cmake -S . -B build && cmake --build build`
+
+Try:
+```bash
+cmake -S . -B build && cmake --build build
+```
 
 or for debugging:
 
-`cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build`
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
+```
 
 # Try out the examples
 ```bash
-$ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
+build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 ```
 
 ## TODO
@@ -66,4 +72,4 @@ $ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 
 
 # Disclaimer and License
-While conceptually inspired by the application domain of the closed source [SHIELD-HIT12A](https://shieldhit.org), it shares no source code with the original SHIELD-HIT. The architecture, implementation, and code base are completely new and designed according to modern, explicit software engineering principles. OpenShieldHIT is licensed under the MIT License, permitting reuse, modification, and incorporation of its code into other software projects under compatible licensing terms.
+While conceptually inspired by the application domain of the closed source [SHIELD-HIT12A](https://shieldhit.org), it shares no source code with the original SHIELD-HIT12A. The architecture, implementation, and code base are completely new and designed according to modern, explicit software engineering principles. OpenShieldHIT is licensed under the MIT License, permitting reuse, modification, and incorporation of its code into other software projects under compatible licensing terms.
