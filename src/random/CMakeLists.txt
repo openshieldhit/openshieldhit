@@ -10,5 +10,7 @@ target_include_directories(osh_random
     ${PROJECT_SOURCE_DIR}/src
 )
 
-# Link math library
-target_link_libraries(osh_random PRIVATE m)
+# Link math library (Unix/Linux only - Windows has it in the C runtime)
+if(UNIX)
+    target_link_libraries(osh_random PRIVATE m)
+endif()

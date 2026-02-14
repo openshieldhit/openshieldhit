@@ -8,8 +8,12 @@ target_link_libraries(gemca_sdl_viewer
     PRIVATE
         osh_all
         SDL2::SDL2
-        m
 )
+
+# Link math library (Unix/Linux only - Windows has it in the C runtime)
+if(UNIX)
+    target_link_libraries(gemca_sdl_viewer PRIVATE m)
+endif()
 
 # Allow includes like "gemca/..." and "common/..."
 target_include_directories(gemca_sdl_viewer

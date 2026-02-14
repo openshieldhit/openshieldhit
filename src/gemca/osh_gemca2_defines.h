@@ -1,6 +1,15 @@
 #ifndef _OSH_GEMCA2_DEFINES
 #define _OSH_GEMCA2_DEFINES
 
+/* Windows compatibility */
+#ifdef _WIN32
+    #include <stddef.h>
+    /* ssize_t is not available on Windows, use ptrdiff_t instead */
+    typedef ptrdiff_t ssize_t;
+    /* strcasecmp is called _stricmp on Windows */
+    #define strcasecmp _stricmp
+#endif
+
 /* maximum length of a user given body name, must be sufficiently less than OSH_MAX_LINE_LENGTH:
     NBODY * OSH_GEMCA_BODY_NAME_MAXLEN < OSH_MAX_LINE_LENGTH
  */

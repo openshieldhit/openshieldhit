@@ -6,7 +6,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
-add_compile_options(-pedantic -Wall -Wextra)
+# Compiler-specific warning flags
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-pedantic -Wall -Wextra)
+elseif(MSVC)
+    add_compile_options(/W4)
+endif()
 
 # (Optional but recommended) default build type for Makefiles/Ninja
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
