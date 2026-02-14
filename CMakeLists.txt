@@ -140,7 +140,7 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY ${CPACK_PACKAGE_NAME})
 # Debian package specific settings
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OpenShieldHIT Contributors")
 set(CPACK_DEBIAN_PACKAGE_SECTION "science")
-set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/grzanka/openshieldhit")
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/openshieldhit/openshieldhit")
 # Optionally require libsdl2 if examples are built
 if(OSH_BUILD_EXAMPLES)
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0 (>= 2.0.0)")
