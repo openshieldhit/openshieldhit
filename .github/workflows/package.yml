@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
+  workflow_dispatch:
 
 jobs:
   package-linux:
@@ -40,7 +41,7 @@ jobs:
         path: |
           build/*.deb
           build/*.tar.gz
-        retention-days: 30
+        retention-days: 3
 
   test-package:
     needs: package-linux
