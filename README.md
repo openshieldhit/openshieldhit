@@ -36,15 +36,21 @@ The intention is to expose the physics and the computational structure, rather t
 SDL2 is required for building examples (optional): `sudo apt-get install libsdl2-dev`
 
 ## How to build
-`cmake -S . -B build && cmake --build build`
+
+Try:
+```bash
+cmake -S . -B build && cmake --build build
+```
 
 or for debugging:
 
-`cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build`
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
+```
 
 # Try out the examples
 ```bash
-$ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
+build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 ```
 
 ## TODO
