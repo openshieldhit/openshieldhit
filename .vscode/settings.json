@@ -5,5 +5,9 @@
         "osh_beam_spotlist.h": "c"
     },
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
-    "editor.defaultFormatter": null
+    "editor.defaultFormatter": null,
+    "chat.tools.terminal.autoApprove": {
+        "cmake": true,
+        "ctest": true
+    }
 }
