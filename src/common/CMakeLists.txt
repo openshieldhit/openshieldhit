@@ -15,5 +15,7 @@ target_include_directories(osh_common
     ${PROJECT_SOURCE_DIR}/src
 )
 
-# Link math library
-target_link_libraries(osh_common m)
+# Link math library (Unix/Linux only - Windows has it in the C runtime)
+if(UNIX)
+    target_link_libraries(osh_common m)
+endif()

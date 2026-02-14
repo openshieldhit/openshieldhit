@@ -11,5 +11,7 @@ target_include_directories(osh_particle
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# Link math library
-target_link_libraries(osh_particle m)
+# Link math library (Unix/Linux only - Windows has it in the C runtime)
+if(UNIX)
+    target_link_libraries(osh_particle m)
+endif()
