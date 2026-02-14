@@ -18,17 +18,11 @@ cmake -B build  # Re-runs configure, updates version
    - Release title: `Release v0.1.0`
    - Click "Publish release"
 
-2. **Push the tag to GitHub**:
-   ```bash
-   git tag -a v0.1.0 -m "Release 0.1.0 - Initial release"
-   git push origin v0.1.0
-   ```
-
-3. **Workflow automatically uploads artifacts**:
-   - The **Package and Release** workflow detects the tag push
+2. **Workflow automatically starts**:
+   - The **Package and Release** workflow detects the release publication
    - Builds DEB and TGZ packages on Linux
    - Tests the DEB package installation
-   - Uploads both artifacts to your manually-created release
+   - Uploads both artifacts to your release
 
 **Version format**: Use semantic versioning `vMAJOR.MINOR.PATCH` (e.g., `v0.1.0`, `v1.2.3`)
 
@@ -36,7 +30,7 @@ cmake -B build  # Re-runs configure, updates version
 
 ### Automatic Triggers
 - **Push to main branch**: Builds packages, uploads as artifacts (retention: 3 days)
-- **Push version tag** (`v*`): Builds packages and uploads artifacts to existing GitHub release
+- **Release published on GitHub web**: Builds packages and automatically uploads artifacts to the release
 
 ### Manual Trigger
 1. Go to: https://github.com/openshieldhit/openshieldhit/actions
