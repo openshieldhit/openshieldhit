@@ -89,7 +89,7 @@ SDL_Color colormap[6] = {
 
 int random_ray(struct ray *r);
 int zero_ray(struct ray *r);
-int plot(struct gemca_workspace *g, int ndots);
+int plot(struct gemca_workspace *g, int nrays, int zone);
 void setRendererColor(SDL_Renderer *renderer, int zid);
 void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
 int ray_cast_statistics(struct gemca_workspace *g, int nstat);
@@ -99,6 +99,7 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots);
 int main(int argc, char *argv[]) {
 
     struct gemca_workspace g;
+    int zone = 1;
 
     /* Handle --version flag */
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
@@ -116,6 +117,18 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    if (argc > 1) {
+        // get filename from command line and optional zone number folling the filename
+        printf("Loading geometry from file: %s\n", argv[1]);
+        if (argc > 2) {
+            zone = atoi(argv[2]);
+            printf("Using zone number: %d\n", zone);
+        } else {
+            zone = 1; // default to -1 if no zone number is provided
+            printf("No zone number provided, defaulting to: %d\n", zone);
+        }
+    }
+
     osh_rng_init(&g_rng, OSH_RNG_TYPE_XOSHIRO256SS, 1234, 0);
 
     printf("----------------ffff---------------------\n");
@@ -123,7 +136,7 @@ int main(int argc, char *argv[]) {
     osh_gemca_load(argv[1], &g);
     osh_gemca_print_gemca(&g);
 
-    plot(&g, 40000);
+    plot(&g, 4000, zone);
 
     return 0;
 }
@@ -301,7 +314,7 @@ int ray2line(struct ray *r, double d, float *x, float *z) {
     return 0;
 }
 
-int plot(struct gemca_workspace *g, int ndots) {
+int plot(struct gemca_workspace *g, int nrays, int zone) {
     const int windowHeight = WINDOW_HEIGHT;
     const int windowWidth = WINDOW_WIDTH;
     int quit = 0;
@@ -330,7 +343,7 @@ int plot(struct gemca_workspace *g, int ndots) {
     SDL_RenderPresent(s);
 
 #if DO_MAP
-    draw_map(s, g, ndots);
+    draw_map(s, g, 100000);
 #endif
 
     /* Add a coordinate system */
@@ -370,7 +383,7 @@ int plot(struct gemca_workspace *g, int ndots) {
     /* next plot a series of rays which travel trough the zones */
 #if DO_RAYS
     const int batch_size = 50;
-    const int max_rays = 10000;
+    const int max_rays = nrays;
     int total_rays = 0;
 
     while (total_rays < max_rays && !quit) {
@@ -390,7 +403,7 @@ int plot(struct gemca_workspace *g, int ndots) {
             size_t zi0 = osh_gemca_zone_index(*g, r);
             size_t medium0 = g->zones[zi0]->medium;
 
-            if (medium0 != 3)
+            if (medium0 != (size_t) zone)
                 continue; /* skip if we are not in a medium of interest */
 
             int px, pz;
