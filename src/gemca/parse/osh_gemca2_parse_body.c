@@ -99,7 +99,9 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
 
     char nstr[OSH_GEMCA_BODY_NAME_MAXLEN]; /* string for body name */
 
-    ssize_t ibody = -1; // TODO change to size_t
+    size_t ibody;
+    int has_body = 0;     /* flag to check if we have found at least one body, to save the last one when we find the end statement */
+
     size_t _ib;
 
     rewind(shf->fp);
@@ -112,13 +114,14 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
             /* we have found a new body */
 
             /* let us save the previous one, if there was one */
-            if (ibody > -1) {
+            if (has_body) {
                 _save_body(g->bodies[ibody], nstr, par, npar, btype);
                 /* save the first line number where the body was defined */
                 g->bodies[ibody]->lineno = lineno_b;
             }
 
             ibody++;
+            has_body = 1;
             // TODO: improve parser so all arguments may appear in a single line, if they want to
             // This corresponds to FLUKA-free format
             nt = sscanf(
