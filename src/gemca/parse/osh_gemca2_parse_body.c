@@ -108,7 +108,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
     /* read line by line and parse the keys and arguments */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
-        /* END check early so we don not touch parsing state on END lines */
+        /* END check early so we do not touch parsing state on END lines */
         if ((strcasecmp(key, OSH_GEMCA_KEY_END) == 0) && (nend == 0)) {
             if (current_body == NULL) {
                 osh_error(EX_CONFIG,
