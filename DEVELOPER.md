@@ -52,7 +52,7 @@ Not intended for end-users.
 #endif /* _OSH_FOO_H */
 ```
 
-- idea is to provide a public API as well, allow these header files to be linked against C++, so encapsulate header in
+- The idea is to provide a public API as well, allowing these header files to be linked against C++, so encapsulate headers in:
 
 ```c
 #ifdef __cplusplus
