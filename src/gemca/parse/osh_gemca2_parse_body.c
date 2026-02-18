@@ -99,24 +99,25 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g)
 
     char nstr[OSH_GEMCA_BODY_NAME_MAXLEN];
 
-    struct body *cur = NULL;
+    struct body *current_body = NULL;
 
     size_t ibody = 0;
     size_t _ib;
 
     rewind(shf->fp);
 
+    /* read line by line and parse the keys and arguments */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
         /* END check early so we don not touch parsing state on END lines */
         if ((strcasecmp(key, OSH_GEMCA_KEY_END) == 0) && (nend == 0)) {
-            if (cur == NULL) {
+            if (current_body == NULL) {
                 osh_error(EX_CONFIG,
                           "Error parsing geometry line %li - END encountered before any body definition\n",
                           (long int)lineno);
             }
-            _save_body(cur, nstr, par, npar, btype);
-            cur->lineno = lineno_b;
+            _save_body(current_body, nstr, par, npar, btype);
+            current_body->lineno = lineno_b;
             break;
         }
 
@@ -125,12 +126,12 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g)
         if (btype_new != OSH_GEMCA_BODY_NONE) {
 
             /* save previous body if any */
-            if (cur != NULL) {
-                _save_body(cur, nstr, par, npar, btype);
-                cur->lineno = lineno_b;
+            if (current_body != NULL) {
+                _save_body(current_body, nstr, par, npar, btype);
+                current_body->lineno = lineno_b;
             }
 
-            /* capacity guard (optional) */
+            /* capacity guard */
             if (ibody >= g->nbodies) {
                 osh_error(EX_CONFIG,
                           "Error parsing geometry line %li - too many bodies (max=%li)\n",
@@ -139,7 +140,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g)
             }
 
             /* start new body */
-            cur = g->bodies[ibody];
+            current_body = g->bodies[ibody];
             btype = btype_new;
             lineno_b = lineno;
 
@@ -153,9 +154,9 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g)
                         "%s %lf %lf %lf %lf %lf %lf",
                         nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
 
-            /* duplicate-name check: init _ib right before loop */
-            _ib = 0;
-            while (_ib < ibody) {
+
+            /* check if body name is already used, and drop and error if that is the case */
+            for (_ib = 0; _ib < ibody; _ib++) {
                 if (strcmp(g->bodies[_ib]->name, nstr) == 0) {
                     osh_error(EX_CONFIG,
                               "Error parsing geometry line %li - body name '%s' already exists (defined at line %li)\n",
@@ -163,7 +164,6 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g)
                               nstr,
                               (long int)g->bodies[_ib]->lineno);
                 }
-                _ib++;
             }
 
             npar = nt - 1;
@@ -172,7 +172,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g)
             ibody++;
         } else {
             /* continuation line */
-            if (cur == NULL) {
+            if (current_body == NULL) {
                 osh_error(EX_CONFIG,
                           "Error parsing geometry line %li - parameters found before any body definition\n",
                           (long int)lineno);
