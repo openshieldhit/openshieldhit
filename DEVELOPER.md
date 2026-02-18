@@ -38,19 +38,22 @@ Not intended for end-users.
   - Defensive initialization clearly improves robustness without hiding logic errors.
 
 ### General Coding Conventions
-
-- Private/internal functions use `static` and a `_osh_name()` prefix.
+- Publihc functions use have `osh` prefix : `osh_foobar()`
+- Private/internal functions use `static` and no `_osh` prefix : `foobar()`
+- Private/inline functions use `static inline` and `_` prefix: `_foobar()`
 - Prefer `enum` instead of `#define` numbered lists.
 
 - Public headers must use include guards of the form:
 
 ```c
-#ifndef OSH_FOO_H
-#define OSH_FOO_H
+#ifndef _OSH_FOO_H
+#define _OSH_FOO_H
 ...
-#endif /* OSH_FOO_H */
+#endif /* _OSH_FOO_H */
+```
 
 - idea is to provide a public API as well, allow these header files to be linked against C++, so encapsulate header in
+
 ```c
 #ifdef __cplusplus
 extern "C" {
