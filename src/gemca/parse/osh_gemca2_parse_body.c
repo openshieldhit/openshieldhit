@@ -84,7 +84,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
     char *args = NULL;
     char *line = NULL;
     int lineno;
-    int lineno_b; /* valid only when cur != NULL */
+    int lineno_b; /* valid only when current_body != NULL */
 
     int nt;
     int btype = OSH_GEMCA_BODY_NONE;
