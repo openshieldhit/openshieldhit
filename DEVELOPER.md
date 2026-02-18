@@ -38,7 +38,7 @@ Not intended for end-users.
   - Defensive initialization clearly improves robustness without hiding logic errors.
 
 ### General Coding Conventions
-- Publihc functions use have `osh` prefix : `osh_foobar()`
+- Public functions have `osh` prefix : `osh_foobar()`
 - Private/internal functions use `static` and no `_osh` prefix : `foobar()`
 - Private/inline functions use `static inline` and `_` prefix: `_foobar()`
 - Prefer `enum` instead of `#define` numbered lists.
