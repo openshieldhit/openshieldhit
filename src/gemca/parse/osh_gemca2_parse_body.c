@@ -100,7 +100,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
     char nstr[OSH_GEMCA_BODY_NAME_MAXLEN]; /* string for body name */
 
     size_t ibody;
-    int has_body = 0;     /* flag to check if we have found at least one body, to save the last one when we find the end statement */
+    char has_body = 0;     /* flag to check if we have found at least one body, to save the last one when we find the end statement */
 
     size_t _ib;
 
