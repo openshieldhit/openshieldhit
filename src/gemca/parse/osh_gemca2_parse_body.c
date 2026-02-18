@@ -100,11 +100,14 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
     char nstr[OSH_GEMCA_BODY_NAME_MAXLEN]; /* string for body name */
 
     size_t ibody;
-    char has_body = 0;     /* flag to track if we have a body to save (used when finding a new body or the end statement) */
+    char has_body;     /* flag to track if we have a body to save (used when finding a new body or the end statement) */
 
     size_t _ib;
 
     rewind(shf->fp);
+
+    ibody = 0;
+    has_body = 0;
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
