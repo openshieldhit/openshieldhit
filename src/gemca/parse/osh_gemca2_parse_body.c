@@ -148,6 +148,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
                     EX_CONFIG, "Error parsing geometry line %li - missing body name/parameters\n", (long int) lineno);
             }
 
+            // TODO: sscanf("%s", ...) is unsafe because %s is unbounded and may overflow nstr.
             nt = sscanf(args, "%s %lf %lf %lf %lf %lf %lf", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
 
             /* check if body name is already used, and drop and error if that is the case */
@@ -173,6 +174,15 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
                           (long int) lineno);
             }
 
+            /* We may write up to par[off+5] on a continuation line */
+            if ((off + 5) >= OSH_GEMCA_NARGS_MAX) {
+                osh_error(EX_CONFIG,
+                          "Error parsing geometry line %li - too many arguments (need index %i, max index %i)\n",
+                          (long int) lineno,
+                          off + 5,
+                          OSH_GEMCA_NARGS_MAX - 1);
+            }
+
             nt = sscanf(key, "%lf", &par[off]);
             if (nt > 0) {
                 npar += nt;
@@ -193,13 +203,6 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
             }
 
             off += 6;
-        }
-
-        if ((off + 5) > OSH_GEMCA_NARGS_MAX) {
-            osh_error(EX_CONFIG,
-                      "Error parsing geometry line %li - too many arguments off+5 = %i\n",
-                      (long int) lineno,
-                      off + 5);
         }
 
         free(line);
