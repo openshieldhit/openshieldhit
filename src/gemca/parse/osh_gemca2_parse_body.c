@@ -151,7 +151,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
             // TODO: sscanf("%s", ...) is unsafe because %s is unbounded and may overflow nstr.
             nt = sscanf(args, "%s %lf %lf %lf %lf %lf %lf", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
 
-            /* check if body name is already used, and drop and error if that is the case */
+            /* check if body name is already used, and raise an error if that is the case */
             for (_ib = 0; _ib < ibody; _ib++) {
                 if (strcmp(g->bodies[_ib]->name, nstr) == 0) {
                     osh_error(EX_CONFIG,
