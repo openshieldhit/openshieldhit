@@ -50,7 +50,7 @@ Not intended for end-users.
 ...
 #endif /* OSH_FOO_H */
 
-- idea is to provide a public API as well, allow these header files to be linked agains C++, so encapsulate header in
+- idea is to provide a public API as well, allow these header files to be linked against C++, so encapsulate header in
 ```c
 #ifdef __cplusplus
 extern "C" {
