@@ -80,56 +80,79 @@ size_t osh_gemca_parse_count_bodies(struct oshfile *shf) {
  * @author Niels Bassler
  */
 int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
-
     char *key = NULL;
     char *args = NULL;
     char *line = NULL;
     int lineno;
-    int lineno_b; /* save first line where this body was defined */
+    int lineno_b; /* valid only when current_body != NULL */
 
-    int nt = 0;
-    int btype = 0;
-    int btype_new = 0;
+    int nt;
+    int btype = OSH_GEMCA_BODY_NONE;
+    int btype_new;
 
-    int nend = 0; /* number of end statements parsed so far */
+    int nend = 0; /* keep if you plan to use it; otherwise remove */
 
-    double par[OSH_GEMCA_NARGS_MAX]; /* temporary placeholder for body parsed arguments */
-    int npar = 0;                    /* number of parameters */
-    int off = 0;                     /* index offset for parameters while parsing */
+    double par[OSH_GEMCA_NARGS_MAX];
+    int npar = 0;
+    int off = 0;
 
-    char nstr[OSH_GEMCA_BODY_NAME_MAXLEN]; /* string for body name */
+    char nstr[OSH_GEMCA_BODY_NAME_MAXLEN];
 
-    ssize_t ibody = -1; // TODO change to size_t
+    struct body *current_body = NULL;
+
+    size_t ibody = 0;
     size_t _ib;
 
     rewind(shf->fp);
 
+    /* read line by line and parse the keys and arguments */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
-        // printf("line %i  '%s':'%s'\n", lineno, key, args);
-        btype_new = _body_from_key(key);
-        if (OSH_GEMCA_BODY_NONE != btype_new) {
-            /* we have found a new body */
+        /* END check early so we do not touch parsing state on END lines */
+        if ((strcasecmp(key, OSH_GEMCA_KEY_END) == 0) && (nend == 0)) {
+            if (current_body == NULL) {
+                osh_error(EX_CONFIG,
+                          "Error parsing geometry line %li - END encountered before any body definition\n",
+                          (long int) lineno);
+            }
+            _save_body(current_body, nstr, par, npar, btype);
+            current_body->lineno = lineno_b;
+            break;
+        }
 
-            /* let us save the previous one, if there was one */
-            if (ibody > -1) {
-                _save_body(g->bodies[ibody], nstr, par, npar, btype);
-                /* save the first line number where the body was defined */
-                g->bodies[ibody]->lineno = lineno_b;
+        btype_new = _body_from_key(key);
+
+        if (btype_new != OSH_GEMCA_BODY_NONE) {
+
+            /* save previous body if any */
+            if (current_body != NULL) {
+                _save_body(current_body, nstr, par, npar, btype);
+                current_body->lineno = lineno_b;
             }
 
-            ibody++;
-            // TODO: improve parser so all arguments may appear in a single line, if they want to
-            // This corresponds to FLUKA-free format
-            nt = sscanf(
-                args, "%s %lf %lf %lf %lf %lf %lf\n", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
-            /*
-               // printf("parsed : %i parameters and incl. one name\n", nt);
-               // printf("parsed : %lf %lf %lf - %lf %lf %lf\n", par[0], par[1], par[2], par[3], par[4], par[5]);
-             */
+            /* capacity guard */
+            if (ibody >= g->nbodies) {
+                osh_error(EX_CONFIG,
+                          "Error parsing geometry line %li - too many bodies (max=%li)\n",
+                          (long int) lineno,
+                          (long int) g->nbodies);
+            }
 
-            /* check if a body with name nstr already exist, and if yes, exit with an error */
-            for (_ib = 0; _ib < (size_t) ibody; _ib++) {
+            /* start new body */
+            current_body = g->bodies[ibody];
+            btype = btype_new;
+            lineno_b = lineno;
+
+            if (args == NULL) {
+                osh_error(
+                    EX_CONFIG, "Error parsing geometry line %li - missing body name/parameters\n", (long int) lineno);
+            }
+
+            // TODO: sscanf("%s", ...) is unsafe because %s is unbounded and may overflow nstr.
+            nt = sscanf(args, "%s %lf %lf %lf %lf %lf %lf", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
+
+            /* check if body name is already used, and raise an error if that is the case */
+            for (_ib = 0; _ib < ibody; _ib++) {
                 if (strcmp(g->bodies[_ib]->name, nstr) == 0) {
                     osh_error(EX_CONFIG,
                               "Error parsing geometry line %li - body name '%s' already exists (defined at line %li)\n",
@@ -141,30 +164,34 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
 
             npar = nt - 1;
             off = 6;
-            btype = btype_new;
+
+            ibody++;
         } else {
-            if (btype_new == OSH_GEMCA_BODY_VOX) {
-                /* this is the special case when we have a path to a filename */
-                g->bodies[ibody]->filename_vox = calloc(strlen(key) + 1, sizeof(char));
-                snprintf(g->bodies[ibody]->filename_vox, strlen(key), "%s", key);
-                printf("Vox filename = %s\n", key);
-            } else {
-                nt = sscanf(key, "%lf", &par[off]);
+            /* continuation line */
+            if (current_body == NULL) {
+                osh_error(EX_CONFIG,
+                          "Error parsing geometry line %li - parameters found before any body definition\n",
+                          (long int) lineno);
             }
 
-            /* check if there is a continuation line to the same body.
-                This is the case if the next line is a number.  */
+            /* We may write up to par[off+5] on a continuation line */
+            if ((off + 5) >= OSH_GEMCA_NARGS_MAX) {
+                osh_error(EX_CONFIG,
+                          "Error parsing geometry line %li - too many arguments (need index %i, max index %i)\n",
+                          (long int) lineno,
+                          off + 5,
+                          OSH_GEMCA_NARGS_MAX - 1);
+            }
+
+            nt = sscanf(key, "%lf", &par[off]);
             if (nt > 0) {
-                /* yes, there is, extend the number of parameters */
                 npar += nt;
-                // printf("parsed another : %i parameters\n", nt);
             }
 
-            /* scan for remaining parameters in this line */
             nt = 0;
             if (args != NULL) {
                 nt = sscanf(args,
-                            "%lf %lf %lf %lf %lf\n",
+                            "%lf %lf %lf %lf %lf",
                             &par[1 + off],
                             &par[2 + off],
                             &par[3 + off],
@@ -172,30 +199,18 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
                             &par[5 + off]);
             }
             if (nt > 0) {
-                // printf("parsed another : %i parameters\n", nt);
-                /* and update the number of arguments parsed */
                 npar += nt;
             }
+
             off += 6;
         }
-        if ((off + 5) > OSH_GEMCA_NARGS_MAX) {
-            osh_error(EX_CONFIG,
-                      "Error parsing geometry line %li - too many arguments  off+5 = %i\n",
-                      (long int) lineno,
-                      off + 5);
-        }
 
-        if ((strcasecmp(key, OSH_GEMCA_KEY_END) == 0) && (nend == 0)) {
-            /*  save the last body we found */
-            _save_body(g->bodies[ibody], nstr, par, npar, btype);
-            break; /* break out of while loop */
-        }
         free(line);
-        /* save the line number before reading next body*/
-        lineno_b = lineno;
+        line = NULL;
+    }
 
-    } /* end of while loop */
     free(line);
+    line = NULL;
     return 1;
 }
 

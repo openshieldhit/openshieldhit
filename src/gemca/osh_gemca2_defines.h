@@ -4,8 +4,6 @@
 /* Windows compatibility */
 #ifdef _WIN32
     #include <stddef.h>
-    /* ssize_t is not available on Windows, use ptrdiff_t instead */
-    typedef ptrdiff_t ssize_t;
     /* strcasecmp is called _stricmp on Windows */
     #define strcasecmp _stricmp
 #endif
