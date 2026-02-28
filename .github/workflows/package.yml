@@ -37,7 +37,7 @@ jobs:
       run: ls -lh build/ | grep -E '\.(deb|tar\.gz)$'
 
     - name: Upload packages as artifacts
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: openshieldhit-packages-linux
         path: |
