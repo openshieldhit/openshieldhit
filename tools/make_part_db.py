@@ -7,6 +7,9 @@ from urllib import request, error
 
 ISO_URL = "https://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl?ele=&ascii=ascii&isotype=all"
 BASENAME = "osh_isotope_db_generated"
+OSH_ISOTOPE_DB_ERR = 0xFFFF
+
+logger = logging.getLogger(__name__)
 
 
 def init_db(url: str = ISO_URL):
@@ -25,8 +28,8 @@ def init_db(url: str = ISO_URL):
     except (error.URLError, TimeoutError) as e:
         raise RuntimeError(f"Failed to download isotope table from NIST: {e}") from e
 
-    eldb = [{1: ("N/A", 0.0, 0.0)}]  # synthetic placeholder; not a physical isotope
-    count = 1
+    eldb = [{}]  # synthetic placeholder
+    count = 0
 
     in_table = False
     current_z = None
@@ -41,8 +44,8 @@ def init_db(url: str = ISO_URL):
         if not in_table:
             continue
 
-        # Stop if we leave the <pre> (or hit other html)
-        if b"</pre>" in line or (b"<" in line and b">" in line):
+        # Stop on any HTML tag once we are in the table block
+        if line.lstrip().startswith(b"<"):
             break
 
         # Fixed-width columns from NIST ASCII table
@@ -58,14 +61,22 @@ def init_db(url: str = ISO_URL):
 
         # New element begins when Z is present
         if z_s:
+            logger.info(f"parsing {z_s}")
             z = int(z_s)
 
-            # Commit previous element dict
-            if current is not None:
-                eldb.append(current)
+            # Commit previous element dict into its Z slot
+            if current is not None and current_z is not None:
+                while len(eldb) <= current_z:
+                    eldb.append({})
+                eldb[current_z] = current
+
+            # Ensure eldb is long enough for this new Z
+            while len(eldb) <= z:
+                eldb.append({})
 
             current_z = z
             current = {}
+            current_el_symb = symb_s or (current_el_symb or "")
             # The element's base symbol is the symbol on the Z line (e.g. "H", "He", "Li")
             if symb_s:
                 current_el_symb = symb_s
@@ -89,9 +100,11 @@ def init_db(url: str = ISO_URL):
         current[a] = (iso_symb, amass, abund)
         count += 1
 
-    # Commit final element
-    if current is not None:
-        eldb.append(current)
+        # Commit final element into its Z slot
+        if current is not None and current_z is not None:
+            while len(eldb) <= current_z:
+                eldb.append({})
+            eldb[current_z] = current
 
     return eldb, count
 
@@ -130,19 +143,19 @@ def make_files(eldb, n, basename: str):
 
     h_lines.append(f"#define OSH_ISOTOPE_DB_NISO {n:d}  /* number of isotopes in database */\n")
     h_lines.append(f"#define OSH_ISOTOPE_DB_NELEM {nelem:d}  /* number of elements in database */\n")
-    h_lines.append("#define OSH_ISOTPOPE_DB_ERR 0xFFFF /* error code */\n\n")
-
+    h_lines.append(f"#define OSH_ISOTOPE_DB_ERR 0x{OSH_ISOTOPE_DB_ERR:04X} /* error code */\n\n")
     h_lines.append("extern const struct isotope osh_isotope_db[];\n")
+    h_lines.append("extern const unsigned int osh_isotopes_len[];\n")
+    h_lines.append("extern const unsigned int osh_isotopes_idx[];\n")
+    h_lines.append("extern const unsigned int osh_isotopes_idx_default[];\n")
     h_lines.append(f"#endif /* !{guard} */\n")
 
     c_lines = []
     c_lines.append(stamp)
     c_lines.append(f'#include "{fname_h}"\n\n')
-    c_lines.append("const struct isotope osh_isotope_db_len[] = {\n")
+    c_lines.append("const struct isotope osh_isotope_db[] = {\n")
     c_lines.append("/* relative atomic mass [u], relative abundance, z, A, IUPAC symbol */\n")
 
-    # These arrays are currently computed but not emitted in your .c output;
-    # keeping them here in case you add them later.
     niso = [0] * nelem
     el_idx = [0] * nelem
     el_idx_default = [0] * nelem
@@ -153,8 +166,12 @@ def make_files(eldb, n, basename: str):
         niso[z] = _niso
         el_idx[z] = count
 
+        if _niso == 0:
+            el_idx_default[z] = OSH_ISOTOPE_DB_ERR
+            continue
+
         best_abund = -1.0
-        el_idx_default[z] = count
+        el_idx_default[z] = count  # fallback to first isotope if all abund are 0
 
         for a, (symb, amass, abund) in sorted(element.items()):
             if abund > best_abund:
@@ -167,7 +184,49 @@ def make_files(eldb, n, basename: str):
             c_lines.append(line + "\n")
             count += 1
 
-    c_lines.append("};\n")
+    c_lines.append("};\n\n")
+
+    _max_line_length = 110
+
+    # create table with number of isotopes
+    line = "  "
+    c_lines.append("const unsigned int osh_isotopes_len[] = {\n")
+    for i, el in enumerate(eldb):
+        if len(line) >= _max_line_length:
+            c_lines.append(line + "\n")
+            line = "  "
+
+        line += " {:2d}".format(niso[i])
+        if i < nelem - 1:
+            line += ","
+    c_lines.append(line)
+    c_lines.append("\n};\n\n")
+
+    # create table with index start array
+    line = "  "
+    c_lines.append("const unsigned int osh_isotopes_idx[] = {\n")
+    for i, el in enumerate(eldb):
+        if len(line) >= _max_line_length:
+            c_lines.append(line + "\n")
+            line = "  "
+        line += " {:4d}".format(el_idx[i])
+        if i < nelem - 1:
+            line += ","
+    c_lines.append(line)
+    c_lines.append("\n};\n\n")
+
+    # create table with index start array
+    line = "  "
+    c_lines.append("const unsigned int osh_isotopes_idx_default[] = {\n")
+    for i, el in enumerate(eldb):
+        if len(line) >= _max_line_length:
+            c_lines.append(line + "\n")  # + "/* {:s} */".format(el.value[0]),
+            line = "  "
+        line += " {:4d}".format(el_idx_default[i])
+        if i < nelem - 1:
+            line += ","
+    c_lines.append(line)
+    c_lines.append("\n};\n\n")
 
     with open(fname_h, "w", encoding="utf-8") as f:
         f.write("".join(h_lines))
