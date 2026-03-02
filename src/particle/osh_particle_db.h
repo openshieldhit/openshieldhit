@@ -1,7 +1,9 @@
 #ifndef OSH_PARTICLE_DB_H
 #define OSH_PARTICLE_DB_H
 
-struct particle_db_type {
+#include <stddef.h>
+
+struct particle_db_entry {
     double mass_mev;
     const char *name;
     const char *symbol;
@@ -9,7 +11,7 @@ struct particle_db_type {
     int charge_e;
 };
 
-extern struct particle_db_type const osh_particle_db[];
+extern struct particle_db_entry const osh_particle_db[];
 extern size_t const osh_particle_db_len;
 
 /*
@@ -20,6 +22,6 @@ extern size_t const osh_particle_db_len;
 
     @author Niels Bassler
 */
-struct osh_particle_db_entry const *osh_particle_db_get(int pdg);
+struct particle_db_entry const *osh_particle_db_get(int pdg);
 
 #endif /* OSH_PARTICLE_DB_H */

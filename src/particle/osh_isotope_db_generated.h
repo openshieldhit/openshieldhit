@@ -24,6 +24,6 @@ struct isotope {
 
 extern const struct isotope osh_isotope_db[];
 extern const unsigned int osh_isotopes_len[];
-extern const unsigned int osh_isotopes_idx[];
-extern const unsigned int osh_isotopes_idx_default[];
+extern const unsigned int osh_isotopes_idx[];  /* atomic number as input index to get db index */
+extern const unsigned int osh_isotopes_idx_default[];  /* most likely isotope for each element */
 #endif /* !OSH_ISOTOPE_DB_GENERATED_H */

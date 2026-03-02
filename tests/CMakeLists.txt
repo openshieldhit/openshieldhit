@@ -20,7 +20,6 @@ foreach(test_src ${TEST_SOURCES})
             osh_random
             osh_beam
             osh_particle
-            osh_species
     )
 
     # Register the test

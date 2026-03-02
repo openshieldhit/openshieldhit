@@ -60,7 +60,6 @@ add_subdirectory(src/common)
 add_subdirectory(src/random)
 add_subdirectory(src/beam)
 add_subdirectory(src/particle)
-add_subdirectory(src/species)
 add_subdirectory(src/gemca)
 add_subdirectory(src/transport)
 
