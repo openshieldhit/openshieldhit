@@ -7,6 +7,18 @@
 #include "particle/osh_particle_db.h"
 #include "particle/osh_particle_pdg.h"
 
+void reset_particle(struct particle *p) {
+    p->mass = 0.0;
+    p->weight = 1.0;
+    p->gen = 0;
+    p->nprim = 0;
+    p->pdg = OSH_PART_PDG_NONE;
+    p->charge = 0;
+    p->z = 0;
+    p->a = 0;
+    p->is_nucleus = 0;
+}
+
 int osh_particle_from_pdg(struct particle *p, int pdg) {
 
     size_t i;
@@ -24,12 +36,8 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
 
     /* set the mass of the particle */
     if (!osh_particle_mass_from_pdg(pdg, &p->mass)) {
-        p->mass = 0.0;
+        reset_particle(p);
         p->pdg = OSH_PART_PDG_INVALID;
-        p->charge = 0;
-        p->is_nucleus = 0;
-        p->z = 0;
-        p->a = 0;
         return 0;
     }
 
@@ -55,16 +63,13 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
             }
         }
     }
-
+    reset_particle(p);
     p->pdg = OSH_PART_PDG_INVALID;
     return 0;
 }
 
 int osh_particle_pdg_is_ion(int pdg) {
-    if (pdg > OSH_PART_PDG_HIBASE)
-        return 1;
-    else
-        return 0;
+    return pdg > OSH_PART_PDG_HIBASE;
 }
 
 int osh_particle_name_from_pdg(int pdg, char *name_buf, size_t buf_size) {

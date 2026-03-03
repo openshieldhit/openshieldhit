@@ -24,7 +24,7 @@ int osh_isotope_from_za(struct isotope *iso, unsigned int z, unsigned a) {
 
     for (i = osh_isotopes_idx[z]; i < i_max; ++i) {
         if (osh_isotope_db[i].a == a) {
-            iso = &osh_isotope_db[i];
+            *iso = osh_isotope_db[i];
             return 1;
         }
     }
@@ -40,7 +40,7 @@ int osh_isotope_from_pdg(struct isotope *iso, int pdg) {
     }
 
     z = (pdg - OSH_PART_PDG_HIBASE) / 10000;
-    a = (pdg - OSH_PART_PDG_HIBASE) % 10000;
+    a = (pdg - OSH_PART_PDG_HIBASE) % 10000 / 10;
 
     return osh_isotope_from_za(iso, z, a);
 }

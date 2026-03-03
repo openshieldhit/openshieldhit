@@ -1,5 +1,5 @@
-#ifndef _OSH_PARTICLE_PDG
-#define _OSH_PARTICLE_PDG
+#ifndef OSH_PARTICLE_PDG_H
+#define OSH_PARTICLE_PDG_H
 
 // clang-format off
 #define OSH_PART_PDG_NEUTRON     2112    /* neutron */
@@ -40,4 +40,4 @@
 #define OSH_PART_PDG_INVALID     100      /* for error handling */
 // clang-format on
 
-#endif /* !_OSH_PARTICLE_PDG */
+#endif /* !OSH_PARTICLE_PDG_H */

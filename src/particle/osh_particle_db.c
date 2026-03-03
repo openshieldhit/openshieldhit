@@ -47,13 +47,3 @@ struct particle_db_entry const osh_particle_db[] = {
 };
 
 size_t const osh_particle_db_len = sizeof(osh_particle_db) / sizeof(osh_particle_db[0]);
-
-struct particle_db_entry const *osh_particle_db_get(int pdg) {
-    size_t i;
-
-    for (i = 0; i < osh_particle_db_len; ++i) {
-        if (osh_particle_db[i].pdg == pdg)
-            return &osh_particle_db[i];
-    }
-    return NULL;
-}

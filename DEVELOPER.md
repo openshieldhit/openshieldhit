@@ -46,10 +46,10 @@ Not intended for end-users.
 - Public headers must use include guards of the form:
 
 ```c
-#ifndef _OSH_FOO_H
-#define _OSH_FOO_H
+#ifndef OSH_FOO_H
+#define OSH_FOO_H
 ...
-#endif /* _OSH_FOO_H */
+#endif /* OSH_FOO_H */
 ```
 
 - The idea is to provide a public API as well, allowing these header files to be linked against C++, so encapsulate headers in:

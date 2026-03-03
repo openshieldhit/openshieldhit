@@ -1,5 +1,5 @@
-#ifndef _OSH_PARTICLE_CONST
-#define _OSH_PARTICLE_CONST
+#ifndef OSH_PARTICLE_CONST_H
+#define OSH_PARTICLE_CONST_H
 
 #include "common/osh_const.h"
 #include "particle/osh_particle_pdg.h"
@@ -9,4 +9,4 @@
 #define OSH_PART_MASS_PROTON 938.2720882
 #define OSH_PART_MASS_ELECTRON 0.51099894929
 
-#endif /* !_OSH_PARTICLE_CONST */
+#endif /* !OSH_PARTICLE_CONST_H */
