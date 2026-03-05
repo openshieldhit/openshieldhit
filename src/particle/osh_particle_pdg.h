@@ -1,5 +1,5 @@
-#ifndef _OSH_PARTICLE_PDG
-#define _OSH_PARTICLE_PDG
+#ifndef OSH_PARTICLE_PDG_H
+#define OSH_PARTICLE_PDG_H
 
 // clang-format off
 #define OSH_PART_PDG_NEUTRON     2112    /* neutron */
@@ -31,9 +31,13 @@
 #define OSH_PART_PDG_HE4         1000020040  /* He-4 */
 #define OSH_PART_PDG_HIBASE      1000000000  /* base number to build hadron in ground state */
 
+/* alternative hypothetical proton / neutron definitions, which could happen. */
+#define OSH_PART_PDG_PROTON_ION  1000010010  /* proton ion, will be converted to OSH_PART_PDG_PROTON in code */
+#define OSH_PART_PDG_NEUTRON_ION 1000000010  /* neutron ion, will be converted to OSH_PART_PDG_NEUTRON in code */
+
 /* PDG codes 81–100 are reserved for generator-specific pseudoparticles and concepts. */
 #define OSH_PART_PDG_NONE        81       /* zero-physics virtual particle for testing, currently also used if not set */
 #define OSH_PART_PDG_INVALID     100      /* for error handling */
 // clang-format on
 
-#endif /* !_OSH_PARTICLE_PDG */
+#endif /* !OSH_PARTICLE_PDG_H */

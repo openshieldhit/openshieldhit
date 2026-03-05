@@ -1,17 +1,12 @@
-# Create a library from local source files
-# Cmake cannot track changes *.c glob files, so we list them explicitly
 add_library(osh_particle
     osh_particle.c
-    _osh_partdb.c
+    osh_particle_db.c
+    osh_isotope_db.c
+    osh_isotope_db_generated.c
 )
 
 # Make sure consumers of the library see the headers
 target_include_directories(osh_particle
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
 )
-
-# Link math library (Unix/Linux only - Windows has it in the C runtime)
-if(UNIX)
-    target_link_libraries(osh_particle PRIVATE m)
-endif()
