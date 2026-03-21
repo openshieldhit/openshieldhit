@@ -28,7 +28,7 @@ jobs:
         fetch-depth: 0  # Full git history needed for version extraction (git describe)
 
     - name: Set up CMake
-      uses: jwlawson/actions-setup-cmake@v2.1.1
+      uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Install dependencies (Ubuntu)
       if: runner.os == 'Linux'
