@@ -13,6 +13,7 @@ add_library(osh_common
 target_include_directories(osh_common
     PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_BINARY_DIR}/generated
 )
 
 # Link math library (Unix/Linux only - Windows has it in the C runtime)
