@@ -102,7 +102,7 @@ double osh_rng_gauss01(struct osh_rng *rng) {
 }
 
 double osh_rng_gauss(struct osh_rng *rng, double mu, double sigma) {
-    return mu + sigma * osh_rng_gauss01(rng);
+    return mu + (sigma * osh_rng_gauss01(rng));
 }
 
 /* vectors */

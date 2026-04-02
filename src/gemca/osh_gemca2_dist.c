@@ -48,7 +48,8 @@ static inline double _minpos(double a, double b);
  */
 double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
 
-    double d, total_distance;
+    double d;
+    double total_distance;
     struct ray rr;
 
     // printf("osh_gemca_get_distance(): calculating distance to zone boundary for zone '%s'\n", z->name);
@@ -156,10 +157,10 @@ static inline double _dist_body(struct body const *b, struct ray const *r) {
 
     struct surface *sf;
     int i;
-    double d, _d;
+    double d;
+    double _d;
     struct ray rr;
 
-    d = OSH_GEMCA_INFINITY;
     _d = OSH_GEMCA_INFINITY;
 
     // printf("******* _dist_body() %s\n", b->name);
@@ -259,7 +260,7 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
         tr->p[i] = r->p[i];
         tr->cp[i] = r->cp[i];
     }
-    tr->system = b->coord;
+    tr->system = (unsigned char) b->coord;
     // printf("_transform_to_local() ray after transform:\n");
     // osh_transport_print_ray(tr);
 
@@ -332,7 +333,8 @@ static inline int _ray_advance(double d, struct ray const *r, struct ray *rr) {
  * @author Niels Bassler
  */
 static inline double _dist_plane_xyz(int axis, struct surface const *sf, struct ray const *r) {
-    double d, _d;
+    double d;
+    double _d;
 
     // Choose the appropriate ray and plane components
     double rp = r->p[axis];
@@ -346,7 +348,7 @@ static inline double _dist_plane_xyz(int axis, struct surface const *sf, struct 
         }
         return OSH_GEMCA_INFINITY;
     }
-    d = -(sf->p[0] * rp + sf->p[1]) / _d;
+    d = -((sf->p[0] * rp) + sf->p[1]) / _d;
 
     return d;
 }
@@ -365,7 +367,9 @@ static inline double _dist_plane_xyz(int axis, struct surface const *sf, struct 
  * @author Niels Bassler
  */
 static inline double _dist_plane(struct surface const *sf, struct ray const *r) {
-    double dot_ln, dot_pn, d;
+    double dot_ln;
+    double dot_pn;
+    double d;
     double *n = &(sf->p[0]); /* Plane normal vector (A, B, C) */
 
     /* Dot product of ray direction with plane normal */
@@ -398,7 +402,8 @@ static inline double _dist_plane(struct surface const *sf, struct ray const *r) 
  * @author Niels Bassler
  */
 static inline double _dist_sphere(double r2, struct ray const *r) {
-    double b, c;
+    double b;
+    double c;
 
     // Compute quadratic coefficients
     b = 2.0 * osh_vect_dot(r->cp, r->p); // 2(l · o)
@@ -424,7 +429,9 @@ static inline double _dist_sphere(double r2, struct ray const *r) {
  */
 static inline double _dist_cyl(double r2, struct ray const *r) {
 
-    double a, b, c;
+    double a;
+    double b;
+    double c;
 
     a = r->cp[0] * r->cp[0] + r->cp[1] * r->cp[1];
     b = 2.0 * (r->cp[0] * r->p[0] + r->cp[1] * r->p[1]);
@@ -448,7 +455,9 @@ static inline double _dist_cyl(double r2, struct ray const *r) {
  */
 static inline double _dist_elipcyl(double ra2, double rb2, struct ray const *r) {
 
-    double a, b, c;
+    double a;
+    double b;
+    double c;
 
     // TODO vectorize me
     a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2; /* a in gemca */
@@ -473,7 +482,9 @@ static inline double _dist_elipcyl(double ra2, double rb2, struct ray const *r) 
  */
 static inline double _dist_cone(double ra2, double rb2, struct ray const *r) {
 
-    double a, b, c;
+    double a;
+    double b;
+    double c;
     double t;
 
     t = (r->p[2] - ra2) / rb2;
@@ -498,7 +509,9 @@ static inline double _dist_cone(double ra2, double rb2, struct ray const *r) {
  */
 static inline double _dist_ellipsoid(double ra2, double rb2, double rc2, struct ray const *r) {
 
-    double a, b, c;
+    double a;
+    double b;
+    double c;
 
     // TODO vectorize me
     a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2 + (r->cp[2] * r->cp[2]) / rc2; /* a in gemca */
@@ -521,15 +534,17 @@ static inline double _quadratic_solver(double a, double b, double c) {
 
     double d;
     double _d;
-    double r1, r2;
+    double r1;
+    double r2;
 
     if (fabs(a) < OSH_GEMCA_SMALL) {
         if (fabs(b) > OSH_GEMCA_SMALL) {
             r1 = -c / b;
-            if (r1 > 0.0)
+            if (r1 > 0.0) {
                 return r1;
-            else
+            } else {
                 return OSH_GEMCA_INFINITY;
+            }
         }
         return OSH_GEMCA_INFINITY;
     }

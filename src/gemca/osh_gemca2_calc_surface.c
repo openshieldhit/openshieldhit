@@ -36,7 +36,7 @@ int osh_gemca2_add_surfaces(struct body *b, int n) {
     int i;
 
     b->nsurfs = n;
-    b->surfs = calloc(n, sizeof(struct surface *));
+    b->surfs = (struct surface **) calloc(n, sizeof(struct surface *));
 
     for (i = 0; i < n; i++) {
         b->surfs[i] = calloc(1, sizeof(struct surface));

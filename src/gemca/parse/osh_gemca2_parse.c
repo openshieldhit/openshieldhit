@@ -11,6 +11,7 @@
 #include "gemca/parse/osh_gemca2_parse_zone.h"
 
 static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone);
+static void _rewind_oshfile(struct oshfile *shf);
 
 /**
  * @brief loads and parses the geometry geo.dat file (or whatever filename was specified.
@@ -32,14 +33,7 @@ int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
     struct body **body = NULL;
     struct zone **zone = NULL;
 
-    struct oshfile *shf;
-
-    shf = calloc(1, sizeof(struct oshfile));
-    if (shf == NULL) {
-        osh_error(EX_UNAVAILABLE, "could not allocate memory.\n");
-    }
-
-    shf = osh_fopen(filename);
+    struct oshfile *shf = osh_fopen(filename);
 
     /* test_format() also counts the number of bodies and zones */
     if (!_test_format(shf, &nbody, &nzone)) {
@@ -50,12 +44,12 @@ int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
     snprintf(g->filename, strlen(filename) + 1, "%s", filename);
 
     /* allocate memory for pointers to lists */
-    body = calloc(nbody, sizeof(struct body *));
+    body = (struct body **) calloc(nbody, sizeof(struct body *));
     if (body == NULL) {
         fprintf(stderr, "*** Error in memory allocation, *body.\n");
         exit(EX_UNAVAILABLE);
     }
-    zone = calloc(nzone, sizeof(struct zone *));
+    zone = (struct zone **) calloc(nzone, sizeof(struct zone *));
     if (zone == NULL) {
         fprintf(stderr, "*** Error in memory allocation, *zone.\n");
         exit(EX_UNAVAILABLE);
@@ -99,7 +93,7 @@ static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone) {
 
     int ret = 0;
 
-    rewind(shf->fp);
+    _rewind_oshfile(shf);
 
     *nbody = osh_gemca_parse_count_bodies(shf);
     *nzone = osh_gemca_parse_count_zones(shf);
@@ -109,4 +103,18 @@ static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone) {
     }
     // printf("GEMCA test_format() : Found %lu bodies and %lu zones. %i\n", *nbody, *nzone, ret);
     return ret;
+}
+
+/**
+ * @brief Rewind an `oshfile` stream and reset its tracked line number.
+ *
+ * @param[in,out] shf Open geometry file wrapper to rewind.
+ *
+ * @returns Nothing. Exits via `osh_error()` if rewinding fails.
+ */
+static void _rewind_oshfile(struct oshfile *shf) {
+    if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
+        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+    }
+    shf->lineno = 0;
 }

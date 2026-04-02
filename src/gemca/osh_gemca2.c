@@ -29,13 +29,13 @@ int osh_gemca_workspace_free(struct gemca_workspace *wg) {
         free(wg->bodies[i]->a);
         free(wg->bodies[i]);
     }
-    free(wg->bodies);
+    free((void *) wg->bodies);
 
     for (i = 0; i < wg->nzones; i++) {
         free(wg->zones[i]->name);
         free(wg->zones[i]);
     }
-    free(wg->zones);
+    free((void *) wg->zones);
 
     free(wg);
     return 0;

@@ -1,5 +1,6 @@
 #include "osh_gemca2_parse_stack.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 struct stackitem *osh_gemca_stack_pop(struct stack *s) {
@@ -44,9 +45,9 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
     /* check if we need more memory */
     if ((s->ni) > (s->n)) {
         s->n += 32; /* allocate memory for another 32 elements */
-        tmp_si = (struct stackitem **) realloc(s->si, s->n * sizeof(struct stackitem *));
+        tmp_si = (struct stackitem **) realloc((void *) s->si, s->n * sizeof(struct stackitem *));
         if (tmp_si == NULL) {
-            free(s->si);
+            free((void *) s->si);
             free(s);
             return 0;
         }
