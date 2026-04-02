@@ -341,7 +341,7 @@ static struct cgnode *_new_node_body(struct body *b) {
 /**
  * @brief Build the abstract syntax tree.
  *
- * @details This uses the shunting yard algorithm, and undertands paranthesis, +, -, | operators.
+ * @details This uses the shunting yard algorithm, and undertands parentheses, +, -, | operators.
  *
  * @param[in] *z - input struct zone from which the AST will be generated.
  * @param[in] *g - input struct gemca (needed to lookup the bodies from the token names)
@@ -395,7 +395,8 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
                 }
             }
             if (opst == NULL) {
-                osh_error(EX_CONFIG, "unbalanced paranthesis in zone description");
+                osh_error(
+                    EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
             }
         } else {
             /* this is a simple body / leaf node. Push it to the stack as such, */
@@ -419,7 +420,7 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
         si = osh_gemca_stack_pop(opst);
 
         if ((si->v.op == '(') || (si->v.op == ')')) {
-            osh_error(EX_CONFIG, "unbalanced paranthesis in zone description");
+            osh_error(EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
         } else {
             /* make csgnode from popped and push to csgstack */
             node = _new_node_comp(st, si->v.op);
@@ -488,7 +489,7 @@ static size_t _reformat(char const *input, char **output) {
         return 0; /* string is empty, nothing is to be done */
     }
 
-    /*   add a leading paranthesis */
+    /*   add a leading parenthesis */
     (*output)[0] = '(';
     j++;
 
@@ -633,7 +634,7 @@ static int _tokenizer(char const *input, char ***ptokens) {
 }
 
 /**
- * @brief Reverses the list of tokens, and flips the paranthesises.
+ * @brief Reverses the list of tokens, and flips the parentheses.
  *
  * @param[in,out] **ptokens - array of pointers to strings
  * @param[in] *input - pointer to a char string prepared with _reformat().
@@ -665,7 +666,7 @@ static int _reverse_tokens(char **tokens, int ntokens) {
     }
 
     for (i = 0; i < ntokens; i++) {
-        /* reverse any paranthesises */
+        /* reverse any parentheses */
         len = strlen(tokens[i]);
         // printf("len : %li\n", len);
         for (j = 0; j < len; j++) {

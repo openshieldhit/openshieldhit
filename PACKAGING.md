@@ -91,7 +91,7 @@ cmake --build build --config Release --target package
 ## Package Contents
 
 **DEB package** (`/usr/local/`):
-- `bin/osh` - Main executable
+- `bin/openshieldhit` - Main executable
 - `bin/gemca_sdl_viewer`, `bin/bnct_sdl` - Examples (if enabled)
 - `share/openshieldhit/examples/` - Example data
 - `share/openshieldhit/README.md`, `LICENSE`
@@ -102,12 +102,12 @@ cmake --build build --config Release --target package
 
 Print version:
 ```bash
-osh --version
+openshieldhit --version
 ```
 
 Show help:
 ```bash
-osh --help
+openshieldhit --help
 ```
 
 List installed files (DEB packages):
