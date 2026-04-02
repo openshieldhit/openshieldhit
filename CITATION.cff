@@ -1,0 +1,26 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: OpenShieldHIT
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Niels
+    family-names: Bassler
+    affiliation: Aarhus University
+    orcid: 'https://orcid.org/0000-0002-4160-1078'
+  - given-names: Leszek
+    family-names: Grzanka
+    affiliation: >-
+      Institute of Nuclear Physics Polish Academy of
+      Sciences
+    orcid: 'https://orcid.org/0000-0002-3599-854X'
+repository-code: 'https://github.com/openshieldhit/openshieldhit'
+abstract: >-
+  OpenShieldHIT is an early-stage open-source project
+  building a lean, modular Monte Carlo particle transport
+  framework in C.
+license: MIT
