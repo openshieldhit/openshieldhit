@@ -4,21 +4,173 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cli/osh_cli.h"
-#include "common/osh_rc.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 
-static char const *const OPENSHIELDHIT_DEFAULT_WORKDIR = ".";
-static char const *const OPENSHIELDHIT_GEO_FILENAME = "geo.dat";
-static char const *const OPENSHIELDHIT_BEAM_FILENAME = "beam.dat";
-static char const *const OPENSHIELDHIT_MAT_FILENAME = "mat.dat";
-static char const *const OPENSHIELDHIT_DETECT_FILENAME = "detect.dat";
+/* ---- Internal context definition ---------------------------------------- */
 
-static void copy_cli_options(struct openshieldhit_cli_options *dst, struct osh_cli_options const *src);
-static int map_osh_status(int rc);
+struct openshieldhit_context {
+    /* Input paths — owned by the context; freed in destroy(). */
+    char *workdir;
+    char *out_dir;
+    char *geo_path;
+    char *beam_path;
+    char *mat_path;
+    char *detect_path;
+
+    /* Run options */
+    unsigned long long nstat;
+    int has_nstat;
+    enum openshieldhit_run_mode run_mode;
+    int log_level;
+
+    /* Last error message, populated by openshieldhit_run() on failure.
+     * Future: could be extended to a linked list of diagnostics. */
+    char last_error[256];
+};
+
+/* ---- Default file names -------------------------------------------------- */
+
+static char const *const OSH_DEFAULT_WORKDIR = ".";
+static char const *const OSH_GEO_FILENAME = "geo.dat";
+static char const *const OSH_BEAM_FILENAME = "beam.dat";
+static char const *const OSH_MAT_FILENAME = "mat.dat";
+static char const *const OSH_DETECT_FILENAME = "detect.dat";
+
+/* ---- Internal helpers ---------------------------------------------------- */
+
 static char *resolve_input_path(char const *workdir, char const *override_path, char const *filename);
 static int file_exists(char const *path);
+
+/* Sets ctx->last_error and optionally prints to err (NULL = silent). */
+static void ctx_set_error(openshieldhit_context_t *ctx, FILE *err, char const *fmt, char const *detail) {
+    if (ctx) {
+        snprintf(ctx->last_error, sizeof(ctx->last_error), fmt, detail);
+    }
+    if (err) {
+        fprintf(err, "Error: ");
+        fprintf(err, fmt, detail);
+        fprintf(err, "\n");
+    }
+}
+
+/* Deep-copies src into *dst. On OOM the old value is preserved and 0 is
+ * returned. Passing NULL/empty clears the field (always succeeds). */
+static int ctx_set_string(char **dst, char const *src) {
+    char *copy;
+    if (!src || !src[0]) {
+        free(*dst);
+        *dst = NULL;
+        return 1;
+    }
+    copy = strdup(src);
+    if (!copy) {
+        return 0; /* old value untouched */
+    }
+    free(*dst);
+    *dst = copy;
+    return 1;
+}
+
+/* ---- Lifecycle ----------------------------------------------------------- */
+
+openshieldhit_context_t *openshieldhit_context_create(void) {
+    return (openshieldhit_context_t *) calloc(1, sizeof(openshieldhit_context_t));
+}
+
+void openshieldhit_context_destroy(openshieldhit_context_t *ctx) {
+    if (!ctx) {
+        return;
+    }
+    free(ctx->workdir);
+    free(ctx->out_dir);
+    free(ctx->geo_path);
+    free(ctx->beam_path);
+    free(ctx->mat_path);
+    free(ctx->detect_path);
+    free(ctx);
+}
+
+/* ---- Configuration setters ----------------------------------------------- */
+
+enum openshieldhit_status openshieldhit_context_set_workdir(openshieldhit_context_t *ctx, char const *path) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    return ctx_set_string(&ctx->workdir, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
+}
+
+enum openshieldhit_status openshieldhit_context_set_out_dir(openshieldhit_context_t *ctx, char const *path) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    return ctx_set_string(&ctx->out_dir, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
+}
+
+enum openshieldhit_status openshieldhit_context_set_run_mode(openshieldhit_context_t *ctx,
+                                                             enum openshieldhit_run_mode mode) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    ctx->run_mode = mode;
+    return OPENSHIELDHIT_STATUS_OK;
+}
+
+enum openshieldhit_status openshieldhit_context_set_log_level(openshieldhit_context_t *ctx, int level) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    ctx->log_level = level;
+    return OPENSHIELDHIT_STATUS_OK;
+}
+
+enum openshieldhit_status openshieldhit_context_set_nstat(openshieldhit_context_t *ctx, unsigned long long nstat) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    ctx->nstat = nstat;
+    ctx->has_nstat = 1;
+    return OPENSHIELDHIT_STATUS_OK;
+}
+
+enum openshieldhit_status openshieldhit_context_set_geo_path(openshieldhit_context_t *ctx, char const *path) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    return ctx_set_string(&ctx->geo_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
+}
+
+enum openshieldhit_status openshieldhit_context_set_beam_path(openshieldhit_context_t *ctx, char const *path) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    return ctx_set_string(&ctx->beam_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
+}
+
+enum openshieldhit_status openshieldhit_context_set_mat_path(openshieldhit_context_t *ctx, char const *path) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    return ctx_set_string(&ctx->mat_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
+}
+
+enum openshieldhit_status openshieldhit_context_set_detect_path(openshieldhit_context_t *ctx, char const *path) {
+    if (!ctx) {
+        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    }
+    return ctx_set_string(&ctx->detect_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
+}
+
+/* ---- Error retrieval ----------------------------------------------------- */
+
+char const *openshieldhit_last_error(openshieldhit_context_t const *ctx) {
+    if (!ctx) {
+        return "";
+    }
+    return ctx->last_error;
+}
+
+/* ---- Version ------------------------------------------------------------- */
 
 char const *openshieldhit_version_string(void) {
     return OSH_VERSION;
@@ -36,28 +188,9 @@ int openshieldhit_version_patch(void) {
     return OSH_VERSION_PATCH;
 }
 
-int openshieldhit_cli_parse(int argc, char *argv[], struct openshieldhit_cli_options *opt, char *err, size_t err_cap) {
-    int rc;
-    struct osh_cli_options internal_opt;
+/* ---- Run ----------------------------------------------------------------- */
 
-    if (!opt) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    }
-
-    rc = osh_cli_parse(argc, argv, &internal_opt, err, err_cap);
-    if (rc != OSH_OK) {
-        return map_osh_status(rc);
-    }
-
-    copy_cli_options(opt, &internal_opt);
-    return OPENSHIELDHIT_STATUS_OK;
-}
-
-void openshieldhit_cli_print_help(FILE *out, char const *prog) {
-    osh_cli_print_help(out, prog);
-}
-
-int openshieldhit_run(struct openshieldhit_cli_options const *opt, FILE *out, FILE *err) {
+enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *out, FILE *err) {
     char const *workdir;
     char const *outdir;
     char *geo_path = NULL;
@@ -65,172 +198,117 @@ int openshieldhit_run(struct openshieldhit_cli_options const *opt, FILE *out, FI
     char *mat_path = NULL;
     char *detect_path = NULL;
     struct gemca_workspace *geom = NULL;
+    enum openshieldhit_status rc = OPENSHIELDHIT_STATUS_OK;
 
-    if (!opt) {
+    if (!ctx) {
         return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
     }
 
-    if (!out) {
-        out = stdout;
-    }
-    if (!err) {
-        err = stderr;
-    }
+    ctx->last_error[0] = '\0';
 
-    workdir = (opt->workdir && opt->workdir[0]) ? opt->workdir : OPENSHIELDHIT_DEFAULT_WORKDIR;
-    outdir = (opt->out_dir && opt->out_dir[0]) ? opt->out_dir : workdir;
+    workdir = (ctx->workdir && ctx->workdir[0]) ? ctx->workdir : OSH_DEFAULT_WORKDIR;
+    outdir = (ctx->out_dir && ctx->out_dir[0]) ? ctx->out_dir : workdir;
 
-    geo_path = resolve_input_path(workdir, opt->geo_path, OPENSHIELDHIT_GEO_FILENAME);
-    beam_path = resolve_input_path(workdir, opt->beam_path, OPENSHIELDHIT_BEAM_FILENAME);
-    mat_path = resolve_input_path(workdir, opt->mat_path, OPENSHIELDHIT_MAT_FILENAME);
-    detect_path = resolve_input_path(workdir, opt->detect_path, OPENSHIELDHIT_DETECT_FILENAME);
+    geo_path = resolve_input_path(workdir, ctx->geo_path, OSH_GEO_FILENAME);
+    beam_path = resolve_input_path(workdir, ctx->beam_path, OSH_BEAM_FILENAME);
+    mat_path = resolve_input_path(workdir, ctx->mat_path, OSH_MAT_FILENAME);
+    detect_path = resolve_input_path(workdir, ctx->detect_path, OSH_DETECT_FILENAME);
+
     if (!geo_path || !beam_path || !mat_path || !detect_path) {
-        fprintf(err, "Error: out of memory while resolving input paths\n");
-        free(geo_path);
-        free(beam_path);
-        free(mat_path);
-        free(detect_path);
-        return OPENSHIELDHIT_STATUS_NO_MEMORY;
+        ctx_set_error(ctx, err, "%s", "out of memory while resolving input paths");
+        rc = OPENSHIELDHIT_STATUS_NO_MEMORY;
+        goto cleanup;
     }
 
-    if (!opt->dry_run) {
-        fprintf(out, "OpenShieldHIT version %s\n", openshieldhit_version_string());
-        fprintf(out, "No run mode selected. Use --dry-run to validate input loading.\n");
-        fprintf(out, "Verbosity level  : %d\n", opt->verbose);
-        if (opt->has_nstat) {
-            fprintf(out, "Requested nstat  : %llu\n", opt->nstat);
+    if (ctx->run_mode != OPENSHIELDHIT_RUN_VALIDATE) {
+        /* Full transport is not yet implemented. Return NOT_SUPPORTED so
+         * callers can distinguish this from a successful run. */
+        ctx_set_error(ctx, err, "%s", "run mode NORMAL is not yet implemented");
+        rc = OPENSHIELDHIT_STATUS_NOT_SUPPORTED;
+        goto cleanup;
+    }
+
+    if (out) {
+        fprintf(out, "Validate configuration\n");
+        fprintf(out, "  Log level        : %d\n", ctx->log_level);
+        if (ctx->has_nstat) {
+            fprintf(out, "  Requested nstat  : %llu\n", ctx->nstat);
         }
-        fprintf(out, "Working directory: %s\n", workdir);
-        fprintf(out, "Output directory : %s\n", outdir);
-        fprintf(out, "Geometry input   : %s\n", geo_path);
-        fprintf(out, "Beam input       : %s\n", beam_path);
-        fprintf(out, "Material input   : %s\n", mat_path);
-        fprintf(out, "Detect input     : %s\n", detect_path);
-        free(geo_path);
-        free(beam_path);
-        free(mat_path);
-        free(detect_path);
-        return OPENSHIELDHIT_STATUS_OK;
+        fprintf(out, "  Working directory: %s\n", workdir);
+        fprintf(out, "  Output directory : %s\n", outdir);
+        fprintf(out, "  Geometry input   : %s\n", geo_path);
+        fprintf(out, "  Beam input       : %s\n", beam_path);
+        fprintf(out, "  Material input   : %s\n", mat_path);
+        fprintf(out, "  Detect input     : %s\n", detect_path);
     }
-
-    fprintf(out, "Dry-run configuration\n");
-    fprintf(out, "  Verbosity level  : %d\n", opt->verbose);
-    if (opt->has_nstat) {
-        fprintf(out, "  Requested nstat  : %llu\n", opt->nstat);
-    }
-    fprintf(out, "  Working directory: %s\n", workdir);
-    fprintf(out, "  Output directory : %s\n", outdir);
-    fprintf(out, "  Geometry input   : %s\n", geo_path);
-    fprintf(out, "  Beam input       : %s\n", beam_path);
-    fprintf(out, "  Material input   : %s\n", mat_path);
-    fprintf(out, "  Detect input     : %s\n", detect_path);
 
     if (!file_exists(geo_path)) {
-        fprintf(err, "Error: geometry file not found: %s\n", geo_path);
-        free(geo_path);
-        free(beam_path);
-        free(mat_path);
-        free(detect_path);
-        return OPENSHIELDHIT_STATUS_IO_ERROR;
+        ctx_set_error(ctx, err, "geometry file not found: %s", geo_path);
+        rc = OPENSHIELDHIT_STATUS_IO_ERROR;
+        goto cleanup;
     }
 
     if (!osh_gemca_workspace_init(&geom)) {
-        fprintf(err, "Error: could not allocate geometry workspace\n");
-        free(geo_path);
-        free(beam_path);
-        free(mat_path);
-        free(detect_path);
-        return OPENSHIELDHIT_STATUS_NO_MEMORY;
+        ctx_set_error(ctx, err, "%s", "could not allocate geometry workspace");
+        rc = OPENSHIELDHIT_STATUS_NO_MEMORY;
+        goto cleanup;
     }
 
     if (!osh_gemca_load(geo_path, geom)) {
-        fprintf(err, "Error: failed to load geometry '%s'\n", geo_path);
-        osh_gemca_workspace_free(geom);
-        free(geo_path);
-        free(beam_path);
-        free(mat_path);
-        free(detect_path);
-        return OPENSHIELDHIT_STATUS_PARSE_ERROR;
+        ctx_set_error(ctx, err, "failed to load geometry: %s", geo_path);
+        rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+        goto cleanup;
     }
-    fprintf(out, "Loaded geometry: %s\n", geo_path);
-
-    if (file_exists(beam_path)) {
-        fprintf(out, "Beam file found (loader wiring pending): %s\n", beam_path);
-    } else {
-        fprintf(out, "Beam file missing (loader wiring pending): %s\n", beam_path);
-    }
-    if (file_exists(mat_path)) {
-        fprintf(out, "Material file found (loader wiring pending): %s\n", mat_path);
-    } else {
-        fprintf(out, "Material file missing (loader wiring pending): %s\n", mat_path);
-    }
-    if (file_exists(detect_path)) {
-        fprintf(out, "Detect file found (loader wiring pending): %s\n", detect_path);
-    } else {
-        fprintf(out, "Detect file missing (loader wiring pending): %s\n", detect_path);
+    if (out) {
+        fprintf(out, "Loaded geometry: %s\n", geo_path);
     }
 
+    /* TODO: wire beam loader */
+    if (out) {
+        fprintf(
+            out, "Beam file %s (loader wiring pending): %s\n", file_exists(beam_path) ? "found" : "missing", beam_path);
+    }
+
+    /* TODO: wire material loader */
+    if (out) {
+        fprintf(out,
+                "Material file %s (loader wiring pending): %s\n",
+                file_exists(mat_path) ? "found" : "missing",
+                mat_path);
+    }
+
+    /* TODO: wire scoring/detect loader */
+    if (out) {
+        fprintf(out,
+                "Detect file %s (loader wiring pending): %s\n",
+                file_exists(detect_path) ? "found" : "missing",
+                detect_path);
+    }
+
+    if (out) {
+        fprintf(out, "Validation completed.\n");
+    }
+
+cleanup:
     if (geom) {
         osh_gemca_workspace_free(geom);
     }
-
     free(geo_path);
     free(beam_path);
     free(mat_path);
     free(detect_path);
-
-    fprintf(out, "Dry-run completed.\n");
-    return OPENSHIELDHIT_STATUS_OK;
+    return rc;
 }
 
-static void copy_cli_options(struct openshieldhit_cli_options *dst, struct osh_cli_options const *src) {
-    dst->action = (enum openshieldhit_cli_action) src->action;
-    dst->dry_run = src->dry_run;
-    dst->verbose = src->verbose;
-    dst->workdir = src->workdir;
-    dst->geo_path = src->geo_path;
-    dst->beam_path = src->beam_path;
-    dst->mat_path = src->mat_path;
-    dst->detect_path = src->detect_path;
-    dst->out_dir = src->out_dir;
-    dst->nstat = src->nstat;
-    dst->has_nstat = src->has_nstat;
-}
-
-static int map_osh_status(int rc) {
-    switch (rc) {
-    case OSH_OK:
-        return OPENSHIELDHIT_STATUS_OK;
-    case OSH_EINVAL:
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    case OSH_ENOMEM:
-        return OPENSHIELDHIT_STATUS_NO_MEMORY;
-    case OSH_EIO:
-        return OPENSHIELDHIT_STATUS_IO_ERROR;
-    case OSH_EPARSE:
-        return OPENSHIELDHIT_STATUS_PARSE_ERROR;
-    case OSH_EINCOMPLETE:
-        return OPENSHIELDHIT_STATUS_INCOMPLETE;
-    case OSH_ENOTSUP:
-        return OPENSHIELDHIT_STATUS_NOT_SUPPORTED;
-    case OSH_ESTATE:
-        return OPENSHIELDHIT_STATUS_STATE_ERROR;
-    default:
-        return OPENSHIELDHIT_STATUS_STATE_ERROR;
-    }
-}
+/* ---- Internal helpers ---------------------------------------------------- */
 
 static char *resolve_input_path(char const *workdir, char const *override_path, char const *filename) {
-    char *path = NULL;
+    char *path;
     size_t wlen;
     size_t flen;
 
     if (override_path && override_path[0]) {
-        path = (char *) malloc(strlen(override_path) + 1);
-        if (!path) {
-            return NULL;
-        }
-        strcpy(path, override_path);
+        path = strdup(override_path);
         return path;
     }
 
@@ -256,16 +334,13 @@ static char *resolve_input_path(char const *workdir, char const *override_path, 
 
 static int file_exists(char const *path) {
     FILE *fp;
-
     if (!path || !path[0]) {
         return 0;
     }
-
     fp = fopen(path, "r");
     if (!fp) {
         return 0;
     }
-
     fclose(fp);
     return 1;
 }

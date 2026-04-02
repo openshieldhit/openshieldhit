@@ -1,48 +1,91 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "cli/osh_cli.h"
 #include "openshieldhit/openshieldhit.h"
 
-enum osh_main_exit_code {
-    OSH_MAIN_EXIT_OK = 0,
-    OSH_MAIN_EXIT_FAIL = 1,
-    OSH_MAIN_EXIT_USAGE = 2
-};
+enum osh_main_exit { OSH_EXIT_OK = 0, OSH_EXIT_FAIL = 1, OSH_EXIT_USAGE = 2 };
 
-static size_t const OSH_MAIN_ERR_BUF_CAP = 256;
-static int osh_main_exit_code_for_status(int status);
+static int exit_code_for_status(enum openshieldhit_status status);
+static enum openshieldhit_status apply_options(openshieldhit_context_t *ctx, struct osh_cli_options const *opt);
 
 int main(int argc, char *argv[]) {
-    int rc;
-    char err[OSH_MAIN_ERR_BUF_CAP];
-    struct openshieldhit_cli_options opt;
+    struct osh_cli_options opt;
+    openshieldhit_context_t *ctx;
+    char err[256];
+    enum openshieldhit_status rc;
 
-    rc = openshieldhit_cli_parse(argc, argv, &opt, err, OSH_MAIN_ERR_BUF_CAP);
-    if (rc != 0) {
-        fprintf(stderr, "Error: %s\n\n", err[0] ? err : "invalid command line");
-        openshieldhit_cli_print_help(stderr, argv[0]);
-        return OSH_MAIN_EXIT_USAGE;
+    if (osh_cli_parse(argc, argv, &opt, err, sizeof(err)) != 0) {
+        fprintf(stderr, "Error: %s\n\n", err);
+        osh_cli_print_help(stderr, argv[0]);
+        return OSH_EXIT_USAGE;
     }
 
-    if (opt.action == OPENSHIELDHIT_CLI_ACTION_HELP) {
-        openshieldhit_cli_print_help(stdout, argv[0]);
-        return OSH_MAIN_EXIT_OK;
+    if (opt.action == OSH_CLI_ACTION_HELP) {
+        osh_cli_print_help(stdout, argv[0]);
+        return OSH_EXIT_OK;
     }
 
-    if (opt.action == OPENSHIELDHIT_CLI_ACTION_VERSION) {
+    if (opt.action == OSH_CLI_ACTION_VERSION) {
         printf("OpenShieldHIT version %s\n", openshieldhit_version_string());
-        return OSH_MAIN_EXIT_OK;
+        return OSH_EXIT_OK;
     }
 
-    return osh_main_exit_code_for_status(openshieldhit_run(&opt, stdout, stderr));
+    ctx = openshieldhit_context_create();
+    if (!ctx) {
+        fprintf(stderr, "Error: out of memory\n");
+        return OSH_EXIT_FAIL;
+    }
+
+    rc = apply_options(ctx, &opt);
+    if (rc != OPENSHIELDHIT_STATUS_OK) {
+        fprintf(stderr, "Error: out of memory while configuring context\n");
+        openshieldhit_context_destroy(ctx);
+        return OSH_EXIT_FAIL;
+    }
+
+    rc = openshieldhit_run(ctx, stdout, stderr);
+    openshieldhit_context_destroy(ctx);
+    return exit_code_for_status(rc);
 }
 
-static int osh_main_exit_code_for_status(int status) {
-    if (status == OPENSHIELDHIT_STATUS_OK) {
-        return OSH_MAIN_EXIT_OK;
+static int exit_code_for_status(enum openshieldhit_status status) {
+    switch (status) {
+    case OPENSHIELDHIT_STATUS_OK:
+        return OSH_EXIT_OK;
+    case OPENSHIELDHIT_STATUS_INVALID_ARGUMENT:
+        return OSH_EXIT_USAGE;
+    default:
+        return OSH_EXIT_FAIL;
     }
-    if (status == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT) {
-        return OSH_MAIN_EXIT_USAGE;
+}
+
+static enum openshieldhit_status apply_options(openshieldhit_context_t *ctx, struct osh_cli_options const *opt) {
+    enum openshieldhit_status rc;
+
+#define TRY(call)                                                                                                      \
+    do {                                                                                                               \
+        rc = (call);                                                                                                   \
+        if (rc != OPENSHIELDHIT_STATUS_OK) {                                                                           \
+            return rc;                                                                                                 \
+        }                                                                                                              \
+    } while (0)
+
+    TRY(openshieldhit_context_set_workdir(ctx, opt->workdir));
+    TRY(openshieldhit_context_set_out_dir(ctx, opt->out_dir));
+    TRY(openshieldhit_context_set_log_level(ctx, opt->verbose));
+    TRY(openshieldhit_context_set_geo_path(ctx, opt->geo_path));
+    TRY(openshieldhit_context_set_beam_path(ctx, opt->beam_path));
+    TRY(openshieldhit_context_set_mat_path(ctx, opt->mat_path));
+    TRY(openshieldhit_context_set_detect_path(ctx, opt->detect_path));
+    if (opt->has_nstat) {
+        TRY(openshieldhit_context_set_nstat(ctx, opt->nstat));
     }
-    return OSH_MAIN_EXIT_FAIL;
+    if (opt->dry_run) {
+        TRY(openshieldhit_context_set_run_mode(ctx, OPENSHIELDHIT_RUN_VALIDATE));
+    }
+
+#undef TRY
+
+    return OPENSHIELDHIT_STATUS_OK;
 }

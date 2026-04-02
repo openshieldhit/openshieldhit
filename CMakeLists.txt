@@ -98,20 +98,22 @@ target_include_directories(osh_all INTERFACE
     ${PROJECT_BINARY_DIR}/generated
 )
 
-add_library(openshieldhit_api
-    src/openshieldhit.c
-    src/cli/osh_cli.c
-)
-target_link_libraries(openshieldhit_api PUBLIC osh_all)
-target_include_directories(openshieldhit_api PUBLIC
-    ${PROJECT_SOURCE_DIR}/include
+# ---- Internal CLI parser (used by executable + tests, not installed) ----
+add_library(osh_cli STATIC src/cli/osh_cli.c)
+target_include_directories(osh_cli PUBLIC ${PROJECT_SOURCE_DIR}/src)
+
+# ---- Public library facade ----
+add_library(openshieldhit_api STATIC src/openshieldhit.c)
+target_link_libraries(openshieldhit_api PRIVATE osh_all)
+target_include_directories(openshieldhit_api
+    PUBLIC  ${PROJECT_SOURCE_DIR}/include
+    PRIVATE ${PROJECT_SOURCE_DIR}/src
+            ${PROJECT_BINARY_DIR}/generated
 )
 
 # ---- Main executable ----
-add_executable(openshieldhit
-    src/main.c
-)
-target_link_libraries(openshieldhit PRIVATE openshieldhit_api)
+add_executable(openshieldhit src/main.c)
+target_link_libraries(openshieldhit PRIVATE openshieldhit_api osh_cli)
 
 # ---- Tests ----
 include(CTest)

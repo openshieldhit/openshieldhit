@@ -8,15 +8,23 @@ function(register_named_c_tests target source_file)
     endforeach()
 endfunction()
 
-# ---- test_osh_main: verifies shared version header values ----
+# ---- test_osh_main: verifies public API (version functions, context lifecycle) ----
 add_executable(test_osh_main test_osh_main.c)
 target_link_libraries(test_osh_main PRIVATE openshieldhit_api)
 register_named_c_tests(test_osh_main ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_main.c)
 add_test(NAME openshieldhit_version_cli COMMAND $<TARGET_FILE:openshieldhit> --version)
 
+# ---- test_osh_cli: verifies internal CLI parser ----
+add_executable(test_osh_cli test_osh_cli.c)
+target_link_libraries(test_osh_cli PRIVATE osh_cli)
+register_named_c_tests(test_osh_cli ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_cli.c)
+
 # Collect remaining test source files
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/test_*.c")
-list(REMOVE_ITEM TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_main.c)
+list(REMOVE_ITEM TEST_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_cli.c
+)
 
 # Loop over each test file and create an executable
 foreach(test_src ${TEST_SOURCES})

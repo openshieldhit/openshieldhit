@@ -5,8 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "common/osh_rc.h"
-
 enum osh_cli_long_opt_id {
     OSH_CLI_OPT_DRY_RUN = 1000,
     OSH_CLI_OPT_WORKDIR,
@@ -25,25 +23,23 @@ static int parse_u64(char const *s, unsigned long long *out);
 int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err, size_t err_cap) {
     int c;
     int long_idx = 0;
-    static struct option const long_opts[] = {
-        {"help", no_argument, NULL, 'h'},
-        {"version", no_argument, NULL, 'V'},
-        {"verbose", no_argument, NULL, 'v'},
-        {"nstat", required_argument, NULL, 'N'},
-        {"dry-run", no_argument, NULL, OSH_CLI_OPT_DRY_RUN},
-        {"workdir", required_argument, NULL, OSH_CLI_OPT_WORKDIR},
-        {"geo", required_argument, NULL, OSH_CLI_OPT_GEO},
-        {"beam", required_argument, NULL, OSH_CLI_OPT_BEAM},
-        {"mat", required_argument, NULL, OSH_CLI_OPT_MAT},
-        {"detect", required_argument, NULL, OSH_CLI_OPT_DETECT},
-        {"outdir", required_argument, NULL, 'o'},
-        {"out", required_argument, NULL, 'o'},
-        {"output", required_argument, NULL, OSH_CLI_OPT_OUTPUT},
-        {NULL, 0, NULL, 0}
-    };
+    static struct option const long_opts[] = {{"help", no_argument, NULL, 'h'},
+                                              {"version", no_argument, NULL, 'V'},
+                                              {"verbose", no_argument, NULL, 'v'},
+                                              {"nstat", required_argument, NULL, 'N'},
+                                              {"dry-run", no_argument, NULL, OSH_CLI_OPT_DRY_RUN},
+                                              {"workdir", required_argument, NULL, OSH_CLI_OPT_WORKDIR},
+                                              {"geo", required_argument, NULL, OSH_CLI_OPT_GEO},
+                                              {"beam", required_argument, NULL, OSH_CLI_OPT_BEAM},
+                                              {"mat", required_argument, NULL, OSH_CLI_OPT_MAT},
+                                              {"detect", required_argument, NULL, OSH_CLI_OPT_DETECT},
+                                              {"outdir", required_argument, NULL, 'o'},
+                                              {"out", required_argument, NULL, 'o'},
+                                              {"output", required_argument, NULL, OSH_CLI_OPT_OUTPUT},
+                                              {NULL, 0, NULL, 0}};
 
     if (!opt) {
-        return OSH_EINVAL;
+        return 1;
     }
 
     opt->action = OSH_CLI_ACTION_RUN;
@@ -60,7 +56,7 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
 
     if (argc <= 1) {
         opt->action = OSH_CLI_ACTION_HELP;
-        return OSH_OK;
+        return 0;
     }
 
     /* Reset getopt state in case parser is called multiple times in-process. */
@@ -127,7 +123,7 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
         }
     }
 
-    return OSH_OK;
+    return 0;
 }
 
 void osh_cli_print_help(FILE *out, char const *prog) {
@@ -158,7 +154,7 @@ static int set_err(char *err, size_t err_cap, char const *fmt, char const *arg) 
         (void) snprintf(err, err_cap, fmt, arg);
         err[err_cap - 1] = '\0';
     }
-    return OSH_EINVAL;
+    return 1;
 }
 
 static int parse_u64(char const *s, unsigned long long *out) {
