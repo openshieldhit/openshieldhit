@@ -4,6 +4,16 @@
         "__threading_support": "c",
         "osh_beam_spotlist.h": "c"
     },
+    "files.watcherExclude": {
+        "**/.git/**": true,
+        "**/build/**": true
+    },
+    "search.exclude": {
+        "**/build/**": true
+    },
+    "files.exclude": {
+        "**/build": true
+    },
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
     "editor.defaultFormatter": null,
     "chat.tools.terminal.autoApprove": {

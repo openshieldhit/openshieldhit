@@ -1,0 +1,8 @@
+* Water I = 78 eV
+MEDIUM 1
+STATE 2
+RHO 1.000
+NUCLID    1     2
+IVALUE    22.9      ! Override I-value of hydrogen
+NUCLID    8     1
+END

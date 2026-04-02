@@ -1,85 +1,51 @@
-## Bootstrap Runtime Pipeline: CLI + Geometry + Beam + Parser Tests
+## Runtime / API Status
 
-We should establish a minimal end-to-end runtime pipeline so `openshieldhit` can load core inputs and run in a dry/skeleton mode.
+The repo has moved past the original bootstrap phase. We now have:
 
-### Goals
-1. Add a CLI parser with basic functionality.
-2. Add geometry reader integration.
-3. Add geometry reader tests.
-4. Add beam reader integration (already implemented), so `main` can handle two workspaces.
+- [x] Internal CLI parser in `src/cli/`
+- [x] Thin `src/main.c` that configures a public API context and calls the facade
+- [x] Public header `include/openshieldhit/openshieldhit.h`
+- [x] Opaque `openshieldhit_context_t`
+- [x] Context lifecycle, deep-copying setters, version helpers, and `openshieldhit_last_error()`
+- [x] `OPENSHIELDHIT_RUN_VALIDATE` mode for parse/validate-only execution
+- [x] Geometry loading wired into `openshieldhit_run()`
+- [x] Startup / validation summary output
+- [x] Basic tests for the public API (`tests/test_osh_main.c`)
+- [x] Basic tests for the internal CLI parser (`tests/test_osh_cli.c`)
 
-### Proposed TODO
-- [x] Implement CLI skeleton in `main`:
-  - [x] `--help`
-  - [x] `--version`
-  - [x] input args for geometry and beam files (e.g. `--geo`, `--beam`)
-  - [x] optional `--dry-run` (parse/load only, no transport yet)
-- [x] Wire geometry workspace loading into runtime flow.
-- [ ] Wire beam workspace loading into runtime flow.
-- [x] Add clear startup summary output (which files loaded, basic counts/status).
-- [ ] Add tests for geometry parser using SHIELD-HIT reference-like inputs:
-  - [ ] valid geometry cases
-  - [ ] malformed geometry cases (expected failure + useful line/file error)
-- [ ] Add at least one integration test:
-  - [ ] load geometry + beam together in dry-run mode and exit `0`.
+## Current High-Priority TODO
 
-### Acceptance Criteria
-- `openshieldhit --help` and `openshieldhit --version` behave consistently across platforms.
-- Running with valid geometry + beam inputs initializes both workspaces successfully.
-- Invalid geometry inputs fail with actionable diagnostics (file + line where possible).
-- CI includes geometry parser tests and a dry-run integration test.
+- [ ] Wire beam loading into `openshieldhit_run()`
+  - Current state: beam path resolution and file-existence reporting are present, but the actual loader is still marked "loader wiring pending".
+  - Note: the internal beam parser/workspace code already exists under `src/beam/`; it is just not connected to the public facade yet.
+- [ ] Wire material loading into `openshieldhit_run()`
+- [ ] Wire detect/scoring loading into `openshieldhit_run()`
+- [ ] Implement `OPENSHIELDHIT_RUN_NORMAL`
+  - Current state: `OPENSHIELDHIT_RUN_NORMAL` returns `OPENSHIELDHIT_STATUS_NOT_SUPPORTED`.
+- [ ] Add a validate-mode integration test using `tests/res/test01/`
+  - Goal: run geometry + beam + mat + detect resolution/loading through the public API or CLI and assert expected exit status.
+- [ ] Add tests for `openshieldhit_last_error()`
+  - Suggested coverage: missing geometry file, unsupported normal mode, and error reset on a subsequent successful call.
+- [ ] Add tests for context setter ownership semantics
+  - Suggested coverage: strings are deep-copied, `NULL` clears a field, and failed replacement does not clobber the previous value.
 
-### Notes
-This issue is intentionally scoped to bootstrap the executable contract and input loading path; transport/scoring/material physics logic will be handled in follow-up issues.
+## Packaging / Install TODO
 
----
+- [ ] Decide whether the public facade should ship as static-only, shared-only, or both
+  - Current state: `openshieldhit_api` is a static library target.
+- [ ] Install the public library target
+- [ ] Install public headers under `include/openshieldhit/`
+- [ ] Keep internal headers and the internal CLI parser non-installed
 
-## Mini-RFC: Shared-Library-First API
+## Cleanup / Follow-up
 
-### Motivation
-- Keep `main` thin and stable.
-- Make core logic reusable for tests, tools, and future bindings.
-- Prepare packaging for both CLI + shared library (`.so`/`.dylib`/`.dll`).
+- [ ] Improve validation diagnostics where possible
+  - Especially for malformed geometry / beam input: include useful file and line information when the underlying parser can provide it.
+- [ ] Revisit the public API once beam/material/detect loading are wired
+  - Decide whether dedicated load/validate helpers are needed in addition to the current context + `openshieldhit_run()` model.
 
-### High-level Architecture
-- `openshieldhit` executable: CLI parser + user interaction only.
-- `libopenshieldhit` shared library: public runtime API.
-- Internal modules remain modular, but are consumed through one public facade.
+## Notes
 
-### Public API (first draft)
-- `openshieldhit_context_create()`
-- `openshieldhit_context_destroy()`
-- `openshieldhit_geometry_load()`
-- `openshieldhit_beam_load()`
-- `openshieldhit_run_dry()`
-- `openshieldhit_last_error()`
-
-Notes:
-- Public API uses opaque handles (no exposed internal structs).
-- Error handling should return codes and provide a retrievable error message.
-- CLI should only call into this API.
-
-### CMake / Packaging Plan
-- Build and install shared library target: `openshieldhit`.
-- Install public headers under `include/openshieldhit/`.
-- Keep existing internal static libs for now; compose them into the shared facade target.
-
-### Naming Policy (new files from now on)
-- Public API files use `openshieldhit_*` naming.
-- Internal source/header files in `src/` use `osh_*` naming.
-- Keep `src/main.c` as the thin CLI entry point.
-- Install only public API headers; internal headers remain non-installed.
-
-### First Implementation Slice
-- [ ] Add `src/api/` module for facade implementation.
-- [ ] Add public header: `include/openshieldhit/openshieldhit.h`.
-- [ ] Add minimal context object and create/destroy API.
-- [ ] Add geometry + beam load wrappers calling existing workspace loaders.
-- [ ] Refactor `src/main.c` to call API (no direct module wiring in CLI).
-- [ ] Add one integration test for `--dry-run` using geometry + beam inputs.
-- [ ] Keep internal implementation files in `osh_*` style; expose only `openshieldhit_*` in installed/public API.
-
-### Acceptance Criteria
-- CLI builds and runs by linking only to `libopenshieldhit`.
-- A program can load geometry + beam through the public API without depending on internal headers.
-- New files added in this work follow the no-`osh` filename rule.
+- The earlier `src/api/` idea is no longer necessary; the facade currently lives in `src/openshieldhit.c`.
+- The public API is now context-based and opaque; the CLI parser remains internal in `src/cli/`.
+- The old `--dry-run` CLI concept maps to `OPENSHIELDHIT_RUN_VALIDATE` in the public API.

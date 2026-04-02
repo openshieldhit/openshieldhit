@@ -6,7 +6,10 @@
 #include "common/osh_file.h"
 #include "common/osh_readline.h"
 
-#define TEST_PATH "../../tests/res/test01/beam.dat"
+#ifndef OSH_TEST_FIXTURES_DIR
+#error "OSH_TEST_FIXTURES_DIR must be defined by the build system"
+#endif
+#define TEST_PATH OSH_TEST_FIXTURES_DIR "/test01/beam.dat"
 
 void test_readline_key(char const *filename) {
     struct oshfile *oshf;
