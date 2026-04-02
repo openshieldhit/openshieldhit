@@ -85,8 +85,9 @@ static int run_named_test(char const *name) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc == 2)
+    if (argc == 2) {
         return run_named_test(argv[1]);
+    }
 
     test_version_short_flag();
     test_verbose_and_dir_options();

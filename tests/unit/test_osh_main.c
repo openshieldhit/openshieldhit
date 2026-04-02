@@ -46,23 +46,24 @@ static void test_setters_return_ok(void) {
     openshieldhit_context_t *ctx = openshieldhit_context_create();
     ASSERT_TRUE(ctx != NULL);
 
-    ASSERT_TRUE(openshieldhit_context_set_workdir(ctx,     "/tmp")         == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_out_dir(ctx,     "/tmp/out")     == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_geo_path(ctx,    "geo.dat")      == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_beam_path(ctx,   "beam.dat")     == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_mat_path(ctx,    "mat.dat")      == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_detect_path(ctx, "detect.dat")   == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_nstat(ctx,       1000ULL)        == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_log_level(ctx,   1)              == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_workdir(ctx, "/tmp") == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_out_dir(ctx, "/tmp/out") == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_geo_path(ctx, "geo.dat") == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_beam_path(ctx, "beam.dat") == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_mat_path(ctx, "mat.dat") == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_detect_path(ctx, "detect.dat") == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_nstat(ctx, 1000ULL) == OPENSHIELDHIT_STATUS_OK);
+    ASSERT_TRUE(openshieldhit_context_set_log_level(ctx, 1) == OPENSHIELDHIT_STATUS_OK);
     ASSERT_TRUE(openshieldhit_context_set_run_mode(ctx, OPENSHIELDHIT_RUN_VALIDATE) == OPENSHIELDHIT_STATUS_OK);
 
     openshieldhit_context_destroy(ctx);
 }
 
 static void test_setters_reject_null_context(void) {
-    ASSERT_TRUE(openshieldhit_context_set_workdir(NULL, "/tmp")  == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
-    ASSERT_TRUE(openshieldhit_context_set_nstat(NULL, 100ULL)    == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
-    ASSERT_TRUE(openshieldhit_context_set_run_mode(NULL, OPENSHIELDHIT_RUN_VALIDATE) == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
+    ASSERT_TRUE(openshieldhit_context_set_workdir(NULL, "/tmp") == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
+    ASSERT_TRUE(openshieldhit_context_set_nstat(NULL, 100ULL) == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
+    ASSERT_TRUE(openshieldhit_context_set_run_mode(NULL, OPENSHIELDHIT_RUN_VALIDATE)
+                == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
 }
 
 static int run_named_test(char const *name) {
@@ -94,8 +95,9 @@ static int run_named_test(char const *name) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc == 2)
+    if (argc == 2) {
         return run_named_test(argv[1]);
+    }
 
     test_version_string_defined();
     test_version_components_non_negative();
