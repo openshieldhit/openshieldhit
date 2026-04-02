@@ -1,0 +1,18 @@
+---
+Checks: >-
+  clang-analyzer-*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -bugprone-branch-clone,
+  -bugprone-switch-missing-default-case,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -clang-analyzer-security.insecureAPI.strcpy,
+  readability-braces-around-statements,
+  readability-isolate-declaration,
+  readability-math-missing-parentheses
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(src|tests|examples)/'
+FormatStyle: none
+...
