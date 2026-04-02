@@ -171,8 +171,9 @@ static void _mutex_destroy(struct osh_mutex *m) {
 
 struct osh_logger *osh_logger_create(int level, unsigned flags) {
     struct osh_logger *lg = (struct osh_logger *) calloc(1, sizeof(*lg));
-    if (!lg)
+    if (!lg) {
         return NULL;
+    }
 
     lg->level = level;
     lg->flags = flags;
@@ -187,8 +188,9 @@ struct osh_logger *osh_logger_create(int level, unsigned flags) {
 }
 
 void osh_logger_destroy(struct osh_logger *lg) {
-    if (!lg)
+    if (!lg) {
         return;
+    }
 
     _mutex_lock(&lg->lock);
 
@@ -206,8 +208,9 @@ void osh_logger_destroy(struct osh_logger *lg) {
 }
 
 void osh_logger_set_level(struct osh_logger *lg, int level) {
-    if (!lg)
+    if (!lg) {
         return;
+    }
 
     _mutex_lock(&lg->lock);
     lg->level = level;
@@ -216,8 +219,9 @@ void osh_logger_set_level(struct osh_logger *lg, int level) {
 
 int osh_logger_get_level(struct osh_logger const *lg) {
     int level = OSH_LOG_OFF;
-    if (!lg)
+    if (!lg) {
         return level;
+    }
 
     /* Cast away const only to use the same mutex; or store level atomically later. */
     _mutex_lock((struct osh_mutex *) &lg->lock);
@@ -227,8 +231,9 @@ int osh_logger_get_level(struct osh_logger const *lg) {
 }
 
 void osh_logger_set_flags(struct osh_logger *lg, unsigned flags) {
-    if (!lg)
+    if (!lg) {
         return;
+    }
 
     _mutex_lock(&lg->lock);
     lg->flags = flags;
@@ -237,8 +242,9 @@ void osh_logger_set_flags(struct osh_logger *lg, unsigned flags) {
 
 unsigned int osh_logger_get_flags(struct osh_logger const *lg) {
     unsigned flags = 0u;
-    if (!lg)
+    if (!lg) {
         return flags;
+    }
 
     _mutex_lock((struct osh_mutex *) &lg->lock);
     flags = lg->flags;
@@ -247,15 +253,18 @@ unsigned int osh_logger_get_flags(struct osh_logger const *lg) {
 }
 
 void osh_logger_flush(struct osh_logger *lg) {
-    if (!lg)
+    if (!lg) {
         return;
+    }
 
     _mutex_lock(&lg->lock);
-    if (lg->fp_file)
+    if (lg->fp_file) {
         fflush(lg->fp_file);
+    }
     fflush(stderr);
-    if (lg->use_stdout)
+    if (lg->use_stdout) {
         fflush(stdout);
+    }
     _mutex_unlock(&lg->lock);
 }
 
@@ -280,45 +289,51 @@ int osh_log_init(int level, unsigned flags) {
 }
 
 void osh_log_close(void) {
-    if (!g_default_logger)
+    if (!g_default_logger) {
         return;
+    }
 
     osh_logger_destroy(g_default_logger);
     g_default_logger = NULL;
 }
 
 int osh_log_set_level(int level) {
-    if (!g_default_logger)
+    if (!g_default_logger) {
         return -1;
+    }
 
     osh_logger_set_level(g_default_logger, level);
     return 0;
 }
 
 int osh_log_get_level(void) {
-    if (!g_default_logger)
+    if (!g_default_logger) {
         return OSH_LOG_OFF;
+    }
 
     return osh_logger_get_level(g_default_logger);
 }
 
 void osh_log_set_flags(unsigned flags) {
-    if (!g_default_logger)
+    if (!g_default_logger) {
         return;
+    }
 
     osh_logger_set_flags(g_default_logger, flags);
 }
 
 unsigned osh_log_get_flags(void) {
-    if (!g_default_logger)
+    if (!g_default_logger) {
         return 0u;
+    }
 
     return osh_logger_get_flags(g_default_logger);
 }
 
 void osh_log_flush(void) {
-    if (!g_default_logger)
+    if (!g_default_logger) {
         return;
+    }
 
     osh_logger_flush(g_default_logger);
 }
@@ -359,8 +374,9 @@ static int _is_errorish(int level) {
 static size_t _vsnprintf0(char *dst, size_t cap, char const *fmt, va_list ap) {
     int n = vsnprintf(dst, cap, fmt, ap);
     if (n < 0) {
-        if (cap)
+        if (cap) {
             dst[0] = '\0';
+        }
         return 0u;
     }
     return (size_t) n; /* would-have length (excluding NUL) */
@@ -378,32 +394,38 @@ static size_t _snprintf0(char *dst, size_t cap, char const *fmt, ...) {
 }
 
 static size_t _append_n(char *dst, size_t cap, size_t off, char const *s, size_t n) {
-    if (!dst || cap == 0)
+    if (!dst || cap == 0) {
         return off;
-    if (off >= cap)
+    }
+    if (off >= cap) {
         return off;
+    }
 
     size_t space = cap - off - 1; /* keep room for NUL */
     size_t tocpy = (n < space) ? n : space;
 
-    if (tocpy)
+    if (tocpy) {
         memcpy(dst + off, s, tocpy);
+    }
     off += tocpy;
     dst[off] = '\0';
     return off;
 }
 
 static size_t _append(char *dst, size_t cap, size_t off, char const *s) {
-    if (!s)
+    if (!s) {
         return off;
+    }
     return _append_n(dst, cap, off, s, strlen(s));
 }
 
 static size_t _append_char(char *dst, size_t cap, size_t off, char c) {
-    if (!dst || cap == 0)
+    if (!dst || cap == 0) {
         return off;
-    if (off + 1 >= cap)
+    }
+    if (off + 1 >= cap) {
         return off;
+    }
     dst[off++] = c;
     dst[off] = '\0';
     return off;
@@ -510,11 +532,20 @@ _format_prefix(char *dst, size_t cap, int level, unsigned flags, char const *fil
 static void _write_record_unlocked(
     struct osh_logger *lg, int level, char const *prefix, size_t prefix_len, char const *fmt, va_list ap) {
     FILE *fp_primary = NULL;
+    size_t prefix_bytes = 0u;
 
     if (_is_errorish(level)) {
         fp_primary = stderr;
     } else {
         fp_primary = lg->use_stdout ? stdout : stderr;
+    }
+
+    if (prefix != NULL) {
+        (void) prefix_len;
+        prefix_bytes = strlen(prefix);
+        if (prefix_bytes > prefix_len) {
+            prefix_bytes = prefix_len;
+        }
     }
 
     /* Make copies BEFORE any consumption */
@@ -525,16 +556,18 @@ static void _write_record_unlocked(
     va_copy(ap_file, ap);
 
     if (fp_primary) {
-        if (prefix && prefix_len)
-            (void) fwrite(prefix, 1, prefix_len, fp_primary);
+        if (prefix_bytes > 0u) {
+            (void) fputs(prefix, fp_primary);
+        }
 
         (void) vfprintf(fp_primary, fmt, ap_primary);
         (void) fputc('\n', fp_primary);
     }
 
     if (lg->fp_file) {
-        if (prefix && prefix_len)
-            (void) fwrite(prefix, 1, prefix_len, lg->fp_file);
+        if (prefix_bytes > 0u) {
+            (void) fputs(prefix, lg->fp_file);
+        }
 
         (void) vfprintf(lg->fp_file, fmt, ap_file);
         (void) fputc('\n', lg->fp_file);
@@ -545,8 +578,9 @@ static void _write_record_unlocked(
 
     /* Callback — optional, bounded */
     if (lg->cb) {
-        if (prefix && prefix_len)
-            lg->cb(lg->cb_user, prefix, prefix_len);
+        if (prefix_bytes > 0u) {
+            lg->cb(lg->cb_user, prefix, prefix_bytes);
+        }
 
         char tmp[512];
         va_list ap_cb;
@@ -578,16 +612,20 @@ void osh_logger_logv_ex(struct osh_logger *lg,
     char prefix[512]; /* Prefix is small; safe on stack */
     size_t prefix_len;
 
-    if (!lg || !fmt)
+    if (!lg || !fmt) {
         return;
+    }
 
     /* Fast reject (best-effort; races with setters are acceptable) */
-    if (lg->closed)
+    if (lg->closed) {
         return;
-    if (level >= OSH_LOG_OFF)
+    }
+    if (level >= OSH_LOG_OFF) {
         return;
-    if (level < lg->level)
+    }
+    if (level < lg->level) {
         return;
+    }
 
     unsigned flags = _effective_flags(lg, flags_override);
 
@@ -614,20 +652,23 @@ char const *osh_log_level_name(int level) {
  * ----------------------------- */
 
 static FILE *_open_log_file(char const *path, int append) {
-    if (!path || !*path)
+    if (!path || !*path) {
         return NULL;
+    }
 
     /* On Windows, text mode is fine; if you ever need strict \n behavior, use "ab"/"wb". */
     return fopen(path, append ? "a" : "w");
 }
 
 int osh_logger_add_file(struct osh_logger *lg, char const *path, int append) {
-    if (!lg)
+    if (!lg) {
         return -1;
+    }
 
     FILE *fp = _open_log_file(path, append);
-    if (!fp)
+    if (!fp) {
         return -1;
+    }
 
     _mutex_lock(&lg->lock);
     if (lg->fp_file) {
@@ -644,8 +685,9 @@ int osh_log_add_file(char const *path, int append) {
 }
 
 int osh_logger_enable_stdout(struct osh_logger *lg, int enable) {
-    if (!lg)
+    if (!lg) {
         return -1;
+    }
 
     _mutex_lock(&lg->lock);
     lg->use_stdout = enable ? 1 : 0;
@@ -659,8 +701,9 @@ int osh_log_enable_stdout(int enable) {
 }
 
 int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user) {
-    if (!lg)
+    if (!lg) {
         return -1;
+    }
 
     _mutex_lock(&lg->lock);
     lg->cb = cb;

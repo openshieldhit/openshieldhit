@@ -1,5 +1,9 @@
 # OpenShieldHIT
 
+[![CMake CI](https://github.com/openshieldhit/openshieldhit/actions/workflows/test.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/test.yml)
+[![clang-format](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-format.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-format.yml)
+[![clang-tidy](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-tidy.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-tidy.yml)
+
 Lean Monte Carlo Particle Transport in C
 
 OpenShieldHIT is a modern Monte Carlo particle transport framework written entirely from scratch in C.

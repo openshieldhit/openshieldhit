@@ -20,6 +20,7 @@
  * @author Niels Bassler
  */
 static int _mapfile(struct oshfile *oshf);
+static void _rewind_file(struct oshfile *oshf);
 
 struct oshfile *osh_fopen(char const *filename) {
     FILE *fp;
@@ -51,11 +52,13 @@ struct oshfile *osh_fopen(char const *filename) {
 }
 
 void osh_fclose(struct oshfile *oshf) {
-    if (!oshf)
+    if (!oshf) {
         return;
+    }
 
-    if (oshf->fp)
+    if (oshf->fp) {
         fclose(oshf->fp);
+    }
     free(oshf->filename);
     free(oshf->map);
     free(oshf);
@@ -63,14 +66,18 @@ void osh_fclose(struct oshfile *oshf) {
 
 int osh_file_lineno(const struct oshfile *oshf) {
     long int pos;
-    int low = 0, high, mid;
+    int low = 0;
+    int high;
+    int mid;
 
-    if (!oshf || !oshf->fp || !oshf->map || oshf->map_len == 0)
+    if (!oshf || !oshf->fp || !oshf->map || oshf->map_len == 0) {
         return -1;
+    }
 
     pos = ftell(oshf->fp);
-    if (pos < 0)
+    if (pos < 0) {
         return -1;
+    }
 
     high = oshf->map_len - 1;
 
@@ -87,21 +94,25 @@ int osh_file_lineno(const struct oshfile *oshf) {
 }
 
 static int _mapfile(struct oshfile *oshf) {
-    char c;
+    int c;
     long int i;
+    size_t map_slots;
 
     if (!oshf || !oshf->fp) {
         osh_error(EX_SOFTWARE, "osh_mapfile: null file pointer");
     }
 
     /* Rewind and count newlines */
-    rewind(oshf->fp);
+    _rewind_file(oshf);
     oshf->map_len = 0;
 
-    for (c = getc(oshf->fp); c != EOF; c = getc(oshf->fp)) {
+    for (c = fgetc(oshf->fp); c != EOF; c = fgetc(oshf->fp)) {
         if (c == '\n') {
             oshf->map_len++;
         }
+    }
+    if (ferror(oshf->fp)) {
+        osh_error(EX_IOERR, "osh_mapfile: failed while scanning file '%s'", oshf->filename);
     }
 
     if (oshf->map_len < 1) {
@@ -109,22 +120,34 @@ static int _mapfile(struct oshfile *oshf) {
     }
 
     /* Allocate and fill the map with byte address of each new line */
-    oshf->map = calloc(oshf->map_len, sizeof(long int));
+    map_slots = (oshf->map_len > 0) ? (size_t) oshf->map_len : 1u;
+    oshf->map = calloc(map_slots, sizeof(long int));
     if (!oshf->map) {
         osh_alloc_failed("osh_mapfile: failed to allocate memory for line map");
     }
 
-    rewind(oshf->fp);
+    _rewind_file(oshf);
 
     i = 0;
-    for (c = getc(oshf->fp); c != EOF; c = getc(oshf->fp)) {
+    for (c = fgetc(oshf->fp); c != EOF; c = fgetc(oshf->fp)) {
         if (c == '\n') {
             oshf->map[i] = ftell(oshf->fp);
             i++;
         }
     }
+    if (ferror(oshf->fp)) {
+        osh_error(EX_IOERR, "osh_mapfile: failed while building line map for '%s'", oshf->filename);
+    }
 
-    rewind(oshf->fp);
+    _rewind_file(oshf);
 
     return 1; /* Success */
+}
+
+static void _rewind_file(struct oshfile *oshf) {
+    if (fseek(oshf->fp, 0L, SEEK_SET) != 0) {
+        osh_error(EX_IOERR, "osh_mapfile: failed to rewind file '%s'", oshf->filename);
+    }
+    clearerr(oshf->fp);
+    oshf->lineno = 0;
 }

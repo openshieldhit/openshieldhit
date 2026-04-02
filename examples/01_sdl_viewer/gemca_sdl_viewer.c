@@ -10,6 +10,7 @@
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
+#include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 #include "transport/osh_transport.h"
 
@@ -18,9 +19,9 @@
 
 /* all numbers below in cm */
 #define XMAX 10.0
-#define XMIN -10.0
+#define XMIN (-10.0)
 #define ZMAX 10.0
-#define ZMIN -10.0
+#define ZMIN (-10.0)
 #define STEP_SIZE 0.1
 
 SDL_Color colormap[6] = {
@@ -40,7 +41,7 @@ void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
 
 int main(int argc, char *argv[]) {
 
-    struct gemca_workspace g;
+    struct gemca_workspace g = {0};
 
     /* Handle --version flag */
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
@@ -137,8 +138,8 @@ int ray2line(struct ray *r, double d, float *x, float *z) {
 }
 
 int plot(struct gemca_workspace *g, int ndots) {
-    const int windowHeight = WINDOW_HEIGHT;
-    const int windowWidth = WINDOW_WIDTH;
+    int const windowHeight = WINDOW_HEIGHT;
+    int const windowWidth = WINDOW_WIDTH;
     int pointLocationx;
     int pointLocationy;
     int pointLocationx2;
@@ -148,7 +149,8 @@ int plot(struct gemca_workspace *g, int ndots) {
     int zi;
 
     struct ray r;
-    float x, z;
+    float x;
+    float z;
     double dist;
     size_t zid; /* zone id */
 
@@ -217,17 +219,19 @@ int plot(struct gemca_workspace *g, int ndots) {
     /* Add 1 cm scale ticks to coordinate system */
     for (i = XMIN; i < XMAX; i += 1) {
         x = (int) ((i - XMIN) / (XMAX - XMIN) * windowWidth);
-        if (i % 5 == 0)
-            SDL_RenderDrawLine(s, x, windowHeight / 2 - 10, x, windowHeight / 2 + 10);
-        else
-            SDL_RenderDrawLine(s, x, windowHeight / 2 - 5, x, windowHeight / 2 + 5);
+        if (i % 5 == 0) {
+            SDL_RenderDrawLine(s, x, (windowHeight / 2) - 10, x, (windowHeight / 2) + 10);
+        } else {
+            SDL_RenderDrawLine(s, x, (windowHeight / 2) - 5, x, (windowHeight / 2) + 5);
+        }
     }
     for (i = ZMIN; i < ZMAX; i += 1) {
         z = (int) ((i - ZMIN) / (ZMAX - ZMIN) * windowHeight);
-        if (i % 5 == 0)
-            SDL_RenderDrawLine(s, windowWidth / 2 - 10, z, windowWidth / 2 + 10, z);
-        else
-            SDL_RenderDrawLine(s, windowWidth / 2 - 5, z, windowWidth / 2 + 5, z);
+        if (i % 5 == 0) {
+            SDL_RenderDrawLine(s, (windowWidth / 2) - 10, z, (windowWidth / 2) + 10, z);
+        } else {
+            SDL_RenderDrawLine(s, (windowWidth / 2) - 5, z, (windowWidth / 2) + 5, z);
+        }
     }
 
     /* next plot a series of rays which travel trough the zones */
@@ -242,8 +246,9 @@ int plot(struct gemca_workspace *g, int ndots) {
         zi = osh_gemca_zone_index(*g, r);
         dist = osh_gemca_dist(g->zones[zi], &r);
         printf("dist: %f\n", dist);
-        if (dist > 20.0)
+        if (dist > 20.0) {
             dist = 20.0;
+        }
 
         ray2line(&r, dist, &x, &z);
 
@@ -262,9 +267,8 @@ int plot(struct gemca_workspace *g, int ndots) {
 
     sleep(1130);
 
-    SDL_DestroyWindow(window);
-    // We have to destroy the renderer, same as with the window.
     SDL_DestroyRenderer(s);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 
     return 1;

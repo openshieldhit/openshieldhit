@@ -13,6 +13,7 @@
 
 int _assign_material(struct gemca_workspace *g, char *args, int lineno);
 int _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g);
+static void _rewind_oshfile(struct oshfile *shf);
 
 /**
  * @brief Parse zone information
@@ -44,13 +45,14 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
     int lineno;
 
     /* move to the second end statement */
-    rewind(shf->fp);
+    _rewind_oshfile(shf);
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
         if (strcasecmp(OSH_GEMCA_KEY_END, key) == 0) {
             in_media++;
-            if (in_media == 2) /* jump out after second END statement was read */
+            if (in_media == 2) { /* jump out after second END statement was read */
                 break;
+            }
         }
         free(line);
     }
@@ -201,4 +203,18 @@ int _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g) {
         }
     }
     return 0; /* not found */
+}
+
+/**
+ * @brief Rewind an `oshfile` stream and reset its tracked line number.
+ *
+ * @param[in,out] shf Open geometry file wrapper to rewind.
+ *
+ * @returns Nothing. Exits via `osh_error()` if rewinding fails.
+ */
+static void _rewind_oshfile(struct oshfile *shf) {
+    if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
+        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+    }
+    shf->lineno = 0;
 }

@@ -43,7 +43,7 @@ Not intended for end-users.
 ### General Coding Conventions
 - Public functions have `osh` prefix : `osh_foobar()`
 - Private/internal functions use `static` and no `_osh` prefix : `foobar()`
-- Private/inline functions use `static inline` and `_` prefix: `_foobar()`
+- Private/inline functions use `static inline` and `_` prefix: `_foobar()`. This naming may be subject to change later when we settle on a better convention.
 - Prefer `enum` instead of `#define` numbered lists.
 
 - Public headers must use include guards of the form:

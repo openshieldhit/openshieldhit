@@ -28,11 +28,13 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
     p->nprim = 0;
     p->weight = 1.0;
 
-    if (pdg == 1000010010)
+    if (pdg == 1000010010) {
         pdg = OSH_PART_PDG_PROTON;
+    }
 
-    if (pdg == 1000000010) /* hypothetical neutron nucleus */
+    if (pdg == 1000000010) { /* hypothetical neutron nucleus */
         pdg = OSH_PART_PDG_NEUTRON;
+    }
 
     /* set the mass of the particle */
     if (!osh_particle_mass_from_pdg(pdg, &p->mass)) {
@@ -78,8 +80,9 @@ int osh_particle_name_from_pdg(int pdg, char *name_buf, size_t buf_size) {
     struct isotope iso;
     size_t i;
 
-    if (buf_size == 0)
+    if (buf_size == 0) {
         return 0;
+    }
 
     for (i = 0; i < osh_particle_db_len; ++i) {
         if (osh_particle_db[i].pdg == pdg) {
@@ -101,8 +104,9 @@ int osh_particle_symbol_from_pdg(int pdg, char *symbol_buf, size_t buf_size) {
     struct isotope iso;
     size_t i;
 
-    if (buf_size == 0)
+    if (buf_size == 0) {
         return 0;
+    }
 
     for (i = 0; i < osh_particle_db_len; ++i) {
         if (osh_particle_db[i].pdg == pdg) {
@@ -151,8 +155,9 @@ int osh_particle_mass_from_pdg(int pdg, double *mass) {
 void osh_print_particle(struct particle const *p) {
     char name_buf[64];
 
-    if (!osh_particle_name_from_pdg(p->pdg, name_buf, sizeof(name_buf)))
+    if (!osh_particle_name_from_pdg(p->pdg, name_buf, sizeof(name_buf))) {
         name_buf[0] = '\0';
+    }
 
     printf("Particle: %s\n", name_buf);
     printf("----------------------------------------\n");

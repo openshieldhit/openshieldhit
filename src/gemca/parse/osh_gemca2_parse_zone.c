@@ -15,6 +15,7 @@
 // static char* _skip_zone_op(char *s);
 static int _key_is_zone_continuation(char const *key);
 static struct body *_body_from_name(char *bname, struct gemca_workspace *g);
+static void _rewind_oshfile(struct oshfile *shf);
 
 static struct cgnode *_new_node_comp(struct stack *st, char operator);
 static struct cgnode *_new_node_body(struct body *b);
@@ -73,7 +74,7 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
     int nzone = 0;
     int in_block = 0;
 
-    rewind(shf->fp);
+    _rewind_oshfile(shf);
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
         if (strcasecmp(OSH_GEMCA_KEY_END, key) != 0) {
@@ -88,9 +89,10 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
             in_block++;
         }
 
-        if (in_block == 0)
+        if (in_block == 0) {
             /* were done reading the header */
             in_block = 1;
+        }
 
         free(line);
     }
@@ -131,7 +133,7 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
     int len;
 
     /* move to the second end statement */
-    rewind(shf->fp);
+    _rewind_oshfile(shf);
 
     /* forward to the first line after the first END statement */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
@@ -239,6 +241,20 @@ static int _key_is_zone_continuation(char const *key) {
 }
 
 /**
+ * @brief Rewind an `oshfile` stream and reset its tracked line number.
+ *
+ * @param[in,out] shf Open geometry file wrapper to rewind.
+ *
+ * @returns Nothing. Exits via `osh_error()` if rewinding fails.
+ */
+static void _rewind_oshfile(struct oshfile *shf) {
+    if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
+        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+    }
+    shf->lineno = 0;
+}
+
+/**
  * @brief lookup in g->bodies for a body with the name bname, and return a pointer to this body, if found.
  *
  * @param[in] *bname - character string holding the body name to be looked up
@@ -325,7 +341,7 @@ static struct cgnode *_new_node_body(struct body *b) {
 /**
  * @brief Build the abstract syntax tree.
  *
- * @details This uses the shunting yard algorithm, and undertands paranthesis, +, -, | operators.
+ * @details This uses the shunting yard algorithm, and undertands parentheses, +, -, | operators.
  *
  * @param[in] *z - input struct zone from which the AST will be generated.
  * @param[in] *g - input struct gemca (needed to lookup the bodies from the token names)
@@ -362,10 +378,11 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
             osh_gemca_stack_push(&opst, si);
         } else if (token[0] == ')') {
             /* pop the entire operator stack until we see a matching opening '(' */
-            while (opst->ni > 0) {
+            while (opst != NULL && opst->ni > 0) {
                 si = osh_gemca_stack_pop(opst);
                 if (si->v.op == '(') {
                     free(si);
+                    si = NULL;
                     break;
                 } else {
                     /* make a csgnode from the popped operator and push the new node to the csgstack */
@@ -376,6 +393,9 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
                     si->v.cgnode = node;
                     osh_gemca_stack_push(&st, si);
                 }
+            }
+            if (opst == NULL) {
+                osh_error(EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
             }
         } else {
             /* this is a simple body / leaf node. Push it to the stack as such, */
@@ -395,11 +415,11 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
     } /* end of for loop over tokens */
 
     /* check if there are any remaining operators left on the operator stack. If so, pop them. */
-    while (opst->ni > 0) {
+    while (opst != NULL && opst->ni > 0) {
         si = osh_gemca_stack_pop(opst);
 
         if ((si->v.op == '(') || (si->v.op == ')')) {
-            osh_error(EX_CONFIG, "unbalanced paranthesis in zone description");
+            osh_error(EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
         } else {
             /* make csgnode from popped and push to csgstack */
             node = _new_node_comp(st, si->v.op);
@@ -412,6 +432,9 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
     }
     /* what is left on the stack is the AST object. */
     si = osh_gemca_stack_pop(st);
+    if (si == NULL) {
+        osh_error(EX_CONFIG, "empty zone description");
+    }
     z->node = *si->v.cgnode;
     free(si);
     return &z->node;
@@ -449,8 +472,9 @@ static size_t _reformat(char const *input, char **output) {
        normally it is less than the input string, but here we will just allocate at least 0xFF bytes or
        twice the size of the input string */
     ol = 0x100; /* start with just 256 bytes for the output string */
-    if (il > ol)
+    if (il > ol) {
         ol = 2 * il;
+    }
     *output = realloc(*output, ol * sizeof(char));
     if (*output == NULL) {
         osh_error(EX_UNAVAILABLE, "_reformat(): cannot malloc");
@@ -464,7 +488,7 @@ static size_t _reformat(char const *input, char **output) {
         return 0; /* string is empty, nothing is to be done */
     }
 
-    /*   add a leading paranthesis */
+    /*   add a leading parenthesis */
     (*output)[0] = '(';
     j++;
 
@@ -551,8 +575,6 @@ static int _tokenizer(char const *input, char ***ptokens) {
     size_t i;
     size_t j;
 
-    char **tokens = *ptokens;
-
     /* Instead of realloc() every tooken, we scan first how many tokens there are, and do a single calloc instead. */
     n = 0;
     ilen = strlen(input);
@@ -572,15 +594,23 @@ static int _tokenizer(char const *input, char ***ptokens) {
     }
 
     /* allocate memory for n tokens for the token list */
-    tokens = calloc(n, sizeof(char *));
+    if (n == 0) {
+        *ptokens = NULL;
+        return 0;
+    }
+
+    *ptokens = (char **) calloc(n, sizeof(char *));
+    if (*ptokens == NULL) {
+        osh_error(EX_UNAVAILABLE, "_tokenizer(): cannot allocate token list");
+    }
 
     /* Now repeat the loop, while also adding the tokens to the token list. */
     n = 0; /* notice, n is used as an index first, since the increment happens after the assignments */
     for (i = 0; i < ilen; i++) {
         if (_is_operator(input[i])) {
-            tokens[n] = calloc(2, sizeof(char));
-            tokens[n][0] = input[i];
-            tokens[n][1] = '\0';
+            (*ptokens)[n] = (char *) calloc(2, sizeof(char));
+            (*ptokens)[n][0] = input[i];
+            (*ptokens)[n][1] = '\0';
         } else {
             /* This must be a body. Scan ahead until we find the next operator. */
             j = 0;
@@ -589,8 +619,8 @@ static int _tokenizer(char const *input, char ***ptokens) {
             }
 
             /* bodies need variable amounts of memoery, since they represented by character strings with var. size. */
-            tokens[n] = calloc(j + 1, sizeof(char)); /* carefully including the terminal null byte */
-            strncpy(tokens[n], input + i, j);
+            (*ptokens)[n] = (char *) calloc(j + 1, sizeof(char)); /* carefully including the terminal null byte */
+            strncpy((*ptokens)[n], input + i, j);
 
             /* skip to next operator position */
             i += j - 1;
@@ -598,13 +628,12 @@ static int _tokenizer(char const *input, char ***ptokens) {
         n++; /* increment for either operator or for a body */
     }
     /* We are now done making the token list. Attach it to the ptokens pointer so it can be returned */
-    *ptokens = tokens;
     /* n is now no longer an index, but holds the actual number of tokens  due to the last icreement */
     return n;
 }
 
 /**
- * @brief Reverses the list of tokens, and flips the paranthesises.
+ * @brief Reverses the list of tokens, and flips the parentheses.
  *
  * @param[in,out] **ptokens - array of pointers to strings
  * @param[in] *input - pointer to a char string prepared with _reformat().
@@ -617,7 +646,8 @@ static int _reverse_tokens(char **tokens, int ntokens) {
 
     char *c; /* temporary placeholder for a pointer to string */
     int i;
-    size_t len, j;
+    size_t len;
+    size_t j;
 
     for (i = 0; i < ntokens; i++) {
         // printf("Tokens: '%s'\n", tokens[i]);
@@ -635,7 +665,7 @@ static int _reverse_tokens(char **tokens, int ntokens) {
     }
 
     for (i = 0; i < ntokens; i++) {
-        /* reverse any paranthesises */
+        /* reverse any parentheses */
         len = strlen(tokens[i]);
         // printf("len : %li\n", len);
         for (j = 0; j < len; j++) {
@@ -668,8 +698,9 @@ static int _is_operator(char o) {
     int i;
 
     for (i = 0; i < nops; i++) {
-        if (o == ops[i])
+        if (o == ops[i]) {
             return 1;
+        }
     }
     return 0;
 }
@@ -687,7 +718,8 @@ static int _is_operator(char o) {
  * @author Niels Bassler
  */
 static void _concat(char **a, char const *b) {
-    int la, lb;
+    int la;
+    int lb;
 
     la = strlen(*a);
     lb = strlen(b);

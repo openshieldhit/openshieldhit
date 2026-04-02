@@ -38,8 +38,9 @@ size_t osh_gemca_get_zone(struct gemca_workspace *g, struct ray *r) {
 
     for (i = 0; i < g->nzones; i++) {
         // printf("\n --- _get_zone(), test zone %li '%s' ----------------- \n", g->zones[i]->id, g->zones[i]->name);
-        if (_in_zone(g->zones[i], r))
+        if (_in_zone(g->zones[i], r)) {
             return g->zones[i]->id;
+        }
     }
     return 0; // TODO, -1 for invalid
 }
@@ -60,8 +61,9 @@ size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r) {
 
     for (i = 0; i < g->nzones; i++) {
         // printf("\n --- _get_zone(), test zone %li '%s' ----------------- \n", g->zones[i]->id, g->zones[i]->name);
-        if (_in_zone(g->zones[i], r))
+        if (_in_zone(g->zones[i], r)) {
             return i;
+        }
     }
     return 0; // TODO, -1 for invalid
 }
@@ -101,23 +103,26 @@ static inline int _in_node(struct cgnode const *self, struct ray const *r) {
     } else {
         a = _in_node(self->left, r);
         b = _in_node(self->right, r);
-        op = self->op;
+        op = (unsigned char) self->op;
 
         switch (op) { // TODO: use defines instead of checking on char
 
         case '+':
-            if (a && b)
+            if (a && b) {
                 return 1;
+            }
             break;
 
         case '-':
-            if (a && !b)
+            if (a && !b) {
                 return 1;
+            }
             break;
 
         case '|':
-            if (a || b)
+            if (a || b) {
                 return 1;
+            }
             break;
 
         default:
@@ -179,7 +184,7 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
         tr->p[i] = r->p[i];
         tr->cp[i] = r->cp[i];
     }
-    tr->system = b->coord;
+    tr->system = (unsigned char) b->coord;
     // printf("_transform_to_local() ray after transform:\n");
     // osh_transport_print_ray(tr);
 

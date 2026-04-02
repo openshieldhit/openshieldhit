@@ -31,12 +31,14 @@ static long count_newlines_in_file(char const *path) {
     long count = 0;
     int c;
 
-    if (!f)
+    if (!f) {
         return -1;
+    }
 
     while ((c = fgetc(f)) != EOF) {
-        if (c == '\n')
+        if (c == '\n') {
             count++;
+        }
     }
     fclose(f);
     return count;

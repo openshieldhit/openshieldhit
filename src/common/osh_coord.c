@@ -17,10 +17,13 @@
  */
 int osh_coord_c2v(double const *c, double *v) {
 
-    double cost, sint, sinf, cosf;
+    double cost;
+    double sint;
+    double sinf;
+    double cosf;
 
     cost = c[0];
-    sint = sqrt(1.0 - cost * cost);
+    sint = sqrt(1.0 - (cost * cost));
     sinf = c[1];
     cosf = c[2];
 
@@ -300,13 +303,15 @@ int osh_invert_matrix(double const m[16], double im[16]) {
 
     det = m[0] * im[0] + m[1] * im[4] + m[2] * im[8] + m[3] * im[12];
 
-    if (det == 0)
+    if (det == 0) {
         return 0;
+    }
 
     det = 1.0 / det;
 
-    for (i = 0; i < 16; i++)
+    for (i = 0; i < 16; i++) {
         im[i] = im[i] * det;
+    }
 
     return 1;
 }

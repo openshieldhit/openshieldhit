@@ -1,0 +1,39 @@
+name: clang-tidy
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up CMake
+        uses: jwlawson/actions-setup-cmake@v2.2.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev clang-tidy-19 clang-tools-19
+
+      - name: Check clang-tidy version
+        run: clang-tidy-19 --version
+
+      - name: Configure project
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DOSH_BUILD_EXAMPLES=ON
+
+      - name: Run clang-tidy
+        run: |
+          find src examples tests \
+            -name '*.c' \
+            -print0 \
+            | xargs -0 run-clang-tidy-19 -p build -quiet

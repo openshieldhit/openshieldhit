@@ -1,0 +1,38 @@
+name: clang-format
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install clang-format-19
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-19
+
+      - name: Check clang-format version
+        run: clang-format-19 --version
+
+      - name: Check formatting
+        run: |
+          find . \
+            \( -name '*.c' -o -name '*.h' \) \
+            -not -path './build/*' \
+            -not -path './cmake-build-*/*' \
+            -not -path './CMakeFiles/*' \
+            -not -path './Testing/*' \
+            -not -path './dist/*' \
+            -not -path './out/*' \
+            -not -path './.git/*' \
+            -print0 \
+            | xargs -0 clang-format-19 --dry-run --Werror --style=file

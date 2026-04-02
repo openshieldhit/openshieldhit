@@ -33,7 +33,8 @@ int osh_isotope_from_za(struct isotope *iso, unsigned int z, unsigned a) {
 
 int osh_isotope_from_pdg(struct isotope *iso, int pdg) {
 
-    unsigned int z, a;
+    unsigned int z;
+    unsigned int a;
 
     if (pdg < OSH_PART_PDG_PROTON_ION) {
         return 0;

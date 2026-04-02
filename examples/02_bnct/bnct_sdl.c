@@ -10,6 +10,7 @@
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_vect.h"
+#include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
@@ -22,22 +23,22 @@
 #define DO_STATS 1
 
 /* all numbers below in cm */
-#define XMAX 50e-6 * 100
-#define XMIN -50e-6 * 100
-#define YMAX 50e-6 * 100
-#define YMIN -50e-6 * 100
-#define ZMAX 50e-6 * 100
-#define ZMIN -50e-6 * 100
+#define XMAX (50e-6 * 100)
+#define XMIN (-50e-6 * 100)
+#define YMAX (50e-6 * 100)
+#define YMIN (-50e-6 * 100)
+#define ZMAX (50e-6 * 100)
+#define ZMIN (-50e-6 * 100)
 #define STEP_SIZE 0.1
 
 /* define simulation window ,centered on central primitive element */
-#define SIM_XWIDTH 22e-6 * 100.0
-#define SIM_YWIDTH 22e-6 * 100.0
-#define SIM_ZWIDTH 22e-6 * 100.0
+#define SIM_XWIDTH (22e-6 * 100.0)
+#define SIM_YWIDTH (22e-6 * 100.0)
+#define SIM_ZWIDTH (22e-6 * 100.0)
 
 /* Coordinate system ticks */
-#define TICKS_MINOR 5e-6 * 100.0
-#define TICKS_MAJOR 10e-6 * 100.0
+#define TICKS_MINOR (5e-6 * 100.0)
+#define TICKS_MAJOR (10e-6 * 100.0)
 
 /* model parameters */
 #define RANGE_B10_LI 9.0e-6 // meter
@@ -56,7 +57,9 @@ static inline double urand(void) {
 
 static inline void osh_rng_unit_sphere(double out[3]) {
     /* Marsaglia (1972): sample uniformly on sphere using two uniforms */
-    double u, v, s;
+    double u;
+    double v;
+    double s;
 
     do {
         u = 2.0 * osh_rng_double(&g_rng) - 1.0;
@@ -98,7 +101,7 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots);
 
 int main(int argc, char *argv[]) {
 
-    struct gemca_workspace g;
+    struct gemca_workspace g = {0};
     int zone = 1;
 
     /* Handle --version flag */
@@ -133,10 +136,28 @@ int main(int argc, char *argv[]) {
 
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
-    osh_gemca_load(argv[1], &g);
+    fflush(stdout);
+    if (osh_gemca_load(argv[1], &g) != 1) {
+        fprintf(stderr, "bnct_sdl: osh_gemca_load() failed for '%s'\n", argv[1]);
+        return EXIT_FAILURE;
+    }
+
+    if (g.bodies == NULL || g.zones == NULL || g.nbodies == 0 || g.nzones == 0) {
+        fprintf(stderr, "bnct_sdl: geometry workspace is incomplete after osh_gemca_load()\n");
+        return EXIT_FAILURE;
+    }
+
+    printf("PHASE 2: geometry loaded successfully (%llu bodies, %llu zones)\n",
+           (unsigned long long) g.nbodies,
+           (unsigned long long) g.nzones);
+    fflush(stdout);
+
     osh_gemca_print_gemca(&g);
 
-    plot(&g, 4000, zone);
+    if (plot(&g, 4000, zone) != 0) {
+        fprintf(stderr, "bnct_sdl: plot() failed\n");
+        return EXIT_FAILURE;
+    }
 
     return 0;
 }
@@ -320,21 +341,38 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
     int quit = 0;
 
     int i;
-    double x, z, _f;
+    double x;
+    double z;
+    double tick_pos;
     struct ray r;
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        fprintf(stderr, "SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
         return 1;
+    }
 
     SDL_Window *window = SDL_CreateWindow(
-        "Geometry Test", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
+        "Geometry Test", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
 
     if (!window) {
+        fprintf(stderr, "SDL_CreateWindow() failed: %s\n", SDL_GetError());
         SDL_Quit();
         return 2;
     }
 
     SDL_Renderer *s = SDL_CreateRenderer(window, 0, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!s) {
+        fprintf(stderr,
+                "SDL_CreateRenderer(accelerated|vsync) failed: %s\nFalling back to software renderer.\n",
+                SDL_GetError());
+        s = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    }
+    if (!s) {
+        fprintf(stderr, "SDL_CreateRenderer(software) failed: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 3;
+    }
 
     SDL_Event event;
 
@@ -364,20 +402,20 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
 
     /* Draw Ticks */
     for (x = XMIN; x <= XMAX; x += TICKS_MAJOR) {
-        _f = (int) ((x - XMIN) / (XMAX - XMIN) * windowWidth);
-        SDL_RenderDrawLine(s, _f, windowHeight / 2 - 10, _f, windowHeight / 2 + 10); // Major tick
+        tick_pos = (x - XMIN) / (XMAX - XMIN) * windowWidth;
+        SDL_RenderDrawLine(s, (int) tick_pos, (windowHeight / 2) - 10, (int) tick_pos, (windowHeight / 2) + 10);
     }
     for (x = XMIN; x <= XMAX; x += TICKS_MINOR) {
-        _f = (int) ((x - XMIN) / (XMAX - XMIN) * windowWidth);
-        SDL_RenderDrawLine(s, _f, windowHeight / 2 - 5, _f, windowHeight / 2 + 5); // Major tick
+        tick_pos = (x - XMIN) / (XMAX - XMIN) * windowWidth;
+        SDL_RenderDrawLine(s, (int) tick_pos, (windowHeight / 2) - 5, (int) tick_pos, (windowHeight / 2) + 5);
     }
     for (z = ZMIN; z <= ZMAX; z += TICKS_MAJOR) {
-        _f = (int) ((z - ZMIN) / (ZMAX - ZMIN) * windowHeight);
-        SDL_RenderDrawLine(s, windowWidth / 2 - 10, _f, windowWidth / 2 + 10, _f); // Major tick
+        tick_pos = (z - ZMIN) / (ZMAX - ZMIN) * windowHeight;
+        SDL_RenderDrawLine(s, (windowWidth / 2) - 10, (int) tick_pos, (windowWidth / 2) + 10, (int) tick_pos);
     }
     for (z = ZMIN; z <= ZMAX; z += TICKS_MINOR) {
-        _f = (int) ((z - ZMIN) / (ZMAX - ZMIN) * windowHeight);
-        SDL_RenderDrawLine(s, windowWidth / 2 - 5, _f, windowWidth / 2 + 5, _f); // Major tick
+        tick_pos = (z - ZMIN) / (ZMAX - ZMIN) * windowHeight;
+        SDL_RenderDrawLine(s, (windowWidth / 2) - 5, (int) tick_pos, (windowWidth / 2) + 5, (int) tick_pos);
     }
 
     /* next plot a series of rays which travel trough the zones */
@@ -390,8 +428,9 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
 
         /* handle window events */
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT)
+            if (event.type == SDL_QUIT) {
                 quit = 1;
+            }
         }
 
         for (int k = 0; k < batch_size && total_rays < max_rays; k++) {
@@ -403,10 +442,12 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
             size_t zi0 = osh_gemca_zone_index(*g, r);
             size_t medium0 = g->zones[zi0]->medium;
 
-            if (medium0 != (size_t) zone)
+            if (medium0 != (size_t) zone) {
                 continue; /* skip if we are not in a medium of interest */
+            }
 
-            int px, pz;
+            int px;
+            int pz;
             coord2pixel(r.p[0], r.p[2], &px, &pz);
 
             setRendererColor(s, (int) medium0);
@@ -416,7 +457,7 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
 
             total_rays++;
         }
-        sleep(0.5);
+        SDL_Delay(500);
 
         SDL_RenderPresent(s);
 
@@ -437,18 +478,18 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
     /* keep window up until user closes it */
     while (!quit) {
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT)
+            if (event.type == SDL_QUIT) {
                 quit = 1;
+            }
         }
         SDL_Delay(16);
     }
 
-    SDL_DestroyWindow(window);
-    // We have to destroy the renderer, same as with the window.
     SDL_DestroyRenderer(s);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 
-    return 1;
+    return 0;
 }
 
 void setRendererColor(SDL_Renderer *renderer, int zid) {
@@ -525,9 +566,10 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
                 random_ray_3d(r);
                 zi = osh_gemca_zone_index(*g, *r);
                 medium = g->zones[zi]->medium; /* check medium */
-                if (medium == 1 || medium == 2 || medium == 3)
+                if (medium == 1 || medium == 2 || medium == 3) {
                     // if (medium == 3 )
                     break;
+                }
                 // if (urand() < boron_cumm[medium])
                 //    break;
             }
@@ -627,13 +669,18 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
         double step = (d_to_bnd < remaining) ? d_to_bnd : remaining;
 
         /* compute endpoints in world coords */
-        double x0 = r.p[0], z0 = r.p[2];
+        double x0 = r.p[0];
+        double z0 = r.p[2];
         struct ray r2 = r;
         osh_transport_move_ray(&r2, step);
-        double x1 = r2.p[0], z1 = r2.p[2];
+        double x1 = r2.p[0];
+        double z1 = r2.p[2];
 
         /* map to pixels and draw */
-        int px0, pz0, px1, pz1;
+        int px0;
+        int pz0;
+        int px1;
+        int pz1;
         coord2pixel(x0, z0, &px0, &pz0);
         coord2pixel(x1, z1, &px1, &pz1);
 
@@ -667,7 +714,8 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots) {
         size_t zidx = osh_gemca_zone_index(*g, r);
         size_t medium = g->zones[zidx]->medium;
 
-        int px, pz;
+        int px;
+        int pz;
         coord2pixel(r.p[0], r.p[2], &px, &pz);
 
         setRendererColor(s, (int) medium);

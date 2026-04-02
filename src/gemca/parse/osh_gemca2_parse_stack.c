@@ -1,6 +1,9 @@
 #include "osh_gemca2_parse_stack.h"
 
+#include <stdio.h>
 #include <stdlib.h>
+
+#include "common/osh_logger.h"
 
 struct stackitem *osh_gemca_stack_pop(struct stack *s) {
     struct stackitem *si;
@@ -19,17 +22,26 @@ struct stackitem *osh_gemca_stack_pop(struct stack *s) {
 size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
 
     struct stack *s;
+    struct stackitem **tmp_si;
+    size_t new_n;
 
     /* check if stack exists, if not, allocate memory */
     if (*ps == NULL) {
         /* allocate memory to the stack */
         // printf("Allocate memory to stack\n");
 
-        s = calloc(1, sizeof(struct stack));
+        s = (struct stack *) calloc(1, sizeof(struct stack));
+        if (s == NULL) {
+            osh_alloc_failed("osh_gemca_stack_push(): stack");
+        }
 
         /* allocate memory to 32 stack pointers */
         s->n = 32;
-        s->si = calloc(s->n, sizeof(struct stackitem *));
+        s->si = (struct stackitem **) calloc(s->n, sizeof(struct stackitem *));
+        if (s->si == NULL) {
+            free(s);
+            osh_alloc_failed("osh_gemca_stack_push(): stack items");
+        }
 
         /* number of elements in stack is so far just 0 */
         s->ni = 0;
@@ -42,8 +54,14 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
 
     /* check if we need more memory */
     if ((s->ni) > (s->n)) {
-        s->n += 32; /* allocate memory for another 32 elements */
-        s->si = realloc(s->si, s->n * sizeof(struct stackitem *));
+        new_n = s->n + 32; /* allocate memory for another 32 elements */
+        tmp_si = (struct stackitem **) realloc((void *) s->si, new_n * sizeof(struct stackitem *));
+        if (tmp_si == NULL) {
+            /* Keep existing stack untouched to avoid dangling pointers at call sites. */
+            osh_alloc_failed("osh_gemca_stack_push(): stack grow");
+        }
+        s->si = tmp_si;
+        s->n = new_n;
     }
 
     // printf("WRITE TO INDEX: %li\n", s->ni - 1);
@@ -58,10 +76,14 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
 
 void osh_gemca_stack_free(struct stack **ps) {
     size_t i;
+    if ((ps == NULL) || (*ps == NULL))
+        return;
     for (i = 0; i < (*ps)->n; i++) {
         free((*ps)->si[i]);
     }
+    free((*ps)->si);
     free(*ps);
+    *ps = NULL;
 }
 
 void osh_gemca_stack_print(struct stack *s) {
@@ -76,8 +98,9 @@ void osh_gemca_stack_print(struct stack *s) {
         printf("    StackITEM: %llu: %p  type: %i   ", (unsigned long long) i, (void *) s->si[i], s->si[i]->type);
         if (s->si[i]->type == _OSH_GEMCA_STACKITEM_OPERATOR) {
             printf("'%c'\n", s->si[i]->v.op);
-        } else
+        } else {
             printf("\n");
+        }
     }
 
     printf("\n");

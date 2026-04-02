@@ -26,6 +26,25 @@ endif()
 
 message(STATUS "OpenShieldHIT version: ${GIT_VERSION}")
 
+# Parse semver components from tag (e.g. v1.2.3 or v1.2.3-5-gabcdef)
+string(REGEX MATCH "([0-9]+)\\.([0-9]+)\\.([0-9]+)" OSH_SEMVER_MATCH "${GIT_VERSION}")
+if(OSH_SEMVER_MATCH)
+    set(OSH_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(OSH_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(OSH_VERSION_PATCH "${CMAKE_MATCH_3}")
+else()
+    set(OSH_VERSION_MAJOR 0)
+    set(OSH_VERSION_MINOR 0)
+    set(OSH_VERSION_PATCH 0)
+endif()
+set(OSH_PROJECT_VERSION "${OSH_VERSION_MAJOR}.${OSH_VERSION_MINOR}.${OSH_VERSION_PATCH}")
+
+configure_file(
+    ${PROJECT_SOURCE_DIR}/src/common/osh_version.h.in
+    ${PROJECT_BINARY_DIR}/generated/common/osh_version.h
+    @ONLY
+)
+
 # Compiler-specific warning flags
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-pedantic -Wall -Wextra)
@@ -75,15 +94,12 @@ target_link_libraries(osh_all INTERFACE
 )
 target_include_directories(osh_all INTERFACE
     ${PROJECT_SOURCE_DIR}/src
-)
-# Pass version as preprocessor definition (OSH_VERSION) to all targets
-target_compile_definitions(osh_all INTERFACE
-    OSH_VERSION="${GIT_VERSION}"
+    ${PROJECT_BINARY_DIR}/generated
 )
 
 # ---- Main executable ----
-add_executable(osh src/main.c)
-target_link_libraries(osh PRIVATE osh_all)
+add_executable(openshieldhit src/main.c)
+target_link_libraries(openshieldhit PRIVATE osh_all)
 
 # ---- Tests ----
 include(CTest)
@@ -99,7 +115,7 @@ endif()
 # ---- Installation and Packaging ----
 
 # Install main executable
-install(TARGETS osh
+install(TARGETS openshieldhit
     RUNTIME DESTINATION bin
 )
 

@@ -4,14 +4,14 @@
 
 #include "common/osh_vect.h"
 
-void test_dot_product() {
+void test_dot_product(void) {
     double a[OSH_VECT_DIM] = {1.0, 2.0, 3.0};
     double b[OSH_VECT_DIM] = {4.0, -5.0, 6.0};
     double result = osh_vect_dot(a, b);
     assert(fabs(result - (1 * 4 + 2 * (-5) + 3 * 6)) < OSH_VECT_EPS);
 }
 
-void test_cross_product() {
+void test_cross_product(void) {
     double i[OSH_VECT_DIM] = {1.0, 0.0, 0.0};
     double j[OSH_VECT_DIM] = {0.0, 1.0, 0.0};
     double k[OSH_VECT_DIM];
@@ -21,7 +21,7 @@ void test_cross_product() {
     assert(fabs(k[2] - 1.0) < OSH_VECT_EPS);
 }
 
-void test_norm() {
+void test_norm(void) {
     double len2_after;
     double u[OSH_VECT_DIM] = {3.0, 4.0, 0.0};
     double v[OSH_VECT_DIM];

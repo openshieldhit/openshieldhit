@@ -198,7 +198,10 @@ static int _setup_wed(struct body *b) {
     double p[3]; /* temporary point */
     double c[3]; /* some point guaranteed to be inside the wedge */
 
-    double *r0, *r1, *r2, *r3; /* alias pointers to make code more readable */
+    double *r0;
+    double *r1;
+    double *r2;
+    double *r3; /* alias pointers to make code more readable */
     int i;
 
     r0 = &(b->a[0]); /* origin point */
@@ -303,15 +306,18 @@ static int _setup_wed(struct body *b) {
 static int _setup_arb(struct body *b) {
 
     int const nsurfs = 6;
-    struct surface *sf;      /* temporary surface */
-    double *p[8];            /* 8 points describing the arb */
-    double u[3], v[3], w[3]; /* temporary vectors */
-    int i, j;
+    struct surface *sf; /* temporary surface */
+    double *p[8];       /* 8 points describing the arb */
+    double u[3];
+    double v[3];
+    double w[3]; /* temporary vectors */
+    int i;
+    int j;
     int k[3];
 
     /* setup alias for the vertices of ARB for easier to read code */
     for (i = 0; i < 8; i++) {
-        p[i] = &(b->a[i * 3]); /* list of vertices */
+        p[i] = &(b->a[(ptrdiff_t) i * 3]); /* list of vertices */
     }
 
     /* ----------- Setup translation matrix */
@@ -400,8 +406,13 @@ static int _setup_box(struct body *b) {
     int const nsurfs = 6;
     struct surface *sf; /* temporary surface */
 
-    double *p, *r, *s, *t;
-    double u[3], v[3], w[3];
+    double *p;
+    double *r;
+    double *s;
+    double *t;
+    double u[3];
+    double v[3];
+    double w[3];
     int i;
 
     p = &(b->a[0]); /* starting point of box */
@@ -480,7 +491,8 @@ static int _setup_vox(struct body *b) {
     double couch_angle = 0.0;
     double gantry_angle = 0.0;
 
-    int i, j;
+    int i;
+    int j;
 
     // TODO:
     // open b->filename_vox
@@ -501,7 +513,7 @@ static int _setup_vox(struct body *b) {
     /* copy transposed matrix into translation matrix */
     for (i = 0; i < 3; i++) {
         for (j = 0; j < 3; j++) {
-            b->t[j * 4 + i] = tb[j][i]; /* remember; t is a 4x4 matrix */
+            b->t[(j * 4) + i] = tb[j][i]; /* remember; t is a 4x4 matrix */
         }
     }
 
@@ -627,7 +639,8 @@ static int _setup_rcc(struct body *b) {
     int const nsurfs = 3;
     struct surface *sf;
 
-    double *p, *r;
+    double *p;
+    double *r;
 
     /* Cylinder has a base point p, and is spanned by a user given vector t. */
     p = &(b->a[0]); /* center of cylinder base in OSH_COORD_UNIVERSE */
@@ -679,7 +692,10 @@ static int _setup_rec(struct body *b) {
     int const nsurfs = 3;
     struct surface *sf; /* temporary surface */
 
-    double *p, *r, *s, *t;
+    double *p;
+    double *r;
+    double *s;
+    double *t;
     double wt[3];
 
     p = &(b->a[0]); /* center of cylinder base */
@@ -738,10 +754,13 @@ static int _setup_trc(struct body *b) {
     int const nsurfs = 3;
     struct surface *sf; /* temporary surface */
 
-    double *p, *r;
+    double *p;
+    double *r;
 
     double wt[3];
-    double h, r1, r2; /* scalar cylinder height, minor axis, major axis */
+    double h;
+    double r1;
+    double r2; /* scalar cylinder height, minor axis, major axis */
 
     p = &(b->a[0]); /* center point of cone base */
     r = &(b->a[3]); /* vector along cone center axis */
@@ -800,7 +819,10 @@ static int _setup_ell(struct body *b) {
     int const nsurfs = 1;
     struct surface *sf; /* temporary surface */
 
-    double *p, *r, *s, *t;
+    double *p;
+    double *r;
+    double *s;
+    double *t;
 
     p = &(b->a[0]); /* center point of ellipsoid */
     r = &(b->a[3]); /* vector1 from p */
@@ -952,7 +974,8 @@ static int _setup_pla(struct body *b) {
     int const nsurfs = 1;
     struct surface *sf; /* temporary surface */
 
-    double *p, *r;
+    double *p;
+    double *r;
 
     p = &(b->a[0]);
     r = &(b->a[3]);
@@ -1050,7 +1073,8 @@ static int _setup_mov(struct body *b) {
  */
 static void _vertex_index_arb_fluka(double d, int *i) {
     char s[12];
-    int j, k;
+    int j;
+    int k;
 
     snprintf(s, 11, "%.0f", d);
 
