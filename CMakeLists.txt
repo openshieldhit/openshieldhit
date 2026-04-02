@@ -94,12 +94,24 @@ target_link_libraries(osh_all INTERFACE
 )
 target_include_directories(osh_all INTERFACE
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_BINARY_DIR}/generated
 )
 
+add_library(openshieldhit_api
+    src/openshieldhit.c
+    src/cli/osh_cli.c
+)
+target_link_libraries(openshieldhit_api PUBLIC osh_all)
+target_include_directories(openshieldhit_api PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+)
+
 # ---- Main executable ----
-add_executable(openshieldhit src/main.c)
-target_link_libraries(openshieldhit PRIVATE osh_all)
+add_executable(openshieldhit
+    src/main.c
+)
+target_link_libraries(openshieldhit PRIVATE openshieldhit_api)
 
 # ---- Tests ----
 include(CTest)

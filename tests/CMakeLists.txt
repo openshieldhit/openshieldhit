@@ -1,11 +1,21 @@
+function(register_named_c_tests target source_file)
+    file(STRINGS "${source_file}" named_test_lines REGEX "^static void test_[A-Za-z0-9_]+\\(void\\)")
+
+    foreach(test_line IN LISTS named_test_lines)
+        string(REGEX MATCH "test_([A-Za-z0-9_]+)\\(void\\)" _ "${test_line}")
+        set(test_case "${CMAKE_MATCH_1}")
+        add_test(NAME "${target}::${test_case}" COMMAND "${target}" "${test_case}")
+    endforeach()
+endfunction()
+
 # ---- test_osh_main: verifies shared version header values ----
 add_executable(test_osh_main test_osh_main.c)
-target_link_libraries(test_osh_main PRIVATE osh_all)
-add_test(NAME test_osh_main_tests COMMAND test_osh_main)
+target_link_libraries(test_osh_main PRIVATE openshieldhit_api)
+register_named_c_tests(test_osh_main ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_main.c)
 add_test(NAME openshieldhit_version_cli COMMAND $<TARGET_FILE:openshieldhit> --version)
 
 # Collect remaining test source files
-file(GLOB TEST_SOURCES test_*.c)
+file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/test_*.c")
 list(REMOVE_ITEM TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_main.c)
 
 # Loop over each test file and create an executable
