@@ -1,0 +1,21 @@
+# Build backend: scikit-build-core drives CMake directly, making it the natural
+# choice for C/C++ projects with Python bindings. No bindings exist yet, but
+# the infrastructure is in place for when they are added.
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "openshieldhit"
+description = "Lean Monte Carlo Particle Transport in C"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dynamic = ["version"]
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+wheel.packages = []  # no Python packages yet; remove when bindings are added
+
+[tool.ruff]
+line-length = 127
