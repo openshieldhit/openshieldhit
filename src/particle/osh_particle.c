@@ -43,6 +43,8 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
 
     if (osh_particle_pdg_is_ion(pdg)) {
         if (!osh_isotope_from_pdg(&iso, pdg)) {
+            reset_particle(p);
+            p->pdg = OSH_PART_PDG_INVALID;
             return 0;
         }
         p->pdg = pdg;
