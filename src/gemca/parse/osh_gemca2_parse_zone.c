@@ -395,8 +395,7 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
                 }
             }
             if (opst == NULL) {
-                osh_error(
-                    EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
+                osh_error(EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
             }
         } else {
             /* this is a simple body / leaf node. Push it to the stack as such, */
