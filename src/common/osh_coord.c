@@ -246,7 +246,7 @@ int osh_coord_trans_ray_r(struct ray const *r, struct ray *rt, double const t[16
  * @author MESA library, adaptions by Niels Bassler
  *
  */
-int osh_invert_matrix(const double m[16], double im[16]) {
+int osh_invert_matrix(double const m[16], double im[16]) {
     double det;
     int i;
 

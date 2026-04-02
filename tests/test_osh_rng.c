@@ -18,7 +18,7 @@ static void test_pcg32_known_sequence(void) {
     osh_rng_init(&r, OSH_RNG_TYPE_PCG32, 42u, 54u);
 
     /* Expected sequence for (seed=42, stream=54) with current implementation */
-    const uint32_t exp[5] = {
+    uint32_t const exp[5] = {
         2707161783u,
         2068313097u,
         3122475824u,
@@ -36,7 +36,7 @@ static void test_xoshiro256ss_known_sequence(void) {
     struct osh_rng r;
     osh_rng_init(&r, OSH_RNG_TYPE_XOSHIRO256SS, 42u, 54u);
 
-    const uint64_t exp[5] = {
+    uint64_t const exp[5] = {
         9619421891339311063ull,
         17143628181114060176ull,
         17740981343507171333ull,
@@ -68,7 +68,7 @@ static void test_gauss01_known_values(void) {
     osh_rng_init(&r, OSH_RNG_TYPE_PCG32, 42u, 54u);
 
     /* Expected first values (seed=42, stream=54) */
-    const double exp[4] = {
+    double const exp[4] = {
         0.8010234011838121,
         1.3954298012510542,
         0.83712788683267014,

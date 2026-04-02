@@ -17,6 +17,7 @@ struct stackitem {
         struct cgnode *cgnode; /* stack item holds a pointer to a cgnodes */
         char op;               /* stack item holds a single operator */
     } v;
+
     int type; /* stack type  _OSH_GEMCA_STACKITEM_* */
 };
 

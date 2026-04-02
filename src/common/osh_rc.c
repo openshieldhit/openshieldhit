@@ -1,6 +1,6 @@
 #include "osh_rc.h"
 
-const char *osh_strerr(int c) {
+char const *osh_strerr(int c) {
     switch (c) {
     case OSH_OK:
         return "OK";

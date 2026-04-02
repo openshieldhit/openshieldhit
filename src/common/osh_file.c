@@ -21,7 +21,7 @@
  */
 static int _mapfile(struct oshfile *oshf);
 
-struct oshfile *osh_fopen(const char *filename) {
+struct oshfile *osh_fopen(char const *filename) {
     FILE *fp;
     struct oshfile *oshf;
 

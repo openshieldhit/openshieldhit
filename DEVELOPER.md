@@ -11,9 +11,12 @@ Not intended for end-users.
   - Keep fields that are commonly read together near each other
   - Keep “rarely touched” caches separate
 
-- Compilation follows the C99 standard, but with some **C90-inspired** stylistic ideas:
+- Compilation follows the **C11 standard**, but with some **C90-inspired** stylistic ideas:
   - `//` single-line comments are permitted **only for temporary code**, such as quick notes or `TODO`s. They must not remain in production code. This helps spotting temporary and WIP code.
   - Use `stdint.h` types (e.g., `uint32_t`) only when needed.
+  - Use `<stdatomic.h>` for atomic operations on shared tallies/counters (e.g., `_Atomic`, `atomic_fetch_add`). Prefer lock-free atomics over mutexes for hot paths.
+  - Use `_Alignas(64)` on per-thread data structures to avoid false sharing across cache lines.
+  - Avoid `<threads.h>` for portability (MSVC does not implement it); use pthreads or OpenMP for the thread pool instead.
 
 - Use `const` on pointers when the function does not modify the referenced data. This clarifies ownership and protects against accidental changes.
 - Prefer `double const *p` rather than `const double *p`.
@@ -46,10 +49,10 @@ Not intended for end-users.
 - Public headers must use include guards of the form:
 
 ```c
-#ifndef _OSH_FOO_H
-#define _OSH_FOO_H
+#ifndef OSH_FOO_H
+#define OSH_FOO_H
 ...
-#endif /* _OSH_FOO_H */
+#endif /* OSH_FOO_H */
 ```
 
 - The idea is to provide a public API as well, allowing these header files to be linked against C++, so encapsulate headers in:

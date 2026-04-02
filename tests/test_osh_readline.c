@@ -8,7 +8,7 @@
 
 #define TEST_PATH "../../tests/res/test01/beam.dat"
 
-void test_readline_key(const char *filename) {
+void test_readline_key(char const *filename) {
     struct oshfile *oshf;
 
     char *lline = NULL;
@@ -35,7 +35,7 @@ void test_readline_key(const char *filename) {
     printf("test_readline_key passed.\n");
 }
 
-void test_count_keys(const char *filename) {
+void test_count_keys(char const *filename) {
 
     struct oshfile *oshf;
     int count = 0;

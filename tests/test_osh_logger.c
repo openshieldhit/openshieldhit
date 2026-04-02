@@ -5,7 +5,7 @@
 
 #include "common/osh_logger.h"
 
-static int file_contains(const char *path, const char *needle) {
+static int file_contains(char const *path, char const *needle) {
     char line[1024];
     FILE *f = fopen(path, "r");
     if (!f)
@@ -21,12 +21,12 @@ static int file_contains(const char *path, const char *needle) {
     return 0;
 }
 
-static int file_not_contains(const char *path, const char *needle) {
+static int file_not_contains(char const *path, char const *needle) {
     return !file_contains(path, needle);
 }
 
 void test_logger_basic(void) {
-    const char *logfile = "test_logger.log";
+    char const *logfile = "test_logger.log";
 
     /* Start clean */
     remove(logfile);

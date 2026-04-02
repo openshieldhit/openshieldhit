@@ -26,7 +26,7 @@ struct thread_arg {
 };
 
 /* --- line counting helper --- */
-static long count_newlines_in_file(const char *path) {
+static long count_newlines_in_file(char const *path) {
     FILE *f = fopen(path, "rb");
     long count = 0;
     int c;
@@ -75,9 +75,9 @@ static void *thread_main(void *param) {
 #endif
 
 static void test_logger_threads(void) {
-    const char *logfile = "test_logger_threads.log";
-    const int nthreads = THREADS;
-    const int iters = ITERS;
+    char const *logfile = "test_logger_threads.log";
+    int const nthreads = THREADS;
+    int const iters = ITERS;
 
     remove(logfile);
 

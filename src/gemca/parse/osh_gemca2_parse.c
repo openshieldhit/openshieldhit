@@ -23,7 +23,7 @@ static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone);
  *
  * @author Niels Bassler
  */
-int osh_gemca_parse(const char *filename, struct gemca_workspace *g) {
+int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
 
     size_t i;
     size_t nbody; /* number of bodies */

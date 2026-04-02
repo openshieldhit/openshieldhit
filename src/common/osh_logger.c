@@ -52,55 +52,55 @@ unsigned osh_log_get_flags(void);
 void osh_log_flush(void);
 
 /* sinks / callbacks (public) */
-int osh_log_add_file(const char *path, int append);
+int osh_log_add_file(char const *path, int append);
 int osh_log_enable_stdout(int enable);
 
-int osh_logger_add_file(struct osh_logger *lg, const char *path, int append);
+int osh_logger_add_file(struct osh_logger *lg, char const *path, int append);
 int osh_logger_enable_stdout(struct osh_logger *lg, int enable);
 int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user);
 
 /* wrappers / convenience (public) */
-const char *osh_log_level_name(int level);
+char const *osh_log_level_name(int level);
 
 void osh_logger_log_ex(struct osh_logger *lg,
                        int level,
                        unsigned flags_override,
-                       const char *file,
+                       char const *file,
                        int line,
-                       const char *function,
-                       const char *fmt,
+                       char const *function,
+                       char const *fmt,
                        ...);
-void osh_logger_logv(struct osh_logger *lg, int level, const char *fmt, va_list ap);
-void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...);
+void osh_logger_logv(struct osh_logger *lg, int level, char const *fmt, va_list ap);
+void osh_logger_log(struct osh_logger *lg, int level, char const *fmt, ...);
 
-void osh_trace(const char *fmt, ...);
-void osh_debug(const char *fmt, ...);
-void osh_info(const char *fmt, ...);
-void osh_warn(const char *fmt, ...);
-void osh_error(int exit_code, const char *fmt, ...);
-void osh_alloc_failed(const char *fmt, ...);
+void osh_trace(char const *fmt, ...);
+void osh_debug(char const *fmt, ...);
+void osh_info(char const *fmt, ...);
+void osh_warn(char const *fmt, ...);
+void osh_error(int exit_code, char const *fmt, ...);
+void osh_alloc_failed(char const *fmt, ...);
 
 /* formatting / output helpers (file-local) */
 static unsigned _effective_flags(struct osh_logger *lg, unsigned flags_override);
-static const char *_level_name(int level);
+static char const *_level_name(int level);
 static int _is_errorish(int level);
 
-static size_t _vsnprintf0(char *dst, size_t cap, const char *fmt, va_list ap);
-static size_t _snprintf0(char *dst, size_t cap, const char *fmt, ...);
+static size_t _vsnprintf0(char *dst, size_t cap, char const *fmt, va_list ap);
+static size_t _snprintf0(char *dst, size_t cap, char const *fmt, ...);
 
-static size_t _append(char *dst, size_t cap, size_t off, const char *s);
-static size_t _append_n(char *dst, size_t cap, size_t off, const char *s, size_t n);
+static size_t _append(char *dst, size_t cap, size_t off, char const *s);
+static size_t _append_n(char *dst, size_t cap, size_t off, char const *s, size_t n);
 static size_t _append_char(char *dst, size_t cap, size_t off, char c);
 static size_t _append_int(char *dst, size_t cap, size_t off, int v);
 static size_t _append_timestamp(char *dst, size_t cap, size_t off);
 
 static size_t
-_format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line, const char *function);
+_format_prefix(char *dst, size_t cap, int level, unsigned flags, char const *file, int line, char const *function);
 
-static FILE *_open_log_file(const char *path, int append);
+static FILE *_open_log_file(char const *path, int append);
 
 static void _write_record_unlocked(
-    struct osh_logger *lg, int level, const char *prefix, size_t prefix_len, const char *fmt, va_list ap);
+    struct osh_logger *lg, int level, char const *prefix, size_t prefix_len, char const *fmt, va_list ap);
 
 /* -----------------------------
  * types / state
@@ -116,7 +116,7 @@ struct osh_logger {
     int use_stdout; /* 0/1 */
 
     /* callback sink */
-    void (*cb)(void *user, const char *msg, size_t len);
+    void (*cb)(void *user, char const *msg, size_t len);
     void *cb_user;
 
     /* synchronization */
@@ -331,7 +331,7 @@ static unsigned _effective_flags(struct osh_logger *lg, unsigned flags_override)
     return flags_override ? flags_override : lg->flags;
 }
 
-static const char *_level_name(int level) {
+static char const *_level_name(int level) {
     switch (level) {
     case OSH_LOG_TRACE:
         return "TRACE";
@@ -356,7 +356,7 @@ static int _is_errorish(int level) {
     return (level >= OSH_LOG_WARN);
 }
 
-static size_t _vsnprintf0(char *dst, size_t cap, const char *fmt, va_list ap) {
+static size_t _vsnprintf0(char *dst, size_t cap, char const *fmt, va_list ap) {
     int n = vsnprintf(dst, cap, fmt, ap);
     if (n < 0) {
         if (cap)
@@ -366,7 +366,7 @@ static size_t _vsnprintf0(char *dst, size_t cap, const char *fmt, va_list ap) {
     return (size_t) n; /* would-have length (excluding NUL) */
 }
 
-static size_t _snprintf0(char *dst, size_t cap, const char *fmt, ...) {
+static size_t _snprintf0(char *dst, size_t cap, char const *fmt, ...) {
     va_list ap;
     size_t n;
 
@@ -377,7 +377,7 @@ static size_t _snprintf0(char *dst, size_t cap, const char *fmt, ...) {
     return n;
 }
 
-static size_t _append_n(char *dst, size_t cap, size_t off, const char *s, size_t n) {
+static size_t _append_n(char *dst, size_t cap, size_t off, char const *s, size_t n) {
     if (!dst || cap == 0)
         return off;
     if (off >= cap)
@@ -393,7 +393,7 @@ static size_t _append_n(char *dst, size_t cap, size_t off, const char *s, size_t
     return off;
 }
 
-static size_t _append(char *dst, size_t cap, size_t off, const char *s) {
+static size_t _append(char *dst, size_t cap, size_t off, char const *s) {
     if (!s)
         return off;
     return _append_n(dst, cap, off, s, strlen(s));
@@ -480,7 +480,7 @@ static size_t _append_timestamp(char *dst, size_t cap, size_t off) {
 }
 
 static size_t
-_format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *file, int line, const char *function) {
+_format_prefix(char *dst, size_t cap, int level, unsigned flags, char const *file, int line, char const *function) {
     size_t off = 0;
 
     if (flags & OSH_LOG_F_TIMESTAMP) {
@@ -508,7 +508,7 @@ _format_prefix(char *dst, size_t cap, int level, unsigned flags, const char *fil
 }
 
 static void _write_record_unlocked(
-    struct osh_logger *lg, int level, const char *prefix, size_t prefix_len, const char *fmt, va_list ap) {
+    struct osh_logger *lg, int level, char const *prefix, size_t prefix_len, char const *fmt, va_list ap) {
     FILE *fp_primary = NULL;
 
     if (_is_errorish(level)) {
@@ -558,7 +558,7 @@ static void _write_record_unlocked(
             lg->cb(lg->cb_user, tmp, (size_t) ((n < (int) sizeof(tmp)) ? n : (int) sizeof(tmp) - 1));
         }
 
-        const char nl = '\n';
+        char const nl = '\n';
         lg->cb(lg->cb_user, &nl, 1);
     }
 }
@@ -570,10 +570,10 @@ static void _write_record_unlocked(
 void osh_logger_logv_ex(struct osh_logger *lg,
                         int level,
                         unsigned flags_override,
-                        const char *file,
+                        char const *file,
                         int line,
-                        const char *function,
-                        const char *fmt,
+                        char const *function,
+                        char const *fmt,
                         va_list ap) {
     char prefix[512]; /* Prefix is small; safe on stack */
     size_t prefix_len;
@@ -604,7 +604,7 @@ void osh_logger_logv_ex(struct osh_logger *lg,
  * exported helpers
  * ----------------------------- */
 
-const char *osh_log_level_name(int level) {
+char const *osh_log_level_name(int level) {
     /* Keep consistent with internal _level_name() */
     return _level_name(level);
 }
@@ -613,7 +613,7 @@ const char *osh_log_level_name(int level) {
  * sinks / callbacks
  * ----------------------------- */
 
-static FILE *_open_log_file(const char *path, int append) {
+static FILE *_open_log_file(char const *path, int append) {
     if (!path || !*path)
         return NULL;
 
@@ -621,7 +621,7 @@ static FILE *_open_log_file(const char *path, int append) {
     return fopen(path, append ? "a" : "w");
 }
 
-int osh_logger_add_file(struct osh_logger *lg, const char *path, int append) {
+int osh_logger_add_file(struct osh_logger *lg, char const *path, int append) {
     if (!lg)
         return -1;
 
@@ -639,7 +639,7 @@ int osh_logger_add_file(struct osh_logger *lg, const char *path, int append) {
     return 0;
 }
 
-int osh_log_add_file(const char *path, int append) {
+int osh_log_add_file(char const *path, int append) {
     return osh_logger_add_file(osh_log_default(), path, append);
 }
 
@@ -677,10 +677,10 @@ int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *us
 void osh_logger_log_ex(struct osh_logger *lg,
                        int level,
                        unsigned flags_override,
-                       const char *file,
+                       char const *file,
                        int line,
-                       const char *function,
-                       const char *fmt,
+                       char const *function,
+                       char const *fmt,
                        ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -688,11 +688,11 @@ void osh_logger_log_ex(struct osh_logger *lg,
     va_end(ap);
 }
 
-void osh_logger_logv(struct osh_logger *lg, int level, const char *fmt, va_list ap) {
+void osh_logger_logv(struct osh_logger *lg, int level, char const *fmt, va_list ap) {
     osh_logger_logv_ex(lg, level, 0u, NULL, 0, NULL, fmt, ap);
 }
 
-void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...) {
+void osh_logger_log(struct osh_logger *lg, int level, char const *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(lg, level, 0u, NULL, 0, NULL, fmt, ap);
@@ -703,34 +703,35 @@ void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...) {
  * default logger convenience functions
  * ----------------------------- */
 
-void osh_trace(const char *fmt, ...) {
+void osh_trace(char const *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(osh_log_default(), OSH_LOG_TRACE, 0u, __FILE__, __LINE__, __func__, fmt, ap);
     va_end(ap);
 }
 
-void osh_debug(const char *fmt, ...) {
+void osh_debug(char const *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(osh_log_default(), OSH_LOG_DEBUG, 0u, __FILE__, __LINE__, __func__, fmt, ap);
     va_end(ap);
 }
 
-void osh_info(const char *fmt, ...) {
+void osh_info(char const *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(osh_log_default(), OSH_LOG_INFO, 0u, __FILE__, __LINE__, __func__, fmt, ap);
     va_end(ap);
 }
 
-void osh_warn(const char *fmt, ...) {
+void osh_warn(char const *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(osh_log_default(), OSH_LOG_WARN, 0u, __FILE__, __LINE__, __func__, fmt, ap);
     va_end(ap);
 }
-void osh_error(int exit_code, const char *fmt, ...) {
+
+void osh_error(int exit_code, char const *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     osh_logger_logv_ex(osh_log_default(), OSH_LOG_FATAL, 0u, __FILE__, __LINE__, __func__, fmt, ap);
@@ -740,7 +741,7 @@ void osh_error(int exit_code, const char *fmt, ...) {
     exit(exit_code);
 }
 
-void osh_alloc_failed(const char *fmt, ...) {
+void osh_alloc_failed(char const *fmt, ...) {
     va_list ap;
 
     va_start(ap, fmt);

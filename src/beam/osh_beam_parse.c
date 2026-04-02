@@ -1,77 +1,62 @@
-#include "osh_beam.h"
 #include "osh_beam_parse.h"
-#include "osh_beam_parse_keys.h"
 
+#include "osh_beam.h"
+#include "osh_beam_parse_keys.h"
 #include "osh_logger.h"
 
 /* Forward declarations of handler functions */
-static int _parse_apcorr(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_beamdir(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_beamdiv(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_beampos(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_beamsad(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_beamsigma(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_bmodmc(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_bmodtrans(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_deltae(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_demin(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_emtrans(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_extspec(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_hiproj(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_jpart0(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_makeln(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_mscat(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_neutrfast(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_neutrlcut(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_nstat(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_nucre(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_rndseed(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_stragg(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_tmax0(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_tcut0(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_usebmod(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
-static int _parse_useparlev(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
+static int _parse_apcorr(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_beamdir(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_beamdiv(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_beampos(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_beamsad(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_beamsigma(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_bmodmc(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_bmodtrans(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_deltae(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_demin(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_emtrans(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_extspec(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_hiproj(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_jpart0(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_makeln(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_mscat(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_neutrfast(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_neutrlcut(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_nstat(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_nucre(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_rndseed(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_stragg(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_tmax0(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_tcut0(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_usebmod(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
+static int _parse_useparlev(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
 
 /* ... */
 
 /* Dispatch entry */
 struct beam_dispatch_entry {
-    const char *key;
-    int (*handler)(struct beam_workspace *beam, struct oshfile *oshf, const char *args);
+    char const *key;
+    int (*handler)(struct beam_workspace *beam, struct oshfile *oshf, char const *args);
 };
 
 static struct beam_dispatch_entry beam_dispatch_table[] = {
-    { OSH_BEAM_KEY_APCORR,     _parse_apcorr },
-    { OSH_BEAM_KEY_BEAMDIR,    _parse_beamdir },
-    { OSH_BEAM_KEY_BEAMDIV,    _parse_beamdiv },
-    { OSH_BEAM_KEY_BEAMPOS,    _parse_beampos },
-    { OSH_BEAM_KEY_BEAMSAD,    _parse_beamsad },
-    { OSH_BEAM_KEY_BEAMSIGMA,  _parse_beamsigma },
-    { OSH_BEAM_KEY_BMODMC,     _parse_bmodmc },
-    { OSH_BEAM_KEY_BMODTRANS,  _parse_bmodtrans },
-    { OSH_BEAM_KEY_DELTAE,     _parse_deltae },
-    { OSH_BEAM_KEY_DEMIN,      _parse_demin },
-    { OSH_BEAM_KEY_EMTRANS,    _parse_emtrans },
-    { OSH_BEAM_KEY_EXTSPEC,    _parse_extspec },
-    { OSH_BEAM_KEY_HIPROJ,     _parse_hiproj },
-    { OSH_BEAM_KEY_JPART0,     _parse_jpart0 },
-    { OSH_BEAM_KEY_MAKELN,     _parse_makeln },
-    { OSH_BEAM_KEY_MSCAT,      _parse_mscat },
-    { OSH_BEAM_KEY_NEUTRFAST,  _parse_neutrfast },
-    { OSH_BEAM_KEY_NEUTRLCUT,  _parse_neutrlcut },
-    { OSH_BEAM_KEY_NSTAT,      _parse_nstat },
-    { OSH_BEAM_KEY_NUCRE,      _parse_nucre },
-    { OSH_BEAM_KEY_RNDSEED,    _parse_rndseed },
-    { OSH_BEAM_KEY_STRAGG,     _parse_stragg },
-    { OSH_BEAM_KEY_TMAX0,      _parse_tmax0 },
-    { OSH_BEAM_KEY_TCUT0,      _parse_tcut0 },
-    { OSH_BEAM_KEY_USEBMOD,    _parse_usebmod },
-    { OSH_BEAM_KEY_USECBEAM,   _parse_usecbeam },
-    { OSH_BEAM_KEY_USEPARLEV,  _parse_useparlev },
-    { NULL,                    NULL }  /* Sentinel */
+    {OSH_BEAM_KEY_APCORR, _parse_apcorr},       {OSH_BEAM_KEY_BEAMDIR, _parse_beamdir},
+    {OSH_BEAM_KEY_BEAMDIV, _parse_beamdiv},     {OSH_BEAM_KEY_BEAMPOS, _parse_beampos},
+    {OSH_BEAM_KEY_BEAMSAD, _parse_beamsad},     {OSH_BEAM_KEY_BEAMSIGMA, _parse_beamsigma},
+    {OSH_BEAM_KEY_BMODMC, _parse_bmodmc},       {OSH_BEAM_KEY_BMODTRANS, _parse_bmodtrans},
+    {OSH_BEAM_KEY_DELTAE, _parse_deltae},       {OSH_BEAM_KEY_DEMIN, _parse_demin},
+    {OSH_BEAM_KEY_EMTRANS, _parse_emtrans},     {OSH_BEAM_KEY_EXTSPEC, _parse_extspec},
+    {OSH_BEAM_KEY_HIPROJ, _parse_hiproj},       {OSH_BEAM_KEY_JPART0, _parse_jpart0},
+    {OSH_BEAM_KEY_MAKELN, _parse_makeln},       {OSH_BEAM_KEY_MSCAT, _parse_mscat},
+    {OSH_BEAM_KEY_NEUTRFAST, _parse_neutrfast}, {OSH_BEAM_KEY_NEUTRLCUT, _parse_neutrlcut},
+    {OSH_BEAM_KEY_NSTAT, _parse_nstat},         {OSH_BEAM_KEY_NUCRE, _parse_nucre},
+    {OSH_BEAM_KEY_RNDSEED, _parse_rndseed},     {OSH_BEAM_KEY_STRAGG, _parse_stragg},
+    {OSH_BEAM_KEY_TMAX0, _parse_tmax0},         {OSH_BEAM_KEY_TCUT0, _parse_tcut0},
+    {OSH_BEAM_KEY_USEBMOD, _parse_usebmod},     {OSH_BEAM_KEY_USECBEAM, _parse_usecbeam},
+    {OSH_BEAM_KEY_USEPARLEV, _parse_useparlev}, {NULL, NULL} /* Sentinel */
 };
-
 
 /* Main parser entry point */
 int osh_beam_parse(struct oshfile *oshf, struct beam_workspace *beam) {
@@ -96,31 +81,29 @@ int osh_beam_parse(struct oshfile *oshf, struct beam_workspace *beam) {
     return 0;
 }
 
-
-static int _parse_apcorr(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_apcorr(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     return 0;
 }
 
-
-static int _parse_beamdir(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_beamdir(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[2];
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) != 2) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
     }
-    if (_f[0] <
-        0.0) osh_err(EX_CONFIG, "in %s line %i: theta must be within [0:180] deg", oshf->filename, oshf->lineno);
-    if (_f[0] > 180.0) osh_err(EX_CONFIG, "in %s line %i: theta must be within [0:180] deg", oshf->filename,
-                               oshf->lineno);
-    if (_f[1] < 0.0) osh_err(EX_CONFIG, "in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
-    if (_f[1] >
-        360.0) osh_err(EX_CONFIG, "in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
-    //beam->spot0->theta = (double) _f[0] * M_PI / 180.0;
-    //beam->spot0->phi = (double) _f[1] * M_PI / 180.0;
+    if (_f[0] < 0.0)
+        osh_err(EX_CONFIG, "in %s line %i: theta must be within [0:180] deg", oshf->filename, oshf->lineno);
+    if (_f[0] > 180.0)
+        osh_err(EX_CONFIG, "in %s line %i: theta must be within [0:180] deg", oshf->filename, oshf->lineno);
+    if (_f[1] < 0.0)
+        osh_err(EX_CONFIG, "in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
+    if (_f[1] > 360.0)
+        osh_err(EX_CONFIG, "in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
+    // beam->spot0->theta = (double) _f[0] * M_PI / 180.0;
+    // beam->spot0->phi = (double) _f[1] * M_PI / 180.0;
     return 0;
 }
 
-
-static int _parse_beamdiv(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_beamdiv(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[3];
     if (sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]) > 3) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -128,12 +111,12 @@ static int _parse_beamdiv(struct beam_workspace *beam, struct oshfile *oshf, con
     beam->spot0->div[0] = (double) _f[0] * 0.001;
     beam->spot0->div[1] = (double) _f[1] * 0.001;
     beam->spot0->focus = (double) _f[2];
-    if (fabs(_f[0]) > 0.0 || fabs(_f[1]) > 0.0) beam->spot0->use_div = 1;
+    if (fabs(_f[0]) > 0.0 || fabs(_f[1]) > 0.0)
+        beam->spot0->use_div = 1;
     return 0;
 }
 
-
-static int _parse_beampos(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_beampos(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[3];
     int i;
     if (sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]) != 3) {
@@ -145,8 +128,7 @@ static int _parse_beampos(struct beam_workspace *beam, struct oshfile *oshf, con
     return 0;
 }
 
-
-static int _parse_beamsad(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_beamsad(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[2];
     int i = sscanf(args, "%f %f", &_f[0], &_f[1]);
     switch (i) {
@@ -161,15 +143,15 @@ static int _parse_beamsad(struct beam_workspace *beam, struct oshfile *oshf, con
     default:
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
     }
-    if ((beam->spot0->sad[0] > 0.0) && (beam->spot0->sad[1] > 0.0)) beam->spot0->use_sad = 1;
+    if ((beam->spot0->sad[0] > 0.0) && (beam->spot0->sad[1] > 0.0))
+        beam->spot0->use_sad = 1;
     else {
         osh_err(EX_CONFIG, "In %s line %i: SAD must be > 0.0.", oshf->filename, oshf->lineno);
     }
     return 0;
 }
 
-
-static int _parse_beamsigma(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_beamsigma(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[2];
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) > 2) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -178,18 +160,15 @@ static int _parse_beamsigma(struct beam_workspace *beam, struct oshfile *oshf, c
         beam->spot0->shape = OSH_BEAM_SHAPE_SQUARE;
         beam->spot0->size[0] = fabs(_f[0]);
         beam->spot0->size[1] = fabs(_f[1]);
-    }
-    else if (_f[0] >= 0.0 && _f[1] < 0.0) {
+    } else if (_f[0] >= 0.0 && _f[1] < 0.0) {
         beam->spot0->shape = OSH_BEAM_SHAPE_CIRCULAR;
         beam->spot0->size[0] = fabs(_f[1]);
         beam->spot0->size[1] = 0.0;
-    }
-    else if ((_f[0] >= 0.0 && _f[1] > 0.0) ||  (_f[0] > 0.0 && _f[1] >= 0.0)) {
+    } else if ((_f[0] >= 0.0 && _f[1] > 0.0) || (_f[0] > 0.0 && _f[1] >= 0.0)) {
         beam->spot0->shape = OSH_BEAM_SHAPE_GAUSSIAN;
         beam->spot0->size[0] = _f[0];
         beam->spot0->size[1] = _f[1];
-    }
-    else {
+    } else {
         beam->spot0->shape = OSH_BEAM_SHAPE_PENCIL;
         beam->spot0->size[0] = 0.0;
         beam->spot0->size[1] = 0.0;
@@ -197,16 +176,14 @@ static int _parse_beamsigma(struct beam_workspace *beam, struct oshfile *oshf, c
     return 0;
 }
 
-
-static int _parse_bmodmc(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_bmodmc(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     if (sscanf(args, "%c", &(beam->rifi->mode_mc)) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: unknown BMODMC mode '%s'", oshf->filename, oshf->lineno, args);
     }
     return 0;
 }
 
-
-static int _parse_bmodtrans(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_bmodtrans(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     if (sscanf(args, "%c", &(beam->rifi->mode_trans)) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: unknown BMODMC mode '%s'", oshf->filename, oshf->lineno, args);
     }
@@ -214,8 +191,7 @@ static int _parse_bmodtrans(struct beam_workspace *beam, struct oshfile *oshf, c
     return 0;
 }
 
-
-static int _parse_deltae(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_deltae(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[1];
     if (sscanf(args, "%f", &_f[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -224,8 +200,7 @@ static int _parse_deltae(struct beam_workspace *beam, struct oshfile *oshf, cons
     return 0;
 }
 
-
-static int _parse_demin(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_demin(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[1];
     if (sscanf(args, "%f", &_f[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -234,22 +209,19 @@ static int _parse_demin(struct beam_workspace *beam, struct oshfile *oshf, const
     return 0;
 }
 
-
-static int _parse_emtrans(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_emtrans(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     if (sscanf(args, "%c", &(beam->emtrans)) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: unknown EMTRANS mode '%s'", oshf->filename, oshf->lineno, args);
     }
     return 0;
 }
 
-
-static int _parse_extspec(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_extspec(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     osh_err(EX_CONFIG, "in %s line %i: EXTSPEC not implemented", oshf->filename, oshf->lineno);
     return 0;
 }
 
-
-static int _parse_hiproj(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_hiproj(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[2];
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) != 2) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -259,8 +231,7 @@ static int _parse_hiproj(struct beam_workspace *beam, struct oshfile *oshf, cons
     return 0;
 }
 
-
-static int _parse_jpart0(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_jpart0(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[1];
     if (sscanf(args, "%i", &_i[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -272,8 +243,7 @@ static int _parse_jpart0(struct beam_workspace *beam, struct oshfile *oshf, cons
     return 0;
 }
 
-
-static int _parse_makeln(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_makeln(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[1];
     if (sscanf(args, "%i", &_i[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: unknown MAKELN mode '%s'", oshf->filename, oshf->lineno, args);
@@ -282,8 +252,7 @@ static int _parse_makeln(struct beam_workspace *beam, struct oshfile *oshf, cons
     return 0;
 }
 
-
-static int _parse_mscat(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_mscat(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[1];
     if (sscanf(args, "%i", &_i[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: unknown MSCAT mode '%s'", oshf->filename, oshf->lineno, args);
@@ -295,18 +264,16 @@ static int _parse_mscat(struct beam_workspace *beam, struct oshfile *oshf, const
     return 0;
 }
 
-
-static int _parse_neutrfast(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_neutrfast(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[1];
     if (sscanf(args, "%i", &_i[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: unknown NEUTRFAST mode '%s'", oshf->filename, oshf->lineno, args);
     }
-    beam->neutrfast =  (char) _i[0];
+    beam->neutrfast = (char) _i[0];
     return 0;
 }
 
-
-static int _parse_neutrlcut(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_neutrlcut(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[1];
     if (sscanf(args, "%f", &_f[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -315,8 +282,7 @@ static int _parse_neutrlcut(struct beam_workspace *beam, struct oshfile *oshf, c
     return 0;
 }
 
-
-static int _parse_nstat(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_nstat(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[2];
     if (sscanf(args, "%i %i", &_i[0], &_i[1]) > 2) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -326,8 +292,7 @@ static int _parse_nstat(struct beam_workspace *beam, struct oshfile *oshf, const
     return 0;
 }
 
-
-static int _parse_nucre(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_nucre(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[1];
     if (sscanf(args, "%i", &_i[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -339,8 +304,7 @@ static int _parse_nucre(struct beam_workspace *beam, struct oshfile *oshf, const
     return 0;
 }
 
-
-static int _parse_rndseed(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_rndseed(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[1];
     if (sscanf(args, "%i", &_i[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -349,8 +313,7 @@ static int _parse_rndseed(struct beam_workspace *beam, struct oshfile *oshf, con
     return 0;
 }
 
-
-static int _parse_stragg(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_stragg(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     int _i[1];
     if (sscanf(args, "%i", &_i[0]) != 1) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -362,8 +325,7 @@ static int _parse_stragg(struct beam_workspace *beam, struct oshfile *oshf, cons
     return 0;
 }
 
-
-static int _parse_tmax0(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_tmax0(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[2];
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) > 2) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -371,41 +333,43 @@ static int _parse_tmax0(struct beam_workspace *beam, struct oshfile *oshf, const
     if (_f[0] < 0.0) {
         beam->spot0->pmax0 = fabs(_f[0]);
         beam->spot0->use_pmax0 = 1;
-    }
-    else {
+    } else {
         beam->spot0->tmax0 = _f[0];
         beam->spot0->use_pmax0 = 0;
         if (_f[0] < OSH_BEAM_TMIN0)
-            osh_err(EX_CONFIG, "in %s line %i: TMAX0 is below transport threshold '%s'",
-                    oshf->filename, oshf->lineno, args);
+            osh_err(EX_CONFIG,
+                    "in %s line %i: TMAX0 is below transport threshold '%s'",
+                    oshf->filename,
+                    oshf->lineno,
+                    args);
     }
     if (_f[1] < 0.0) {
         beam->spot0->psigma0 = fabs(_f[1]);
         beam->spot0->use_psigma0 = 1;
-    }
-    else {
+    } else {
         beam->spot0->tsigma0 = _f[1];
         beam->spot0->use_psigma0 = 0;
     }
     return 0;
 }
 
-
-static int _parse_tcut0(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_tcut0(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[2];
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) > 2) {
         osh_err(EX_CONFIG, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
     }
     if (_f[0] > _f[1])
-        osh_err(EX_CONFIG, "in %s line %i: TCUT0 upper bound must be larger than lower bound.",
-                oshf->filename, oshf->lineno, args);
+        osh_err(EX_CONFIG,
+                "in %s line %i: TCUT0 upper bound must be larger than lower bound.",
+                oshf->filename,
+                oshf->lineno,
+                args);
     beam->spot0->tcut0[0] = fabs(_f[0]);
     beam->spot0->tcut0[1] = fabs(_f[1]);
     return 0;
 }
 
-
-static int _parse_usebmod(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_usebmod(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     float _f[1];
     char tmpstr[256];
     char *_path = NULL;
@@ -418,8 +382,7 @@ static int _parse_usebmod(struct beam_workspace *beam, struct oshfile *oshf, con
     return 0;
 }
 
-
-static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     char tmpstr[256];
     char *_path = NULL;
     if (sscanf(args, "%s", tmpstr) > 1) {
@@ -427,15 +390,15 @@ static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, co
     }
     osh_relative_path_to_file(&_path, beam->wdir, tmpstr);
     beam->_sobp_fname = calloc(strlen(_path) + 1, sizeof(char));
-    if (!beam->_sobp_fname) osh_malloc_err("beam->sobp_fname");
+    if (!beam->_sobp_fname)
+        osh_malloc_err("beam->sobp_fname");
     sprintf(beam->_sobp_fname, "%s", _path);
     free(_path);
     beam->beam_mode = OSH_BEAM_MODE_SOBP;
     return 0;
 }
 
-
-static int _parse_useparlev(struct beam_workspace *beam, struct oshfile *oshf, const char *args) {
+static int _parse_useparlev(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     char tmpstr[256];
     char *_path = NULL;
     if (sscanf(args, "%s", tmpstr) > 1) {
@@ -446,4 +409,3 @@ static int _parse_useparlev(struct beam_workspace *beam, struct oshfile *oshf, c
     free(_path);
     return 0;
 }
-

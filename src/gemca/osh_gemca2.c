@@ -41,7 +41,7 @@ int osh_gemca_workspace_free(struct gemca_workspace *wg) {
     return 0;
 }
 
-int osh_gemca_load(const char *filename, struct gemca_workspace *g) {
+int osh_gemca_load(char const *filename, struct gemca_workspace *g) {
 
     osh_gemca_parse(filename, g);
 

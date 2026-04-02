@@ -46,7 +46,7 @@ enum osh_log_level {
  *
  * @return The name of the logging level as a string.
  */
-const char *osh_log_level_name(int level);
+char const *osh_log_level_name(int level);
 
 /* -----------------------------
  * Flags (bitmask)
@@ -104,7 +104,7 @@ void osh_log_close(void);
  *
  * @return 0 on success, nonzero on error.
  */
-int osh_log_add_file(const char *path, int append);
+int osh_log_add_file(char const *path, int append);
 
 /**
  * @brief Enable or disable stdout logging for the default logger.
@@ -180,7 +180,7 @@ void osh_logger_destroy(struct osh_logger *lg);
  *
  * @return 0 on success, nonzero on error.
  */
-int osh_logger_add_file(struct osh_logger *lg, const char *path, int append);
+int osh_logger_add_file(struct osh_logger *lg, char const *path, int append);
 
 /**
  * @brief Enable or disable stdout logging for a logger instance.
@@ -239,7 +239,7 @@ void osh_logger_flush(struct osh_logger *lg);
  * @param[in] msg The log message.
  * @param[in] len The length of the log message.
  */
-typedef void (*osh_log_write_cb)(void *user, const char *msg, size_t len);
+typedef void (*osh_log_write_cb)(void *user, char const *msg, size_t len);
 
 /**
  * @brief Set a custom callback sink for a logger instance.
@@ -272,10 +272,10 @@ int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *us
 void osh_logger_logv_ex(struct osh_logger *lg,
                         int level,
                         unsigned flags_override,
-                        const char *file,
+                        char const *file,
                         int line,
-                        const char *function,
-                        const char *fmt,
+                        char const *function,
+                        char const *fmt,
                         va_list ap);
 
 /**
@@ -293,10 +293,10 @@ void osh_logger_logv_ex(struct osh_logger *lg,
 void osh_logger_log_ex(struct osh_logger *lg,
                        int level,
                        unsigned flags_override,
-                       const char *file,
+                       char const *file,
                        int line,
-                       const char *function,
-                       const char *fmt,
+                       char const *function,
+                       char const *fmt,
                        ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 7, 8)))
@@ -311,7 +311,7 @@ void osh_logger_log_ex(struct osh_logger *lg,
  * @param[in] fmt The format string.
  * @param[in] ap The variable argument list.
  */
-void osh_logger_logv(struct osh_logger *lg, int level, const char *fmt, va_list ap);
+void osh_logger_logv(struct osh_logger *lg, int level, char const *fmt, va_list ap);
 
 /**
  * @brief Log a message (variadic version).
@@ -321,7 +321,7 @@ void osh_logger_logv(struct osh_logger *lg, int level, const char *fmt, va_list 
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...)
+void osh_logger_log(struct osh_logger *lg, int level, char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 3, 4)))
 #endif
@@ -333,7 +333,7 @@ void osh_logger_log(struct osh_logger *lg, int level, const char *fmt, ...)
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_trace(const char *fmt, ...)
+void osh_trace(char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 1, 2)))
 #endif
@@ -345,7 +345,7 @@ void osh_trace(const char *fmt, ...)
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_debug(const char *fmt, ...)
+void osh_debug(char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 1, 2)))
 #endif
@@ -357,7 +357,7 @@ void osh_debug(const char *fmt, ...)
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_info(const char *fmt, ...)
+void osh_info(char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 1, 2)))
 #endif
@@ -369,7 +369,7 @@ void osh_info(const char *fmt, ...)
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_warn(const char *fmt, ...)
+void osh_warn(char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 1, 2)))
 #endif
@@ -382,7 +382,7 @@ void osh_warn(const char *fmt, ...)
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_error(int exit_code, const char *fmt, ...)
+void osh_error(int exit_code, char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 2, 3), noreturn))
 #endif
@@ -397,7 +397,7 @@ void osh_error(int exit_code, const char *fmt, ...)
  * @param[in] fmt printf-style format string describing the failure.
  * @param[in] ... Optional format arguments.
  */
-void osh_alloc_failed(const char *fmt, ...)
+void osh_alloc_failed(char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 1, 2))) __attribute__((noreturn))
 #endif

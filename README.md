@@ -72,4 +72,4 @@ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 
 
 # Disclaimer and License
-While conceptually inspired by the application domain of the closed source [SHIELD-HIT12A](https://shieldhit.org), it shares no source code with the original SHIELD-HIT12A. The architecture, implementation, and code base are completely new and designed according to modern, explicit software engineering principles. OpenShieldHIT is licensed under the MIT License, permitting reuse, modification, and incorporation of its code into other software projects under compatible licensing terms.
+While conceptually inspired by the application domain of the closed source [SHIELD-HIT12A](https://shieldhit.org), it shares no source code with the original SHIELD-HIT. The architecture, implementation, and code base are completely new and designed according to modern, explicit software engineering principles. Parts of OpenShieldHIT may be reused in SHIELD-HIT12A. OpenShieldHIT is licensed under the MIT License, permitting reuse, modification, and incorporation of its code into other software projects under compatible licensing terms.
