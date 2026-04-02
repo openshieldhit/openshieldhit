@@ -13,6 +13,6 @@ enum osh_status {
     OSH_ESTATE       /* inconsistent state */
 };
 
-const char *osh_strerr(int code);
+char const *osh_strerr(int code);
 
 #endif /* !_OSH_RC_H */

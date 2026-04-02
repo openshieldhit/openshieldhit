@@ -78,6 +78,9 @@ int osh_particle_name_from_pdg(int pdg, char *name_buf, size_t buf_size) {
     struct isotope iso;
     size_t i;
 
+    if (buf_size == 0)
+        return 0;
+
     for (i = 0; i < osh_particle_db_len; ++i) {
         if (osh_particle_db[i].pdg == pdg) {
             snprintf(name_buf, buf_size, "%s", osh_particle_db[i].name);
@@ -90,12 +93,16 @@ int osh_particle_name_from_pdg(int pdg, char *name_buf, size_t buf_size) {
         snprintf(name_buf, buf_size, "%s-%u", iso.symb, iso.a);
         return 1;
     }
+    name_buf[0] = '\0';
     return 0; /* not found */
 }
 
 int osh_particle_symbol_from_pdg(int pdg, char *symbol_buf, size_t buf_size) {
     struct isotope iso;
     size_t i;
+
+    if (buf_size == 0)
+        return 0;
 
     for (i = 0; i < osh_particle_db_len; ++i) {
         if (osh_particle_db[i].pdg == pdg) {
@@ -109,6 +116,7 @@ int osh_particle_symbol_from_pdg(int pdg, char *symbol_buf, size_t buf_size) {
         snprintf(symbol_buf, buf_size, "%s-%u", iso.symb, iso.a);
         return 1;
     }
+    symbol_buf[0] = '\0';
     return 0; /* not found */
 }
 

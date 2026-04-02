@@ -11,11 +11,11 @@
 #define OSH_ISOTOPE_DB_GENERATED_H
 
 struct isotope {
-  double amass;   /* atomic mass in amu */
-  double abund;   /* relative abundance by number */
-  unsigned int z; /* particle charge */
-  unsigned int a; /* nucleon number */
-  char symb[4];   /* chemical symbol */
+    double amass;   /* atomic mass in amu */
+    double abund;   /* relative abundance by number */
+    unsigned int z; /* particle charge */
+    unsigned int a; /* nucleon number */
+    char symb[4];   /* chemical symbol */
 };
 
 #define OSH_ISOTOPE_DB_NISO 3352  /* number of isotopes in database */
@@ -23,7 +23,7 @@ struct isotope {
 #define OSH_ISOTOPE_DB_ERR 0xFFFF /* error code */
 
 extern const struct isotope osh_isotope_db[];
-extern const unsigned int osh_isotopes_len[];
-extern const unsigned int osh_isotopes_idx[];  /* atomic number as input index to get db index */
-extern const unsigned int osh_isotopes_idx_default[];  /* most likely isotope for each element */
-#endif /* !OSH_ISOTOPE_DB_GENERATED_H */
+extern unsigned int const osh_isotopes_len[];
+extern unsigned int const osh_isotopes_idx[];         /* atomic number as input index to get db index */
+extern unsigned int const osh_isotopes_idx_default[]; /* most likely isotope for each element */
+#endif                                                /* !OSH_ISOTOPE_DB_GENERATED_H */

@@ -26,7 +26,7 @@ struct oshfile {
  *
  * @author Niels Bassler
  */
-struct oshfile *osh_fopen(const char *filename);
+struct oshfile *osh_fopen(char const *filename);
 
 /**
  * @brief Close the file and clean up internal state

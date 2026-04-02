@@ -5,8 +5,8 @@
 
 struct particle_db_entry {
     double mass_mev;
-    const char *name;
-    const char *symbol;
+    char const *name;
+    char const *symbol;
     int pdg;
     int charge_e;
 };

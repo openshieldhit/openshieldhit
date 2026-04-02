@@ -3,6 +3,6 @@
 
 #include "gemca/osh_gemca2.h"
 
-int osh_gemca_parse(const char *filename, struct gemca_workspace *g);
+int osh_gemca_parse(char const *filename, struct gemca_workspace *g);
 
 #endif /* _OSH_GEMCA2_PARSE */

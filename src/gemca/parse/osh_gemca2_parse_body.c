@@ -12,7 +12,7 @@
 #include "gemca/parse/osh_gemca2_parse_keys.h"
 
 static int _save_body(struct body *b, char *nstr, double *par, int npar, int btype);
-static int _body_from_key(const char *key);
+static int _body_from_key(char const *key);
 
 /**
  * @brief Initialize a body.
@@ -223,7 +223,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
  *
  * @author Niels Bassler
  */
-int _body_from_key(const char *key) {
+int _body_from_key(char const *key) {
     if (strcasecmp(key, OSH_GEMCA_KEY_SPH) == 0)
         return OSH_GEMCA_BODY_SPH;
     if (strcasecmp(key, OSH_GEMCA_KEY_WED) == 0)

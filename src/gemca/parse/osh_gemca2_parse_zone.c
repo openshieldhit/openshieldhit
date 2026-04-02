@@ -13,7 +13,7 @@
 #include "gemca/parse/osh_gemca2_parse_stack.h"
 
 // static char* _skip_zone_op(char *s);
-static int _key_is_zone_continuation(const char *key);
+static int _key_is_zone_continuation(char const *key);
 static struct body *_body_from_name(char *bname, struct gemca_workspace *g);
 
 static struct cgnode *_new_node_comp(struct stack *st, char operator);
@@ -234,7 +234,7 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
 }
 
 /* @brief Check if the given key is a zone continuation operator */
-static int _key_is_zone_continuation(const char *key) {
+static int _key_is_zone_continuation(char const *key) {
     return key && (key[0] == '+' || key[0] == '-' || key[0] == '|' || key[0] == '(' || key[0] == ')');
 }
 

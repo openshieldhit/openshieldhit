@@ -3,9 +3,9 @@
 
 /* Windows compatibility */
 #ifdef _WIN32
-    #include <stddef.h>
-    /* strcasecmp is called _stricmp on Windows */
-    #define strcasecmp _stricmp
+#include <stddef.h>
+/* strcasecmp is called _stricmp on Windows */
+#define strcasecmp _stricmp
 #endif
 
 /* maximum length of a user given body name, must be sufficiently less than OSH_MAX_LINE_LENGTH:

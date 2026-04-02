@@ -7,7 +7,6 @@
 #include <string.h>
 #include <unistd.h>
 
-
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_vect.h"
@@ -50,6 +49,7 @@
 
 /* for this code, keep prng global */
 static struct osh_rng g_rng;
+
 static inline double urand(void) {
     return osh_rng_double(&g_rng);
 }
@@ -64,7 +64,7 @@ static inline void osh_rng_unit_sphere(double out[3]) {
         s = u * u + v * v;
     } while (s >= 1.0 || s == 0.0);
 
-    const double k = 2.0 * sqrt(1.0 - s);
+    double const k = 2.0 * sqrt(1.0 - s);
     out[0] = u * k;
     out[1] = v * k;
     out[2] = 1.0 - 2.0 * s;
@@ -315,8 +315,8 @@ int ray2line(struct ray *r, double d, float *x, float *z) {
 }
 
 int plot(struct gemca_workspace *g, int nrays, int zone) {
-    const int windowHeight = WINDOW_HEIGHT;
-    const int windowWidth = WINDOW_WIDTH;
+    int const windowHeight = WINDOW_HEIGHT;
+    int const windowWidth = WINDOW_WIDTH;
     int quit = 0;
 
     int i;
@@ -383,7 +383,7 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
     /* next plot a series of rays which travel trough the zones */
 #if DO_RAYS
     const int batch_size = 50;
-    const int max_rays = nrays;
+    int const max_rays = nrays;
     int total_rays = 0;
 
     while (total_rays < max_rays && !quit) {
@@ -398,7 +398,7 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
 
             random_ray(&r);
 
-            const double range_cm = RANGE_B10_HE * 100.0;
+            double const range_cm = RANGE_B10_HE * 100.0;
 
             size_t zi0 = osh_gemca_zone_index(*g, r);
             size_t medium0 = g->zones[zi0]->medium;
@@ -647,7 +647,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
         /* if we exactly hit boundary, nudge forward a hair so we enter next zone
            (prevents being stuck on the boundary due to fp noise) */
         if (step == d_to_bnd && remaining > 0.0) {
-            const double eps = 1e-12; /* cm; tune if needed */
+            double const eps = 1e-12; /* cm; tune if needed */
             osh_transport_move_ray(&r, eps);
             remaining -= eps;
         }
@@ -659,7 +659,7 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots) {
     int i = 0;
 
     /* Render progressively so you see it update */
-    const int present_every = 2000;
+    int const present_every = 2000;
 
     for (i = 0; i < ndots; i++) {
         random_pos(&r);
