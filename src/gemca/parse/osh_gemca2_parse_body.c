@@ -169,9 +169,10 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
         } else {
             /* continuation line */
             if (current_body == NULL) {
-                osh_error(EX_CONFIG,
-                          "Error parsing geometry line %li - parameters found before any body definition\n",
-                          (long int) lineno);
+                /* Allow non-body preamble/header lines before the first real body card. */
+                free(line);
+                line = NULL;
+                continue;
             }
 
             /* We may write up to par[off+5] on a continuation line */

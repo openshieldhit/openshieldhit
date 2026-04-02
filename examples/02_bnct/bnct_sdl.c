@@ -98,7 +98,7 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots);
 
 int main(int argc, char *argv[]) {
 
-    struct gemca_workspace g;
+    struct gemca_workspace g = {0};
     int zone = 1;
 
     /* Handle --version flag */
@@ -133,10 +133,28 @@ int main(int argc, char *argv[]) {
 
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
-    osh_gemca_load(argv[1], &g);
+    fflush(stdout);
+    if (osh_gemca_load(argv[1], &g) != 1) {
+        fprintf(stderr, "bnct_sdl: osh_gemca_load() failed for '%s'\n", argv[1]);
+        return EXIT_FAILURE;
+    }
+
+    if (g.bodies == NULL || g.zones == NULL || g.nbodies == 0 || g.nzones == 0) {
+        fprintf(stderr, "bnct_sdl: geometry workspace is incomplete after osh_gemca_load()\n");
+        return EXIT_FAILURE;
+    }
+
+    printf("PHASE 2: geometry loaded successfully (%llu bodies, %llu zones)\n",
+           (unsigned long long) g.nbodies,
+           (unsigned long long) g.nzones);
+    fflush(stdout);
+
     osh_gemca_print_gemca(&g);
 
-    plot(&g, 4000, zone);
+    if (plot(&g, 4000, zone) != 0) {
+        fprintf(stderr, "bnct_sdl: plot() failed\n");
+        return EXIT_FAILURE;
+    }
 
     return 0;
 }
@@ -323,18 +341,33 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
     double x, z, _f;
     struct ray r;
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        fprintf(stderr, "SDL_Init(SDL_INIT_VIDEO) failed: %s\n", SDL_GetError());
         return 1;
+    }
 
     SDL_Window *window = SDL_CreateWindow(
-        "Geometry Test", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
+        "Geometry Test", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
 
     if (!window) {
+        fprintf(stderr, "SDL_CreateWindow() failed: %s\n", SDL_GetError());
         SDL_Quit();
         return 2;
     }
 
     SDL_Renderer *s = SDL_CreateRenderer(window, 0, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!s) {
+        fprintf(stderr,
+                "SDL_CreateRenderer(accelerated|vsync) failed: %s\nFalling back to software renderer.\n",
+                SDL_GetError());
+        s = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    }
+    if (!s) {
+        fprintf(stderr, "SDL_CreateRenderer(software) failed: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 3;
+    }
 
     SDL_Event event;
 
@@ -443,12 +476,11 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
         SDL_Delay(16);
     }
 
-    SDL_DestroyWindow(window);
-    // We have to destroy the renderer, same as with the window.
     SDL_DestroyRenderer(s);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 
-    return 1;
+    return 0;
 }
 
 void setRendererColor(SDL_Renderer *renderer, int zid) {
