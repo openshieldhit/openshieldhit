@@ -167,8 +167,9 @@ void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
 void osh_vect_eqpln(double const *p, double const *u, double *pp) {
     int i;
 
-    for (i = 0; i < OSH_VECT_DIM; i++)
+    for (i = 0; i < OSH_VECT_DIM; i++) {
         pp[i] = u[i];
+    }
 
     pp[3] = -osh_vect_dot(u, p);
 
@@ -176,7 +177,8 @@ void osh_vect_eqpln(double const *p, double const *u, double *pp) {
 }
 
 void osh_vect_rot_y(double alpha, double *u) {
-    double tx, tz;
+    double tx;
+    double tz;
 
     tx = u[0];
     tz = u[2];
@@ -188,7 +190,8 @@ void osh_vect_rot_y(double alpha, double *u) {
 }
 
 void osh_vect_rot_z(double alpha, double *u) {
-    double tx, ty;
+    double tx;
+    double ty;
 
     tx = u[0];
     ty = u[1];
@@ -213,8 +216,9 @@ void osh_vect_matrix4_print(double const *tm) {
     printf("    ");
     for (i = 0; i < 16; i++) {
         printf("% .3f ", tm[i]); // fixed width printout
-        if (!((i + 1) % 4))
+        if (!((i + 1) % 4)) {
             printf("\n    ");
+        }
     }
     printf("\n");
 }

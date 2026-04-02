@@ -20,7 +20,7 @@
 /* Carbon-12 ion: not in particle_db, exercises the isotope_db fallback path */
 #define PDG_CARBON_12 1000060120
 
-void test_isotope_db() {
+void test_isotope_db(void) {
 
     struct isotope iso;
 
@@ -32,7 +32,7 @@ void test_isotope_db() {
     assert(fabs(iso.abund - 0.4078) < EPS);
 }
 
-void test_particles() {
+void test_particles(void) {
 
     /* get a protons */
     struct particle p;

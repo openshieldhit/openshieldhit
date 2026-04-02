@@ -137,8 +137,8 @@ int ray2line(struct ray *r, double d, float *x, float *z) {
 }
 
 int plot(struct gemca_workspace *g, int ndots) {
-    const int windowHeight = WINDOW_HEIGHT;
-    const int windowWidth = WINDOW_WIDTH;
+    int const windowHeight = WINDOW_HEIGHT;
+    int const windowWidth = WINDOW_WIDTH;
     int pointLocationx;
     int pointLocationy;
     int pointLocationx2;

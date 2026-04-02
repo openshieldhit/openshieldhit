@@ -8,8 +8,9 @@
 static int file_contains(char const *path, char const *needle) {
     char line[1024];
     FILE *f = fopen(path, "r");
-    if (!f)
+    if (!f) {
         return 0;
+    }
 
     while (fgets(line, sizeof(line), f)) {
         if (strstr(line, needle)) {

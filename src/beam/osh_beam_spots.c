@@ -5,26 +5,30 @@
 #include "common/osh_rc.h"
 
 int osh_beam_spots_init(struct beam_spot **sl, size_t nspots) {
-    if (!sl || nspots == 0)
+    if (!sl || nspots == 0) {
         return OSH_EINVAL;
+    }
 
     *sl = calloc(1, sizeof(struct beam_spot));
-    if (!*sl)
+    if (!*sl) {
         return OSH_ENOMEM;
+    }
 
     return OSH_OK;
 }
 
 int osh_beam_spots_free(struct beam_spot *sl) {
-    if (!sl)
+    if (!sl) {
         return OSH_EINVAL;
+    }
     free(sl);
     return OSH_OK;
 }
 
 int osh_beam_shared_init(struct beam_shared *shared) {
-    if (!shared)
+    if (!shared) {
         return OSH_EINVAL;
+    }
     memset(shared, 0, sizeof *shared);
     shared->tcut[0] = 0.0;
     shared->tcut[1] = 2500.0; /* MeV */
@@ -43,8 +47,9 @@ int osh_beam_shared_init(struct beam_shared *shared) {
 }
 
 int osh_beam_shared_free(struct beam_shared *shared) {
-    if (!shared)
+    if (!shared) {
         return OSH_EINVAL;
+    }
     free(shared);
     return OSH_OK;
 }

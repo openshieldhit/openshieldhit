@@ -17,13 +17,15 @@ int osh_beam_setup(char const *filename, char const *wdir, struct beam_workspace
     struct oshfile *sf = NULL;
     struct beam_workspace *wb = NULL;
 
-    if (!filename || !wb_out)
+    if (!filename || !wb_out) {
         return OSH_EINVAL;
+    }
     *wb_out = NULL;
 
     sf = osh_fopen(filename);
-    if (!sf)
+    if (!sf) {
         return OSH_EIO;
+    }
 
     wb = (struct beam_workspace *) calloc(1, sizeof *wb);
     if (!wb) {
@@ -81,10 +83,12 @@ int osh_beam_setup(char const *filename, char const *wdir, struct beam_workspace
 }
 
 int osh_beam_workspace_free(struct beam_workspace *wb) {
-    if (!wb)
+    if (!wb) {
         return OSH_OK;
-    if (wb->wdir)
+    }
+    if (wb->wdir) {
         free(wb->wdir);
+    }
     if (wb->spots) {
         osh_beam_spots_free(wb->spots);
     }
@@ -103,15 +107,17 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
         // TODO osh_beam_parlev_free(wb->parlev);
         free(wb->parlev);
     }
-    if (wb->fname)
+    if (wb->fname) {
         free(wb->fname);
+    }
     free(wb);
     return OSH_OK;
 }
 
 static void _wb_defaults(struct beam_workspace *wb) {
-    if (!wb)
+    if (!wb) {
         return;
+    }
 
     wb->wdir = NULL;
     wb->fname = NULL;
@@ -141,14 +147,17 @@ static void _wb_defaults(struct beam_workspace *wb) {
 }
 
 static int _wb_validate(const struct beam_workspace *wb) {
-    if (!wb)
+    if (!wb) {
         return OSH_EINVAL;
+    }
 
     // Check required fields
-    if (!wb->spots && !wb->phsp)
+    if (!wb->spots && !wb->phsp) {
         return OSH_EINVAL;
-    if (wb->spots && wb->nspots == 0)
+    }
+    if (wb->spots && wb->nspots == 0) {
         return OSH_EINVAL;
+    }
 
     return OSH_OK;
 }

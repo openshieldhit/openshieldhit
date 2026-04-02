@@ -13,6 +13,7 @@
 
 static int _save_body(struct body *b, char *nstr, double *par, int npar, int btype);
 static int _body_from_key(char const *key);
+static void _rewind_oshfile(struct oshfile *shf);
 
 /**
  * @brief Initialize a body.
@@ -52,7 +53,7 @@ size_t osh_gemca_parse_count_bodies(struct oshfile *shf) {
 
     int nbody = 0;
 
-    rewind(shf->fp);
+    _rewind_oshfile(shf);
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
@@ -103,7 +104,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
     size_t ibody = 0;
     size_t _ib;
 
-    rewind(shf->fp);
+    _rewind_oshfile(shf);
 
     /* read line by line and parse the keys and arguments */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
@@ -153,7 +154,8 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
 
             /* check if body name is already used, and raise an error if that is the case */
             for (_ib = 0; _ib < ibody; _ib++) {
-                if (strcmp(g->bodies[_ib]->name, nstr) == 0) {
+                if ((g->bodies[_ib] != NULL) && (g->bodies[_ib]->name != NULL)
+                    && (strcmp(g->bodies[_ib]->name, nstr) == 0)) {
                     osh_error(EX_CONFIG,
                               "Error parsing geometry line %li - body name '%s' already exists (defined at line %li)\n",
                               (long int) lineno,
@@ -225,46 +227,77 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
  * @author Niels Bassler
  */
 int _body_from_key(char const *key) {
-    if (strcasecmp(key, OSH_GEMCA_KEY_SPH) == 0)
+    if (strcasecmp(key, OSH_GEMCA_KEY_SPH) == 0) {
         return OSH_GEMCA_BODY_SPH;
-    if (strcasecmp(key, OSH_GEMCA_KEY_WED) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_WED) == 0) {
         return OSH_GEMCA_BODY_WED;
-    if (strcasecmp(key, OSH_GEMCA_KEY_ARB) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_ARB) == 0) {
         return OSH_GEMCA_BODY_ARB;
+    }
 
-    if (strcasecmp(key, OSH_GEMCA_KEY_BOX) == 0)
+    if (strcasecmp(key, OSH_GEMCA_KEY_BOX) == 0) {
         return OSH_GEMCA_BODY_BOX;
-    if (strcasecmp(key, OSH_GEMCA_KEY_VOX) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_VOX) == 0) {
         return OSH_GEMCA_BODY_VOX;
-    if (strcasecmp(key, OSH_GEMCA_KEY_RPP) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_RPP) == 0) {
         return OSH_GEMCA_BODY_RPP;
+    }
 
-    if (strcasecmp(key, OSH_GEMCA_KEY_RCC) == 0)
+    if (strcasecmp(key, OSH_GEMCA_KEY_RCC) == 0) {
         return OSH_GEMCA_BODY_RCC;
-    if (strcasecmp(key, OSH_GEMCA_KEY_REC) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_REC) == 0) {
         return OSH_GEMCA_BODY_REC;
-    if (strcasecmp(key, OSH_GEMCA_KEY_TRC) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_TRC) == 0) {
         return OSH_GEMCA_BODY_TRC;
-    if (strcasecmp(key, OSH_GEMCA_KEY_ELL) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_ELL) == 0) {
         return OSH_GEMCA_BODY_ELL;
+    }
 
-    if (strcasecmp(key, OSH_GEMCA_KEY_YZP) == 0)
+    if (strcasecmp(key, OSH_GEMCA_KEY_YZP) == 0) {
         return OSH_GEMCA_BODY_YZP;
-    if (strcasecmp(key, OSH_GEMCA_KEY_XZP) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_XZP) == 0) {
         return OSH_GEMCA_BODY_XZP;
-    if (strcasecmp(key, OSH_GEMCA_KEY_XYP) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_XYP) == 0) {
         return OSH_GEMCA_BODY_XYP;
-    if (strcasecmp(key, OSH_GEMCA_KEY_PLA) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_PLA) == 0) {
         return OSH_GEMCA_BODY_PLA;
+    }
 
-    if (strcasecmp(key, OSH_GEMCA_KEY_ROT) == 0)
+    if (strcasecmp(key, OSH_GEMCA_KEY_ROT) == 0) {
         return OSH_GEMCA_BODY_ROT;
-    if (strcasecmp(key, OSH_GEMCA_KEY_CPY) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_CPY) == 0) {
         return OSH_GEMCA_BODY_CPY;
-    if (strcasecmp(key, OSH_GEMCA_KEY_MOV) == 0)
+    }
+    if (strcasecmp(key, OSH_GEMCA_KEY_MOV) == 0) {
         return OSH_GEMCA_BODY_MOV;
+    }
 
     return OSH_GEMCA_BODY_NONE;
+}
+
+/**
+ * @brief Rewind an `oshfile` stream and reset its tracked line number.
+ *
+ * @param[in,out] shf Open geometry file wrapper to rewind.
+ *
+ * @returns Nothing. Exits via `osh_error()` if rewinding fails.
+ */
+static void _rewind_oshfile(struct oshfile *shf) {
+    if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
+        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+    }
+    shf->lineno = 0;
 }
 
 /**
