@@ -7,7 +7,7 @@
 #include "particle/osh_particle_db.h"
 #include "particle/osh_particle_pdg.h"
 
-void reset_particle(struct particle *p) {
+static void reset_particle(struct particle *p) {
     p->mass = 0.0;
     p->weight = 1.0;
     p->gen = 0;
@@ -76,8 +76,9 @@ int osh_particle_pdg_is_ion(int pdg) {
 
 int osh_particle_name_from_pdg(int pdg, char *name_buf, size_t buf_size) {
     struct isotope iso;
+    size_t i;
 
-    for (size_t i = 0; i < osh_particle_db_len; ++i) {
+    for (i = 0; i < osh_particle_db_len; ++i) {
         if (osh_particle_db[i].pdg == pdg) {
             snprintf(name_buf, buf_size, "%s", osh_particle_db[i].name);
             return 1;
@@ -94,8 +95,9 @@ int osh_particle_name_from_pdg(int pdg, char *name_buf, size_t buf_size) {
 
 int osh_particle_symbol_from_pdg(int pdg, char *symbol_buf, size_t buf_size) {
     struct isotope iso;
+    size_t i;
 
-    for (size_t i = 0; i < osh_particle_db_len; ++i) {
+    for (i = 0; i < osh_particle_db_len; ++i) {
         if (osh_particle_db[i].pdg == pdg) {
             snprintf(symbol_buf, buf_size, "%s", osh_particle_db[i].symbol);
             return 1;
