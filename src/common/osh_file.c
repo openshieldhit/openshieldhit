@@ -151,3 +151,40 @@ static void _rewind_file(struct oshfile *oshf) {
     clearerr(oshf->fp);
     oshf->lineno = 0;
 }
+
+void osh_path_normalize(char *path) {
+#ifdef _WIN32
+    if (!path) {
+        return;
+    }
+    for (; *path; ++path) {
+        if (*path == '\\') {
+            *path = '/';
+        }
+    }
+#else
+    (void) path; /* no-op on non-Windows */
+#endif
+}
+
+char *osh_path_dirname(char const *path) {
+    char const *sep;
+    size_t len;
+    char *dir;
+
+    if (!path) {
+        return NULL;
+    }
+    sep = strrchr(path, '/');
+    if (!sep || sep == path) {
+        return NULL;
+    }
+    len = (size_t)(sep - path);
+    dir = (char *) malloc(len + 1);
+    if (!dir) {
+        return NULL;
+    }
+    memcpy(dir, path, len);
+    dir[len] = '\0';
+    return dir;
+}

@@ -58,14 +58,21 @@ struct cgnode {
 };
 
 struct zone {           /* zone description */
-    struct cgnode node; /* top level node of the abstrac syntax tree which holds
+    struct cgnode node; /* top level node of the abstract syntax tree which holds
                            the body description */
     size_t id;          /* number of this zone, starting at 1 */
-    size_t lineno;      /* fist line number where this zone was defined */
+    size_t lineno;      /* first line number where this zone was defined */
     size_t medium;      /* medium/material ID of this zone */
     size_t ntokens;     /* number of tokens */
     char **tokens;      /* list of tokens */
     char *name;         /* user given name of this zone */
+
+    /* TODO: per-zone transport cutoff overrides. When set, these take
+     * precedence over the global defaults in beam_workspace at simulation
+     * time. Add fields such as:
+     *   float tcut;   lower ion energy cutoff for this zone [MeV/nucleon]
+     *   float ncut;   lower neutron energy cutoff for this zone [MeV]
+     * Leave unset (e.g. 0 or negative) to fall back to the global default. */
 };
 
 struct surface {  /* surface descriptions */

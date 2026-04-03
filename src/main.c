@@ -3,6 +3,7 @@
 
 #include "cli/osh_cli.h"
 #include "common/osh_exit.h"
+#include "common/osh_file.h"
 #include "openshieldhit/openshieldhit.h"
 
 /* Generic failure — not covered by a specific EX_* code. */
@@ -38,6 +39,15 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error: out of memory\n");
         return OSH_EXIT_FAIL;
     }
+
+    /* Normalize path separators once here so all library code can assume '/'
+     * without per-subsystem #ifdef _WIN32 blocks. No-op on non-Windows. */
+    osh_path_normalize((char *) opt.workdir);
+    osh_path_normalize((char *) opt.geo_path);
+    osh_path_normalize((char *) opt.beam_path);
+    osh_path_normalize((char *) opt.mat_path);
+    osh_path_normalize((char *) opt.detect_path);
+    osh_path_normalize((char *) opt.out_dir);
 
     cfg.workdir = opt.workdir;
     cfg.out_dir = opt.out_dir;
