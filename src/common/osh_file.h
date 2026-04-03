@@ -59,6 +59,18 @@ void osh_fclose(struct oshfile *oshf);
  */
 int osh_file_lineno(const struct oshfile *oshf);
 
+/* Resolve a secondary file path referenced inside an input file.
+ *
+ * Paths in input files (beam.dat, geo.dat, …) may be absolute or relative.
+ * Relative paths are resolved relative to the directory of the input file
+ * that references them (base_dir), NOT relative to the working directory of
+ * the process. base_dir should be the dirname of the containing input file.
+ *
+ * If rel_path is already absolute it is used as-is.
+ * Writes a newly malloc'd absolute path into *out; caller must free() it.
+ * Returns 0 on success, -1 on allocation failure. */
+int osh_relative_path_to_file(char **out, char const *base_dir, char const *rel_path);
+
 /* Normalize path separators to '/' in-place.
  *
  * On Windows, the Win32 API accepts both '/' and '\' so normalizing to '/'

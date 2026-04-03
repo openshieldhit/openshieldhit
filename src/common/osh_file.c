@@ -152,6 +152,44 @@ static void _rewind_file(struct oshfile *oshf) {
     oshf->lineno = 0;
 }
 
+int osh_relative_path_to_file(char **out, char const *base_dir, char const *rel_path) {
+    size_t blen;
+    size_t rlen;
+    char *result;
+
+    if (!out || !rel_path) {
+        return -1;
+    }
+
+    if (rel_path[0] == '/') {
+        /* already absolute — copy as-is */
+        rlen = strlen(rel_path);
+        result = (char *) malloc(rlen + 1);
+        if (!result) {
+            return -1;
+        }
+        memcpy(result, rel_path, rlen + 1);
+        *out = result;
+        return 0;
+    }
+
+    blen = base_dir ? strlen(base_dir) : 0;
+    rlen = strlen(rel_path);
+    result = (char *) malloc(blen + 1 + rlen + 1); /* base + '/' + rel + NUL */
+    if (!result) {
+        return -1;
+    }
+    if (blen > 0) {
+        memcpy(result, base_dir, blen);
+        result[blen] = '/';
+        memcpy(result + blen + 1, rel_path, rlen + 1);
+    } else {
+        memcpy(result, rel_path, rlen + 1);
+    }
+    *out = result;
+    return 0;
+}
+
 void osh_path_normalize(char *path) {
 #ifdef _WIN32
     if (!path) {
@@ -179,7 +217,7 @@ char *osh_path_dirname(char const *path) {
     if (!sep || sep == path) {
         return NULL;
     }
-    len = (size_t)(sep - path);
+    len = (size_t) (sep - path);
     dir = (char *) malloc(len + 1);
     if (!dir) {
         return NULL;

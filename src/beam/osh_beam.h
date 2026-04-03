@@ -21,6 +21,11 @@
 #define OSH_BEAM_MODE_SOBP 1  /* spread-out Bragg peak from external file */
 #define OSH_BEAM_MODE_PHSP 2  /* phase-space source (MCPL) */
 
+#define OSH_BEAM_SHAPE_PENCIL 0   /* zero-width pencil beam */
+#define OSH_BEAM_SHAPE_GAUSSIAN 1 /* Gaussian lateral profile */
+#define OSH_BEAM_SHAPE_SQUARE 2   /* uniform square profile */
+#define OSH_BEAM_SHAPE_CIRCULAR 3 /* uniform circular/annular profile */
+
 /* Minimum beam energy at which transport is meaningful [MeV total]. */
 #define OSH_BEAM_TMIN 0.1
 
