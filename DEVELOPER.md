@@ -14,6 +14,7 @@ Not intended for end-users.
 - Compilation follows the **C11 standard**, but with some **C90-inspired** stylistic ideas:
   - `//` single-line comments are permitted **only for temporary code**, such as quick notes or `TODO`s. They must not remain in production code. This helps spotting temporary and WIP code.
   - Use `stdint.h` types (e.g., `uint32_t`) only when needed.
+  - Prefer `char` for boolean flag fields in structs rather than `<stdbool.h>` — it is explicit about storage size and keeps struct layout predictable. Use `int` for function return codes.
   - Use `<stdatomic.h>` for atomic operations on shared tallies/counters (e.g., `_Atomic`, `atomic_fetch_add`). Prefer lock-free atomics over mutexes for hot paths.
   - Use `_Alignas(64)` on per-thread data structures to avoid false sharing across cache lines.
   - Avoid `<threads.h>` for portability (MSVC does not implement it); use pthreads or OpenMP for the thread pool instead.
