@@ -57,7 +57,6 @@ int main(int argc, char *argv[]) {
         return OSH_EXIT_FAIL;
     }
 
-
     rc = openshieldhit_run(ctx, stdout, stderr);
     openshieldhit_context_destroy(ctx);
     return exit_code_for_status(rc);
