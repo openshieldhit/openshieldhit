@@ -1,204 +1,212 @@
 #ifndef _OSH_BEAM
 #define _OSH_BEAM
-#include <stdio.h>
-#include <stdlib.h>
 
-#include "common/osh_readline.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "common/osh_logger.h"
 #include "particle/osh_particle.h"
 
-#define OSH_BEAM_STRAGG_OFF 0
-#define OSH_BEAM_STRAGG_GAUSS 1
-#define OSH_BEAM_STRAGG_VAVILOV 2
+/* ---- Physics model constants --------------------------------------------- */
 
-#define OSH_BEAM_MSCAT_OFF 0
-#define OSH_BEAM_MSCAT_GAUSS 1
-#define OSH_BEAM_MSCAT_MOLIERE 2
+#define OSH_BEAM_STRAGG_OFF 0     /* no energy straggling */
+#define OSH_BEAM_STRAGG_GAUSS 1   /* Gaussian straggling */
+#define OSH_BEAM_STRAGG_VAVILOV 2 /* Vavilov straggling */
 
-#define OSH_BEAM_TMIN0 0.1 /* MeV or MeV/nucleon */
+#define OSH_BEAM_MSCAT_OFF 0     /* no multiple scattering */
+#define OSH_BEAM_MSCAT_GAUSS 1   /* Gaussian (Highland) model */
+#define OSH_BEAM_MSCAT_MOLIERE 2 /* Moliere model */
 
-/* forward declarations */
-struct ripple_filter;
-struct parlev;
-struct shfile;
-struct ray_c;
+#define OSH_BEAM_MODE_SPOTS 0 /* pencil/scanning spot list */
+#define OSH_BEAM_MODE_SOBP 1  /* spread-out Bragg peak from external file */
+#define OSH_BEAM_MODE_PHSP 2  /* phase-space source (MCPL) */
 
-/* a single beam spot */
+/* Minimum beam energy at which transport is meaningful [MeV total]. */
+#define OSH_BEAM_TMIN 0.1
+
+/* ---- Forward declarations ------------------------------------------------ */
+
+struct ripple_filter; /* beam range modulator — defined in osh_beam_rifi.h */
+struct parlev;        /* LEVERS parameter block — defined in osh_beam_parlev.h */
+
+/* ---- beam_spot ------------------------------------------------------------ */
+
+/* A single beam spot.
+ *
+ * All energies are TOTAL kinetic energy in MeV — NOT MeV/nucleon, NOT specific
+ * energy. The transport engine divides by part->a (nucleon number A) when it
+ * needs specific energy for stopping-power table lookup. Storing total values
+ * here avoids per-primary multiplications in the inner transport loop.
+ *
+ * All momenta are total momentum in MeV/c — NOT per nucleon.
+ *
+ * Fields prefixed with '_' are derived quantities computed once by
+ * osh_beam_setup_from_path() after parsing. The parser and transport loop must
+ * not write to them. */
 struct beam_spot {
-    /* position data is for nominal transport along Z */
-    struct particle *part; /* pointer to what particle we have */
-    double _tm[16];        /* matrix for beam rotation and translation */
-    double p[3];           /* position [cm] relative to isocenter */
-    double size[2];        /* beam size parameter (e.g. 1 sigma if gaussian, inner and outer radius if ciruclar) [cm] */
-    double div[2];         /* beam divergence [rad] */
-    double cov[2];         /* beam covariance [cm^2] */
+    /* Derived at init — do not write after osh_beam_setup_from_path() returns */
+    double _tm[16]; /* 4x4 rotation+translation matrix, built from shared.theta/phi and p[] */
 
-    double t0;     /* initial energy [MeV] or [MeV/nucleon] */
-    double tsigma; /* energy spread [MeV] or [MeV/nucleon] */
-    double p0;     /* initial momentum [MeV/c] */
-    double psigma; /* momentum spread [MeV/c] */
+    /* Lateral profile */
+    double p[3];    /* position [cm] relative to isocenter */
+    double size[2]; /* lateral size [cm]: 1-sigma (Gaussian), half-width (square),
+                       inner/outer radius (circular) */
+    double div[2];  /* beam divergence [rad] */
+    double cov[2];  /* position-divergence covariance [cm * rad] */
 
-    double wt;             /* weight (1.0 = normal weight) (currently not fully by SHIELD-HIT core), leave it at 1.0 */
-    unsigned int spot_id;  /* spot number */
-    unsigned int layer_id; /* energy layer number */
+    /* Energy / momentum — total quantities, NOT per nucleon */
+    double t0;     /* total kinetic energy [MeV] */
+    double tsigma; /* total kinetic energy spread [MeV] */
+    double p0;     /* total momentum [MeV/c]; derived from t0 at init if not given explicitly */
+    double psigma; /* total momentum spread [MeV/c]; derived from tsigma at init if not given */
 
-    char shape;       /* shape of the beam, as listed in OSH_BEAM_SHAPE_* in osh_beamdef.h */
-    char tsigma_type; /* energy spread distribution OSH_RANDOM_DIST_* (square, gaussian) */
+    /* Sampling metadata */
+    double wt; /* statistical weight (1.0 = normal) */
+    unsigned int spot_id;
+    unsigned int layer_id;
+
+    struct particle *part; /* particle species — pointer into a shared table, NOT owned here */
+    char shape;            /* lateral profile shape: OSH_BEAM_SHAPE_* */
+    char tsigma_type;      /* energy spread distribution: OSH_RANDOM_DIST_* */
 };
 
+/* ---- beam_shared ---------------------------------------------------------- */
+
+/* Beam source geometry shared across all spots in a beam file.
+ *
+ * This struct covers beam direction, source-to-axis geometry, divergence flags,
+ * and derived per-run maxima used for stopping-power table sizing.
+ *
+ * Transport control parameters (cutoffs, step limits, physics switches) are
+ * NOT here — they live in beam_workspace.
+ *
+ * emax and pmax are computed once by osh_beam_setup_from_path() as the maximum
+ * over all spots. Units: total MeV and total MeV/c respectively. */
 struct beam_shared {
-    double tcut[2]; /* upper and lower primary cutoff energy. */
-    double pcut[2]; /* upper and lower primary cutoff momentum. */
-    double sad[2];  /* scanning-magnet to isocenter distance [cm] */
-    double focus;   /* focus point relative to source (k-distance) [cm] */
-    /* theta and phi are by ISO 80000-2:2019 convention.
-        see https://en.wikipedia.org/wiki/Spherical_coordinate_system
+    /* Derived at init — do not write after osh_beam_setup_from_path() returns */
+    double emax; /* max t0 over all spots [MeV] — for stopping-power table cap */
+    double pmax; /* max p0 over all spots [MeV/c] */
 
-        direction axis : (theta, phi)
-        x : (pi/2, 0)
-        y : (pi/2,pi/2)
-        z : (0,*)
-     */
-    double theta; /* beam theta relative to Z axis [rad]*/
-    double phi;   /* beam phi realtive to Z axis [rad] */
+    double sad[2]; /* scanning-magnet to isocenter distance [cm]: [0]=x, [1]=y */
+    double focus;  /* focus point along beam axis relative to source [cm] */
 
-    char use_pmax;   /* true if user specified momentum instead of energy  */
-    char use_psigma; /* true if user specified momentum instead of energy */
-    char use_div;    /* flag to skip divergence calculation, if not requested by user */
-    char use_sad;    /* flag to skip SAD calculation, if not requested by user */
+    /* Beam direction by ISO 80000-2:2019 spherical convention:
+     *   theta=0            -> along +Z  (any phi)
+     *   theta=pi/2, phi=0  -> along +X
+     *   theta=pi/2, phi=pi/2 -> along +Y */
+    double theta; /* polar angle from +Z [rad], range [0, pi] */
+    double phi;   /* azimuthal angle from +X [rad], range [0, 2*pi) */
+
+    char use_div; /* 1 if divergence sampling is active */
+    char use_sad; /* 1 if SAD correction is active */
 };
 
-// /* --- Spot list --- */
-// struct beam_spots {
-//     struct beam_spot *spots; /* owned array */
-//     struct beam_shared *shared; /* shared across all spots */
-//     char *fname;  /* input file */
-//     size_t nspots;
-//     // double norm;
-// };
+/* ---- beam_phsp ------------------------------------------------------------ */
 
-/* a phase-space file */
+/* Phase-space particle source, following the MCPL file convention:
+ *   - direction vectors are normalised unit vectors
+ *   - energy is total kinetic energy in MeV (NOT per nucleon)
+ *   - particle species is stored as PDG particle code per entry
+ *
+ * Positions and directions use structure-of-arrays layout (p[3], d[3]) so each
+ * coordinate axis is a contiguous double array, enabling SIMD vectorisation.
+ *
+ * The particle struct pointer is not stored per entry to save memory. A
+ * one-entry cache (_cached_pdg / _cached_part) avoids repeated table lookups:
+ * homogeneous files (single species) pay the lookup cost exactly once; mixed
+ * files pay it on each species transition. */
 struct beam_phsp {
-    struct particle **part; /* list of pointers to particles */
-    size_t len;             /* array length */
-    double *p[3];           /* list of positions */
-    double *d[3];           /* list of directions */
-    double *wt;             /* list of weights */
-    char *fname;            /* input file */
+    double *p[3]; /* position [cm]: p[0]=x, p[1]=y, p[2]=z — each a contiguous array */
+    double *d[3]; /* normalised direction: d[0]=ux, d[1]=uy, d[2]=uz */
+    double *e;    /* total kinetic energy per entry [MeV] — NOT per nucleon */
+    double *wt;   /* statistical weight per entry */
+    int32_t *pdg; /* PDG particle code per entry */
+    size_t len;   /* number of entries */
+    char *fname;  /* source file path (owned) */
+
+    /* Sampling cache — avoids repeated particle table lookup */
+    int32_t _cached_pdg;
+    struct particle *_cached_part;
 };
 
-/* defining beam parameters */
+/* ---- beam_workspace ------------------------------------------------------- */
+
+/* Top-level beam workspace.
+ *
+ * Holds the beam source (spots or phase-space), beam geometry (via shared),
+ * and simulation-wide transport defaults parsed from beam.dat.
+ *
+ * nstat may be overridden after osh_beam_setup_from_path() by the caller if an
+ * explicit CLI value was given (check has_nstat / cfg.nstat in openshieldhit_run).
+ *
+ * Transport cutoffs are global defaults for the run. Per-medium overrides are
+ * stored in struct zone (osh_gemca2.h) and take precedence at simulation time. */
 struct beam_workspace {
-    struct beam_phsp *phsp;     /* phase space files */
-    struct beam_spot *spots;    /* placeholder for beam scanning data (struct is init to 0 if not given) */
-    struct beam_shared *shared; /* shared parameters across all spots */
-    struct ripple_filter *rifi; /* beam modulator placeholder (struct is init to 0 if not given) */
-    struct parlev *parlev;      /* parameter settings from PARLEV() array found in /LEVERS/ common block */
-    char *wdir;                 /* working directory */
-    char *fname;                /* filename of beam input file */
-    char *fname_spotlist;       /* filename of optional external spotlist */
-    size_t nspots;              /* Number of spots */
+    /* --- Beam source --- */
+    struct beam_phsp *phsp;     /* phase-space source; NULL if spots mode */
+    struct beam_spot *spots;    /* spot array; NULL if phsp mode */
+    struct beam_shared *shared; /* beam geometry shared across all spots */
+    struct ripple_filter *rifi; /* range modulator; NULL if not used */
+    struct parlev *parlev;      /* PARLEV lever settings; NULL if not used */
+    char *wdir;                 /* working directory for relative paths (owned) */
+    char *fname;                /* beam input file path (owned) */
+    char *fname_spotlist;       /* external spot list file (owned); NULL if not used */
+    size_t nspots;              /* number of entries in spots[] */
 
-    size_t nstat;   /* Number of requested primaries */
-    size_t nsave;   /* saving step of primaries, 0 for disable */
-    int rndseed;    /* random number seed as given in beam.dat */
-    int rndoffset;  /* offset to rndseed as given by -N option */
-    float deltae;   /* max. fraction of energy lost in a single step */
-    float oln;      /* lower neutron energy cut */
-    float demin;    /* lower moliere scatter cut */
-    char straggl;   /* switch for energy straggling */
-    char scatter;   /* switch for multiple scattering */
-    char nuclear;   /* switch for nuclear reactions */
-    char emtrans;   /* switch for EM-transport (unused) */
-    char apcorr;    /* switch for alternative antiproton annihilation model */
-    char beam_mode; /* switch for spots or PHSP*/
-    char makeln;    /* switch for generation of neutron output data file */
-    char neutrfast; /* switch for fast neutron transport */
+    /* --- Run control (may be overridden by CLI after setup) --- */
+    size_t nstat;  /* number of requested primary histories */
+    size_t nsave;  /* history save interval (0 = disabled) */
+    int rndseed;   /* random number seed */
+    int rndoffset; /* seed offset applied on top of rndseed */
+
+    /* --- Transport cutoffs [global defaults; per-medium overrides in geometry] --- */
+    float tcut;   /* lower primary ion energy cutoff [MeV/nucleon] */
+    float pcut;   /* lower primary momentum cutoff [MeV/c] */
+    float ncut;   /* lower neutron energy cutoff [MeV] */
+    float deltae; /* max fractional energy loss per step */
+    float demin;  /* lower Moliere multiple-scattering cutoff [MeV/nucleon] */
+
+    /* --- Physics switches --- */
+    char straggl;   /* energy straggling model: OSH_BEAM_STRAGG_* */
+    char scatter;   /* multiple scattering model: OSH_BEAM_MSCAT_* */
+    char nuclear;   /* nuclear reactions: 0=off, 1=on */
+    char emtrans;   /* EM transport (unused, reserved for future use) */
+    char apcorr;    /* alternative antiproton annihilation model */
+    char beam_mode; /* source type: OSH_BEAM_MODE_* */
+    char makeln;    /* generate neutron output file */
+    char neutrfast; /* enable fast neutron transport */
 };
 
-/**
- * @brief Allocate, parse, and fully initialize a beam workspace.
- *
- * This is the one-shot, library-style entry point. It:
- *  - allocates and zero-initializes a new ::beam_workspace,
- *  - applies sane defaults,
- *  - parses @p filename (using @p wdir as working directory if non-NULL),
- *  - builds the spot list or phase-space (depending on the file contents),
- *  - wires shared, run-wide parameters (spotlist->shared = &wb->shared),
- *  - computes per-spot transform matrices (spot->_tm[16]),
- *  - validates invariants (e.g., non-empty spotlist/PHSP, sane cutoffs),
- *  - and returns a ready-to-use workspace via @p wb_out.
- *
- * On success, @p *wb_out owns all allocated resources and must be released with
- * ::osh_beam_workspace_free(). On failure, no allocation is leaked and @p *wb_out
- * is left unmodified.
- *
- * ### Inputs and ownership
- * - @p filename: path to a configuration file. The content defines either a spot list
- *   (beam_mode=spots) or a phase-space source (beam_mode=phsp). The string is not retained.
- * - @p wdir: optional working directory for relative includes/paths; copied internally
- *   if provided; may be NULL.
- * - @p wb_out: non-NULL pointer to receive the allocated workspace pointer.
- *
- * ### Outputs and guarantees
- * - @p *wb_out is non-NULL on success and points to a fully-initialized ::beam_workspace.
- * - If spots are configured:
- *     - wb->spotlist is non-NULL, wb->spotlist->nspots > 0,
- *     - wb->spotlist->shared == &wb->shared (wired),
- *     - every spot has its per-spot transform filled in spot->_tm[16].
- * - If PHSP is configured:
- *     - wb->phsp is non-NULL, wb->phsp->len > 0.
- * - Units: energies are MeV (or MeV/u if per-nucleon), momenta are MeV/c (or MeV/c/u).
- *   The exact interpretation of t0/p0 is preserved from the input (see struct comments).
- *
- * @return error code as in osh_err.h
- *
- * @note Thread-safety: this function is not thread-safe. Use per-thread workspaces.
- *
- * @param filename  Path to the configuration file (not retained).
- * @param wdir      Optional working directory; may be NULL (copied if non-NULL).
- * @param wb_out    Output: on success, set to a newly allocated ::beam_workspace.
- *
- * @return 0 on success; negative OSH_E* code on failure (see osh_err.h).
- *
- * @author Niels Bassler
- */
-int osh_beam_setup(char const *filename, char const *wdir, struct beam_workspace **wb);
+/* ---- API ------------------------------------------------------------------ */
 
-/**
- * @brief Release a beam workspace and all owned resources.
+/* Allocate, parse, and fully initialise a beam workspace from a file path.
  *
- * Frees all memory owned by @p wb, including nested allocations (spot arrays,
- * PHSP arrays, strings, etc.). Safe to call with NULL.
+ * The working directory for resolving relative paths inside the file (spot
+ * lists, USEBMOD, USEPARLEV etc.) is derived from dirname(path) automatically.
  *
- * @param wb  Workspace returned by ::osh_beam_setup(), or NULL.
- * @return 0 (OSH_OK). Always succeeds.
+ * On success, *wb_out owns all allocated resources and must be released with
+ * osh_beam_workspace_free(). On failure *wb_out is left unmodified and no
+ * memory is leaked.
  *
- * @author Niels Bassler
- */
+ * @param path   Path to the beam input file (not retained).
+ * @param lg     Logger for diagnostics; NULL uses the global default logger.
+ * @param wb_out Receives the allocated workspace pointer on success.
+ * @return OSH_OK on success, negative OSH_E* code on failure.
+ *
+ * Future constructor variants follow the same signature pattern:
+ *   osh_beam_setup_from_pipe(fd,   lg, wb_out)
+ *   osh_beam_setup_from_json(json, lg, wb_out) */
+int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct beam_workspace **wb_out);
+
+/* Release a beam workspace and all owned resources. Safe to call with NULL. */
 int osh_beam_workspace_free(struct beam_workspace *wb);
-// int osh_beam_get_primary(struct beam_workspace *wb, struct particle **part, struct ray_c *ray);  TODO later
 
-/**
- * @brief Print a concise summary of the workspace to stdout.
- *
- * Intended for debugging/logging. Does not modify @p wb.
- *
- * @param wb  Workspace to print; ignored if NULL.
- *
- * @author Niels Bassler
- */
+/* TODO: osh_beam_get_primary() — sample next primary ray from workspace */
+
+/* Print a concise summary of the workspace (debugging / logging). */
 void osh_beam_print(struct beam_workspace const *wb);
 
-/**
- * @brief Print a concise summary of a single beam spot to stdout.
- *
- * Shows position, size/divergence, t0/p0 with spreads, IDs, and shape.
- * Does not modify @p spot.
- *
- * @param spot  Spot to print; ignored if NULL.
- *
- * @author Niels Bassler
- */
+/* Print a concise summary of a single beam spot (debugging / logging). */
 void osh_beam_print_spot(struct beam_spot const *spot);
 
 #endif /* !_OSH_BEAM */

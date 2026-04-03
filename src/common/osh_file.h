@@ -1,6 +1,7 @@
 #ifndef OSH_FILE_H
 #define OSH_FILE_H
 
+#include <stddef.h>
 #include <stdio.h>
 
 /**
@@ -57,5 +58,21 @@ void osh_fclose(struct oshfile *oshf);
  * @author Niels Bassler
  */
 int osh_file_lineno(const struct oshfile *oshf);
+
+/* Normalize path separators to '/' in-place.
+ *
+ * On Windows, the Win32 API accepts both '/' and '\' so normalizing to '/'
+ * once in the thin client (main.c) lets all library code assume forward slashes
+ * without per-subsystem #ifdef blocks.
+ *
+ * On non-Windows platforms this is a no-op. Safe to call with NULL. */
+void osh_path_normalize(char *path);
+
+/* Extract the directory portion of a path into a newly allocated string.
+ *
+ * Returns a malloc'd copy of everything up to (but not including) the last '/'.
+ * Returns NULL if path is NULL, contains no separator, or allocation fails.
+ * Caller owns the returned string and must free() it. */
+char *osh_path_dirname(char const *path);
 
 #endif /* OSH_FILE_H */
