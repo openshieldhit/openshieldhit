@@ -1,5 +1,6 @@
 #include "beam/osh_beam_spots.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "common/osh_rc.h"
@@ -30,26 +31,17 @@ int osh_beam_shared_init(struct beam_shared *shared) {
         return OSH_EINVAL;
     }
     memset(shared, 0, sizeof *shared);
-    shared->tcut[0] = 0.0;
-    shared->tcut[1] = 2500.0; /* MeV */
-    shared->pcut[0] = 0.0;
-    shared->pcut[1] = 2500.0; /* MeV/c */
+
+    /* emax/pmax are derived after parse — leave at 0.0 until computed */
+    shared->emax = 0.0;
+    shared->pmax = 0.0;
     shared->sad[0] = 0.0;
-    shared->sad[1] = 0.0; /* cm */
-    shared->focus = 0.0;  /* cm */
-    shared->theta = 0.0;  /* rad */
-    shared->phi = 0.0;    /* rad */
-    shared->use_pmax = 0;
-    shared->use_psigma = 0;
+    shared->sad[1] = 0.0;
+    shared->focus = 0.0;
+    shared->theta = 0.0; /* rad — along +Z by default */
+    shared->phi = 0.0;   /* rad */
     shared->use_div = 0;
     shared->use_sad = 0;
-    return OSH_OK;
-}
 
-int osh_beam_shared_free(struct beam_shared *shared) {
-    if (!shared) {
-        return OSH_EINVAL;
-    }
-    free(shared);
     return OSH_OK;
 }
