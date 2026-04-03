@@ -10,20 +10,38 @@ The repo has moved past the original bootstrap phase. We now have:
 - [x] `OPENSHIELDHIT_RUN_VALIDATE` mode for parse/validate-only execution
 - [x] Geometry loading wired into `openshieldhit_run()`
 - [x] Startup / validation summary output
-- [x] Basic tests for the public API (`tests/test_osh_main.c`)
-- [x] Basic tests for the internal CLI parser (`tests/test_osh_cli.c`)
+- [x] Basic tests for the public API (`tests/unit/test_osh_main.c`)
+- [x] Basic tests for the internal CLI parser (`tests/unit/test_osh_cli.c`)
+- [x] `osh_beam.h` struct layout finalised (beam_spot, beam_shared, beam_phsp, beam_workspace)
+- [x] `osh_beam_setup_from_path(path, lg, wb_out)` constructor pattern established
+- [x] Path normalisation (`osh_path_normalize`) and dirname (`osh_path_dirname`) in `osh_file.h`
+- [x] Windows path separator handling centralised in `main.c` (no per-subsystem `#ifdef`)
+
+## Beam loader — next steps
+
+The struct layout and constructor API for the beam subsystem are finalised.
+The parser exists but is not yet connected to the new API. Work to do in order:
+
+- [ ] Fix `osh_beam_setup_from_path()` body — currently still calls `osh_beam_shared_init(wb->shared)` on a NULL pointer (shared is a pointer, not embedded value); decide: embed `beam_shared` by value in `beam_workspace` or allocate it
+- [ ] Fix parser references to `beam->spot0` (field does not exist) → use `wb->spots[0]`
+- [ ] Fix parser references to fields that moved (e.g. `sad`, `focus`, `use_div`, `use_sad` now in `beam_shared`; `tcut`, `pcut` moved to `beam_workspace`)
+- [ ] Implement post-parse init step in `osh_beam_setup_from_path()`:
+  - Derive `wdir` from path (done) and store `fname`
+  - Convert p0/psigma from t0/tsigma using particle mass (relativistic)
+  - Compute `shared->emax` and `shared->pmax` over all spots
+  - Build `_tm[16]` rotation+translation matrix per spot from `shared->theta/phi` and `spot->p[]`
+- [ ] Declare `osh_relative_path_to_file()` in `osh_file.h` (currently used in parser but undeclared)
+- [ ] Wire `osh_beam_setup_from_path()` into `openshieldhit_run()` in `src/openshieldhit.c`
+- [ ] Apply CLI override: after beam load, overwrite `wb->nstat` if `cfg->has_nstat` is set
 
 ## Current High-Priority TODO
 
 - [ ] Wire beam loading into `openshieldhit_run()`
-  - Current state: beam path resolution and file-existence reporting are present, but the actual loader is still marked "loader wiring pending".
-  - Note: the internal beam parser/workspace code already exists under `src/beam/`; it is just not connected to the public facade yet.
 - [ ] Wire material loading into `openshieldhit_run()`
 - [ ] Wire detect/scoring loading into `openshieldhit_run()`
 - [ ] Implement `OPENSHIELDHIT_RUN_NORMAL`
-  - Current state: `OPENSHIELDHIT_RUN_NORMAL` returns `OPENSHIELDHIT_STATUS_NOT_SUPPORTED`.
-- [ ] Add a validate-mode integration test using `tests/res/test01/`
-  - Goal: run geometry + beam + mat + detect resolution/loading through the public API or CLI and assert expected exit status.
+  - Current state: returns `OPENSHIELDHIT_STATUS_NOT_SUPPORTED`.
+- [ ] Add a validate-mode integration test using `tests/fixtures/test01/`
 - [ ] Add tests for `openshieldhit_last_error()`
   - [x] Empty on fresh context
   - [x] Empty on NULL context (no crash)
@@ -31,28 +49,27 @@ The repo has moved past the original bootstrap phase. We now have:
   - [ ] Error reset on a subsequent successful call
   - [ ] Set on missing geometry file
 - [ ] Add tests for context configure ownership semantics
-  - Suggested coverage: strings are deep-copied, `NULL` clears a field, and failed replacement does not clobber the previous value.
 
 ## Packaging / Install TODO
 
 - [ ] Decide whether the public facade should ship as static-only, shared-only, or both
-  - Current state: `openshieldhit_api` is a static library target.
-- [ ] Install the public library target
-- [ ] Install public headers under `include/openshieldhit/`
+- [ ] Install the public library target and headers under `include/openshieldhit/`
 - [ ] Keep internal headers and the internal CLI parser non-installed
 
 ## Cleanup / Follow-up
 
 - [ ] Make gemca parser library-safe (non-terminating)
-  - Current state: `osh_gemca_parse()` and all sub-parsers call `osh_error()` on failures, which calls `exit()` directly. This bypasses the `OPENSHIELDHIT_STATUS_PARSE_ERROR` return path in `openshieldhit_run()`. The `03_malformed_geometry` test exits with code 78 by accident (via `exit(EX_CONFIG)` inside the parser), not through the public API.
-  - Fix: thread an error-return mechanism through `osh_gemca_load()` and all parser functions so failures propagate as return values. See comment in `src/gemca/osh_gemca2.c`.
-- [ ] Improve validation diagnostics where possible
-  - Especially for malformed geometry / beam input: include useful file and line information when the underlying parser can provide it.
-- [ ] Revisit the public API once beam/material/detect loading are wired
-  - Decide whether dedicated load/validate helpers are needed in addition to the current context + `openshieldhit_run()` model.
+  - Current state: `osh_gemca_parse()` calls `osh_error()` / `exit()` on failures, bypassing the `OPENSHIELDHIT_STATUS_PARSE_ERROR` return path. The `03_malformed_geometry` test exits with code 78 by accident (via `exit(EX_CONFIG)` inside the parser). See comment in `src/gemca/osh_gemca2.c`.
+- [ ] Make beam parser library-safe (non-terminating)
+  - Same pattern as gemca: all `osh_err()` call sites in `src/beam/osh_beam_parse.c` call `exit()`.
+- [ ] Improve validation diagnostics — include file and line info from parsers
+- [ ] Wire `osh_beam_print` / `osh_beam_print_spot` to logger instead of stdout
+- [ ] Revisit public API once beam/material/detect loading are wired
 
 ## Notes
 
-- The earlier `src/api/` idea is no longer necessary; the facade currently lives in `src/openshieldhit.c`.
-- The public API is now context-based and opaque; the CLI parser remains internal in `src/cli/`.
-- The old `--dry-run` CLI concept maps to `OPENSHIELDHIT_RUN_VALIDATE` in the public API.
+- The public API is context-based and opaque; the CLI parser remains internal in `src/cli/`.
+- `--dry-run` CLI maps to `OPENSHIELDHIT_RUN_VALIDATE` in the public API.
+- `osh_path_normalize()` must be called in `main.c` on all CLI-supplied paths before any library call — library code assumes forward slashes throughout.
+- Beam energies/momenta are always TOTAL (MeV, MeV/c) — never per nucleon. Transport engine divides by `part->a` at table lookup time.
+- nstat override pattern: beam file sets default, CLI `--nstat` wins if `cfg->has_nstat` is set.

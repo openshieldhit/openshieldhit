@@ -40,6 +40,14 @@ Not intended for end-users.
   - An API requires initialization (for example, pointers passed to functions that may free or overwrite them).
   - Defensive initialization clearly improves robustness without hiding logic errors.
 
+### Design Decisions
+
+This project is also intended as a pedagogical reference. Where practical,
+non-obvious design choices should be briefly explained in a comment near the
+decision — struct layout, ownership model, unit conventions, algorithm
+selection, and similar. The goal is that a reader can understand not just
+*what* the code does but *why*, without having to dig through git history.
+
 ### General Coding Conventions
 - Public functions have `osh` prefix : `osh_foobar()`
 - Private/internal functions use `static` and no `_osh` prefix : `foobar()`
