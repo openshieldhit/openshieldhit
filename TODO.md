@@ -25,8 +25,12 @@ The repo has moved past the original bootstrap phase. We now have:
 - [ ] Add a validate-mode integration test using `tests/res/test01/`
   - Goal: run geometry + beam + mat + detect resolution/loading through the public API or CLI and assert expected exit status.
 - [ ] Add tests for `openshieldhit_last_error()`
-  - Suggested coverage: missing geometry file, unsupported normal mode, and error reset on a subsequent successful call.
-- [ ] Add tests for context setter ownership semantics
+  - [x] Empty on fresh context
+  - [x] Empty on NULL context (no crash)
+  - [x] Set on unsupported run mode
+  - [ ] Error reset on a subsequent successful call
+  - [ ] Set on missing geometry file
+- [ ] Add tests for context configure ownership semantics
   - Suggested coverage: strings are deep-copied, `NULL` clears a field, and failed replacement does not clobber the previous value.
 
 ## Packaging / Install TODO

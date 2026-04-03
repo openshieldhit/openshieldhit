@@ -42,28 +42,79 @@ static void test_context_create_destroy(void) {
     openshieldhit_context_destroy(ctx);
 }
 
-static void test_setters_return_ok(void) {
+static void test_config_init_sets_size(void) {
+    openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
+
+    ASSERT_TRUE(cfg.size == sizeof(openshieldhit_config_t));
+    ASSERT_TRUE(cfg.workdir == NULL);
+    ASSERT_TRUE(cfg.run_mode == OPENSHIELDHIT_RUN_NORMAL);
+    ASSERT_TRUE(cfg.has_nstat == 0);
+}
+
+static void test_configure_returns_ok(void) {
     openshieldhit_context_t *ctx = openshieldhit_context_create();
+    openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
+
     ASSERT_TRUE(ctx != NULL);
 
-    ASSERT_TRUE(openshieldhit_context_set_workdir(ctx, "/tmp") == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_out_dir(ctx, "/tmp/out") == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_geo_path(ctx, "geo.dat") == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_beam_path(ctx, "beam.dat") == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_mat_path(ctx, "mat.dat") == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_detect_path(ctx, "detect.dat") == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_nstat(ctx, 1000ULL) == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_log_level(ctx, 1) == OPENSHIELDHIT_STATUS_OK);
-    ASSERT_TRUE(openshieldhit_context_set_run_mode(ctx, OPENSHIELDHIT_RUN_VALIDATE) == OPENSHIELDHIT_STATUS_OK);
+    cfg.workdir = "/tmp";
+    cfg.out_dir = "/tmp/out";
+    cfg.geo_path = "geo.dat";
+    cfg.beam_path = "beam.dat";
+    cfg.mat_path = "mat.dat";
+    cfg.detect_path = "detect.dat";
+    cfg.nstat = 1000ULL;
+    cfg.has_nstat = 1;
+    cfg.log_level = 1;
+    cfg.run_mode = OPENSHIELDHIT_RUN_VALIDATE;
+
+    ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_OK);
 
     openshieldhit_context_destroy(ctx);
 }
 
-static void test_setters_reject_null_context(void) {
-    ASSERT_TRUE(openshieldhit_context_set_workdir(NULL, "/tmp") == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
-    ASSERT_TRUE(openshieldhit_context_set_nstat(NULL, 100ULL) == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
-    ASSERT_TRUE(openshieldhit_context_set_run_mode(NULL, OPENSHIELDHIT_RUN_VALIDATE)
-                == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
+static void test_configure_rejects_invalid_arguments(void) {
+    openshieldhit_context_t *ctx;
+    openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
+
+    ASSERT_TRUE(openshieldhit_context_configure(NULL, &cfg) == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
+
+    ctx = openshieldhit_context_create();
+    ASSERT_TRUE(ctx != NULL);
+    cfg.size = 0;
+    ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_INVALID_ARGUMENT);
+    openshieldhit_context_destroy(ctx);
+}
+
+static void test_last_error_empty_on_fresh_context(void) {
+    openshieldhit_context_t *ctx = openshieldhit_context_create();
+    ASSERT_TRUE(ctx != NULL);
+    ASSERT_TRUE(openshieldhit_last_error(ctx) != NULL);
+    ASSERT_TRUE(openshieldhit_last_error(ctx)[0] == '\0');
+    openshieldhit_context_destroy(ctx);
+}
+
+static void test_last_error_empty_on_null_context(void) {
+    char const *err = openshieldhit_last_error(NULL);
+    ASSERT_TRUE(err != NULL);
+    ASSERT_TRUE(err[0] == '\0');
+}
+
+static void test_last_error_set_on_unsupported_run_mode(void) {
+    openshieldhit_context_t *ctx = openshieldhit_context_create();
+    openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
+    enum openshieldhit_status rc;
+
+    ASSERT_TRUE(ctx != NULL);
+    /* NORMAL mode is not yet implemented — run() should fail and set last_error. */
+    cfg.run_mode = OPENSHIELDHIT_RUN_NORMAL;
+    ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_OK);
+
+    rc = openshieldhit_run(ctx, NULL, NULL);
+    ASSERT_TRUE(rc == OPENSHIELDHIT_STATUS_NOT_SUPPORTED);
+    ASSERT_TRUE(openshieldhit_last_error(ctx)[0] != '\0');
+
+    openshieldhit_context_destroy(ctx);
 }
 
 static int run_named_test(char const *name) {
@@ -83,12 +134,28 @@ static int run_named_test(char const *name) {
         test_context_create_destroy();
         return 0;
     }
-    if (strcmp(name, "setters_return_ok") == 0) {
-        test_setters_return_ok();
+    if (strcmp(name, "config_init_sets_size") == 0) {
+        test_config_init_sets_size();
         return 0;
     }
-    if (strcmp(name, "setters_reject_null_context") == 0) {
-        test_setters_reject_null_context();
+    if (strcmp(name, "configure_returns_ok") == 0) {
+        test_configure_returns_ok();
+        return 0;
+    }
+    if (strcmp(name, "configure_rejects_invalid_arguments") == 0) {
+        test_configure_rejects_invalid_arguments();
+        return 0;
+    }
+    if (strcmp(name, "last_error_empty_on_fresh_context") == 0) {
+        test_last_error_empty_on_fresh_context();
+        return 0;
+    }
+    if (strcmp(name, "last_error_empty_on_null_context") == 0) {
+        test_last_error_empty_on_null_context();
+        return 0;
+    }
+    if (strcmp(name, "last_error_set_on_unsupported_run_mode") == 0) {
+        test_last_error_set_on_unsupported_run_mode();
         return 0;
     }
     return 1;
@@ -103,7 +170,11 @@ int main(int argc, char *argv[]) {
     test_version_components_non_negative();
     test_version_components_in_string();
     test_context_create_destroy();
-    test_setters_return_ok();
-    test_setters_reject_null_context();
+    test_config_init_sets_size();
+    test_configure_returns_ok();
+    test_configure_rejects_invalid_arguments();
+    test_last_error_empty_on_fresh_context();
+    test_last_error_empty_on_null_context();
+    test_last_error_set_on_unsupported_run_mode();
     return 0;
 }

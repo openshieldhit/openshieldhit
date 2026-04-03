@@ -11,7 +11,7 @@
  * DESIGN RULE: No internal structs or types may appear in this header.
  *
  * All mutable state is held in the opaque handle `openshieldhit_context_t`.
- * Callers create a context, configure it through setter functions, run it,
+ * Callers create a context, configure it through one config struct, run it,
  * and destroy it. They never access fields directly.
  *
  * Why opaque handles?
@@ -28,7 +28,7 @@
  * What belongs here?
  * ------------------
  *  - The opaque typedef and its lifecycle functions (create / destroy).
- *  - Setter functions for configuration.
+ *  - A config struct plus a configuration function.
  *  - The run function and error retrieval.
  *  - Version query functions.
  *
@@ -40,8 +40,9 @@
  *
  * Adding new functionality?
  * -------------------------
- * Add a setter function, not a new field in a struct. If you find yourself
- * wanting to put a struct in this header, stop and reconsider.
+ * Add a field to `openshieldhit_config_t` when source compatibility is enough.
+ * If true binary compatibility becomes important later, evolve the config
+ * struct through its `size` field.
  */
 
 /* ---- Status codes ---- */
@@ -75,35 +76,46 @@ enum openshieldhit_run_mode {
  */
 typedef struct openshieldhit_context openshieldhit_context_t;
 
+/* ---- Configuration ----
+ *
+ * Initialize with OPENSHIELDHIT_CONFIG_INIT, then override only the fields
+ * you care about. Zero values select defaults.
+ *
+ * The `size` field lets newer libraries distinguish which fields are present
+ * in older caller-compiled structs. Set it with OPENSHIELDHIT_CONFIG_INIT.
+ */
+typedef struct openshieldhit_config {
+    size_t size;
+    char const *workdir;
+    char const *out_dir;
+    char const *geo_path;
+    char const *beam_path;
+    char const *mat_path;
+    char const *detect_path;
+    enum openshieldhit_run_mode run_mode;
+    int log_level;
+    unsigned long long nstat;
+    int has_nstat;
+} openshieldhit_config_t;
+
+#define OPENSHIELDHIT_CONFIG_INIT                                                                                      \
+    {sizeof(openshieldhit_config_t), NULL, NULL, NULL, NULL, NULL, NULL, OPENSHIELDHIT_RUN_NORMAL, 0, 0ULL, 0}
+
 /* Lifecycle */
 openshieldhit_context_t *openshieldhit_context_create(void);
 void openshieldhit_context_destroy(openshieldhit_context_t *ctx);
 
-/* Configuration setters
- *
- * All setters return OPENSHIELDHIT_STATUS_OK on success or a status code on
- * failure (typically OPENSHIELDHIT_STATUS_NO_MEMORY or
- * OPENSHIELDHIT_STATUS_INVALID_ARGUMENT).
+/* Configure
  *
  * String arguments are deep-copied into the context. The caller does not need
- * to keep the original string alive after the setter returns. Passing NULL
- * clears the previously set value.
+ * to keep the original strings alive after this call returns.
  *
- * Future extension points (not yet implemented):
- *   openshieldhit_context_configure_from_json(ctx, json_string)
- *   openshieldhit_context_configure_from_file(ctx, path)
- *   openshieldhit_context_configure_from_fd(ctx, fd)   -- pipe / stdin
+ * Passing NULL or zero values selects defaults for the corresponding field.
+ * Future extension points can add fields to openshieldhit_config_t while older
+ * callers remain source-compatible through the `size` field.
  */
-enum openshieldhit_status openshieldhit_context_set_workdir(openshieldhit_context_t *ctx, char const *path);
-enum openshieldhit_status openshieldhit_context_set_out_dir(openshieldhit_context_t *ctx, char const *path);
-enum openshieldhit_status openshieldhit_context_set_run_mode(openshieldhit_context_t *ctx,
-                                                             enum openshieldhit_run_mode mode);
-enum openshieldhit_status openshieldhit_context_set_log_level(openshieldhit_context_t *ctx, int level);
-enum openshieldhit_status openshieldhit_context_set_nstat(openshieldhit_context_t *ctx, unsigned long long nstat);
-enum openshieldhit_status openshieldhit_context_set_geo_path(openshieldhit_context_t *ctx, char const *path);
-enum openshieldhit_status openshieldhit_context_set_beam_path(openshieldhit_context_t *ctx, char const *path);
-enum openshieldhit_status openshieldhit_context_set_mat_path(openshieldhit_context_t *ctx, char const *path);
-enum openshieldhit_status openshieldhit_context_set_detect_path(openshieldhit_context_t *ctx, char const *path);
+enum openshieldhit_status openshieldhit_context_configure(openshieldhit_context_t *ctx,
+                                                          openshieldhit_config_t const *cfg);
 
 /* Run
  *

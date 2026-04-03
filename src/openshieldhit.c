@@ -41,6 +41,8 @@ static char const *const OSH_DETECT_FILENAME = "detect.dat";
 
 static char *resolve_input_path(char const *workdir, char const *override_path, char const *filename);
 static int file_exists(char const *path);
+static int duplicate_string(char const *src, char **dst_out);
+static int config_has_field(openshieldhit_config_t const *cfg, size_t field_end);
 
 /* Sets ctx->last_error and optionally prints to err (NULL = silent). */
 static void ctx_set_error(openshieldhit_context_t *ctx, FILE *err, char const *fmt, char const *detail) {
@@ -52,24 +54,6 @@ static void ctx_set_error(openshieldhit_context_t *ctx, FILE *err, char const *f
         fprintf(err, fmt, detail);
         fprintf(err, "\n");
     }
-}
-
-/* Deep-copies src into *dst. On OOM the old value is preserved and 0 is
- * returned. Passing NULL/empty clears the field (always succeeds). */
-static int ctx_set_string(char **dst, char const *src) {
-    char *copy;
-    if (!src || !src[0]) {
-        free(*dst);
-        *dst = NULL;
-        return 1;
-    }
-    copy = strdup(src);
-    if (!copy) {
-        return 0; /* old value untouched */
-    }
-    free(*dst);
-    *dst = copy;
-    return 1;
 }
 
 /* ---- Lifecycle ----------------------------------------------------------- */
@@ -91,74 +75,98 @@ void openshieldhit_context_destroy(openshieldhit_context_t *ctx) {
     free(ctx);
 }
 
-/* ---- Configuration setters ----------------------------------------------- */
+/* ---- Configuration ------------------------------------------------------- */
 
-enum openshieldhit_status openshieldhit_context_set_workdir(openshieldhit_context_t *ctx, char const *path) {
+enum openshieldhit_status openshieldhit_context_configure(openshieldhit_context_t *ctx,
+                                                          openshieldhit_config_t const *cfg) {
+    static openshieldhit_config_t const default_cfg = OPENSHIELDHIT_CONFIG_INIT;
+    char *workdir = NULL;
+    char *out_dir = NULL;
+    char *geo_path = NULL;
+    char *beam_path = NULL;
+    char *mat_path = NULL;
+    char *detect_path = NULL;
+    unsigned long long nstat = 0;
+    int has_nstat = 0;
+    enum openshieldhit_run_mode run_mode = OPENSHIELDHIT_RUN_NORMAL;
+    int log_level = 0;
+
     if (!ctx) {
         return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
     }
-    return ctx_set_string(&ctx->workdir, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
-}
 
-enum openshieldhit_status openshieldhit_context_set_out_dir(openshieldhit_context_t *ctx, char const *path) {
-    if (!ctx) {
+    if (!cfg) {
+        cfg = &default_cfg;
+    }
+    if (cfg->size < sizeof(cfg->size)) {
         return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
     }
-    return ctx_set_string(&ctx->out_dir, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
-}
 
-enum openshieldhit_status openshieldhit_context_set_run_mode(openshieldhit_context_t *ctx,
-                                                             enum openshieldhit_run_mode mode) {
-    if (!ctx) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, workdir) + sizeof(cfg->workdir))
+        && !duplicate_string(cfg->workdir, &workdir)) {
+        goto oom;
     }
-    ctx->run_mode = mode;
-    return OPENSHIELDHIT_STATUS_OK;
-}
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, out_dir) + sizeof(cfg->out_dir))
+        && !duplicate_string(cfg->out_dir, &out_dir)) {
+        goto oom;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, geo_path) + sizeof(cfg->geo_path))
+        && !duplicate_string(cfg->geo_path, &geo_path)) {
+        goto oom;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, beam_path) + sizeof(cfg->beam_path))
+        && !duplicate_string(cfg->beam_path, &beam_path)) {
+        goto oom;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, mat_path) + sizeof(cfg->mat_path))
+        && !duplicate_string(cfg->mat_path, &mat_path)) {
+        goto oom;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, detect_path) + sizeof(cfg->detect_path))
+        && !duplicate_string(cfg->detect_path, &detect_path)) {
+        goto oom;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, run_mode) + sizeof(cfg->run_mode))) {
+        run_mode = cfg->run_mode;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, log_level) + sizeof(cfg->log_level))) {
+        log_level = cfg->log_level;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, nstat) + sizeof(cfg->nstat))) {
+        nstat = cfg->nstat;
+    }
+    if (config_has_field(cfg, offsetof(openshieldhit_config_t, has_nstat) + sizeof(cfg->has_nstat))) {
+        has_nstat = cfg->has_nstat;
+    }
 
-enum openshieldhit_status openshieldhit_context_set_log_level(openshieldhit_context_t *ctx, int level) {
-    if (!ctx) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    }
-    ctx->log_level = level;
-    return OPENSHIELDHIT_STATUS_OK;
-}
+    free(ctx->workdir);
+    free(ctx->out_dir);
+    free(ctx->geo_path);
+    free(ctx->beam_path);
+    free(ctx->mat_path);
+    free(ctx->detect_path);
 
-enum openshieldhit_status openshieldhit_context_set_nstat(openshieldhit_context_t *ctx, unsigned long long nstat) {
-    if (!ctx) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    }
+    ctx->workdir = workdir;
+    ctx->out_dir = out_dir;
+    ctx->geo_path = geo_path;
+    ctx->beam_path = beam_path;
+    ctx->mat_path = mat_path;
+    ctx->detect_path = detect_path;
+    ctx->run_mode = run_mode;
+    ctx->log_level = log_level;
     ctx->nstat = nstat;
-    ctx->has_nstat = 1;
+    ctx->has_nstat = has_nstat;
+
     return OPENSHIELDHIT_STATUS_OK;
-}
 
-enum openshieldhit_status openshieldhit_context_set_geo_path(openshieldhit_context_t *ctx, char const *path) {
-    if (!ctx) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    }
-    return ctx_set_string(&ctx->geo_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
-}
-
-enum openshieldhit_status openshieldhit_context_set_beam_path(openshieldhit_context_t *ctx, char const *path) {
-    if (!ctx) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    }
-    return ctx_set_string(&ctx->beam_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
-}
-
-enum openshieldhit_status openshieldhit_context_set_mat_path(openshieldhit_context_t *ctx, char const *path) {
-    if (!ctx) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    }
-    return ctx_set_string(&ctx->mat_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
-}
-
-enum openshieldhit_status openshieldhit_context_set_detect_path(openshieldhit_context_t *ctx, char const *path) {
-    if (!ctx) {
-        return OPENSHIELDHIT_STATUS_INVALID_ARGUMENT;
-    }
-    return ctx_set_string(&ctx->detect_path, path) ? OPENSHIELDHIT_STATUS_OK : OPENSHIELDHIT_STATUS_NO_MEMORY;
+oom:
+    free(workdir);
+    free(out_dir);
+    free(geo_path);
+    free(beam_path);
+    free(mat_path);
+    free(detect_path);
+    return OPENSHIELDHIT_STATUS_NO_MEMORY;
 }
 
 /* ---- Error retrieval ----------------------------------------------------- */
@@ -343,4 +351,24 @@ static int file_exists(char const *path) {
     }
     fclose(fp);
     return 1;
+}
+
+static int duplicate_string(char const *src, char **dst_out) {
+    char *copy = NULL;
+
+    if (!dst_out) {
+        return 0;
+    }
+    if (src && src[0]) {
+        copy = strdup(src);
+        if (!copy) {
+            return 0;
+        }
+    }
+    *dst_out = copy;
+    return 1;
+}
+
+static int config_has_field(openshieldhit_config_t const *cfg, size_t field_end) {
+    return cfg && (cfg->size >= field_end);
 }
