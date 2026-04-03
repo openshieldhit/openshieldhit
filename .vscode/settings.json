@@ -15,6 +15,9 @@
         "**/build": true
     },
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.workspaceParsingPriority": "low",
+    "C_Cpp.intelliSenseCacheSize": 512,
+    "C_Cpp.codeAnalysis.runAutomatically": false,
     "editor.defaultFormatter": null,
     "chat.tools.terminal.autoApprove": {
         "cmake": true,

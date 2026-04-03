@@ -43,6 +43,9 @@ The repo has moved past the original bootstrap phase. We now have:
 
 ## Cleanup / Follow-up
 
+- [ ] Make gemca parser library-safe (non-terminating)
+  - Current state: `osh_gemca_parse()` and all sub-parsers call `osh_error()` on failures, which calls `exit()` directly. This bypasses the `OPENSHIELDHIT_STATUS_PARSE_ERROR` return path in `openshieldhit_run()`. The `03_malformed_geometry` test exits with code 78 by accident (via `exit(EX_CONFIG)` inside the parser), not through the public API.
+  - Fix: thread an error-return mechanism through `osh_gemca_load()` and all parser functions so failures propagate as return values. See comment in `src/gemca/osh_gemca2.c`.
 - [ ] Improve validation diagnostics where possible
   - Especially for malformed geometry / beam input: include useful file and line information when the underlying parser can provide it.
 - [ ] Revisit the public API once beam/material/detect loading are wired

@@ -2,9 +2,11 @@
 #include <stdlib.h>
 
 #include "cli/osh_cli.h"
+#include "common/osh_exit.h"
 #include "openshieldhit/openshieldhit.h"
 
-enum osh_main_exit { OSH_EXIT_OK = 0, OSH_EXIT_FAIL = 1, OSH_EXIT_USAGE = 2 };
+/* Generic failure — not covered by a specific EX_* code. */
+#define OSH_EXIT_FAIL 1
 
 static int exit_code_for_status(enum openshieldhit_status status);
 
@@ -18,17 +20,17 @@ int main(int argc, char *argv[]) {
     if (osh_cli_parse(argc, argv, &opt, err, sizeof(err)) != 0) {
         fprintf(stderr, "Error: %s\n\n", err);
         osh_cli_print_help(stderr, argv[0]);
-        return OSH_EXIT_USAGE;
+        return EX_USAGE;
     }
 
     if (opt.action == OSH_CLI_ACTION_HELP) {
         osh_cli_print_help(stdout, argv[0]);
-        return OSH_EXIT_OK;
+        return EX_OK;
     }
 
     if (opt.action == OSH_CLI_ACTION_VERSION) {
         printf("OpenShieldHIT version %s\n", openshieldhit_version_string());
-        return OSH_EXIT_OK;
+        return EX_OK;
     }
 
     ctx = openshieldhit_context_create();
@@ -55,6 +57,7 @@ int main(int argc, char *argv[]) {
         return OSH_EXIT_FAIL;
     }
 
+
     rc = openshieldhit_run(ctx, stdout, stderr);
     openshieldhit_context_destroy(ctx);
     return exit_code_for_status(rc);
@@ -63,9 +66,14 @@ int main(int argc, char *argv[]) {
 static int exit_code_for_status(enum openshieldhit_status status) {
     switch (status) {
     case OPENSHIELDHIT_STATUS_OK:
-        return OSH_EXIT_OK;
+        return EX_OK;
     case OPENSHIELDHIT_STATUS_INVALID_ARGUMENT:
-        return OSH_EXIT_USAGE;
+        return EX_USAGE;
+    case OPENSHIELDHIT_STATUS_IO_ERROR:
+        return EX_NOINPUT;
+    case OPENSHIELDHIT_STATUS_PARSE_ERROR:
+    case OPENSHIELDHIT_STATUS_INCOMPLETE:
+        return EX_CONFIG;
     default:
         return OSH_EXIT_FAIL;
     }

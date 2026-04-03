@@ -8,7 +8,7 @@ function(register_named_c_tests target source_file)
         string(REGEX MATCH "test_([A-Za-z0-9_]+)\\(void\\)" _ "${test_line}")
         set(test_case "${CMAKE_MATCH_1}")
         add_test(NAME "unit::${target}::${test_case}"
-                 COMMAND "${target}" "${test_case}")
+                 COMMAND $<TARGET_FILE:${target}> "${test_case}")
         set_tests_properties("unit::${target}::${test_case}" PROPERTIES LABELS "unit")
     endforeach()
 endfunction()
@@ -52,7 +52,7 @@ foreach(test_src ${UNIT_SOURCES})
         OSH_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../fixtures"
     )
 
-    add_test(NAME "unit::${test_name}" COMMAND ${test_name})
+    add_test(NAME "unit::${test_name}" COMMAND $<TARGET_FILE:${test_name}>)
     set_tests_properties("unit::${test_name}" PROPERTIES LABELS "unit")
 endforeach()
 

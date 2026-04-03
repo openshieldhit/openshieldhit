@@ -7,6 +7,12 @@
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 
+/* ---- Internal constants -------------------------------------------------- */
+
+/* Size of the last_error buffer inside the context. Large enough for a path
+ * plus a short diagnostic; adjust here if longer messages are ever needed. */
+#define OSH_LAST_ERROR_SIZE 256
+
 /* ---- Internal context definition ---------------------------------------- */
 
 struct openshieldhit_context {
@@ -26,7 +32,7 @@ struct openshieldhit_context {
 
     /* Last error message, populated by openshieldhit_run() on failure.
      * Future: could be extended to a linked list of diagnostics. */
-    char last_error[256];
+    char last_error[OSH_LAST_ERROR_SIZE];
 };
 
 /* ---- Default file names -------------------------------------------------- */

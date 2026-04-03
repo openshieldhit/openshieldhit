@@ -104,7 +104,7 @@ target_include_directories(osh_cli PUBLIC ${PROJECT_SOURCE_DIR}/src)
 
 # ---- Public library facade ----
 add_library(openshieldhit_api STATIC src/openshieldhit.c)
-target_link_libraries(openshieldhit_api PRIVATE osh_all)
+target_link_libraries(openshieldhit_api PUBLIC osh_all)
 target_include_directories(openshieldhit_api
     PUBLIC  ${PROJECT_SOURCE_DIR}/include
     PRIVATE ${PROJECT_SOURCE_DIR}/src
