@@ -55,7 +55,7 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
         return rc;
     }
 
-    rc = osh_beam_shared_init(wb->shared);
+    rc = osh_beam_shared_init(&wb->shared);
     if (rc != OSH_OK) {
         osh_fclose(sf);
         osh_beam_workspace_free(wb);
@@ -90,9 +90,7 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     if (wb->spots) {
         osh_beam_spots_free(wb->spots);
     }
-    if (wb->shared) {
-        osh_beam_shared_free(wb->shared);
-    }
+    /* wb->shared is embedded by value — no free needed */
     if (wb->phsp) {
         // TODO osh_beam_phsp_free(wb->phsp);
         free(wb->phsp);
@@ -121,7 +119,8 @@ static void _wb_defaults(struct beam_workspace *wb) {
     wb->fname = NULL;
     wb->fname_spotlist = NULL;
     wb->spots = NULL;
-    wb->shared = NULL;
+    /* wb->shared is embedded by value (see osh_beam.h); zero-initialised by
+     * calloc above, then given sensible defaults by osh_beam_shared_init(). */
     wb->phsp = NULL;
     wb->rifi = NULL;
     wb->parlev = NULL;

@@ -145,7 +145,11 @@ struct beam_workspace {
     /* --- Beam source --- */
     struct beam_phsp *phsp;     /* phase-space source; NULL if spots mode */
     struct beam_spot *spots;    /* spot array; NULL if phsp mode */
-    struct beam_shared *shared; /* beam geometry shared across all spots */
+    struct beam_shared shared;  /* beam geometry — embedded by value, not a pointer.
+                                 * Each workspace is an independent run; there is no sharing
+                                 * scenario that would justify a separate allocation. Embedding
+                                 * avoids an extra malloc/free pair and keeps shared fields in
+                                 * the same cache line as the rest of the workspace scalars. */
     struct ripple_filter *rifi; /* range modulator; NULL if not used */
     struct parlev *parlev;      /* PARLEV lever settings; NULL if not used */
     char *wdir;                 /* working directory for relative paths (owned) */
