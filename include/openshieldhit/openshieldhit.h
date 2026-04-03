@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Public API for libopenshieldhit
  * ================================
@@ -135,5 +139,9 @@ char const *openshieldhit_version_string(void);
 int openshieldhit_version_major(void);
 int openshieldhit_version_minor(void);
 int openshieldhit_version_patch(void);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif /* OPENSHIELDHIT_OPENSHIELDHIT_H */
