@@ -2,7 +2,13 @@
 
 ## Version Management
 
-Version is extracted from git at **CMake configure time** using `git describe --tags --always --dirty` and passed to the compiler as a preprocessor definition.
+Version is extracted from git at **CMake configure time** using `git describe --tags --always --dirty` and written into a generated header:
+
+```
+<build_dir>/generated/common/osh_version.h
+```
+
+This file is produced by `configure_file` from `src/common/osh_version.h.in` and provides the macros `OSH_VERSION`, `OSH_VERSION_MAJOR`, `OSH_VERSION_MINOR`, and `OSH_VERSION_PATCH` to the implementation. The public API exposes version information through functions (`openshieldhit_version_string()` etc.) rather than macros.
 
 To update version in an existing build, reconfigure:
 ```bash

@@ -1,0 +1,275 @@
+#include "cli/osh_cli.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* This parser intentionally does not use getopt/getopt_long because MSVC
+ * does not provide <getopt.h> in its standard C runtime. Keeping the option
+ * handling local avoids an extra compatibility dependency on Windows. */
+
+static int set_err(char *err, size_t err_cap, char const *fmt, char const *arg);
+static int parse_u64(char const *s, unsigned long long *out);
+static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_options *opt, char *err, size_t err_cap);
+static int
+parse_short_options(int argc, char *argv[], int *idx, struct osh_cli_options *opt, char *err, size_t err_cap);
+static int consume_option_arg(int argc, char *argv[], int *idx, char const *current, char const **value_out);
+
+int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err, size_t err_cap) {
+    int i;
+    int positional_only = 0;
+
+    if (!opt) {
+        return 1;
+    }
+
+    opt->action = OSH_CLI_ACTION_RUN;
+    opt->dry_run = 0;
+    opt->verbose = 0;
+    opt->workdir = NULL;
+    opt->geo_path = NULL;
+    opt->beam_path = NULL;
+    opt->mat_path = NULL;
+    opt->detect_path = NULL;
+    opt->out_dir = NULL;
+    opt->nstat = 0;
+    opt->has_nstat = 0;
+
+    if (argc <= 1) {
+        opt->action = OSH_CLI_ACTION_HELP;
+        return 0;
+    }
+
+    for (i = 1; i < argc; ++i) {
+        char const *arg = argv[i];
+
+        if (!arg) {
+            continue;
+        }
+
+        if (!positional_only && strcmp(arg, "--") == 0) {
+            positional_only = 1;
+            continue;
+        }
+
+        if (!positional_only && (strncmp(arg, "--", 2) == 0)) {
+            if (parse_long_option(argc, argv, &i, opt, err, err_cap) != 0) {
+                return 1;
+            }
+            continue;
+        }
+
+        if (!positional_only && (arg[0] == '-') && arg[1] != '\0') {
+            if (parse_short_options(argc, argv, &i, opt, err, err_cap) != 0) {
+                return 1;
+            }
+        } else {
+            if (!opt->workdir) {
+                opt->workdir = arg;
+            } else {
+                return set_err(err, err_cap, "unexpected positional argument '%s'", arg);
+            }
+        }
+    }
+
+    return 0;
+}
+
+void osh_cli_print_help(FILE *out, char const *prog) {
+    char const *cmd = (prog && *prog) ? prog : "openshieldhit";
+
+    fprintf(out, "Usage: %s [OPTIONS] [WORKDIR]\n", cmd);
+    fprintf(out, "OpenShieldHIT - Monte Carlo Particle Transport\n\n");
+    fprintf(out, "Options:\n");
+    fprintf(out, "  -h, --help            Show this help message\n");
+    fprintf(out, "  -V, --version         Print version information\n");
+    fprintf(out, "  -v, --verbose         Increase verbosity\n");
+    fprintf(out, "  -N, --nstat <n>       Number of requested primary histories\n");
+    fprintf(out, "      --dry-run         Parse/load inputs only, do not run transport\n");
+    fprintf(out, "      --workdir <dir>   Working directory for default input/output files\n");
+    fprintf(out, "      --geo <file>      Override geometry input file\n");
+    fprintf(out, "      --beam <file>     Override beam input file\n");
+    fprintf(out, "      --mat <file>      Override material input file\n");
+    fprintf(out, "      --detect <file>   Override scoring input file\n");
+    fprintf(out, "  -o, --outdir <dir>    Override output directory\n");
+    fprintf(out, "\n");
+    fprintf(out, "Notes:\n");
+    fprintf(out, "  WORKDIR defaults input files to WORKDIR/{geo,beam,mat,detect}.dat.\n");
+    fprintf(out, "  Input overrides replace only the corresponding default file.\n");
+}
+
+static int set_err(char *err, size_t err_cap, char const *fmt, char const *arg) {
+    if (err && (err_cap > 0)) {
+        (void) snprintf(err, err_cap, fmt, arg);
+        err[err_cap - 1] = '\0';
+    }
+    return 1;
+}
+
+static int parse_u64(char const *s, unsigned long long *out) {
+    unsigned long long v;
+    char *end = NULL;
+
+    if (!s || !*s || !out) {
+        return 0;
+    }
+
+    errno = 0;
+    v = strtoull(s, &end, 10);
+    if ((errno != 0) || (end == s) || (end && *end != '\0')) {
+        return 0;
+    }
+
+    *out = v;
+    return 1;
+}
+
+static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_options *opt, char *err, size_t err_cap) {
+    char *eq;
+    char const *arg = argv[*idx];
+    char const *name = arg + 2;
+    char const *value = NULL;
+    size_t name_len;
+
+    eq = strchr(name, '=');
+    if (eq) {
+        name_len = (size_t) (eq - name);
+        value = eq + 1;
+    } else {
+        name_len = strlen(name);
+    }
+
+    if ((name_len == 4) && (strncmp(name, "help", name_len) == 0) && !value) {
+        opt->action = OSH_CLI_ACTION_HELP;
+        return 0;
+    }
+    if ((name_len == 7) && (strncmp(name, "version", name_len) == 0) && !value) {
+        opt->action = OSH_CLI_ACTION_VERSION;
+        return 0;
+    }
+    if ((name_len == 7) && (strncmp(name, "verbose", name_len) == 0) && !value) {
+        opt->verbose += 1;
+        return 0;
+    }
+    if ((name_len == 7) && (strncmp(name, "dry-run", name_len) == 0) && !value) {
+        opt->dry_run = 1;
+        return 0;
+    }
+
+    if ((name_len == 5) && (strncmp(name, "nstat", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        if (!parse_u64(value, &opt->nstat)) {
+            return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--nstat");
+        }
+        opt->has_nstat = 1;
+        return 0;
+    }
+    if ((name_len == 7) && (strncmp(name, "workdir", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->workdir = value;
+        return 0;
+    }
+    if ((name_len == 3) && (strncmp(name, "geo", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->geo_path = value;
+        return 0;
+    }
+    if ((name_len == 4) && (strncmp(name, "beam", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->beam_path = value;
+        return 0;
+    }
+    if ((name_len == 3) && (strncmp(name, "mat", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->mat_path = value;
+        return 0;
+    }
+    if ((name_len == 6) && (strncmp(name, "detect", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->detect_path = value;
+        return 0;
+    }
+    if (((name_len == 6) && (strncmp(name, "outdir", name_len) == 0))
+        || ((name_len == 3) && (strncmp(name, "out", name_len) == 0))
+        || ((name_len == 6) && (strncmp(name, "output", name_len) == 0))) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->out_dir = value;
+        return 0;
+    }
+
+    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+}
+
+static int
+parse_short_options(int argc, char *argv[], int *idx, struct osh_cli_options *opt, char *err, size_t err_cap) {
+    char const *arg = argv[*idx];
+    size_t pos;
+
+    for (pos = 1; arg[pos] != '\0'; ++pos) {
+        char const *value = NULL;
+        char ch = arg[pos];
+
+        switch (ch) {
+        case 'h':
+            opt->action = OSH_CLI_ACTION_HELP;
+            break;
+        case 'V':
+            opt->action = OSH_CLI_ACTION_VERSION;
+            break;
+        case 'v':
+            opt->verbose += 1;
+            break;
+        case 'N':
+            value = &arg[pos + 1];
+            if (*value == '\0') {
+                if (!consume_option_arg(argc, argv, idx, arg, &value)) {
+                    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+                }
+            }
+            if (!parse_u64(value, &opt->nstat)) {
+                return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--nstat");
+            }
+            opt->has_nstat = 1;
+            return 0;
+        case 'o':
+            value = &arg[pos + 1];
+            if (*value == '\0') {
+                if (!consume_option_arg(argc, argv, idx, arg, &value)) {
+                    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+                }
+            }
+            opt->out_dir = value;
+            return 0;
+        default:
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+    }
+
+    return 0;
+}
+
+static int consume_option_arg(int argc, char *argv[], int *idx, char const *current, char const **value_out) {
+    if ((current != NULL) && (current[0] != '\0')) {
+        ++(*idx);
+    }
+    if ((*idx >= argc) || (argv[*idx] == NULL)) {
+        return 0;
+    }
+    *value_out = argv[*idx];
+    return 1;
+}

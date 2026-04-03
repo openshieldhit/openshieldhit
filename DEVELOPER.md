@@ -45,6 +45,9 @@ Not intended for end-users.
 - Private/internal functions use `static` and no `_osh` prefix : `foobar()`
 - Private/inline functions use `static inline` and `_` prefix: `_foobar()`. This naming may be subject to change later when we settle on a better convention.
 - Prefer `enum` instead of `#define` numbered lists.
+- Avoid magic numbers in implementation code:
+  - Use named constants (`enum`, `static const`, or `#define` where appropriate) for option IDs, buffer sizes, exit codes, default filenames, and similar values.
+  - Small arithmetic literals directly tied to local logic (e.g. `+1` for NUL terminator sizing) are acceptable when obvious and local.
 
 - Public headers must use include guards of the form:
 
