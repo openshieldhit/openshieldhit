@@ -29,10 +29,17 @@ struct parlev;        /* LEVERS parameter block — defined in osh_beam_parlev.h
  * not write to them. */
 struct beam_spot {
     /* Derived at init — do not write after osh_beam_setup_from_path() returns */
-    double _tm[16]; /* 4x4 rotation+translation matrix, built from shared.theta/phi and p[] */
+    double _tm[16]; /* 4x4 standard affine matrix mapping beam-local PZALIGN
+                     * coordinates to UNIVERSE for sampling:
+                     *   p_u = R * p_l + R * spot->p
+                     * where spot->p is BEAMPOS in the local beam frame before
+                     * gantry/table rotation. The 3x3 block rotates local beam
+                     * basis vectors into UNIVERSE; the last column stores the
+                     * translated world-space beam entry point. */
 
     /* Lateral profile */
-    double p[3];    /* position [cm] relative to isocenter */
+    double p[3];    /* BEAMPOS [cm] in beam-local coordinates before gantry /
+                     * table rotation; relative to isocenter */
     double size[2]; /* lateral size [cm]: 1-sigma (Gaussian), half-width (square),
                        inner/outer radius (circular) */
     double div[2];  /* beam divergence [rad] */

@@ -9,7 +9,35 @@
 #define OSH_COORD_BZALIGN 4  /* System which aligned so one body corner is at (0,0,0) cm and turned along z-axis */
 #define OSH_COORD_BCALIGN 5  /* System which aligned so the body center is at (0,0,0) cm */
 
-#include "transport/osh_transport.h"
+struct point {
+    double p[4]; /* x,y,z,E; E is total kinetic energy [MeV] (not per nucleon or per amu).*/
+    int system;  /* optional marker for saying what coordinate system we are in. 0 = unknown, 1 = universe ... */
+};
+
+struct ray {
+    double p[3];
+    double cp[3]; /* direction vector */ /* TODO: refactor to v */
+    int system;   /* coordinate system */
+};
+
+struct position;
+
+/* a ray is a primitive struct which merely contains position, optional energy, and a direction vector */
+/* a ray has no length */
+struct ray_v { /* TODO: rename to ray */
+    double p[4]; /* x,y,z,E; E is total kinetic energy [MeV] (not per nucleon or per amu).*/
+    double v[3]; /* unit vector pointing where particle is traveling (like CX,CY,CZ in gdatap)*/
+    unsigned char
+        system; /* optional marker for saying what coordinate system we are in. 0 = unknown, 1 = universe ... */
+};
+
+/* alternatively a ray can also be defined by cosines of spherical coordinates */
+struct ray_c {
+    double p[4]; /* x,y,z,E; E is total kinetic energy [MeV] (not per nucleon or per amu).*/
+    double c[3]; /* spherical coordinate direction cosines (cos(theta), sin(phi), cos(phi) */
+    unsigned char
+        system; /* optional marker for saying what coordinate system we are in. 0 = unknown, 1 = universe ... */
+};
 
 int osh_coord_c2v(double const *c, double *v);
 int osh_coord_v2c(double const *v, double *c);

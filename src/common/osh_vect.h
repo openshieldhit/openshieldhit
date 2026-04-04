@@ -214,4 +214,30 @@ void osh_vect_matrix4_print(double const *tm);
  */
 void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm);
 
+/**
+ * @brief Builds a standard affine matrix mapping beam-local BZ/PZALIGN
+ * coordinates to UNIVERSE coordinates.
+ *
+ * @details The resulting matrix follows the conventional affine form
+ *   p_out = R * p_in + t
+ * where R columns are the local basis vectors (S,T,Rdir) expressed in
+ * UNIVERSE, and t is a world-space translation.
+ *
+ * This is the preferred helper for new code. The legacy
+ * osh_vect_setup_tmatrix_bzalign() function above follows the older
+ * SHIELD-HIT/GEMCA convention and is kept only for backward compatibility
+ * until GEMCA is migrated away from direct matrix-slot inspection.
+ */
+void osh_vect_setup_tmatrix_bzalign_affine(double const *p_local, double const *r_world, double *tm);
+
+/**
+ * @brief Apply a standard affine matrix to a point.
+ */
+void osh_vect_trans_point_affine(double const *p, double *pt, double const *tm);
+
+/**
+ * @brief Apply only the rotation part of a standard affine matrix to a vector.
+ */
+void osh_vect_trans_vector_affine(double const *v, double *vt, double const *tm);
+
 #endif /* OSH_VECT_H */
