@@ -67,7 +67,7 @@ static double _shape_sigma_1d(struct beam_spot const *spot, int axis) {
     }
 }
 
-static int _sample_position(struct osh_rng *rng, struct beam_spot const *spot, double *x_out, double *y_out) {
+static int _sample_position_xy(struct osh_rng *rng, struct beam_spot const *spot, double pos[2]) {
     double rin;
     double rout;
     double r2;
@@ -75,18 +75,18 @@ static int _sample_position(struct osh_rng *rng, struct beam_spot const *spot, d
 
     switch (spot->shape) {
     case OSH_BEAM_SHAPE_PENCIL:
-        *x_out = 0.0;
-        *y_out = 0.0;
+        pos[0] = 0.0;
+        pos[1] = 0.0;
         return OSH_OK;
 
     case OSH_BEAM_SHAPE_GAUSSIAN:
-        *x_out = (spot->size[0] > 0.0) ? spot->size[0] * osh_rng_gauss01(rng) : 0.0;
-        *y_out = (spot->size[1] > 0.0) ? spot->size[1] * osh_rng_gauss01(rng) : 0.0;
+        pos[0] = (spot->size[0] > 0.0) ? spot->size[0] * osh_rng_gauss01(rng) : 0.0;
+        pos[1] = (spot->size[1] > 0.0) ? spot->size[1] * osh_rng_gauss01(rng) : 0.0;
         return OSH_OK;
 
     case OSH_BEAM_SHAPE_SQUARE:
-        *x_out = _sample_uniform_symmetric(rng, spot->size[0]);
-        *y_out = _sample_uniform_symmetric(rng, spot->size[1]);
+        pos[0] = _sample_uniform_symmetric(rng, spot->size[0]);
+        pos[1] = _sample_uniform_symmetric(rng, spot->size[1]);
         return OSH_OK;
 
     case OSH_BEAM_SHAPE_CIRCULAR:
@@ -98,8 +98,8 @@ static int _sample_position(struct osh_rng *rng, struct beam_spot const *spot, d
         phi = 2.0 * OSH_M_PI * osh_rng_double(rng);
         r2 = rin * rin + (rout * rout - rin * rin) * osh_rng_double(rng);
         rout = sqrt(r2);
-        *x_out = rout * cos(phi);
-        *y_out = rout * sin(phi);
+        pos[0] = rout * cos(phi);
+        pos[1] = rout * sin(phi);
         return OSH_OK;
 
     default:
@@ -107,42 +107,100 @@ static int _sample_position(struct osh_rng *rng, struct beam_spot const *spot, d
     }
 }
 
-/* Sample Gaussian angle in one transverse plane using the Fermi-Eyges
- * correlation form. sigma_x and sigma_xp are the RMS widths; rho is the
- * correlation coefficient. u2 is an independent N(0,1) sample.
+/* Sample the complete transverse phase space in beam-local coordinates.
  *
- *   x  = sigma_x  * u1
- *   x' = sigma_xp * (rho * u1 + sqrt(1 - rho^2) * u2)
+ * Output:
+ *   pos[0], pos[1] = sampled transverse offsets x,y at the beam start plane
+ *   ang[0], ang[1] = sampled small-angle slopes x'=dx/dz, y'=dy/dz
  *
- * For the current single-spot path we use the equivalent closed form
- * directly. For non-Gaussian shapes we feed in the actual sampled x and the
- * RMS width corresponding to that shape, which preserves the requested
- * position-angle correlation. */
-static void _sample_angle_1d(
-    struct osh_rng *rng, double x, double sigma_x, double sigma_xp, double rho, double *xp_out) {
-    double u2;
-    double rho_clamped;
-    double rho_orth;
+ * The current beam model treats the two transverse planes independently:
+ *   - size[0], div[0], cor[0] describe the x/x' plane
+ *   - size[1], div[1], cor[1] describe the y/y' plane
+ *   - there are no cross-plane x-y coupling terms yet
+ *
+ * Gaussian spots sample position and angle together in each plane so the
+ * requested position-angle correlation is exact. Non-Gaussian shapes first
+ * sample the transverse position from the requested profile, then derive the
+ * angle using the RMS width of that profile in the same correlation formula. */
+static int _sample_phase_space_xy(struct osh_rng *rng, struct beam_spot const *spot, double pos[2], double ang[2]) {
+    double sigma_pos[2];
+    double rho[2];
+    double rho_orth[2];
+    double z_ang[2];
+    int axis;
+    int rc;
 
-    if (sigma_xp <= 0.0) {
-        *xp_out = 0.0;
-        return;
+    if (spot->shape == OSH_BEAM_SHAPE_GAUSSIAN) {
+        for (axis = 0; axis < 2; axis++) {
+            /* In the Gaussian case, position and angle belong to one joint
+             * 2x2 phase-space model in each plane, so sample them together. */
+            sigma_pos[axis] = _shape_sigma_1d(spot, axis);
+            pos[axis] = (sigma_pos[axis] > 0.0) ? sigma_pos[axis] * osh_rng_gauss01(rng) : 0.0;
+
+            if (spot->div[axis] <= 0.0) {
+                ang[axis] = 0.0;
+                continue;
+            }
+
+            if (sigma_pos[axis] <= 0.0) {
+                ang[axis] = spot->div[axis] * osh_rng_gauss01(rng);
+                continue;
+            }
+
+            rho[axis] = spot->cor[axis];
+            if (rho[axis] > 1.0) {
+                rho[axis] = 1.0;
+            } else if (rho[axis] < -1.0) {
+                rho[axis] = -1.0;
+            }
+
+            rho_orth[axis] = sqrt(fmax(0.0, 1.0 - rho[axis] * rho[axis]));
+            z_ang[axis] = osh_rng_gauss01(rng);
+            /* Closed-form correlated Gaussian:
+             * x' = sigma_x' * (rho * z_pos + sqrt(1-rho^2) * z_ang)
+             * with z_pos = x / sigma_x. */
+            ang[axis] =
+                spot->div[axis] * (rho[axis] * (pos[axis] / sigma_pos[axis]) + rho_orth[axis] * z_ang[axis]);
+        }
+        return OSH_OK;
     }
 
-    if (sigma_x <= 0.0) {
-        *xp_out = sigma_xp * osh_rng_gauss01(rng);
-        return;
+    /* For square/circular/pencil beams the spatial profile is not Gaussian.
+     * Sample the position from the requested shape first, then map that
+     * sampled position to an angle using the RMS width of the profile. */
+    rc = _sample_position_xy(rng, spot, pos);
+    if (rc != OSH_OK) {
+        return rc;
     }
 
-    rho_clamped = rho;
-    if (rho_clamped > 1.0) {
-        rho_clamped = 1.0;
-    } else if (rho_clamped < -1.0) {
-        rho_clamped = -1.0;
+    for (axis = 0; axis < 2; axis++) {
+        sigma_pos[axis] = _shape_sigma_1d(spot, axis);
+        if (spot->div[axis] <= 0.0) {
+            ang[axis] = 0.0;
+            continue;
+        }
+
+        if (sigma_pos[axis] <= 0.0) {
+            ang[axis] = spot->div[axis] * osh_rng_gauss01(rng);
+            continue;
+        }
+
+        rho[axis] = spot->cor[axis];
+        if (rho[axis] > 1.0) {
+            rho[axis] = 1.0;
+        } else if (rho[axis] < -1.0) {
+            rho[axis] = -1.0;
+        }
+
+        rho_orth[axis] = sqrt(fmax(0.0, 1.0 - rho[axis] * rho[axis]));
+        z_ang[axis] = osh_rng_gauss01(rng);
+        /* Same correlation formula as above, but with the actual sampled
+         * position and the RMS width implied by the chosen beam shape. */
+        ang[axis] =
+            spot->div[axis] * (rho[axis] * (pos[axis] / sigma_pos[axis]) + rho_orth[axis] * z_ang[axis]);
     }
-    rho_orth = sqrt(fmax(0.0, 1.0 - rho_clamped * rho_clamped));
-    u2 = osh_rng_gauss01(rng);
-    *xp_out = sigma_xp * (rho_clamped * (x / sigma_x) + rho_orth * u2);
+
+    return OSH_OK;
 }
 
 /* ---- Step 4: SAD correction ---------------------------------------------- */
@@ -208,8 +266,9 @@ static int _sample_one_primary(struct beam_workspace const *wb,
                                struct particle **part_out,
                                struct ray_v *ray_out) {
     struct beam_spot const *spot;
+    double pos[2];
+    double ang[2];
     double norm;
-    double x, xp, y, yp;
     int rc;
 
     if (!wb || !rng || !part_out || !ray_out) {
@@ -225,21 +284,19 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     /* 3. Sample energy — stored in ray_out->p[3] */
     ray_out->p[3] = _sample_energy(rng, spot);
 
-    /* 4. Sample transverse phase space (x, x') and (y, y') in PZALIGN */
-    rc = _sample_position(rng, spot, &x, &y);
+    /* 4. Sample transverse phase space (x, y, x', y') in PZALIGN */
+    rc = _sample_phase_space_xy(rng, spot, pos, ang);
     if (rc != OSH_OK) {
         return rc;
     }
-    _sample_angle_1d(rng, x, _shape_sigma_1d(spot, 0), spot->div[0], spot->cor[0], &xp);
-    _sample_angle_1d(rng, y, _shape_sigma_1d(spot, 1), spot->div[1], spot->cor[1], &yp);
 
-    ray_out->p[0] = x;
-    ray_out->p[1] = y;
+    ray_out->p[0] = pos[0];
+    ray_out->p[1] = pos[1];
     ray_out->p[2] = 0.0; /* beam starts at z=0 in PZALIGN */
 
     /* Direction in PZALIGN: small-angle (x', y') plus main z component. */
-    ray_out->v[0] = xp;
-    ray_out->v[1] = yp;
+    ray_out->v[0] = ang[0];
+    ray_out->v[1] = ang[1];
     ray_out->v[2] = 1.0;
 
     ray_out->system = OSH_COORD_PZALIGN;
