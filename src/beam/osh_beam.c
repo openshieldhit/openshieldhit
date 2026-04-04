@@ -324,7 +324,7 @@ void osh_beam_print_spot(struct beam_spot const *spot) {
     osh_info("%-18s : %.3f  %.3f  %.3f  cm\n", "Position", spot->p[0], spot->p[1], spot->p[2]);
     osh_info("%-18s : %.3f  %.3f  cm\n", "Size/sigma", spot->size[0], spot->size[1]);
     osh_info("%-18s : %.3f  %.3f  mrad\n", "Divergence", spot->div[0] * 1000.0, spot->div[1] * 1000.0);
-    osh_info("%-18s : %.3f  %.3f  cm*rad\n", "Covariance", spot->cov[0], spot->cov[1]);
+    osh_info("%-18s : %.3f  %.3f\n", "Correlation", spot->cor[0], spot->cor[1]);
     osh_info("\n");
     osh_info("%-18s : %.3f  MeV\n", "T0", spot->t0);
     osh_info("%-18s : %.3f  MeV\n", "TSigma", spot->tsigma);

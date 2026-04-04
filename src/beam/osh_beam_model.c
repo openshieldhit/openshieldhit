@@ -1,5 +1,7 @@
 #include "beam/osh_beam_model.h"
 
+#include <math.h>
+
 #include "common/osh_coord.h"
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
@@ -18,32 +20,89 @@ static struct beam_spot const *_select_spot(struct beam_workspace const *wb) {
 /* ---- Step 2: energy sampling --------------------------------------------- */
 
 /* Sample total kinetic energy [MeV] from the spot's energy distribution.
- * TODO: implement Gaussian draw using spot->tsigma and spot->tsigma_type. */
-static double _sample_energy(struct beam_spot const *spot) {
-    /* TODO: draw from distribution around spot->t0 with spread spot->tsigma */
-    return spot->t0;
+ * Current implementation follows the beam-model path used in export_mcpl.py:
+ * Gaussian sampling around t0 with sigma tsigma, clamped at zero. */
+static double _sample_energy(struct osh_rng *rng, struct beam_spot const *spot) {
+    double e;
+
+    if (spot->tsigma <= 0.0) {
+        return spot->t0;
+    }
+
+    e = osh_rng_gauss(rng, spot->t0, spot->tsigma);
+    if (e < 0.0) {
+        e = 0.0;
+    }
+    return e;
 }
 
 /* ---- Step 3: transverse phase-space sampling ----------------------------- */
 
-/* Sample (position, angle) in one transverse plane using the Fermi-Eyges
- * Cholesky form.  sigma_x and sigma_xp are the RMS widths; rho is the
- * correlation coefficient.  u1 and u2 are independent N(0,1) samples.
+/* Sample Gaussian (position, angle) in one transverse plane using the
+ * Fermi-Eyges Cholesky form. sigma_x and sigma_xp are the RMS widths; rho is
+ * the correlation coefficient. u1 and u2 are independent N(0,1) samples.
  *
  *   x  = sigma_x  * u1
  *   x' = sigma_xp * (rho * u1 + sqrt(1 - rho^2) * u2)
  *
- * TODO: plug in actual random number generator; handle SQUARE/CIRCULAR shapes. */
-static void
-_sample_phasespace_1d(struct osh_rng *rng, double sigma_x, double sigma_xp, double rho, double *x_out, double *xp_out) {
-    /* TODO: replace with actual RNG calls */
-    double u1 = 0.0;
-    double u2 = 0.0;
-    (void) rng;
-    (void) rho;
+ * The Python reference stores rho, not covariance, and computes the equivalent
+ * 2x2 Cholesky factors once per beam layer. For the current single-spot path
+ * we use the equivalent closed form directly. */
+static void _sample_phasespace_gaussian_1d(
+    struct osh_rng *rng, double sigma_x, double sigma_xp, double rho, double *x_out, double *xp_out) {
+    double u1;
+    double u2;
+    double rho_clamped;
+    double rho_orth;
 
-    *x_out = sigma_x * u1;
-    *xp_out = sigma_xp * u2; /* TODO: full Cholesky: rho*u1 + sqrt(1-rho^2)*u2 */
+    if (sigma_x <= 0.0) {
+        *x_out = 0.0;
+    } else {
+        u1 = osh_rng_gauss01(rng);
+        *x_out = sigma_x * u1;
+        if (sigma_xp <= 0.0) {
+            *xp_out = 0.0;
+            return;
+        }
+
+        rho_clamped = rho;
+        if (rho_clamped > 1.0) {
+            rho_clamped = 1.0;
+        } else if (rho_clamped < -1.0) {
+            rho_clamped = -1.0;
+        }
+        rho_orth = sqrt(fmax(0.0, 1.0 - rho_clamped * rho_clamped));
+        u2 = osh_rng_gauss01(rng);
+        *xp_out = sigma_xp * (rho_clamped * u1 + rho_orth * u2);
+        return;
+    }
+
+    if (sigma_xp <= 0.0) {
+        *xp_out = 0.0;
+    } else {
+        *xp_out = sigma_xp * osh_rng_gauss01(rng);
+    }
+}
+
+static int
+_sample_phasespace_1d(struct osh_rng *rng, struct beam_spot const *spot, int axis, double *x_out, double *xp_out) {
+    switch (spot->shape) {
+    case OSH_BEAM_SHAPE_PENCIL:
+        *x_out = 0.0;
+        *xp_out = 0.0;
+        return OSH_OK;
+
+    case OSH_BEAM_SHAPE_GAUSSIAN:
+        _sample_phasespace_gaussian_1d(rng, spot->size[axis], spot->div[axis], spot->cor[axis], x_out, xp_out);
+        return OSH_OK;
+
+    case OSH_BEAM_SHAPE_SQUARE:
+    case OSH_BEAM_SHAPE_CIRCULAR:
+        return OSH_ENOTSUP;
+
+    default:
+        return OSH_EINVAL;
+    }
 }
 
 /* ---- Step 4: SAD correction ---------------------------------------------- */
@@ -85,9 +144,11 @@ static int _sample_one_primary(struct beam_workspace const *wb,
                                struct particle **part_out,
                                struct ray_v *ray_out) {
     struct beam_spot const *spot;
+    double norm;
     double x, xp, y, yp;
+    int rc;
 
-    if (!wb || !part_out || !ray_out) {
+    if (!wb || !rng || !part_out || !ray_out) {
         return OSH_EINVAL;
     }
 
@@ -98,11 +159,17 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     *part_out = spot->part;
 
     /* 3. Sample energy — stored in ray_out->p[3] */
-    ray_out->p[3] = _sample_energy(spot);
+    ray_out->p[3] = _sample_energy(rng, spot);
 
     /* 4. Sample transverse phase space (x, x') and (y, y') in PZALIGN */
-    _sample_phasespace_1d(rng, spot->size[0], spot->div[0], spot->cov[0], &x, &xp);
-    _sample_phasespace_1d(rng, spot->size[1], spot->div[1], spot->cov[1], &y, &yp);
+    rc = _sample_phasespace_1d(rng, spot, 0, &x, &xp);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+    rc = _sample_phasespace_1d(rng, spot, 1, &y, &yp);
+    if (rc != OSH_OK) {
+        return rc;
+    }
 
     ray_out->p[0] = x;
     ray_out->p[1] = y;
@@ -111,7 +178,15 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     /* Direction in PZALIGN: small-angle (x', y') plus main z component */
     ray_out->v[0] = xp;
     ray_out->v[1] = yp;
-    ray_out->v[2] = 1.0; /* TODO: normalise after setting xp, yp */
+    ray_out->v[2] = 1.0;
+
+    norm = sqrt(ray_out->v[0] * ray_out->v[0] + ray_out->v[1] * ray_out->v[1] + ray_out->v[2] * ray_out->v[2]);
+    if (norm <= 0.0) {
+        return OSH_ESTATE;
+    }
+    ray_out->v[0] /= norm;
+    ray_out->v[1] /= norm;
+    ray_out->v[2] /= norm;
 
     ray_out->system = OSH_COORD_PZALIGN;
 
