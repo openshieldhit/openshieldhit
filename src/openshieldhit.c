@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "beam/osh_beam.h"
 #include "common/osh_logger.h"
+#include "common/osh_rc.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 
@@ -212,6 +214,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     char *beam_path = NULL;
     char *mat_path = NULL;
     char *detect_path = NULL;
+    struct beam_workspace *beam = NULL;
     struct gemca_workspace *geom = NULL;
     enum openshieldhit_status rc = OPENSHIELDHIT_STATUS_OK;
 
@@ -290,10 +293,19 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         fprintf(out, "Loaded geometry: %s\n", geo_path);
     }
 
-    /* TODO: wire beam loader */
+    if (!file_exists(beam_path)) {
+        ctx_set_error(ctx, err, "beam file not found: %s", beam_path);
+        rc = OPENSHIELDHIT_STATUS_IO_ERROR;
+        goto cleanup;
+    }
+
+    if (osh_beam_setup_from_path(beam_path, NULL, &beam) != OSH_OK) {
+        ctx_set_error(ctx, err, "failed to load beam: %s", beam_path);
+        rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+        goto cleanup;
+    }
     if (out) {
-        fprintf(
-            out, "Beam file %s (loader wiring pending): %s\n", file_exists(beam_path) ? "found" : "missing", beam_path);
+        fprintf(out, "Loaded beam: %s\n", beam_path);
     }
 
     /* TODO: wire material loader */
@@ -317,6 +329,9 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
 cleanup:
+    if (beam) {
+        osh_beam_workspace_free(beam);
+    }
     if (geom) {
         osh_gemca_workspace_free(geom);
     }

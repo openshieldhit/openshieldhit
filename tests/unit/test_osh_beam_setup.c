@@ -1,0 +1,192 @@
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "beam/osh_beam.h"
+#include "common/osh_rc.h"
+
+#define ASSERT_TRUE(cond)                                                                                              \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);                                 \
+            exit(1);                                                                                                   \
+        }                                                                                                              \
+    } while (0)
+
+static void _write_temp_file(char path_template[], char const *content) {
+    int fd;
+    FILE *fp;
+
+    fd = mkstemp(path_template);
+    ASSERT_TRUE(fd >= 0);
+
+    fp = fdopen(fd, "w");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fputs(content, fp) >= 0);
+    ASSERT_TRUE(fclose(fp) == 0);
+}
+
+static void test_setup_single_spot_from_beamdat(void) {
+    char beam_path[] = "/tmp/osh_beamdat_singleXXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text,
+             sizeof beam_text,
+             "TMAX0 120.0 1.5\n"
+             "BEAMPOS 1.0 2.0 -50.0\n"
+             "BEAMSIGMA 0.0 0.0\n"
+             "BEAMDIV 2.0 3.0 0.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->nspots == 1);
+    ASSERT_TRUE(fabs(wb->spots[0].p[0] - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].p[1] - 2.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].p[2] + 50.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].t0 - 120.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].tsigma - 1.5) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].div[0] - 0.002) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].div[1] - 0.003) < 1e-12);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
+    char beam_path[] = "/tmp/osh_beamdat_spotlistXXXXXX";
+    char spot_path[] = "/tmp/osh_spotlist7XXXXXX";
+    char beam_text[1024];
+    char spot_text[1024];
+    struct beam_workspace *wb = NULL;
+    double fwhm_x0;
+    double fwhm_y0;
+    double fwhm_x1;
+    double fwhm_y1;
+    int rc;
+
+    fwhm_x0 = 0.2 * (2.0 * sqrt(2.0 * log(2.0)));
+    fwhm_y0 = 0.1 * (2.0 * sqrt(2.0 * log(2.0)));
+    fwhm_x1 = 0.3 * (2.0 * sqrt(2.0 * log(2.0)));
+    fwhm_y1 = 0.4 * (2.0 * sqrt(2.0 * log(2.0)));
+
+    snprintf(spot_text,
+             sizeof spot_text,
+             "# E_GeV dE_GeV X_cm Y_cm FWHMx_cm FWHMy_cm Weight\n"
+             "0.150 0.002 1.25 -2.5 %.17g %.17g 1000\n"
+             "0.175 0.003 -4.0 3.5 %.17g %.17g 2000\n",
+             fwhm_x0,
+             fwhm_y0,
+             fwhm_x1,
+             fwhm_y1);
+    _write_temp_file(spot_path, spot_text);
+
+    snprintf(beam_text,
+             sizeof beam_text,
+             "TMAX0 200.0 1.5\n"
+             "BEAMPOS 9.0 8.0 -35.0\n"
+             "BEAMSIGMA 0.0 0.0\n"
+             "BEAMDIV 4.0 6.0 0.0\n"
+             "USECBEAM %s\n",
+             spot_path);
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->nspots == 2);
+
+    ASSERT_TRUE(fabs(wb->spots[0].p[0] - 1.25) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].p[1] + 2.5) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].p[2] + 35.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].t0 - 150.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].tsigma - 2.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].size[0] - 0.2) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].size[1] - 0.1) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].div[0] - 0.004) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].div[1] - 0.006) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].cor[0]) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].cor[1]) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].wt - 1000.0) < 1e-12);
+    ASSERT_TRUE(wb->spots[0].spot_id == 1u);
+
+    ASSERT_TRUE(fabs(wb->spots[1].p[0] + 4.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].p[1] - 3.5) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].p[2] + 35.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].t0 - 175.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].tsigma - 3.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].size[0] - 0.3) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].size[1] - 0.4) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].div[0] - 0.004) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].div[1] - 0.006) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[1].wt - 2000.0) < 1e-12);
+    ASSERT_TRUE(wb->spots[1].spot_id == 2u);
+
+    ASSERT_TRUE(wb->shared.use_div == 1);
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+    ASSERT_TRUE(remove(spot_path) == 0);
+}
+
+static void test_setup_spotlist_overrides_optional_columns(void) {
+    char beam_path[] = "/tmp/osh_beamdat_spotlist11XXXXXX";
+    char spot_path[] = "/tmp/osh_spotlist11XXXXXX";
+    char beam_text[1024];
+    char spot_text[1024];
+    struct beam_workspace *wb = NULL;
+    double fwhm_x;
+    double fwhm_y;
+    int rc;
+
+    fwhm_x = 0.25 * (2.0 * sqrt(2.0 * log(2.0)));
+    fwhm_y = 0.35 * (2.0 * sqrt(2.0 * log(2.0)));
+
+    snprintf(spot_text, sizeof spot_text, "0.125 0.001 2.0 -1.0 %.17g %.17g 10.0 20.0 0.3 -0.4 42\n", fwhm_x, fwhm_y);
+    _write_temp_file(spot_path, spot_text);
+
+    snprintf(beam_text,
+             sizeof beam_text,
+             "TMAX0 220.0 4.0\n"
+             "BEAMPOS 0.0 0.0 -25.0\n"
+             "BEAMSIGMA 0.0 0.0\n"
+             "BEAMDIV 4.0 6.0 0.0\n"
+             "USECBEAM %s\n",
+             spot_path);
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->nspots == 1);
+    ASSERT_TRUE(fabs(wb->spots[0].p[0] - 2.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].p[1] + 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].p[2] + 25.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].t0 - 125.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].tsigma - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].size[0] - 0.25) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].size[1] - 0.35) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].div[0] - 0.01) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].div[1] - 0.02) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].cor[0] - 0.3) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].cor[1] + 0.4) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].wt - 42.0) < 1e-12);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+    ASSERT_TRUE(remove(spot_path) == 0);
+}
+
+int main(void) {
+    test_setup_single_spot_from_beamdat();
+    test_setup_spotlist_replaces_template_and_inherits_defaults();
+    test_setup_spotlist_overrides_optional_columns();
+    return 0;
+}

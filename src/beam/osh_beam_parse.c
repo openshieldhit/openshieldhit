@@ -1,5 +1,6 @@
 #include "beam/osh_beam_parse.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +12,7 @@
 #include "common/osh_file.h"
 #include "common/osh_logger.h"
 #include "common/osh_rc.h"
+#include "common/osh_readline.h"
 
 /* ---- Parse-phase handlers ------------------------------------------------
  *
@@ -85,6 +87,9 @@ int osh_beam_parse(struct oshfile *oshf, struct beam_workspace *beam) {
 
     while (osh_readline_key(oshf, &lline, &key, &args, &lineno) != -1) {
         int found = 0;
+        for (i = 0; key[i] != '\0'; i++) {
+            key[i] = (char) tolower((unsigned char) key[i]);
+        }
         for (i = 0; _dispatch_table[i].key != NULL; i++) {
             if (strcmp(_dispatch_table[i].key, key) == 0) {
                 _dispatch_table[i].handler(beam, oshf, args);
@@ -93,7 +98,7 @@ int osh_beam_parse(struct oshfile *oshf, struct beam_workspace *beam) {
             }
         }
         if (!found) {
-            osh_warn("Line %d: Unknown key '%s'\n", lineno, key);
+            osh_warn("Line %d: Unknown key '%s'", lineno, key);
         }
         free(lline);
         lline = NULL;
@@ -206,7 +211,7 @@ static int _parse_bmodmc(struct beam_workspace *beam, struct oshfile *oshf, char
      * osh_beam_rifi.h exists and beam->rifi is allocated by USEBMOD. */
     (void) beam;
     (void) args;
-    osh_warn("in %s line %i: BMODMC parsed but rifi not yet implemented\n", oshf->filename, oshf->lineno);
+    osh_warn("in %s line %i: BMODMC parsed but rifi not yet implemented", oshf->filename, oshf->lineno);
     return OSH_OK;
 }
 
@@ -214,7 +219,7 @@ static int _parse_bmodtrans(struct beam_workspace *beam, struct oshfile *oshf, c
     /* BMODTRANS is deprecated — warn and ignore. */
     (void) beam;
     (void) args;
-    osh_warn("in %s line %i: BMODTRANS is deprecated and will be ignored\n", oshf->filename, oshf->lineno);
+    osh_warn("in %s line %i: BMODTRANS is deprecated and will be ignored", oshf->filename, oshf->lineno);
     return OSH_OK;
 }
 
@@ -255,7 +260,7 @@ static int _parse_hiproj(struct beam_workspace *beam, struct oshfile *oshf, char
     /* TODO: particle lookup by A/Z not yet wired — requires particle table. */
     (void) beam;
     (void) args;
-    osh_warn("in %s line %i: HIPROJ parsed but particle lookup not yet implemented\n", oshf->filename, oshf->lineno);
+    osh_warn("in %s line %i: HIPROJ parsed but particle lookup not yet implemented", oshf->filename, oshf->lineno);
     return OSH_OK;
 }
 
@@ -263,7 +268,7 @@ static int _parse_jpart0(struct beam_workspace *beam, struct oshfile *oshf, char
     /* TODO: particle lookup by JPART0 index not yet wired — requires particle table. */
     (void) beam;
     (void) args;
-    osh_warn("in %s line %i: JPART0 parsed but particle lookup not yet implemented\n", oshf->filename, oshf->lineno);
+    osh_warn("in %s line %i: JPART0 parsed but particle lookup not yet implemented", oshf->filename, oshf->lineno);
     return OSH_OK;
 }
 
@@ -421,7 +426,7 @@ static int _parse_usebmod(struct beam_workspace *beam, struct oshfile *oshf, cha
     }
     osh_relative_path_to_file(&_path, beam->wdir, tmpstr);
     /* TODO: osh_beam_rifi_load not yet declared in a header */
-    osh_warn("in %s line %i: USEBMOD parsed but rifi loader not yet implemented\n", oshf->filename, oshf->lineno);
+    osh_warn("in %s line %i: USEBMOD parsed but rifi loader not yet implemented", oshf->filename, oshf->lineno);
     free(_path);
     return OSH_OK;
 }
@@ -441,6 +446,7 @@ static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, ch
         osh_alloc_failed("beam->fname_spotlist");
     }
     memcpy(beam->fname_spotlist, _path, len + 1);
+    osh_info("USECBEAM enabled: queued external spotlist %s", beam->fname_spotlist);
     free(_path);
     beam->beam_mode = OSH_BEAM_MODE_SOBP;
     return OSH_OK;
@@ -454,7 +460,7 @@ static int _parse_useparlev(struct beam_workspace *beam, struct oshfile *oshf, c
     }
     osh_relative_path_to_file(&_path, beam->wdir, tmpstr);
     /* TODO: osh_beam_parlev_load not yet declared in a header */
-    osh_warn("in %s line %i: USEPARLEV parsed but parlev loader not yet implemented\n", oshf->filename, oshf->lineno);
+    osh_warn("in %s line %i: USEPARLEV parsed but parlev loader not yet implemented", oshf->filename, oshf->lineno);
     free(_path);
     return OSH_OK;
 }
