@@ -35,12 +35,35 @@ void test_norm(void) {
     assert(fabs(len2_after - 1.0) < OSH_VECT_EPS); /* should be unit vector */
 }
 
+void test_affine_bzalign_transform(void) {
+    double p_local[3] = {1.0, 2.0, 3.0};
+    double v_local[3] = {0.0, 0.0, 1.0};
+    double origin_local[3] = {4.0, 5.0, 6.0};
+    double zdir_world[3] = {0.0, 0.0, 1.0};
+    double tm[16];
+    double p_world[3];
+    double v_world[3];
+
+    osh_vect_setup_tmatrix_bzalign_affine(origin_local, zdir_world, tm);
+    osh_vect_trans_point_affine(p_local, p_world, tm);
+    osh_vect_trans_vector_affine(v_local, v_world, tm);
+
+    assert(fabs(p_world[0] - 5.0) < OSH_VECT_EPS);
+    assert(fabs(p_world[1] - 7.0) < OSH_VECT_EPS);
+    assert(fabs(p_world[2] - 9.0) < OSH_VECT_EPS);
+
+    assert(fabs(v_world[0] - 0.0) < OSH_VECT_EPS);
+    assert(fabs(v_world[1] - 0.0) < OSH_VECT_EPS);
+    assert(fabs(v_world[2] - 1.0) < OSH_VECT_EPS);
+}
+
 int main(void) {
     printf("Running osh_vect tests...\n");
 
     test_dot_product();
     test_cross_product();
     test_norm();
+    test_affine_bzalign_transform();
 
     printf("All tests passed.\n");
     return 0;

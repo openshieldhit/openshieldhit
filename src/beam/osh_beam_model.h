@@ -3,12 +3,16 @@
 
 #include "beam/osh_beam.h"
 #include "particle/osh_particle.h"
+#include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 
 /* ---- Primary particle sampling -------------------------------------------
  *
- * osh_beam_new_primary() is the single entry point called once per history.
- * It samples a complete primary ray in the UNIVERSE coordinate system.
+ * osh_beam_new_primaries() is the batched primary-source entry point. It
+ * samples n complete primary rays in the UNIVERSE coordinate system.
+ *
+ * osh_beam_new_primary() is a thin convenience wrapper around the batched API
+ * with n=1.
  *
  * Spot position convention
  * ------------------------
@@ -39,10 +43,21 @@
  *                         spot->_tm[16] to map PZALIGN -> UNIVERSE.
  *
  * @param wb       Fully initialised beam workspace.
- * @param part_out Receives a pointer to the particle species (owned by wb).
- * @param ray_out  Receives the sampled ray in OSH_COORD_UNIVERSE.
- *                 ray_out->p[3] holds total kinetic energy [MeV].
+ * @param rng      Random-number generator state. Required so the caller can
+ *                 control reproducibility and thread-local stream ownership.
+ *                 Current placeholder sampling may not use it yet, but the
+ *                 API is designed around explicit RNG flow.
+ * @param n        Number of primaries to sample.
+ * @param part_out Receives n particle-species pointers (owned by wb).
+ * @param ray_out  Receives n sampled rays in OSH_COORD_UNIVERSE.
+ *                 ray_out[i].p[3] holds total kinetic energy [MeV].
  * @return OSH_OK on success, negative OSH_E* on error. */
-int osh_beam_new_primary(struct beam_workspace const *wb, struct particle **part_out, struct ray_v *ray_out);
+int osh_beam_new_primaries(
+    struct beam_workspace const *wb, struct osh_rng *rng, size_t n, struct particle **part_out, struct ray_v *ray_out);
+
+int osh_beam_new_primary(struct beam_workspace const *wb,
+                         struct osh_rng *rng,
+                         struct particle **part_out,
+                         struct ray_v *ray_out);
 
 #endif /* OSH_BEAM_MODEL_H */
