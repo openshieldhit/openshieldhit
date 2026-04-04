@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
@@ -20,8 +21,8 @@ static struct beam_spot const *_select_spot(struct beam_workspace const *wb) {
 /* ---- Step 2: energy sampling --------------------------------------------- */
 
 /* Sample total kinetic energy [MeV] from the spot's energy distribution.
- * Current implementation follows the beam-model path used in export_mcpl.py:
- * Gaussian sampling around t0 with sigma tsigma, clamped at zero. */
+ * Current implementation uses Gaussian sampling around t0 with sigma tsigma,
+ * clamped at zero. */
 static double _sample_energy(struct osh_rng *rng, struct beam_spot const *spot) {
     double e;
 
@@ -38,71 +39,110 @@ static double _sample_energy(struct osh_rng *rng, struct beam_spot const *spot) 
 
 /* ---- Step 3: transverse phase-space sampling ----------------------------- */
 
-/* Sample Gaussian (position, angle) in one transverse plane using the
- * Fermi-Eyges Cholesky form. sigma_x and sigma_xp are the RMS widths; rho is
- * the correlation coefficient. u1 and u2 are independent N(0,1) samples.
- *
- *   x  = sigma_x  * u1
- *   x' = sigma_xp * (rho * u1 + sqrt(1 - rho^2) * u2)
- *
- * The Python reference stores rho, not covariance, and computes the equivalent
- * 2x2 Cholesky factors once per beam layer. For the current single-spot path
- * we use the equivalent closed form directly. */
-static void _sample_phasespace_gaussian_1d(
-    struct osh_rng *rng, double sigma_x, double sigma_xp, double rho, double *x_out, double *xp_out) {
-    double u1;
-    double u2;
-    double rho_clamped;
-    double rho_orth;
+static double _sample_uniform_symmetric(struct osh_rng *rng, double half_width) {
+    return (2.0 * osh_rng_double(rng) - 1.0) * half_width;
+}
 
-    if (sigma_x <= 0.0) {
-        *x_out = 0.0;
-    } else {
-        u1 = osh_rng_gauss01(rng);
-        *x_out = sigma_x * u1;
-        if (sigma_xp <= 0.0) {
-            *xp_out = 0.0;
-            return;
-        }
+static double _shape_sigma_1d(struct beam_spot const *spot, int axis) {
+    double rin;
+    double rout;
 
-        rho_clamped = rho;
-        if (rho_clamped > 1.0) {
-            rho_clamped = 1.0;
-        } else if (rho_clamped < -1.0) {
-            rho_clamped = -1.0;
-        }
-        rho_orth = sqrt(fmax(0.0, 1.0 - rho_clamped * rho_clamped));
-        u2 = osh_rng_gauss01(rng);
-        *xp_out = sigma_xp * (rho_clamped * u1 + rho_orth * u2);
-        return;
-    }
+    switch (spot->shape) {
+    case OSH_BEAM_SHAPE_PENCIL:
+        return 0.0;
 
-    if (sigma_xp <= 0.0) {
-        *xp_out = 0.0;
-    } else {
-        *xp_out = sigma_xp * osh_rng_gauss01(rng);
+    case OSH_BEAM_SHAPE_GAUSSIAN:
+        return spot->size[axis];
+
+    case OSH_BEAM_SHAPE_SQUARE:
+        return spot->size[axis] / sqrt(3.0);
+
+    case OSH_BEAM_SHAPE_CIRCULAR:
+        rin = fmin(spot->size[0], spot->size[1]);
+        rout = fmax(spot->size[0], spot->size[1]);
+        return 0.5 * sqrt(rin * rin + rout * rout);
+
+    default:
+        return -1.0;
     }
 }
 
-static int
-_sample_phasespace_1d(struct osh_rng *rng, struct beam_spot const *spot, int axis, double *x_out, double *xp_out) {
+static int _sample_position(struct osh_rng *rng, struct beam_spot const *spot, double *x_out, double *y_out) {
+    double rin;
+    double rout;
+    double r2;
+    double phi;
+
     switch (spot->shape) {
     case OSH_BEAM_SHAPE_PENCIL:
         *x_out = 0.0;
-        *xp_out = 0.0;
+        *y_out = 0.0;
         return OSH_OK;
 
     case OSH_BEAM_SHAPE_GAUSSIAN:
-        _sample_phasespace_gaussian_1d(rng, spot->size[axis], spot->div[axis], spot->cor[axis], x_out, xp_out);
+        *x_out = (spot->size[0] > 0.0) ? spot->size[0] * osh_rng_gauss01(rng) : 0.0;
+        *y_out = (spot->size[1] > 0.0) ? spot->size[1] * osh_rng_gauss01(rng) : 0.0;
         return OSH_OK;
 
     case OSH_BEAM_SHAPE_SQUARE:
+        *x_out = _sample_uniform_symmetric(rng, spot->size[0]);
+        *y_out = _sample_uniform_symmetric(rng, spot->size[1]);
+        return OSH_OK;
+
     case OSH_BEAM_SHAPE_CIRCULAR:
-        return OSH_ENOTSUP;
+        rin = fmin(spot->size[0], spot->size[1]);
+        rout = fmax(spot->size[0], spot->size[1]);
+        if (rin < 0.0 || rout < rin) {
+            return OSH_EINVAL;
+        }
+        phi = 2.0 * OSH_M_PI * osh_rng_double(rng);
+        r2 = rin * rin + (rout * rout - rin * rin) * osh_rng_double(rng);
+        rout = sqrt(r2);
+        *x_out = rout * cos(phi);
+        *y_out = rout * sin(phi);
+        return OSH_OK;
 
     default:
         return OSH_EINVAL;
     }
+}
+
+/* Sample Gaussian angle in one transverse plane using the Fermi-Eyges
+ * correlation form. sigma_x and sigma_xp are the RMS widths; rho is the
+ * correlation coefficient. u2 is an independent N(0,1) sample.
+ *
+ *   x  = sigma_x  * u1
+ *   x' = sigma_xp * (rho * u1 + sqrt(1 - rho^2) * u2)
+ *
+ * For the current single-spot path we use the equivalent closed form
+ * directly. For non-Gaussian shapes we feed in the actual sampled x and the
+ * RMS width corresponding to that shape, which preserves the requested
+ * position-angle correlation. */
+static void _sample_angle_1d(
+    struct osh_rng *rng, double x, double sigma_x, double sigma_xp, double rho, double *xp_out) {
+    double u2;
+    double rho_clamped;
+    double rho_orth;
+
+    if (sigma_xp <= 0.0) {
+        *xp_out = 0.0;
+        return;
+    }
+
+    if (sigma_x <= 0.0) {
+        *xp_out = sigma_xp * osh_rng_gauss01(rng);
+        return;
+    }
+
+    rho_clamped = rho;
+    if (rho_clamped > 1.0) {
+        rho_clamped = 1.0;
+    } else if (rho_clamped < -1.0) {
+        rho_clamped = -1.0;
+    }
+    rho_orth = sqrt(fmax(0.0, 1.0 - rho_clamped * rho_clamped));
+    u2 = osh_rng_gauss01(rng);
+    *xp_out = sigma_xp * (rho_clamped * (x / sigma_x) + rho_orth * u2);
 }
 
 /* ---- Step 4: SAD correction ---------------------------------------------- */
@@ -186,14 +226,12 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     ray_out->p[3] = _sample_energy(rng, spot);
 
     /* 4. Sample transverse phase space (x, x') and (y, y') in PZALIGN */
-    rc = _sample_phasespace_1d(rng, spot, 0, &x, &xp);
+    rc = _sample_position(rng, spot, &x, &y);
     if (rc != OSH_OK) {
         return rc;
     }
-    rc = _sample_phasespace_1d(rng, spot, 1, &y, &yp);
-    if (rc != OSH_OK) {
-        return rc;
-    }
+    _sample_angle_1d(rng, x, _shape_sigma_1d(spot, 0), spot->div[0], spot->cor[0], &xp);
+    _sample_angle_1d(rng, y, _shape_sigma_1d(spot, 1), spot->div[1], spot->cor[1], &yp);
 
     ray_out->p[0] = x;
     ray_out->p[1] = y;

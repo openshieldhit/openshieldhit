@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "beam/osh_beam_model.h"
+#include "common/osh_const.h"
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
 #include "particle/osh_particle.h"
@@ -148,8 +149,121 @@ static void test_single_spot_sad_fanout(void) {
     ASSERT_TRUE(fabs(x_iso - 2.0) < 1e-12);
 }
 
+static void test_single_spot_square_sampling(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct particle part = {0};
+    struct particle *part_out = NULL;
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    struct osh_rng rng_ref;
+    double zdir[3] = {0.0, 0.0, 1.0};
+    double x_exp;
+    double y_exp;
+    int rc;
+
+    part.pdg = 2212;
+    spot.part = &part;
+    spot.shape = OSH_BEAM_SHAPE_SQUARE;
+    spot.p[0] = -3.0;
+    spot.p[1] = 2.5;
+    spot.p[2] = -40.0;
+    spot.size[0] = 1.5;
+    spot.size[1] = 0.5;
+    spot.t0 = 120.0;
+
+    osh_vect_setup_tmatrix_bzalign_affine(spot.p, zdir, spot._tm);
+
+    wb.spots = &spot;
+    wb.nspots = 1;
+    wb.shared.use_sad = 0;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 123u, 456u);
+    osh_rng_init(&rng_ref, OSH_RNG_TYPE_PCG32, 123u, 456u);
+
+    x_exp = (2.0 * osh_rng_double(&rng_ref) - 1.0) * spot.size[0];
+    y_exp = (2.0 * osh_rng_double(&rng_ref) - 1.0) * spot.size[1];
+
+    rc = osh_beam_new_primary(&wb, &rng, &part_out, &ray);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(part_out == &part);
+    ASSERT_TRUE(ray.system == OSH_COORD_UNIVERSE);
+    ASSERT_TRUE(fabs(ray.p[0] - (spot.p[0] + x_exp)) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[1] - (spot.p[1] + y_exp)) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[2] - spot.p[2]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[3] - spot.t0) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[0]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[1]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[2] - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(x_exp) <= spot.size[0]);
+    ASSERT_TRUE(fabs(y_exp) <= spot.size[1]);
+}
+
+static void test_single_spot_circular_sampling(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct particle part = {0};
+    struct particle *part_out = NULL;
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    struct osh_rng rng_ref;
+    double zdir[3] = {0.0, 0.0, 1.0};
+    double phi_exp;
+    double r2_exp;
+    double r_exp;
+    double x_exp;
+    double y_exp;
+    double r_world;
+    int rc;
+
+    part.pdg = 2212;
+    spot.part = &part;
+    spot.shape = OSH_BEAM_SHAPE_CIRCULAR;
+    spot.p[0] = 1.0;
+    spot.p[1] = -1.5;
+    spot.p[2] = -25.0;
+    spot.size[0] = 2.0;
+    spot.size[1] = 0.5;
+    spot.t0 = 90.0;
+
+    osh_vect_setup_tmatrix_bzalign_affine(spot.p, zdir, spot._tm);
+
+    wb.spots = &spot;
+    wb.nspots = 1;
+    wb.shared.use_sad = 0;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 999u, 1001u);
+    osh_rng_init(&rng_ref, OSH_RNG_TYPE_PCG32, 999u, 1001u);
+
+    phi_exp = 2.0 * OSH_M_PI * osh_rng_double(&rng_ref);
+    r2_exp = 0.5 * 0.5 + (2.0 * 2.0 - 0.5 * 0.5) * osh_rng_double(&rng_ref);
+    r_exp = sqrt(r2_exp);
+    x_exp = r_exp * cos(phi_exp);
+    y_exp = r_exp * sin(phi_exp);
+
+    rc = osh_beam_new_primary(&wb, &rng, &part_out, &ray);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(part_out == &part);
+    ASSERT_TRUE(ray.system == OSH_COORD_UNIVERSE);
+    ASSERT_TRUE(fabs(ray.p[0] - (spot.p[0] + x_exp)) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[1] - (spot.p[1] + y_exp)) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[2] - spot.p[2]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[3] - spot.t0) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[0]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[1]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[2] - 1.0) < 1e-12);
+
+    r_world = sqrt((ray.p[0] - spot.p[0]) * (ray.p[0] - spot.p[0]) + (ray.p[1] - spot.p[1]) * (ray.p[1] - spot.p[1]));
+    ASSERT_TRUE(r_world >= 0.5 - 1e-12);
+    ASSERT_TRUE(r_world <= 2.0 + 1e-12);
+}
+
 int main(void) {
     test_single_spot_gaussian_sampling();
     test_single_spot_sad_fanout();
+    test_single_spot_square_sampling();
+    test_single_spot_circular_sampling();
     return 0;
 }
