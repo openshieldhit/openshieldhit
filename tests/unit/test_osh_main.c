@@ -4,6 +4,11 @@
 
 #include "openshieldhit/openshieldhit.h"
 
+/* Set by main() when a verbosity level is passed as the first argument.
+ * Tests that call openshieldhit_run() propagate this to cfg.log_level so the
+ * library initialises the logger at the requested level. */
+static int g_verbosity = 0;
+
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
         if (!(cond)) {                                                                                                 \
@@ -65,7 +70,7 @@ static void test_configure_returns_ok(void) {
     cfg.detect_path = "detect.dat";
     cfg.nstat = 1000ULL;
     cfg.has_nstat = 1;
-    cfg.log_level = 1;
+    cfg.log_level = g_verbosity;
     cfg.run_mode = OPENSHIELDHIT_RUN_VALIDATE;
 
     ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_OK);
@@ -162,6 +167,10 @@ static int run_named_test(char const *name) {
 }
 
 int main(int argc, char *argv[]) {
+    if (argc == 3) {
+        g_verbosity = atoi(argv[1]);
+        return run_named_test(argv[2]);
+    }
     if (argc == 2) {
         return run_named_test(argv[1]);
     }

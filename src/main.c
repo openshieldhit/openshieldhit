@@ -4,6 +4,7 @@
 #include "cli/osh_cli.h"
 #include "common/osh_exit.h"
 #include "common/osh_file.h"
+#include "common/osh_logger.h"
 #include "openshieldhit/openshieldhit.h"
 
 /* Generic failure — not covered by a specific EX_* code. */
@@ -32,6 +33,17 @@ int main(int argc, char *argv[]) {
     if (opt.action == OSH_CLI_ACTION_VERSION) {
         printf("OpenShieldHIT version %s\n", openshieldhit_version_string());
         return EX_OK;
+    }
+
+    /* Initialise the default logger.
+     *   no -v  → OSH_LOG_WARN  (silent; only warnings and errors)
+     *      -v  → OSH_LOG_INFO  (normal informational output)
+     *     -vv  → OSH_LOG_DEBUG (verbose debug output)
+     * Stdout is disabled by default; enable it here for the CLI. */
+    {
+        int log_level = (opt.verbose == 0) ? OSH_LOG_WARN : (opt.verbose == 1) ? OSH_LOG_INFO : OSH_LOG_DEBUG;
+        osh_log_init(log_level, OSH_LOG_F_NONE);
+        osh_log_enable_stdout(1);
     }
 
     ctx = openshieldhit_context_create();
@@ -69,6 +81,7 @@ int main(int argc, char *argv[]) {
 
     rc = openshieldhit_run(ctx, stdout, stderr);
     openshieldhit_context_destroy(ctx);
+    osh_log_close();
     return exit_code_for_status(rc);
 }
 

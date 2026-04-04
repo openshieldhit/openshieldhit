@@ -34,7 +34,7 @@ file(MAKE_DIRECTORY "${WORK_DIR}")
 # --outdir routes any output files to the isolated work directory so nothing
 # is written back into the source-controlled case directory.
 # A case can override OSH_ARGS entirely via a local args.cmake.
-set(OSH_ARGS "--dry-run" "--outdir" "${WORK_DIR}")
+set(OSH_ARGS "--dry-run" "-v" "--outdir" "${WORK_DIR}")
 if(EXISTS "${CASE_DIR}/args.cmake")
     include("${CASE_DIR}/args.cmake")
 endif()

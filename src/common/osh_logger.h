@@ -431,6 +431,13 @@ struct osh_logger *osh_log_default(void);
 #define OSH_WARN(fmt, ...) OSH_LOG(OSH_LOG_WARN, (fmt), ##__VA_ARGS__)
 #define OSH_ERROR(fmt, ...) OSH_LOG(OSH_LOG_ERROR, (fmt), ##__VA_ARGS__)
 
+/* Formatting aids for structured log output sections. */
+#define OSH_LOG_HLINE "------------------------------------------------------------\n"
+#define OSH_LOG_INDENT "    "
+
+/* ON/OFF string pair — index with 0 or 1. */
+static char const *const osh_log_offon[2] = {"OFF", "ON"};
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
