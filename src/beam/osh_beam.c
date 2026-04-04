@@ -201,13 +201,14 @@ static void _postparse_spot_energy(struct beam_spot *spot) {
     }
 }
 
-/* Build the 4×4 transformation matrix for one spot using osh_vect_setup_tmatrix_bzalign.
+/* Build the beam-sampling affine matrix for one spot using the standard
+ * local->universe helper in osh_vect.
  *
- * The beam direction vector is derived from shared.theta/phi via osh_coord_c2v,
- * which takes [cos(theta), sin(phi), cos(phi)] and returns the Cartesian unit
- * vector.  When theta == 0 the beam travels along +Z regardless of phi; phi is
- * pinned to 0 in that case to avoid passing sin/cos of an arbitrary phi value
- * into the matrix builder. */
+ * Matrix contract (row-major):
+ *   p_universe = R * p_local + R * spot->p
+ *
+ * spot->p is interpreted as a local beam-frame offset before gantry/table
+ * rotation. */
 static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh) {
     double cs[3];
     double r[3];
@@ -223,7 +224,7 @@ static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh)
     }
 
     osh_coord_c2v(cs, r);
-    osh_vect_setup_tmatrix_bzalign(spot->p, r, spot->_tm);
+    osh_vect_setup_tmatrix_bzalign_affine(spot->p, r, spot->_tm);
 }
 
 static int _wb_postparse(struct beam_workspace *wb) {

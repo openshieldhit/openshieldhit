@@ -2,6 +2,7 @@
 # Cmake cannot track changes *.c glob files, so we list them explicitly
 add_library(osh_beam
     osh_beam.c
+    osh_beam_model.c
     osh_beam_spots.c
 )
 

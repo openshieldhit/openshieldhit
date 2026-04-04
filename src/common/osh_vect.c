@@ -304,3 +304,51 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
     tm[14] = 0;
     tm[15] = 1;
 }
+
+void osh_vect_setup_tmatrix_bzalign_affine(double const *p_local, double const *r_world, double *tm) {
+    double s[OSH_VECT_DIM];
+    double t[OSH_VECT_DIM];
+    double r_norm[OSH_VECT_DIM];
+    double p_world[OSH_VECT_DIM];
+    int i;
+
+    osh_vect_norm2(r_world, r_norm);
+    osh_vect_orthogonal_basis(r_norm, s, t);
+    osh_vect_norm(s);
+    osh_vect_norm(t);
+
+    tm[0] = s[0];
+    tm[1] = t[0];
+    tm[2] = r_norm[0];
+
+    tm[4] = s[1];
+    tm[5] = t[1];
+    tm[6] = r_norm[1];
+
+    tm[8] = s[2];
+    tm[9] = t[2];
+    tm[10] = r_norm[2];
+
+    for (i = 0; i < OSH_VECT_DIM; i++) {
+        int j = i * 4;
+        p_world[i] = tm[j] * p_local[0] + tm[j + 1] * p_local[1] + tm[j + 2] * p_local[2];
+        tm[j + 3] = p_world[i];
+    }
+
+    tm[12] = 0.0;
+    tm[13] = 0.0;
+    tm[14] = 0.0;
+    tm[15] = 1.0;
+}
+
+void osh_vect_trans_point_affine(double const *p, double *pt, double const *tm) {
+    pt[0] = p[0] * tm[0] + p[1] * tm[1] + p[2] * tm[2] + tm[3];
+    pt[1] = p[0] * tm[4] + p[1] * tm[5] + p[2] * tm[6] + tm[7];
+    pt[2] = p[0] * tm[8] + p[1] * tm[9] + p[2] * tm[10] + tm[11];
+}
+
+void osh_vect_trans_vector_affine(double const *v, double *vt, double const *tm) {
+    vt[0] = v[0] * tm[0] + v[1] * tm[1] + v[2] * tm[2];
+    vt[1] = v[0] * tm[4] + v[1] * tm[5] + v[2] * tm[6];
+    vt[2] = v[0] * tm[8] + v[1] * tm[9] + v[2] * tm[10];
+}
