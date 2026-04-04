@@ -25,6 +25,18 @@
  *
  * where R is the beam direction rotation derived from shared.theta/phi.
  *
+ * Coordinate-language convention
+ * ------------------------------
+ * Beam-model calculations use local upstream/downstream language, not global
+ * sign conventions such as "negative z". In the local beam frame:
+ *   - +z always means downstream
+ *   - the virtual source / scanning-magnet deflection point is always upstream
+ *   - SAD is therefore always a positive upstream distance from isocenter
+ *
+ * This avoids ambiguity when users rotate the beam in UNIVERSE coordinates.
+ * All SAD and fan-out calculations are performed in the local beam frame
+ * before the final affine transform to UNIVERSE.
+ *
  * Sampling pipeline
  * -----------------
  *   1. select_spot      — pick the active beam_spot (spot[0] for single-spot;
@@ -38,6 +50,12 @@
  *
  *   4. apply_sad        — if shared.use_sad: apply source-axis-distance
  *                         correction (scanning-magnet fan-out) in PZALIGN.
+ *                         SAD is a positive source-to-isocenter distance to an
+ *                         upstream virtual source, not a signed z coordinate.
+ *                         It is defined relative to isocenter/focal geometry,
+ *                         not relative to the beam start plane. BEAMPOS and
+ *                         sampled local offsets are therefore included in the
+ *                         fan-out angle calculation.
  *
  *   5. apply_transform  — apply the precomputed standard affine matrix
  *                         spot->_tm[16] to map PZALIGN -> UNIVERSE.

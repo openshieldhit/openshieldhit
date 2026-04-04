@@ -92,7 +92,64 @@ static void test_single_spot_gaussian_sampling(void) {
     ASSERT_TRUE(fabs(ray.v[0] * ray.v[0] + ray.v[1] * ray.v[1] + ray.v[2] * ray.v[2] - 1.0) < 1e-12);
 }
 
+static void test_single_spot_sad_fanout(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct particle part = {0};
+    struct particle *part_out = NULL;
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    double zdir[3] = {0.0, 0.0, 1.0};
+    double vx_exp;
+    double vy_exp;
+    double vz_exp;
+    double x_iso;
+    double norm;
+    int rc;
+
+    part.pdg = 2212;
+    spot.part = &part;
+    spot.shape = OSH_BEAM_SHAPE_PENCIL;
+    spot.p[0] = 1.0;
+    spot.p[1] = -2.0;
+    spot.p[2] = -50.0;
+    spot.t0 = 80.0;
+
+    osh_vect_setup_tmatrix_bzalign_affine(spot.p, zdir, spot._tm);
+
+    wb.spots = &spot;
+    wb.nspots = 1;
+    wb.shared.use_sad = 1;
+    wb.shared.sad[0] = 100.0;
+    wb.shared.sad[1] = 200.0;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 7u, 11u);
+
+    vx_exp = spot.p[0] / (spot.p[2] + wb.shared.sad[0]);
+    vy_exp = spot.p[1] / (spot.p[2] + wb.shared.sad[1]);
+    vz_exp = 1.0;
+    norm = sqrt(vx_exp * vx_exp + vy_exp * vy_exp + vz_exp * vz_exp);
+    vx_exp /= norm;
+    vy_exp /= norm;
+    vz_exp /= norm;
+    x_iso = spot.p[0] + (0.0 - spot.p[2]) * (spot.p[0] / (spot.p[2] + wb.shared.sad[0]));
+
+    rc = osh_beam_new_primary(&wb, &rng, &part_out, &ray);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(part_out == &part);
+    ASSERT_TRUE(ray.system == OSH_COORD_UNIVERSE);
+    ASSERT_TRUE(fabs(ray.p[0] - spot.p[0]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[1] - spot.p[1]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[2] - spot.p[2]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[0] - vx_exp) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[1] - vy_exp) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[2] - vz_exp) < 1e-12);
+    ASSERT_TRUE(fabs(x_iso - 2.0) < 1e-12);
+}
+
 int main(void) {
     test_single_spot_gaussian_sampling();
+    test_single_spot_sad_fanout();
     return 0;
 }
