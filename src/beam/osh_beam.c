@@ -60,6 +60,7 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
         osh_beam_workspace_free(wb);
         return rc;
     }
+    wb->nspots = 1;
 
     rc = osh_beam_shared_init(&wb->shared);
     if (rc != OSH_OK) {
@@ -74,6 +75,15 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
     if (rc != OSH_OK) {
         osh_beam_workspace_free(wb);
         return rc;
+    }
+
+    if (wb->fname_spotlist) {
+        osh_info("Loading spotlist before beam post-parse");
+        rc = osh_beam_spotlist_load(wb);
+        if (rc != OSH_OK) {
+            osh_beam_workspace_free(wb);
+            return rc;
+        }
     }
 
     rc = _wb_validate(wb);
@@ -102,6 +112,9 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     if (wb->spots) {
         osh_beam_spots_free(wb->spots);
     }
+    if (wb->cum_wt) {
+        free(wb->cum_wt);
+    }
     /* wb->shared is embedded by value — no free needed */
     if (wb->phsp) {
         // TODO osh_beam_phsp_free(wb->phsp);
@@ -118,6 +131,9 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     if (wb->fname) {
         free(wb->fname);
     }
+    if (wb->fname_spotlist) {
+        free(wb->fname_spotlist);
+    }
     free(wb);
     return OSH_OK;
 }
@@ -131,6 +147,7 @@ static void _wb_defaults(struct beam_workspace *wb) {
     wb->fname = NULL;
     wb->fname_spotlist = NULL;
     wb->spots = NULL;
+    wb->cum_wt = NULL;
     /* wb->shared is embedded by value (see osh_beam.h); zero-initialised by
      * calloc above, then given sensible defaults by osh_beam_shared_init(). */
     wb->phsp = NULL;
@@ -138,6 +155,7 @@ static void _wb_defaults(struct beam_workspace *wb) {
     wb->parlev = NULL;
 
     wb->nspots = 0;
+    wb->wt_sum = 0.0;
     wb->nstat = 0;
     wb->nsave = 0;
     wb->rndseed = 0;
@@ -229,6 +247,7 @@ static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh)
 
 static int _wb_postparse(struct beam_workspace *wb) {
     size_t i;
+    double wt_acc;
 
     if (!wb) {
         return OSH_EINVAL;
@@ -236,10 +255,28 @@ static int _wb_postparse(struct beam_workspace *wb) {
 
     wb->shared.emax = 0.0;
     wb->shared.pmax = 0.0;
+    wb->wt_sum = 0.0;
 
+    free(wb->cum_wt);
+    wb->cum_wt = NULL;
+
+    if (wb->nspots > 0) {
+        wb->cum_wt = (double *) calloc(wb->nspots, sizeof(double));
+        if (!wb->cum_wt) {
+            return OSH_ENOMEM;
+        }
+    }
+
+    wt_acc = 0.0;
     for (i = 0; i < wb->nspots; i++) {
         _postparse_spot_energy(&wb->spots[i]);
         _build_spot_tm(&wb->spots[i], &wb->shared);
+
+        if (wb->spots[i].wt < 0.0) {
+            return OSH_EINVAL;
+        }
+        wt_acc += wb->spots[i].wt;
+        wb->cum_wt[i] = wt_acc;
 
         if (wb->spots[i].t0 > wb->shared.emax) {
             wb->shared.emax = wb->spots[i].t0;
@@ -248,6 +285,8 @@ static int _wb_postparse(struct beam_workspace *wb) {
             wb->shared.pmax = wb->spots[i].p0;
         }
     }
+
+    wb->wt_sum = wt_acc;
 
     return OSH_OK;
 }
@@ -258,15 +297,15 @@ static void _print_primary(struct particle const *part) {
     if (!part) {
         return;
     }
-    osh_info("Primary particle:\n");
+    osh_info("Primary particle:");
     osh_info(OSH_LOG_HLINE);
-    osh_info("%-18s : %i\n", "PDG code", part->pdg);
-    osh_info("%-18s : %i\n", "Z", (int) part->z);
-    osh_info("%-18s : %i\n", "A", (int) part->a);
-    osh_info("%-18s : %-12.5f MeV/c^2\n", "Mass", part->mass);
-    osh_info("%-18s : %-12.5f u\n", "Mass", part->mass / OSH_AMU);
-    osh_info("%-18s : %i\n", "Generation", (int) part->gen);
-    osh_info("%-18s : %f\n", "Stat.weight", part->weight);
+    osh_info("%-18s : %i", "PDG code", part->pdg);
+    osh_info("%-18s : %i", "Z", (int) part->z);
+    osh_info("%-18s : %i", "A", (int) part->a);
+    osh_info("%-18s : %-12.5f MeV/c^2", "Mass", part->mass);
+    osh_info("%-18s : %-12.5f u", "Mass", part->mass / OSH_AMU);
+    osh_info("%-18s : %i", "Generation", (int) part->gen);
+    osh_info("%-18s : %f", "Stat.weight", part->weight);
 }
 
 void osh_beam_print(struct beam_workspace const *wb) {
@@ -274,36 +313,37 @@ void osh_beam_print(struct beam_workspace const *wb) {
         return;
     }
 
-    osh_info("\n\n");
-    osh_info("Beam configuration:\n");
+    osh_info("%s", "");
+    osh_info("%s", "");
+    osh_info("Beam configuration:");
     osh_info(OSH_LOG_HLINE);
-    osh_info("%-40s : %li\n", "Requested primaries NSTAT", (long int) wb->nstat);
+    osh_info("%-40s : %li", "Requested primaries NSTAT", (long int) wb->nstat);
     if (wb->nsave > 0) {
-        osh_info("%-40s : %li\n", "Save interval NSAVE", (long int) wb->nsave);
+        osh_info("%-40s : %li", "Save interval NSAVE", (long int) wb->nsave);
     } else {
-        osh_info("%-40s : %s\n", "Save interval NSAVE", "OFF");
+        osh_info("%-40s : %s", "Save interval NSAVE", "OFF");
     }
-    osh_info("%-40s : %i\n", "Random seed RNDSEED", wb->rndseed);
-    osh_info("%-40s : %i\n", "Random seed offset", wb->rndoffset);
-    osh_info("\n");
-    osh_info("%-18s : %f\n", "DeltaE/E", wb->deltae);
-    osh_info("%-18s : %f MeV\n", "Neutron cut", wb->ncut);
-    osh_info("%-18s : %f MeV/n\n", "DeltaE min", wb->demin);
-    osh_info("\n");
-    osh_info("%-18s : %s\n", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);
-    osh_info("%-18s : %s\n", "Straggling mode", osh_beam_stragg_names[(int) wb->straggl]);
-    osh_info("%-18s : %s\n", "Nuclear react.", osh_log_offon[(int) wb->nuclear]);
-    osh_info("%-18s : %s\n", "Apcorr mode", osh_log_offon[(int) wb->apcorr]);
-    osh_info("%-18s : %s\n", "Beam mode", osh_beam_mode_names[(int) wb->beam_mode]);
-    osh_info("%-18s : %s\n", "Make LN", osh_log_offon[(int) wb->makeln]);
-    osh_info("%-18s : %s\n", "Fast neutrons", osh_log_offon[(int) wb->neutrfast]);
-    osh_info("\n");
-    osh_info("%-18s : %.3f  %.3f  cm\n", "SAD (x,y)", wb->shared.sad[0], wb->shared.sad[1]);
-    osh_info("%-18s : %.3f  cm\n", "Focus", wb->shared.focus);
-    osh_info("%-18s : %.3f  deg\n", "Theta", wb->shared.theta * 180.0 * OSH_M_1_PI);
-    osh_info("%-18s : %.3f  deg\n", "Phi", wb->shared.phi * 180.0 * OSH_M_1_PI);
-    osh_info("%-18s : %.3f  MeV\n", "Emax", wb->shared.emax);
-    osh_info("%-18s : %.3f  MeV/c\n", "Pmax", wb->shared.pmax);
+    osh_info("%-40s : %i", "Random seed RNDSEED", wb->rndseed);
+    osh_info("%-40s : %i", "Random seed offset", wb->rndoffset);
+    osh_info("%s", "");
+    osh_info("%-18s : %f", "DeltaE/E", wb->deltae);
+    osh_info("%-18s : %f MeV", "Neutron cut", wb->ncut);
+    osh_info("%-18s : %f MeV/n", "DeltaE min", wb->demin);
+    osh_info("%s", "");
+    osh_info("%-18s : %s", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);
+    osh_info("%-18s : %s", "Straggling mode", osh_beam_stragg_names[(int) wb->straggl]);
+    osh_info("%-18s : %s", "Nuclear react.", osh_log_offon[(int) wb->nuclear]);
+    osh_info("%-18s : %s", "Apcorr mode", osh_log_offon[(int) wb->apcorr]);
+    osh_info("%-18s : %s", "Beam mode", osh_beam_mode_names[(int) wb->beam_mode]);
+    osh_info("%-18s : %s", "Make LN", osh_log_offon[(int) wb->makeln]);
+    osh_info("%-18s : %s", "Fast neutrons", osh_log_offon[(int) wb->neutrfast]);
+    osh_info("%s", "");
+    osh_info("%-18s : %.3f  %.3f  cm", "SAD (x,y)", wb->shared.sad[0], wb->shared.sad[1]);
+    osh_info("%-18s : %.3f  cm", "Focus", wb->shared.focus);
+    osh_info("%-18s : %.3f  deg", "Theta", wb->shared.theta * 180.0 * OSH_M_1_PI);
+    osh_info("%-18s : %.3f  deg", "Phi", wb->shared.phi * 180.0 * OSH_M_1_PI);
+    osh_info("%-18s : %.3f  MeV", "Emax", wb->shared.emax);
+    osh_info("%-18s : %.3f  MeV/c", "Pmax", wb->shared.pmax);
 
     if (wb->spots) {
         osh_beam_print_spot(&wb->spots[0]);
@@ -316,28 +356,28 @@ void osh_beam_print_spot(struct beam_spot const *spot) {
     }
 
     if (spot->part) {
-        osh_info("\n");
+        osh_info("%s", "");
         _print_primary(spot->part);
     }
 
-    osh_info("\n");
-    osh_info("%-18s : %.3f  %.3f  %.3f  cm\n", "Position", spot->p[0], spot->p[1], spot->p[2]);
-    osh_info("%-18s : %.3f  %.3f  cm\n", "Size/sigma", spot->size[0], spot->size[1]);
-    osh_info("%-18s : %.3f  %.3f  mrad\n", "Divergence", spot->div[0] * 1000.0, spot->div[1] * 1000.0);
-    osh_info("%-18s : %.3f  %.3f\n", "Correlation", spot->cor[0], spot->cor[1]);
-    osh_info("\n");
-    osh_info("%-18s : %.3f  MeV\n", "T0", spot->t0);
-    osh_info("%-18s : %.3f  MeV\n", "TSigma", spot->tsigma);
-    osh_info("%-18s : %.3f  MeV/c\n", "P0", spot->p0);
-    osh_info("%-18s : %.3f  MeV/c\n", "PSigma", spot->psigma);
-    osh_info("%-18s : %i\n", "TSigma type", (int) spot->tsigma_type);
-    osh_info("\n");
-    osh_info("%-18s : %.3f\n", "Stat.weight", spot->wt);
-    osh_info("%-18s : %u\n", "Spot ID", spot->spot_id);
-    osh_info("%-18s : %u\n", "Layer ID", spot->layer_id);
+    osh_info("%s", "");
+    osh_info("%-18s : %.3f  %.3f  %.3f  cm", "Position", spot->p[0], spot->p[1], spot->p[2]);
+    osh_info("%-18s : %.3f  %.3f  cm", "Size/sigma", spot->size[0], spot->size[1]);
+    osh_info("%-18s : %.3f  %.3f  mrad", "Divergence", spot->div[0] * 1000.0, spot->div[1] * 1000.0);
+    osh_info("%-18s : %.3f  %.3f", "Correlation", spot->cor[0], spot->cor[1]);
+    osh_info("%s", "");
+    osh_info("%-18s : %.3f  MeV", "T0", spot->t0);
+    osh_info("%-18s : %.3f  MeV", "TSigma", spot->tsigma);
+    osh_info("%-18s : %.3f  MeV/c", "P0", spot->p0);
+    osh_info("%-18s : %.3f  MeV/c", "PSigma", spot->psigma);
+    osh_info("%-18s : %i", "TSigma type", (int) spot->tsigma_type);
+    osh_info("%s", "");
+    osh_info("%-18s : %.3f", "Stat.weight", spot->wt);
+    osh_info("%-18s : %u", "Spot ID", spot->spot_id);
+    osh_info("%-18s : %u", "Layer ID", spot->layer_id);
     if (spot->shape >= 0 && (int) spot->shape < 4) {
-        osh_info("%-18s : %s\n", "Shape", osh_beam_shape_names[(int) spot->shape]);
+        osh_info("%-18s : %s", "Shape", osh_beam_shape_names[(int) spot->shape]);
     } else {
-        osh_info("%-18s : invalid (%i)\n", "Shape", (int) spot->shape);
+        osh_info("%-18s : invalid (%i)", "Shape", (int) spot->shape);
     }
 }

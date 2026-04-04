@@ -4,6 +4,7 @@
 
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
+#include "common/osh_interpolate.h"
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
 
@@ -11,11 +12,27 @@
 
 /* Return a pointer to the spot to use for this history.
  * Single-spot and phase-space modes always return spots[0].
- * SOBP mode draws a spot from the list weighted by spot->wt.
- * TODO: implement weighted draw for SOBP. */
-static struct beam_spot const *_select_spot(struct beam_workspace const *wb) {
-    /* TODO: SOBP weighted selection */
-    return &wb->spots[0];
+ * SOBP mode draws a spot from the list weighted by spot->wt. */
+static struct beam_spot const *_select_spot(struct beam_workspace const *wb, struct osh_rng *rng) {
+    double w;
+    long int idx;
+
+    if (!wb || !wb->spots || wb->nspots == 0) {
+        return NULL;
+    }
+    if (wb->nspots == 1) {
+        return &wb->spots[0];
+    }
+    if (!rng || !wb->cum_wt || wb->wt_sum <= 0.0) {
+        return NULL;
+    }
+
+    w = osh_rng_double(rng) * wb->wt_sum;
+    idx = osh_binary_search_upper_d(w, wb->cum_wt, wb->nspots);
+    if (idx < 0 || idx >= (long int) wb->nspots) {
+        return NULL;
+    }
+    return &wb->spots[idx];
 }
 
 /* ---- Step 2: energy sampling --------------------------------------------- */
@@ -159,8 +176,7 @@ static int _sample_phase_space_xy(struct osh_rng *rng, struct beam_spot const *s
             /* Closed-form correlated Gaussian:
              * x' = sigma_x' * (rho * z_pos + sqrt(1-rho^2) * z_ang)
              * with z_pos = x / sigma_x. */
-            ang[axis] =
-                spot->div[axis] * (rho[axis] * (pos[axis] / sigma_pos[axis]) + rho_orth[axis] * z_ang[axis]);
+            ang[axis] = spot->div[axis] * (rho[axis] * (pos[axis] / sigma_pos[axis]) + rho_orth[axis] * z_ang[axis]);
         }
         return OSH_OK;
     }
@@ -196,8 +212,7 @@ static int _sample_phase_space_xy(struct osh_rng *rng, struct beam_spot const *s
         z_ang[axis] = osh_rng_gauss01(rng);
         /* Same correlation formula as above, but with the actual sampled
          * position and the RMS width implied by the chosen beam shape. */
-        ang[axis] =
-            spot->div[axis] * (rho[axis] * (pos[axis] / sigma_pos[axis]) + rho_orth[axis] * z_ang[axis]);
+        ang[axis] = spot->div[axis] * (rho[axis] * (pos[axis] / sigma_pos[axis]) + rho_orth[axis] * z_ang[axis]);
     }
 
     return OSH_OK;
@@ -276,7 +291,10 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     }
 
     /* 1. Select spot */
-    spot = _select_spot(wb);
+    spot = _select_spot(wb, rng);
+    if (!spot) {
+        return OSH_ESTATE;
+    }
 
     /* 2. Particle species */
     *part_out = spot->part;

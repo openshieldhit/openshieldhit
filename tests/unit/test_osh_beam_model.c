@@ -260,10 +260,68 @@ static void test_single_spot_circular_sampling(void) {
     ASSERT_TRUE(r_world <= 2.0 + 1e-12);
 }
 
+static void test_weighted_spot_selection(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spots[3] = {0};
+    struct particle parts[3] = {0};
+    struct particle *part_out = NULL;
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    struct osh_rng rng_ref;
+    double cum_wt[3] = {1.0, 3.0, 10.0};
+    double zdir[3] = {0.0, 0.0, 1.0};
+    double w;
+    size_t idx_exp;
+    int i;
+    int rc;
+
+    for (i = 0; i < 3; i++) {
+        parts[i].pdg = 1000 + i;
+        spots[i].part = &parts[i];
+        spots[i].shape = OSH_BEAM_SHAPE_PENCIL;
+        spots[i].p[0] = 10.0 * (double) i;
+        spots[i].p[1] = -5.0 * (double) i;
+        spots[i].p[2] = -20.0 - (double) i;
+        spots[i].t0 = 70.0 + 10.0 * (double) i;
+        spots[i].wt = (i == 0) ? 1.0 : (i == 1) ? 2.0 : 7.0;
+        osh_vect_setup_tmatrix_bzalign_affine(spots[i].p, zdir, spots[i]._tm);
+    }
+
+    wb.spots = spots;
+    wb.nspots = 3;
+    wb.cum_wt = cum_wt;
+    wb.wt_sum = 10.0;
+    wb.shared.use_sad = 0;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 321u, 654u);
+    osh_rng_init(&rng_ref, OSH_RNG_TYPE_PCG32, 321u, 654u);
+
+    for (i = 0; i < 8; i++) {
+        w = osh_rng_double(&rng_ref) * wb.wt_sum;
+        if (w <= cum_wt[0]) {
+            idx_exp = 0;
+        } else if (w <= cum_wt[1]) {
+            idx_exp = 1;
+        } else {
+            idx_exp = 2;
+        }
+
+        rc = osh_beam_new_primary(&wb, &rng, &part_out, &ray);
+
+        ASSERT_TRUE(rc == OSH_OK);
+        ASSERT_TRUE(part_out == &parts[idx_exp]);
+        ASSERT_TRUE(fabs(ray.p[0] - spots[idx_exp].p[0]) < 1e-12);
+        ASSERT_TRUE(fabs(ray.p[1] - spots[idx_exp].p[1]) < 1e-12);
+        ASSERT_TRUE(fabs(ray.p[2] - spots[idx_exp].p[2]) < 1e-12);
+        ASSERT_TRUE(fabs(ray.p[3] - spots[idx_exp].t0) < 1e-12);
+    }
+}
+
 int main(void) {
     test_single_spot_gaussian_sampling();
     test_single_spot_sad_fanout();
     test_single_spot_square_sampling();
     test_single_spot_circular_sampling();
+    test_weighted_spot_selection();
     return 0;
 }

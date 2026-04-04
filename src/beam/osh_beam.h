@@ -152,6 +152,8 @@ struct beam_workspace {
     char *fname;                /* beam input file path (owned) */
     char *fname_spotlist;       /* external spot list file (owned); NULL if not used */
     size_t nspots;              /* number of entries in spots[] */
+    double *cum_wt;             /* cumulative spot weights for weighted SOBP selection */
+    double wt_sum;              /* total spot weight; equals cum_wt[nspots-1] when nspots > 0 */
 
     /* --- Run control (may be overridden by CLI after setup) --- */
     size_t nstat;  /* number of requested primary histories */
