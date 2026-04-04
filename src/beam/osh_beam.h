@@ -42,8 +42,8 @@ struct beam_spot {
                      * table rotation; relative to isocenter */
     double size[2]; /* lateral size [cm]: 1-sigma (Gaussian), half-width (square),
                        inner/outer radius (circular) */
-    double div[2];  /* beam divergence [rad] */
-    double cov[2];  /* position-divergence covariance [cm * rad] */
+    double div[2];  /* angular spread [rad] */
+    double cor[2];  /* position-angle correlation coefficient rho in [-1,1] */
 
     /* Energy / momentum — total quantities, NOT per nucleon */
     double t0;     /* total kinetic energy [MeV] */
