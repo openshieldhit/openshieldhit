@@ -78,7 +78,12 @@ struct beam_shared {
     double emax; /* max t0 over all spots [MeV] — for stopping-power table cap */
     double pmax; /* max p0 over all spots [MeV/c] */
 
-    double sad[2]; /* scanning-magnet to isocenter distance [cm]: [0]=x, [1]=y */
+    double sad[2]; /* source-to-isocenter / focal distance [cm]: [0]=x, [1]=y.
+                    * This is a positive machine-geometry distance, not a
+                    * signed coordinate. The corresponding virtual source is
+                    * always upstream of isocenter along the local beam axis.
+                    * SAD is therefore defined relative to isocenter, NOT
+                    * relative to BEAMPOS or the current beam start plane. */
     double focus;  /* focus point along beam axis relative to source [cm] */
 
     /* Beam direction by ISO 80000-2:2019 spherical convention:

@@ -108,12 +108,36 @@ _sample_phasespace_1d(struct osh_rng *rng, struct beam_spot const *spot, int axi
 /* ---- Step 4: SAD correction ---------------------------------------------- */
 
 /* Apply source-axis-distance correction in PZALIGN.
- * TODO: implement fan-out shift and angle update. */
-static void _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct beam_shared const *sh) {
-    (void) ray;
-    (void) spot;
-    (void) sh;
-    /* TODO */
+ *
+ * SAD is a positive source-to-isocenter distance to an upstream virtual
+ * source, not a signed z coordinate. It is defined relative to
+ * isocenter/focal geometry, not relative to the beam start plane. The actual
+ * local start position is therefore
+ *   spot->p + ray->p
+ * and the fan-out slope for each plane is taken from a virtual source at
+ *   z = -sad[axis]
+ * pointing to that start point. Since BEAMPOS is already backprojected by the
+ * caller, this updates only the direction, not the start position. */
+static int _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct beam_shared const *sh) {
+    double x;
+    double y;
+    double z;
+    double dzx;
+    double dzy;
+
+    x = spot->p[0] + ray->p[0];
+    y = spot->p[1] + ray->p[1];
+    z = spot->p[2] + ray->p[2];
+
+    dzx = z + sh->sad[0];
+    dzy = z + sh->sad[1];
+    if (dzx <= 0.0 || dzy <= 0.0) {
+        return OSH_ESTATE;
+    }
+
+    ray->v[0] += x / dzx;
+    ray->v[1] += y / dzy;
+    return OSH_OK;
 }
 
 /* ---- Step 5: standard affine transform PZALIGN → UNIVERSE ---------------- */
@@ -175,10 +199,20 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     ray_out->p[1] = y;
     ray_out->p[2] = 0.0; /* beam starts at z=0 in PZALIGN */
 
-    /* Direction in PZALIGN: small-angle (x', y') plus main z component */
+    /* Direction in PZALIGN: small-angle (x', y') plus main z component. */
     ray_out->v[0] = xp;
     ray_out->v[1] = yp;
     ray_out->v[2] = 1.0;
+
+    ray_out->system = OSH_COORD_PZALIGN;
+
+    /* 5. SAD correction */
+    if (wb->shared.use_sad) {
+        rc = _apply_sad(ray_out, spot, &wb->shared);
+        if (rc != OSH_OK) {
+            return rc;
+        }
+    }
 
     norm = sqrt(ray_out->v[0] * ray_out->v[0] + ray_out->v[1] * ray_out->v[1] + ray_out->v[2] * ray_out->v[2]);
     if (norm <= 0.0) {
@@ -187,13 +221,6 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     ray_out->v[0] /= norm;
     ray_out->v[1] /= norm;
     ray_out->v[2] /= norm;
-
-    ray_out->system = OSH_COORD_PZALIGN;
-
-    /* 5. SAD correction */
-    if (wb->shared.use_sad) {
-        _apply_sad(ray_out, spot, &wb->shared);
-    }
 
     /* 6. Apply affine transform PZALIGN -> UNIVERSE */
     _apply_transform(ray_out, spot);
