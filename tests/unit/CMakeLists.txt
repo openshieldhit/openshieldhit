@@ -14,9 +14,22 @@ function(register_named_c_tests target source_file)
 endfunction()
 
 # ---- test_osh_main: public API (version, context lifecycle, setters) ----
+# Registered three times — once per verbosity level (0=silent, 1=info, 2=debug)
+# so that logging paths are exercised under each level.
 add_executable(test_osh_main test_osh_main.c)
 target_link_libraries(test_osh_main PRIVATE openshieldhit_api)
-register_named_c_tests(test_osh_main ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_main.c)
+foreach(verbosity 0 1 2)
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/test_osh_main.c" named_test_lines
+        REGEX "^static void test_[A-Za-z0-9_]+\\(void\\)")
+    foreach(test_line IN LISTS named_test_lines)
+        string(REGEX MATCH "test_([A-Za-z0-9_]+)\\(void\\)" _ "${test_line}")
+        set(test_case "${CMAKE_MATCH_1}")
+        add_test(NAME "unit::test_osh_main::v${verbosity}::${test_case}"
+                 COMMAND $<TARGET_FILE:test_osh_main> "${verbosity}" "${test_case}")
+        set_tests_properties("unit::test_osh_main::v${verbosity}::${test_case}"
+                             PROPERTIES LABELS "unit")
+    endforeach()
+endforeach()
 
 # ---- test_osh_cli: internal CLI parser ----
 add_executable(test_osh_cli test_osh_cli.c)

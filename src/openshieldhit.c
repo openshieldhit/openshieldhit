@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/osh_logger.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 
@@ -219,6 +220,18 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
     ctx->last_error[0] = '\0';
+
+    /* Initialise the default logger from ctx->log_level.
+     *   0  → WARN  (silent — only warnings and errors)
+     *   1  → INFO  (normal informational output)
+     *  ≥2  → DEBUG (verbose debug output)
+     * Stdout is enabled so info/debug output reaches the terminal.
+     * osh_log_init() is idempotent: safe to call on every run. */
+    {
+        int lvl = (ctx->log_level == 0) ? OSH_LOG_WARN : (ctx->log_level == 1) ? OSH_LOG_INFO : OSH_LOG_DEBUG;
+        osh_log_init(lvl, OSH_LOG_F_NONE);
+        osh_log_enable_stdout(1);
+    }
 
     workdir = (ctx->workdir && ctx->workdir[0]) ? ctx->workdir : OSH_DEFAULT_WORKDIR;
     outdir = (ctx->out_dir && ctx->out_dir[0]) ? ctx->out_dir : workdir;
