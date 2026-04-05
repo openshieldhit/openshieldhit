@@ -186,24 +186,27 @@ static int _parse_beamdir(struct beam_workspace *beam, struct oshfile *oshf, cha
  * @brief Parse BEAMDIV: beam angular divergence and focus distance.
  *
  * @details
- * Syntax: BEAMDIV \<divX\> \<divY\> \<focus\>
+ * Syntax: BEAMDIV \<divX\> \<divY\> [\<focus\>]
  *
  * divX and divY are the half-angle divergences in the X and Y planes [mrad],
- * stored internally in radians.  focus is the distance from the beam source
- * to the beam waist [cm], stored as-is.
+ * stored internally in radians. focus is the optional distance from the beam
+ * source to the beam waist [cm], stored as-is; when omitted it defaults to 0.
  *
  * use_div is set only when at least one divergence component is non-zero,
  * so the sampling path can skip the divergence rotation for pencil beams.
  *
  * @param[in,out] beam  Writes spots[0].div[0,1] [rad], shared.focus, shared.use_div.
  * @param[in]     oshf  Used for error diagnostics.
- * @param[in]     args  Up to three whitespace-separated floats: divX divY focus.
+ * @param[in]     args  Two or three whitespace-separated floats: divX divY [focus].
  *
  * @returns OSH_OK on success.
  */
 static int _parse_beamdiv(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
-    float _f[3];
-    if (sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]) > 3) {
+    float _f[3] = {0.0f, 0.0f, 0.0f};
+    int nread;
+
+    nread = sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]);
+    if (nread < 2 || nread > 3) {
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
@@ -291,9 +294,11 @@ static int _parse_beamsad(struct beam_workspace *beam, struct oshfile *oshf, cha
  * @brief Parse BEAMSIGMA: beam spot size and shape.
  *
  * @details
- * Syntax: BEAMSIGMA \<sx\> \<sy\>  [cm]
+ * Syntax: BEAMSIGMA \<sx\> [\<sy\>]  [cm]
  *
  * The sign of the arguments encodes the spot shape:
+ *
+ * If only one value is given, it is applied symmetrically: sy = sx.
  *
  *   sx > 0, sy > 0  —  Gaussian,   sigma_x = sx, sigma_y = sy
  *   sx = 0, sy = 0  —  pencil beam (point source, no lateral spread)
@@ -306,15 +311,21 @@ static int _parse_beamsad(struct beam_workspace *beam, struct oshfile *oshf, cha
  *
  * @param[in,out] beam  Writes spots[0].shape and spots[0].size[0,1].
  * @param[in]     oshf  Used for error diagnostics.
- * @param[in]     args  Two whitespace-separated floats: sx sy.
+ * @param[in]     args  One or two whitespace-separated floats: sx [sy].
  *
  * @returns OSH_OK on success.
  */
 static int _parse_beamsigma(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
-    float _f[2];
-    if (sscanf(args, "%f %f", &_f[0], &_f[1]) > 2) {
+    float _f[2] = {0.0f, 0.0f};
+    int nread;
+
+    nread = sscanf(args, "%f %f", &_f[0], &_f[1]);
+    if (nread < 1 || nread > 2) {
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
+    }
+    if (nread == 1) {
+        _f[1] = _f[0];
     }
     if (_f[0] < 0.0f && _f[1] < 0.0f) {
         beam->spots[0].shape = OSH_BEAM_SHAPE_SQUARE;
@@ -665,13 +676,21 @@ static int _parse_neutrlcut(struct beam_workspace *beam, struct oshfile *oshf, c
  * @returns OSH_OK on success.
  */
 static int _parse_nstat(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
-    int _i[2];
-    if (sscanf(args, "%i %i", &_i[0], &_i[1]) > 2) {
+    int _i[2] = {0, 0};
+    int nread;
+
+    nread = sscanf(args, "%i %i", &_i[0], &_i[1]);
+    if (nread < 1 || nread > 2) {
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
+    if (_i[0] < 0) {
+        osh_error("in %s line %i: NSTAT must be >= 0", oshf->filename, oshf->lineno);
+        return OSH_EPARSE;
+    }
+
     beam->nstat = (size_t) _i[0];
-    beam->nsave = (size_t) _i[1];
+    beam->nsave = (_i[1] > 0) ? (size_t) _i[1] : 0u;
     return OSH_OK;
 }
 

@@ -221,7 +221,17 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm);
  * @details The resulting matrix follows the conventional affine form
  *   p_out = R * p_in + t
  * where R columns are the local basis vectors (S,T,Rdir) expressed in
- * UNIVERSE, and t is a world-space translation.
+ * UNIVERSE.
+ *
+ * The first argument is the beam origin expressed in beam-local
+ * BZ/PZALIGN coordinates, not an already-world-space translation vector.
+ * The stored affine translation is derived as:
+ *   t = R * p_local
+ * so the final matrix maps:
+ *   p_universe = R * p_local_sampled + R * p_local_origin
+ *
+ * Callers that already have a desired world-space translation must not pass
+ * it directly here unless it first matches this local-origin convention.
  *
  * This is the preferred helper for new code. The legacy
  * osh_vect_setup_tmatrix_bzalign() function above follows the older

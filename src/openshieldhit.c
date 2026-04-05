@@ -48,8 +48,16 @@ static char const *const OSH_DETECT_FILENAME = "detect.dat";
 
 /* ---- Internal helpers ---------------------------------------------------- */
 
+/* Resolve either an explicit override path or workdir/filename into an owned
+ * path string for the context. */
 static char *resolve_input_path(char const *workdir, char const *override_path, char const *filename);
+/* Duplicate a C string into owned heap storage. */
+static char *duplicate_cstring(char const *src);
+/* Open a file in read-only mode using a Windows-safe wrapper around fopen. */
+static FILE *fopen_readonly(char const *path);
+/* Return 1 if a readable file exists at path, 0 otherwise. */
 static int file_exists(char const *path);
+/* Duplicate a config string so the context owns stable storage. */
 static int duplicate_string(char const *src, char **dst_out);
 static int config_has_field(openshieldhit_config_t const *cfg, size_t field_end);
 
@@ -304,8 +312,14 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
         goto cleanup;
     }
+    if (ctx->has_nstat) {
+        beam->nstat = (size_t) ctx->nstat;
+    }
     if (out) {
         fprintf(out, "Loaded beam: %s\n", beam_path);
+        if (ctx->has_nstat) {
+            fprintf(out, "Applied nstat override: %llu\n", ctx->nstat);
+        }
     }
 
     /* TODO: wire material loader */
@@ -344,13 +358,25 @@ cleanup:
 
 /* ---- Internal helpers ---------------------------------------------------- */
 
+/**
+ * @brief Resolve an input path into owned storage for the context.
+ *
+ * If @p override_path is given, it is duplicated directly. Otherwise the
+ * function joins @p workdir and @p filename into a newly allocated path.
+ *
+ * @param[in] workdir       Working directory used for default file lookup.
+ * @param[in] override_path Optional explicit path from the caller.
+ * @param[in] filename      Default file name to append to @p workdir.
+ *
+ * @return Newly allocated path string, or NULL on allocation/argument error.
+ */
 static char *resolve_input_path(char const *workdir, char const *override_path, char const *filename) {
     char *path;
     size_t wlen;
     size_t flen;
 
     if (override_path && override_path[0]) {
-        path = strdup(override_path);
+        path = duplicate_cstring(override_path);
         return path;
     }
 
@@ -374,12 +400,69 @@ static char *resolve_input_path(char const *workdir, char const *override_path, 
     return path;
 }
 
+/**
+ * @brief Duplicate a C string into owned heap storage.
+ *
+ * This helper exists to avoid platform-specific strdup variants and to make
+ * ownership explicit in code paths where the context needs stable copies of
+ * caller-provided strings.
+ *
+ * @param[in] src Source string to duplicate.
+ *
+ * @return Newly allocated copy, or NULL on error.
+ */
+static char *duplicate_cstring(char const *src) {
+    char *dst;
+    size_t len;
+
+    if (!src) {
+        return NULL;
+    }
+
+    len = strlen(src) + 1u;
+    dst = (char *) malloc(len);
+    if (!dst) {
+        return NULL;
+    }
+    memcpy(dst, src, len);
+    return dst;
+}
+
+/**
+ * @brief Open a file for read-only probing in a portable way.
+ *
+ * Uses fopen_s on MSVC to avoid C4996 warnings, and falls back to fopen on
+ * other platforms.
+ *
+ * @param[in] path File path to open.
+ *
+ * @return Open FILE* on success, or NULL on failure.
+ */
+static FILE *fopen_readonly(char const *path) {
+#if defined(_MSC_VER)
+    FILE *fp = NULL;
+    if (fopen_s(&fp, path, "r") != 0) {
+        return NULL;
+    }
+    return fp;
+#else
+    return fopen(path, "r");
+#endif
+}
+
+/**
+ * @brief Check whether a readable file exists at @p path.
+ *
+ * @param[in] path File path to probe.
+ *
+ * @return 1 if the file can be opened for reading, otherwise 0.
+ */
 static int file_exists(char const *path) {
     FILE *fp;
     if (!path || !path[0]) {
         return 0;
     }
-    fp = fopen(path, "r");
+    fp = fopen_readonly(path);
     if (!fp) {
         return 0;
     }
@@ -387,6 +470,18 @@ static int file_exists(char const *path) {
     return 1;
 }
 
+/**
+ * @brief Duplicate an optional config string into context-owned storage.
+ *
+ * The configuration struct may point to stack memory or other short-lived
+ * storage. The context therefore copies any non-empty string it accepts and
+ * frees that memory in openshieldhit_context_destroy().
+ *
+ * @param[in]  src     Optional source string; NULL/empty means "unset".
+ * @param[out] dst_out Receives the allocated copy, or NULL when unset.
+ *
+ * @return 1 on success, 0 on allocation/argument error.
+ */
 static int duplicate_string(char const *src, char **dst_out) {
     char *copy = NULL;
 
@@ -394,7 +489,7 @@ static int duplicate_string(char const *src, char **dst_out) {
         return 0;
     }
     if (src && src[0]) {
-        copy = strdup(src);
+        copy = duplicate_cstring(src);
         if (!copy) {
             return 0;
         }

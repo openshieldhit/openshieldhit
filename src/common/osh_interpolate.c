@@ -38,7 +38,7 @@ double osh_interpolate_flin(float x, float const *xx, float const *ff, unsigned 
             /* The case x == xx[0] or x == xx[n-1] may seem to be lost here, but it is not:
                in this case, OSH_INTERPOLATE_OOB_NEAREST will give the same as OSH_INTERPOLATE_OOB_EXTRAPOL.
              */
-            return xx[0];
+            return ff[0];
         default:
             /* by default, assume OSH_INTERPOLATE_OOB_EXTRAPOL */
             break;
@@ -56,7 +56,7 @@ double osh_interpolate_flin(float x, float const *xx, float const *ff, unsigned 
             return 0.0;
         case OSH_INTERPOLATE_OOB_NEAREST:
             /* See comment above */
-            return xx[n - 1];
+            return ff[n - 1];
         default:
             /* by default, do an extrapolate */
             break;
@@ -116,7 +116,7 @@ double osh_interpolate_dlin(double x, double const *xx, double const *ff, unsign
             /* The case x == xx[0] or x == xx[n-1] may seem to be lost here, but it is not:
                in this case, OSH_INTERPOLATE_OOB_NEAREST will give the same as OSH_INTERPOLATE_OOB_EXTRAPOL.
              */
-            return xx[0];
+            return ff[0];
         default:
             /* by default, assume OSH_INTERPOLATE_OOB_EXTRAPOL */
             break;
@@ -134,7 +134,7 @@ double osh_interpolate_dlin(double x, double const *xx, double const *ff, unsign
             return 0.0;
         case OSH_INTERPOLATE_OOB_NEAREST:
             /* See comment above */
-            return xx[n - 1];
+            return ff[n - 1];
         default:
             /* by default, do an extrapolate */
             break;
