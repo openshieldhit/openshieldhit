@@ -88,7 +88,7 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
     double d2;
     struct ray tr; /* transformed ray to coordinate system of the body */
 
-    if (self->type == _OSH_GEMCA_CGNODE_BODY) {  /* we are in the leaf node */
+    if (self->type == _OSH_GEMCA_CGNODE_BODY) { /* we are in the leaf node */
         if (!_transform_to_local(self->body, r, &tr)) {
             self->_is_inside = 0;
             return OSH_GEMCA_INFINITY;
