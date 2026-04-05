@@ -98,7 +98,9 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
         return rc;
     }
 
-    osh_beam_print(wb);
+    if (osh_log_get_level() <= OSH_LOG_DEBUG) {
+        osh_beam_print(wb);
+    }
 
     *wb_out = wb;
     return OSH_OK;
@@ -185,6 +187,10 @@ static int _wb_validate(const struct beam_workspace *wb) {
         return OSH_EINVAL;
     }
     if (wb->spots && wb->nspots == 0) {
+        return OSH_EINVAL;
+    }
+    if (wb->spots && !wb->has_primary) {
+        osh_warn("Beam setup requires PRIMARY for spot-based sources");
         return OSH_EINVAL;
     }
 

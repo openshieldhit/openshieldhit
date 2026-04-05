@@ -116,7 +116,9 @@ int osh_beam_parse(struct oshfile *oshf, struct beam_workspace *beam) {
             }
         }
         if (!found) {
-            osh_warn("Line %d: Unknown key '%s'", lineno, key);
+            osh_error("in %s line %d: unknown key '%s'", oshf->filename, lineno, key);
+            free(lline);
+            return OSH_EPARSE;
         }
         free(lline);
         lline = NULL;
