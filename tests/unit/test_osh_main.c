@@ -128,11 +128,13 @@ static void test_validate_applies_nstat_override(void) {
     enum openshieldhit_status rc;
     FILE *out;
     char buf[4096];
+    char workdir[512];
     size_t nread;
 
     ASSERT_TRUE(ctx != NULL);
 
-    cfg.workdir = "../tests/cases/02_sobp";
+    snprintf(workdir, sizeof(workdir), "%s/tests/cases/02_sobp", OSH_PROJECT_SOURCE_DIR);
+    cfg.workdir = workdir;
     cfg.run_mode = OPENSHIELDHIT_RUN_VALIDATE;
     cfg.nstat = 1234ULL;
     cfg.has_nstat = 1;

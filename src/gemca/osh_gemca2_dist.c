@@ -89,7 +89,10 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
     struct ray tr; /* transformed ray to coordinate system of the body */
 
     if (self->type == _OSH_GEMCA_CGNODE_BODY) {  /* we are in the leaf node */
-        _transform_to_local(self->body, r, &tr); /* Transform ray to body's coordinate system */
+        if (!_transform_to_local(self->body, r, &tr)) {
+            self->_is_inside = 0;
+            return OSH_GEMCA_INFINITY;
+        }
 
         // osh_gemca_print_body(self->body);
         // osh_transport_print_ray(r);
@@ -245,7 +248,7 @@ static inline double _dist_surface(struct surface const *sf, struct ray const *r
  * @param[in] r - input ray in OSH_COORD_UNIVERSE
  * @param[out] tr - transformed output ray in system given by b->coord
  *
- * @returns 1
+ * @returns 1 on success, 0 on unsupported coordinate system.
  *
  * @author Niels Bassler
  */
@@ -286,7 +289,7 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
 
     default:
         osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
-        break;
+        return 0;
     }
     return 1;
 }
