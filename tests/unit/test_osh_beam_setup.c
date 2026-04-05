@@ -37,6 +37,7 @@ static void test_setup_single_spot_from_beamdat(void) {
 
     snprintf(beam_text,
              sizeof beam_text,
+             "PRIMARY proton\n"
              "TMAX0 120.0 1.5\n"
              "BEAMPOS 1.0 2.0 -50.0\n"
              "BEAMSIGMA 0.0 0.0\n"
@@ -90,6 +91,7 @@ static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
 
     snprintf(beam_text,
              sizeof beam_text,
+             "PRIMARY proton\n"
              "TMAX0 200.0 1.5\n"
              "BEAMPOS 9.0 8.0 -35.0\n"
              "BEAMSIGMA 0.0 0.0\n"
@@ -154,6 +156,7 @@ static void test_setup_spotlist_overrides_optional_columns(void) {
 
     snprintf(beam_text,
              sizeof beam_text,
+             "PRIMARY proton\n"
              "TMAX0 220.0 4.0\n"
              "BEAMPOS 0.0 0.0 -25.0\n"
              "BEAMSIGMA 0.0 0.0\n"
@@ -270,6 +273,40 @@ static void test_setup_primary_invalid_returns_einval(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+static void test_setup_missing_primary_returns_einval(void) {
+    char beam_path[] = "/tmp/osh_beamdat_noprimaryXXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "TMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_EINVAL);
+    ASSERT_TRUE(wb == NULL);
+
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_unknown_key_returns_eparse(void) {
+    char beam_path[] = "/tmp/osh_beamdat_badkeyXXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBANANA 1 2 3\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(wb == NULL);
+
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 int main(void) {
     test_setup_single_spot_from_beamdat();
     test_setup_spotlist_replaces_template_and_inherits_defaults();
@@ -278,5 +315,7 @@ int main(void) {
     test_setup_primary_pdg_resolves_particle();
     test_setup_primary_za_resolves_ion();
     test_setup_primary_invalid_returns_einval();
+    test_setup_missing_primary_returns_einval();
+    test_setup_unknown_key_returns_eparse();
     return 0;
 }

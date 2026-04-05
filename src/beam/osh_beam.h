@@ -155,7 +155,7 @@ struct beam_workspace {
     size_t nspots;              /* number of entries in spots[] */
     double *cum_wt;             /* cumulative spot weights for weighted SOBP selection */
     double wt_sum;              /* total spot weight; equals cum_wt[nspots-1] when nspots > 0 */
-    char has_primary;           /* 1 once PARTICLE/ION resolved successfully */
+    char has_primary;           /* 1 once PRIMARY resolved successfully */
 
     /* --- Run control (may be overridden by CLI after setup) --- */
     size_t nstat;  /* number of requested primary histories */
