@@ -6,6 +6,7 @@
 #include "particle/osh_isotope_db_generated.h"
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
+#include "particle/osh_particle_pdg.h"
 
 #define Z_OSMIUM 76
 #define EPS 1e-10
@@ -147,6 +148,42 @@ void test_particle_from_pdg_ion(void) {
     assert(p.mass > 0.0);
 }
 
+void test_particle_pdg_from_name(void) {
+    int pdg;
+    int res;
+
+    res = osh_particle_pdg_from_name("proton", &pdg);
+    assert(res == 1);
+    assert(pdg == OSH_PART_PDG_PROTON);
+
+    res = osh_particle_pdg_from_name("P", &pdg);
+    assert(res == 1);
+    assert(pdg == OSH_PART_PDG_PROTON);
+
+    res = osh_particle_pdg_from_name("antiproton", &pdg);
+    assert(res == 1);
+    assert(pdg == OSH_PART_PDG_APROTON);
+
+    res = osh_particle_pdg_from_name("alpha", &pdg);
+    assert(res == 1);
+    assert(pdg == OSH_PART_PDG_HE4);
+
+    res = osh_particle_pdg_from_name("no_such_particle", &pdg);
+    assert(res == 0);
+}
+
+void test_particle_from_name(void) {
+    struct particle p;
+    int res;
+
+    res = osh_particle_from_name(&p, "He4");
+    assert(res == 1);
+    assert(p.pdg == OSH_PART_PDG_HE4);
+    assert(p.is_nucleus == 1);
+    assert(p.z == 2);
+    assert(p.a == 4);
+}
+
 int main(void) {
     printf("Running osh_particle tests...\n");
 
@@ -155,6 +192,8 @@ int main(void) {
     test_particle_name_from_pdg();
     test_particle_symbol_from_pdg();
     test_particle_from_pdg_ion();
+    test_particle_pdg_from_name();
+    test_particle_from_name();
 
     printf("All tests passed.\n");
     return 0;

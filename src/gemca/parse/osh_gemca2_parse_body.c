@@ -13,7 +13,7 @@
 
 static int _save_body(struct body *b, char *nstr, double *par, int npar, int btype);
 static int _body_from_key(char const *key);
-static void _rewind_oshfile(struct oshfile *shf);
+static int _rewind_oshfile(struct oshfile *shf);
 
 /**
  * @brief Initialize a body.
@@ -28,7 +28,8 @@ int osh_gemca_body_init(struct body **body) {
 
     *body = calloc(1, sizeof(struct body));
     if (*body == NULL) {
-        osh_error(EX_UNAVAILABLE, "osh_gemca_body_init() cannot allocate memory\n");
+        osh_error("osh_gemca_body_init() cannot allocate memory\n");
+        return 0;
     }
     return 1;
 }
@@ -53,7 +54,9 @@ size_t osh_gemca_parse_count_bodies(struct oshfile *shf) {
 
     int nbody = 0;
 
-    _rewind_oshfile(shf);
+    if (!_rewind_oshfile(shf)) {
+        return 0;
+    }
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
@@ -104,7 +107,9 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
     size_t ibody = 0;
     size_t _ib;
 
-    _rewind_oshfile(shf);
+    if (!_rewind_oshfile(shf)) {
+        return 0;
+    }
 
     /* read line by line and parse the keys and arguments */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
@@ -112,9 +117,10 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
         /* END check early so we do not touch parsing state on END lines */
         if ((strcasecmp(key, OSH_GEMCA_KEY_END) == 0) && (nend == 0)) {
             if (current_body == NULL) {
-                osh_error(EX_CONFIG,
-                          "Error parsing geometry line %li - END encountered before any body definition\n",
+                osh_error("Error parsing geometry line %li - END encountered before any body definition\n",
                           (long int) lineno);
+                free(line);
+                return 0;
             }
             _save_body(current_body, nstr, par, npar, btype);
             current_body->lineno = lineno_b;
@@ -133,10 +139,11 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
 
             /* capacity guard */
             if (ibody >= g->nbodies) {
-                osh_error(EX_CONFIG,
-                          "Error parsing geometry line %li - too many bodies (max=%li)\n",
+                osh_error("Error parsing geometry line %li - too many bodies (max=%li)\n",
                           (long int) lineno,
                           (long int) g->nbodies);
+                free(line);
+                return 0;
             }
 
             /* start new body */
@@ -145,8 +152,9 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
             lineno_b = lineno;
 
             if (args == NULL) {
-                osh_error(
-                    EX_CONFIG, "Error parsing geometry line %li - missing body name/parameters\n", (long int) lineno);
+                osh_error("Error parsing geometry line %li - missing body name/parameters\n", (long int) lineno);
+                free(line);
+                return 0;
             }
 
             // TODO: sscanf("%s", ...) is unsafe because %s is unbounded and may overflow nstr.
@@ -156,11 +164,12 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
             for (_ib = 0; _ib < ibody; _ib++) {
                 if ((g->bodies[_ib] != NULL) && (g->bodies[_ib]->name != NULL)
                     && (strcmp(g->bodies[_ib]->name, nstr) == 0)) {
-                    osh_error(EX_CONFIG,
-                              "Error parsing geometry line %li - body name '%s' already exists (defined at line %li)\n",
+                    osh_error("Error parsing geometry line %li - body name '%s' already exists (defined at line %li)\n",
                               (long int) lineno,
                               nstr,
                               (long int) g->bodies[_ib]->lineno);
+                    free(line);
+                    return 0;
                 }
             }
 
@@ -179,11 +188,12 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
 
             /* We may write up to par[off+5] on a continuation line */
             if ((off + 5) >= OSH_GEMCA_NARGS_MAX) {
-                osh_error(EX_CONFIG,
-                          "Error parsing geometry line %li - too many arguments (need index %i, max index %i)\n",
+                osh_error("Error parsing geometry line %li - too many arguments (need index %i, max index %i)\n",
                           (long int) lineno,
                           off + 5,
                           OSH_GEMCA_NARGS_MAX - 1);
+                free(line);
+                return 0;
             }
 
             nt = sscanf(key, "%lf", &par[off]);
@@ -293,11 +303,13 @@ int _body_from_key(char const *key) {
  *
  * @returns Nothing. Exits via `osh_error()` if rewinding fails.
  */
-static void _rewind_oshfile(struct oshfile *shf) {
+static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+        osh_error("Failed to rewind geometry file '%s'\n", shf->filename);
+        return 0;
     }
     shf->lineno = 0;
+    return 1;
 }
 
 /**

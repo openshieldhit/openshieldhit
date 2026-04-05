@@ -41,6 +41,41 @@ Not intended for end-users.
   - An API requires initialization (for example, pointers passed to functions that may free or overwrite them).
   - Defensive initialization clearly improves robustness without hiding logic errors.
 
+### Documentation
+
+Use Doxygen-style `/** ... */` block comments on all non-trivial functions,
+placed immediately before the function signature (not inside the body).
+
+Follow this structure:
+
+```c
+/**
+ * @brief One-sentence summary of what the function does.
+ *
+ * @details
+ * Expanded explanation: sign conventions, units, algorithm choice,
+ * design rationale, or anything a reader cannot infer from the code alone.
+ * Use @details whenever the brief is not self-contained.
+ *
+ * @param[in]     foo  Description.
+ * @param[in,out] bar  Description.
+ * @param[out]    baz  Description.
+ *
+ * @returns Description of return value, or "Does not return" if the
+ *          function calls osh_error() on all error paths.
+ */
+```
+
+Rules:
+- `@brief` is a single line — the summary a reader sees in an overview.
+- `@details` holds everything that needs more than one sentence.
+- Use `@param[in]`, `@param[out]`, `@param[in,out]` as appropriate.
+- Omit `@param` and `@returns` only for trivial flag-setter functions
+  where the signature is completely self-explanatory.
+- Inline `/* */` comments inside the function body are for
+  non-obvious *implementation* details (unit conversions, index tricks),
+  not for repeating what the Doxygen block already says.
+
 ### Design Decisions
 
 This project is also intended as a pedagogical reference. Where practical,

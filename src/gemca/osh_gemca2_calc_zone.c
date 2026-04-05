@@ -126,7 +126,7 @@ static inline int _in_node(struct cgnode const *self, struct ray const *r) {
             break;
 
         default:
-            osh_error(EX_SOFTWARE, "_in_node(): unknown operator");
+            osh_error("_in_node(): unknown operator");
             break;
         }
     }
@@ -209,7 +209,7 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
         break;
 
     default:
-        osh_error(EX_SOFTWARE, "_transform_to_local() unsupported coordinate system :%i", b->coord);
+        osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
         break;
     }
     return 1;

@@ -6,7 +6,7 @@
 /* OSH_AMU         Changed in 2020, old definition was 931.4940954  MeV/c**2 */
 /* OSH_NAVOGADRO   Changed in 2020, old definition was 6.022140857e23  mol^-1 */
 
-#define OSH_AMU 931.49410242         /* 1 amu in [MeV/c**2] */
+#define OSH_AMU 931.49410242         /* 1 Da (dalton, unified atomic mass unit) in [MeV/c**2] */
 #define OSH_NAVOGADRO 6.02214076e23  /* Avogadro constant in [mol^-1] */
 #define OSH_MEVG2GY 1.602176634e-10  /* 1 MeV/g in J/kg */
 #define OSH_EV2JOULE 1.602176634e-19 /* 1 eV in J */

@@ -6,6 +6,7 @@
 
 #include "beam/osh_beam.h"
 #include "common/osh_rc.h"
+#include "particle/osh_particle_pdg.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -184,9 +185,98 @@ static void test_setup_spotlist_overrides_optional_columns(void) {
     ASSERT_TRUE(remove(spot_path) == 0);
 }
 
+static void test_setup_primary_name_resolves_particle(void) {
+    char beam_path[] = "/tmp/osh_beamdat_primarynameXXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->has_primary == 1);
+    ASSERT_TRUE(wb->primary.pdg == OSH_PART_PDG_PROTON);
+    ASSERT_TRUE(wb->spots[0].part == &wb->primary);
+    ASSERT_TRUE(fabs(wb->spots[0].p0) > 0.0);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_primary_pdg_resolves_particle(void) {
+    char beam_path[] = "/tmp/osh_beamdat_primarypdgXXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY 2212\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->has_primary == 1);
+    ASSERT_TRUE(wb->primary.pdg == OSH_PART_PDG_PROTON);
+    ASSERT_TRUE(wb->spots[0].part == &wb->primary);
+    ASSERT_TRUE(fabs(wb->spots[0].p0) > 0.0);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_primary_za_resolves_ion(void) {
+    char beam_path[] = "/tmp/osh_beamdat_primaryzaXXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY 6 12\nTMAX0 1200.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->has_primary == 1);
+    ASSERT_TRUE(wb->primary.pdg == 1000060120);
+    ASSERT_TRUE(wb->primary.z == 6);
+    ASSERT_TRUE(wb->primary.a == 12);
+    ASSERT_TRUE(wb->spots[0].part == &wb->primary);
+    ASSERT_TRUE(fabs(wb->spots[0].p0) > 0.0);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_primary_invalid_returns_einval(void) {
+    char beam_path[] = "/tmp/osh_beamdat_primarybadXXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY nosuchparticle\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_EINVAL);
+    ASSERT_TRUE(wb == NULL);
+
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 int main(void) {
     test_setup_single_spot_from_beamdat();
     test_setup_spotlist_replaces_template_and_inherits_defaults();
     test_setup_spotlist_overrides_optional_columns();
+    test_setup_primary_name_resolves_particle();
+    test_setup_primary_pdg_resolves_particle();
+    test_setup_primary_za_resolves_ion();
+    test_setup_primary_invalid_returns_einval();
     return 0;
 }

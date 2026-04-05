@@ -11,7 +11,7 @@
 #include "gemca/parse/osh_gemca2_parse_zone.h"
 
 static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone);
-static void _rewind_oshfile(struct oshfile *shf);
+static int _rewind_oshfile(struct oshfile *shf);
 
 /**
  * @brief loads and parses the geometry geo.dat file (or whatever filename was specified.
@@ -34,33 +34,52 @@ int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
     struct zone **zone = NULL;
 
     struct oshfile *shf = osh_fopen(filename);
+    if (!shf) {
+        return 0;
+    }
 
     /* test_format() also counts the number of bodies and zones */
     if (!_test_format(shf, &nbody, &nzone)) {
-        osh_error(EX_CONFIG, "Unknown format of %s\n", filename);
+        osh_error("Unknown format of %s\n", filename);
+        osh_fclose(shf);
+        return 0;
     }
 
     g->filename = calloc(strlen(filename) + 1, sizeof(char));
+    if (!g->filename) {
+        osh_alloc_failed("g->filename");
+        osh_fclose(shf);
+        return 0;
+    }
     snprintf(g->filename, strlen(filename) + 1, "%s", filename);
 
     /* allocate memory for pointers to lists */
     body = (struct body **) calloc(nbody, sizeof(struct body *));
     if (body == NULL) {
-        fprintf(stderr, "*** Error in memory allocation, *body.\n");
-        exit(EX_UNAVAILABLE);
+        osh_alloc_failed("*body");
+        osh_fclose(shf);
+        return 0;
     }
     zone = (struct zone **) calloc(nzone, sizeof(struct zone *));
     if (zone == NULL) {
-        fprintf(stderr, "*** Error in memory allocation, *zone.\n");
-        exit(EX_UNAVAILABLE);
+        osh_alloc_failed("*zone");
+        free(body);
+        osh_fclose(shf);
+        return 0;
     }
 
     /* allocate memory for every list item */
     for (i = 0; i < nbody; i++) {
-        osh_gemca_body_init(&body[i]);
+        if (!osh_gemca_body_init(&body[i])) {
+            osh_fclose(shf);
+            return 0;
+        }
     }
     for (i = 0; i < nzone; i++) {
-        osh_gemca_zone_init(&zone[i]);
+        if (!osh_gemca_zone_init(&zone[i])) {
+            osh_fclose(shf);
+            return 0;
+        }
     }
 
     /* initialize gemca workspace */
@@ -69,9 +88,18 @@ int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
     g->nbodies = nbody;
     g->nzones = nzone;
 
-    osh_gemca_parse_bodies(shf, g);
-    osh_gemca_parse_zones(shf, g);
-    osh_gemca_parse_media(shf, g);
+    if (!osh_gemca_parse_bodies(shf, g)) {
+        osh_fclose(shf);
+        return 0;
+    }
+    if (!osh_gemca_parse_zones(shf, g)) {
+        osh_fclose(shf);
+        return 0;
+    }
+    if (!osh_gemca_parse_media(shf, g)) {
+        osh_fclose(shf);
+        return 0;
+    }
 
     osh_fclose(shf);
 
@@ -93,7 +121,9 @@ static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone) {
 
     int ret = 0;
 
-    _rewind_oshfile(shf);
+    if (!_rewind_oshfile(shf)) {
+        return 0;
+    }
 
     *nbody = osh_gemca_parse_count_bodies(shf);
     *nzone = osh_gemca_parse_count_zones(shf);
@@ -112,9 +142,11 @@ static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone) {
  *
  * @returns Nothing. Exits via `osh_error()` if rewinding fails.
  */
-static void _rewind_oshfile(struct oshfile *shf) {
+static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+        osh_error("Failed to rewind geometry file '%s'\n", shf->filename);
+        return 0;
     }
     shf->lineno = 0;
+    return 1;
 }

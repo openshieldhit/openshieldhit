@@ -69,7 +69,7 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
         }
         // printf("  Currently inside zone '%s', advancing %.9e to next boundary\n", z->name, d);
         if (d < 0.0) {
-            osh_error(EX_SOFTWARE, "osh_gemca_get_distance(): negative distance to zone boundary");
+            osh_error("osh_gemca_get_distance(): negative distance to zone boundary");
         }
         if (d < OSH_GEMCA_STEPLIM) {
             // TODO: check if this may introduce scoring artefacts when a step is half in two zones
@@ -119,7 +119,7 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
             self->_is_inside = self->left->_is_inside && !self->right->_is_inside;
             break;
         default:
-            osh_error(EX_SOFTWARE, "_dist_zone(): unknown operator");
+            osh_error("_dist_zone(): unknown operator");
             break;
         }
         /* return smallest possible distance */
@@ -285,7 +285,7 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
         break;
 
     default:
-        osh_error(EX_SOFTWARE, "_transform_to_local() unsupported coordinate system :%i", b->coord);
+        osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
         break;
     }
     return 1;

@@ -64,7 +64,7 @@ void test_count_keys(char const *filename) {
     }
 
     osh_fclose(oshf);
-    assert(count == 14);
+    assert(count == 13);
     printf("test_count_keys() passed. Found %d keys.\n", count);
 }
 

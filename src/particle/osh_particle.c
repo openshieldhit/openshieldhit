@@ -1,7 +1,11 @@
 #include "particle/osh_particle.h"
 
+#include <ctype.h>
 #include <stdio.h>
+#include <string.h>
 
+#include "common/osh_const.h"
+#include "common/osh_logger.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_db.h"
@@ -19,6 +23,26 @@ static void reset_particle(struct particle *p) {
     p->is_nucleus = 0;
 }
 
+static int _name_eq(char const *lhs, char const *rhs) {
+    unsigned char cl;
+    unsigned char cr;
+
+    if (!lhs || !rhs) {
+        return 0;
+    }
+
+    while (*lhs != '\0' && *rhs != '\0') {
+        cl = (unsigned char) tolower((unsigned char) *lhs);
+        cr = (unsigned char) tolower((unsigned char) *rhs);
+        if (cl != cr) {
+            return 0;
+        }
+        lhs++;
+        rhs++;
+    }
+    return *lhs == '\0' && *rhs == '\0';
+}
+
 int osh_particle_from_pdg(struct particle *p, int pdg) {
 
     size_t i;
@@ -28,11 +52,11 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
     p->nprim = 0;
     p->weight = 1.0;
 
-    if (pdg == 1000010010) {
+    if (pdg == OSH_PART_PDG_PROTON_ION) { /* hypothetical hydrogen nucleus */
         pdg = OSH_PART_PDG_PROTON;
     }
 
-    if (pdg == 1000000010) { /* hypothetical neutron nucleus */
+    if (pdg == OSH_PART_PDG_NEUTRON_ION) { /* hypothetical neutron nucleus */
         pdg = OSH_PART_PDG_NEUTRON;
     }
 
@@ -70,6 +94,45 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
     reset_particle(p);
     p->pdg = OSH_PART_PDG_INVALID;
     return 0;
+}
+
+int osh_particle_pdg_from_name(char const *name, int *pdg_out) {
+    size_t i;
+
+    if (!name || !pdg_out) {
+        return 0;
+    }
+
+    for (i = 0; i < osh_particle_db_len; ++i) {
+        if (_name_eq(name, osh_particle_db[i].name) || _name_eq(name, osh_particle_db[i].symbol)) {
+            *pdg_out = osh_particle_db[i].pdg;
+            return 1;
+        }
+    }
+
+    if (_name_eq(name, "alpha")) {
+        *pdg_out = OSH_PART_PDG_HE4;
+        return 1;
+    }
+    if (_name_eq(name, "pbar")) {
+        *pdg_out = OSH_PART_PDG_APROTON;
+        return 1;
+    }
+    if (_name_eq(name, "nbar")) {
+        *pdg_out = OSH_PART_PDG_ANEUTRON;
+        return 1;
+    }
+
+    return 0;
+}
+
+int osh_particle_from_name(struct particle *p, char const *name) {
+    int pdg;
+
+    if (!osh_particle_pdg_from_name(name, &pdg)) {
+        return 0;
+    }
+    return osh_particle_from_pdg(p, pdg);
 }
 
 int osh_particle_pdg_is_ion(int pdg) {
@@ -155,24 +218,23 @@ int osh_particle_mass_from_pdg(int pdg, double *mass) {
 void osh_print_particle(struct particle const *p) {
     char name_buf[64];
 
+    if (!p) {
+        return;
+    }
     if (!osh_particle_name_from_pdg(p->pdg, name_buf, sizeof(name_buf))) {
         name_buf[0] = '\0';
     }
 
-    printf("Particle: %s\n", name_buf);
-    printf("----------------------------------------\n");
-    printf("  PDG code: %d\n", p->pdg);
-    printf("  Mass: %.6f MeV/c^2\n", p->mass);
-    printf("  Relative mass: %.6f u\n", p->mass / OSH_AMU);
-    printf("  Charge: %d e\n", p->charge);
-    if (p->is_nucleus) {
-        printf("  Ion: Z=%u, A=%u\n", p->z, p->a);
-    } else {
-        printf("  Non-ion\n");
-    }
-    printf("  Run-time properties:\n");
-    printf("    Generation: %u\n", p->gen);
-    printf("    Nprim: %u\n", p->nprim);
-    printf("    Weight: %f\n", p->weight);
-    printf("\n");
+    osh_info("Particle: %s", name_buf);
+    osh_info(OSH_LOG_HLINE);
+    osh_info("%-18s : %i", "PDG code", p->pdg);
+    osh_info("%-18s : %i", "Z", (int) p->z);
+    osh_info("%-18s : %i", "A", (int) p->a);
+    /* Mass is the bare nuclear mass (fully stripped ion, no electrons).
+     * Derived as: atomic_mass * OSH_AMU - Z * m_electron (CODATA 2018). */
+    osh_info("%-18s : %-12.5f MeV/c^2  (nuclear, CODATA 2018)", "Mass", p->mass);
+    osh_info("%-18s : %-12.5f Da        (nuclear, CODATA 2018)", "Mass", p->mass / OSH_AMU);
+    osh_info("%-18s : %i e", "Charge", (int) p->charge);
+    osh_info("%-18s : %u", "Generation", p->gen);
+    osh_info("%-18s : %f", "Stat.weight", p->weight);
 }
