@@ -391,12 +391,14 @@ static char *resolve_input_path(char const *workdir, char const *override_path, 
         return NULL;
     }
 
-    strcpy(path, workdir);
+    memcpy(path, workdir, wlen);
+    path[wlen] = '\0';
     if ((wlen > 0) && (workdir[wlen - 1] != '/')) {
         path[wlen] = '/';
         path[wlen + 1] = '\0';
+        wlen += 1u;
     }
-    strcat(path, filename);
+    memcpy(path + wlen, filename, flen + 1u);
     return path;
 }
 

@@ -17,6 +17,18 @@ static int g_verbosity = 0;
         }                                                                                                              \
     } while (0)
 
+static FILE *osh_test_tmpfile(void) {
+#if defined(_MSC_VER)
+    FILE *fp = NULL;
+    if (tmpfile_s(&fp) != 0) {
+        return NULL;
+    }
+    return fp;
+#else
+    return tmpfile();
+#endif
+}
+
 static void test_version_string_defined(void) {
     char const *v = openshieldhit_version_string();
     ASSERT_TRUE(v != NULL);
@@ -142,7 +154,7 @@ static void test_validate_applies_nstat_override(void) {
 
     ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_OK);
 
-    out = tmpfile();
+    out = osh_test_tmpfile();
     ASSERT_TRUE(out != NULL);
 
     rc = openshieldhit_run(ctx, out, NULL);
