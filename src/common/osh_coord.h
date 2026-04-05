@@ -17,14 +17,14 @@ struct point {
 struct ray {
     double p[3];
     double cp[3]; /* direction vector */ /* TODO: refactor to v */
-    int system;   /* coordinate system */
+    int system;                          /* coordinate system */
 };
 
 struct position;
 
 /* a ray is a primitive struct which merely contains position, optional energy, and a direction vector */
 /* a ray has no length */
-struct ray_v { /* TODO: rename to ray */
+struct ray_v {   /* TODO: rename to ray */
     double p[4]; /* x,y,z,E; E is total kinetic energy [MeV] (not per nucleon or per amu).*/
     double v[3]; /* unit vector pointing where particle is traveling (like CX,CY,CZ in gdatap)*/
     unsigned char

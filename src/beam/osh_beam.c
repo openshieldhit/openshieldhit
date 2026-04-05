@@ -305,7 +305,6 @@ static int _wb_postparse(struct beam_workspace *wb) {
 
 /* osh_beamdef.h name arrays (osh_beam_mscat_names etc.) included via osh_beam.h */
 
-
 void osh_beam_print(struct beam_workspace const *wb) {
     if (!wb) {
         return;
