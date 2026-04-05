@@ -5,9 +5,9 @@
 
 /* Define behaviour if out of bounds */
 #define OSH_INTERPOLATE_OOB_ZERO 0     /* will return 0.0 if out of bounds */
-#define OSH_INTERPOLATE_OOB_NEAREST 1  /* will return lowest or highest bound */
+#define OSH_INTERPOLATE_OOB_NEAREST 1  /* will return nearest endpoint value f(x) */
 #define OSH_INTERPOLATE_OOB_EXTRAPOL 2 /* will return extrapolated value */
-#define OSH_INTERPOLATE_OOB_ERR 255    /* will throw an error and exit code */
+#define OSH_INTERPOLATE_OOB_ERR 255    /* will log an error and return NAN */
 
 double osh_interpolate_flin(float xin, float const *xx, float const *ff, unsigned int len, int mode);
 double osh_interpolate_dlin(double xin, double const *xx, double const *ff, unsigned int len, int mode);

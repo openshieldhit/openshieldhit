@@ -122,6 +122,41 @@ static void test_last_error_set_on_unsupported_run_mode(void) {
     openshieldhit_context_destroy(ctx);
 }
 
+static void test_validate_applies_nstat_override(void) {
+    openshieldhit_context_t *ctx = openshieldhit_context_create();
+    openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
+    enum openshieldhit_status rc;
+    FILE *out;
+    char buf[4096];
+    size_t nread;
+
+    ASSERT_TRUE(ctx != NULL);
+
+    cfg.workdir = "../tests/cases/02_sobp";
+    cfg.run_mode = OPENSHIELDHIT_RUN_VALIDATE;
+    cfg.nstat = 1234ULL;
+    cfg.has_nstat = 1;
+    cfg.log_level = g_verbosity;
+
+    ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_OK);
+
+    out = tmpfile();
+    ASSERT_TRUE(out != NULL);
+
+    rc = openshieldhit_run(ctx, out, NULL);
+    ASSERT_TRUE(rc == OPENSHIELDHIT_STATUS_OK);
+
+    ASSERT_TRUE(fseek(out, 0, SEEK_SET) == 0);
+    nread = fread(buf, 1, sizeof(buf) - 1u, out);
+    buf[nread] = '\0';
+
+    ASSERT_TRUE(strstr(buf, "Requested nstat  : 1234") != NULL);
+    ASSERT_TRUE(strstr(buf, "Applied nstat override: 1234") != NULL);
+
+    ASSERT_TRUE(fclose(out) == 0);
+    openshieldhit_context_destroy(ctx);
+}
+
 static int run_named_test(char const *name) {
     if (strcmp(name, "version_string_defined") == 0) {
         test_version_string_defined();
@@ -163,6 +198,10 @@ static int run_named_test(char const *name) {
         test_last_error_set_on_unsupported_run_mode();
         return 0;
     }
+    if (strcmp(name, "validate_applies_nstat_override") == 0) {
+        test_validate_applies_nstat_override();
+        return 0;
+    }
     return 1;
 }
 
@@ -185,5 +224,6 @@ int main(int argc, char *argv[]) {
     test_last_error_empty_on_fresh_context();
     test_last_error_empty_on_null_context();
     test_last_error_set_on_unsupported_run_mode();
+    test_validate_applies_nstat_override();
     return 0;
 }

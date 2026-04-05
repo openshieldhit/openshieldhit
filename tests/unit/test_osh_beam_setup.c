@@ -61,6 +61,33 @@ static void test_setup_single_spot_from_beamdat(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+static void test_setup_beamdiv_without_focus_defaults_to_zero(void) {
+    char beam_path[] = "/tmp/osh_beamdat_beamdiv2XXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text,
+             sizeof beam_text,
+             "PRIMARY proton\n"
+             "TMAX0 120.0 0.0\n"
+             "BEAMPOS 0.0 0.0 -10.0\n"
+             "BEAMDIV 2.0 3.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(fabs(wb->spots[0].div[0] - 0.002) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].div[1] - 0.003) < 1e-12);
+    ASSERT_TRUE(fabs(wb->shared.focus) < 1e-12);
+    ASSERT_TRUE(wb->shared.use_div == 1);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
     char beam_path[] = "/tmp/osh_beamdat_spotlistXXXXXX";
     char spot_path[] = "/tmp/osh_spotlist7XXXXXX";
@@ -307,8 +334,70 @@ static void test_setup_unknown_key_returns_eparse(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+static void test_setup_beamsigma_single_value_sets_symmetric_xy(void) {
+    char beam_path[] = "/tmp/osh_beamdat_sigma1XXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nBEAMSIGMA 1.0\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->spots[0].shape == OSH_BEAM_SHAPE_GAUSSIAN);
+    ASSERT_TRUE(fabs(wb->spots[0].size[0] - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].size[1] - 1.0) < 1e-12);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_nstat_single_value_defaults_nsave_to_zero(void) {
+    char beam_path[] = "/tmp/osh_beamdat_nstat1XXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1234\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->nstat == 1234u);
+    ASSERT_TRUE(wb->nsave == 0u);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_nstat_negative_save_disables_nsave(void) {
+    char beam_path[] = "/tmp/osh_beamdat_nstat2XXXXXX";
+    char beam_text[512];
+    struct beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1000 -1\n");
+    _write_temp_file(beam_path, beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->nstat == 1000u);
+    ASSERT_TRUE(wb->nsave == 0u);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 int main(void) {
     test_setup_single_spot_from_beamdat();
+    test_setup_beamdiv_without_focus_defaults_to_zero();
     test_setup_spotlist_replaces_template_and_inherits_defaults();
     test_setup_spotlist_overrides_optional_columns();
     test_setup_primary_name_resolves_particle();
@@ -317,5 +406,8 @@ int main(void) {
     test_setup_primary_invalid_returns_einval();
     test_setup_missing_primary_returns_einval();
     test_setup_unknown_key_returns_eparse();
+    test_setup_beamsigma_single_value_sets_symmetric_xy();
+    test_setup_nstat_single_value_defaults_nsave_to_zero();
+    test_setup_nstat_negative_save_disables_nsave();
     return 0;
 }

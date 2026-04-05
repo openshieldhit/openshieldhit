@@ -25,7 +25,22 @@ static void test_interpolate_dlin(void) {
     ASSERT_TRUE(fabs(y) < 1e-12);
 
     y = osh_interpolate_dlin(3.0, xx, yy, 3u, OSH_INTERPOLATE_OOB_NEAREST);
-    ASSERT_TRUE(fabs(y - 2.0) < 1e-12);
+    ASSERT_TRUE(fabs(y - 20.0) < 1e-12);
+
+    y = osh_interpolate_dlin(-3.0, xx, yy, 3u, OSH_INTERPOLATE_OOB_NEAREST);
+    ASSERT_TRUE(fabs(y - 0.0) < 1e-12);
+}
+
+static void test_interpolate_flin(void) {
+    float xx[3] = {0.0f, 1.0f, 2.0f};
+    float yy[3] = {0.0f, 10.0f, 20.0f};
+    double y;
+
+    y = osh_interpolate_flin(3.0f, xx, yy, 3u, OSH_INTERPOLATE_OOB_NEAREST);
+    ASSERT_TRUE(fabs(y - 20.0) < 1e-6);
+
+    y = osh_interpolate_flin(-3.0f, xx, yy, 3u, OSH_INTERPOLATE_OOB_NEAREST);
+    ASSERT_TRUE(fabs(y - 0.0) < 1e-6);
 }
 
 static void test_binary_search_upper_d(void) {
@@ -53,6 +68,7 @@ static void test_binary_search_i2(void) {
 
 int main(void) {
     test_interpolate_dlin();
+    test_interpolate_flin();
     test_binary_search_upper_d();
     test_binary_search_i2();
     return 0;
