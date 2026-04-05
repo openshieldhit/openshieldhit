@@ -150,7 +150,9 @@ inline int _in_body(struct body const *b, struct ray const *r) {
     int i;
     struct ray tr; /* ray in body-coordinate system */
 
-    _transform_to_local(b, r, &tr);
+    if (!_transform_to_local(b, r, &tr)) {
+        return 0;
+    }
 
     for (i = 0; i < b->nsurfs; i++) {
         /* see if we are on the good or bad side of the surface */
@@ -170,7 +172,7 @@ inline int _in_body(struct body const *b, struct ray const *r) {
  * @param[in] r - input ray in OSH_COORD_UNIVERSE
  * @param[out] tr - transformed output ray in system given by b->coord
  *
- * @returns 1
+ * @returns 1 on success, 0 on unsupported coordinate system.
  *
  * @author Niels Bassler
  */
@@ -210,7 +212,7 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
 
     default:
         osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
-        break;
+        return 0;
     }
     return 1;
 }
