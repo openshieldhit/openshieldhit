@@ -30,8 +30,8 @@ double osh_interpolate_flin(float x, float const *xx, float const *ff, unsigned 
     if (x < xx[0]) { /* exceeds lower bound */
         switch (mode) {
         case OSH_INTERPOLATE_OOB_ERR:
-            osh_error(EX_SOFTWARE, "osh_interpolate: lower bound exceeded.");
-            break;
+            osh_error("osh_interpolate: lower bound exceeded.");
+            return NAN;
         case OSH_INTERPOLATE_OOB_ZERO:
             return 0.0;
         case OSH_INTERPOLATE_OOB_NEAREST:
@@ -50,8 +50,8 @@ double osh_interpolate_flin(float x, float const *xx, float const *ff, unsigned 
     } else if (x > xx[n - 1]) { /* exceeds upper bound */
         switch (mode) {
         case OSH_INTERPOLATE_OOB_ERR:
-            osh_error(EX_SOFTWARE, "osh_interpolate: upper bound exceeded.");
-            break;
+            osh_error("osh_interpolate: upper bound exceeded.");
+            return NAN;
         case OSH_INTERPOLATE_OOB_ZERO:
             return 0.0;
         case OSH_INTERPOLATE_OOB_NEAREST:
@@ -69,7 +69,8 @@ double osh_interpolate_flin(float x, float const *xx, float const *ff, unsigned 
         /* binary search here, return index i to lower element*/
         i = osh_binary_search_f(x, xx, n);
         if (i < 0) {
-            osh_error(EX_SOFTWARE, "osh_interpolate: bad binary_search. This should not happen.");
+            osh_error("osh_interpolate: bad binary_search. This should not happen.");
+            return NAN;
         }
         /* the highest possible number i can achieve is len - 2. */
         x0 = xx[i];
@@ -107,8 +108,8 @@ double osh_interpolate_dlin(double x, double const *xx, double const *ff, unsign
     if (x < xx[0]) { /* exceeds lower bound */
         switch (mode) {
         case OSH_INTERPOLATE_OOB_ERR:
-            osh_error(EX_SOFTWARE, "osh_interpolate: lower bound exceeded.");
-            break;
+            osh_error("osh_interpolate: lower bound exceeded.");
+            return NAN;
         case OSH_INTERPOLATE_OOB_ZERO:
             return 0.0;
         case OSH_INTERPOLATE_OOB_NEAREST:
@@ -127,8 +128,8 @@ double osh_interpolate_dlin(double x, double const *xx, double const *ff, unsign
     } else if (x > xx[n - 1]) { /* exceeds upper bound */
         switch (mode) {
         case OSH_INTERPOLATE_OOB_ERR:
-            osh_error(EX_SOFTWARE, "osh_interpolate: upper bound exceeded.");
-            break;
+            osh_error("osh_interpolate: upper bound exceeded.");
+            return NAN;
         case OSH_INTERPOLATE_OOB_ZERO:
             return 0.0;
         case OSH_INTERPOLATE_OOB_NEAREST:
@@ -146,7 +147,8 @@ double osh_interpolate_dlin(double x, double const *xx, double const *ff, unsign
         /* binary search here, return index i to lower element*/
         i = osh_binary_search_d(x, xx, n);
         if (i < 0) {
-            osh_error(EX_SOFTWARE, "osh_interpolate: bad binary_search. This should not happen.");
+            osh_error("osh_interpolate: bad binary_search. This should not happen.");
+            return NAN;
         }
         /* the highest possible number i can achieve is len - 2. */
         x0 = xx[i];

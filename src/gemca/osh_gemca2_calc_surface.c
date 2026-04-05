@@ -86,7 +86,7 @@ int osh_gemca2_add_surf_pars(struct surface *s, int type) {
         s->np = 2;            /* [A,B]^2   x^2 + y^2 - (z-A)^2/B^2 = 0 (always along z) */
         break;
     default:
-        osh_error(EX_CONFIG, "_add_surf_pars: unknown surface type: %i", type);
+        osh_error("_add_surf_pars: unknown surface type: %i", type);
         break;
     }
     s->p = calloc(s->np, sizeof(double));
@@ -148,11 +148,11 @@ int osh_gemca2_check_surface_side(struct surface const *sf, struct ray const *r)
         break;
 
     case OSH_GEMCA_SURF_NONE:
-        osh_error(EX_SOFTWARE, "_check_surface_side(): NONE surface type %i\n", sf->type);
+        osh_error("_check_surface_side(): NONE surface type %i\n", sf->type);
         break;
 
     default:
-        osh_error(EX_SOFTWARE, "_check_surface_side(): unknown surface type %i\n", sf->type);
+        osh_error("_check_surface_side(): unknown surface type %i\n", sf->type);
         break;
     }
     return 1; /* is inside */

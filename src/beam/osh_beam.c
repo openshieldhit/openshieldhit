@@ -98,6 +98,8 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
         return rc;
     }
 
+    osh_beam_print(wb);
+
     *wb_out = wb;
     return OSH_OK;
 }
@@ -153,6 +155,7 @@ static void _wb_defaults(struct beam_workspace *wb) {
     wb->phsp = NULL;
     wb->rifi = NULL;
     wb->parlev = NULL;
+    wb->has_primary = 0;
 
     wb->nspots = 0;
     wb->wt_sum = 0.0;
@@ -195,12 +198,12 @@ static int _wb_validate(const struct beam_workspace *wb) {
  * psigma is derived from tsigma via the first-order Jacobian dp/dT = E/p,
  * i.e. psigma = tsigma * (t0 + mass) / p0, valid when sigma << T0.
  *
- * Skipped silently when spot->part is NULL (JPART0/HIPROJ not yet wired). */
+ * Skipped silently when no primary particle was resolved yet. */
 static void _postparse_spot_energy(struct beam_spot *spot) {
     double mass;
 
     if (!spot->part) {
-        return; /* TODO: re-run after JPART0/HIPROJ particle lookup is wired */
+        return;
     }
 
     mass = spot->part->mass;
@@ -269,6 +272,9 @@ static int _wb_postparse(struct beam_workspace *wb) {
 
     wt_acc = 0.0;
     for (i = 0; i < wb->nspots; i++) {
+        if (wb->has_primary) {
+            wb->spots[i].part = &wb->primary;
+        }
         _postparse_spot_energy(&wb->spots[i]);
         _build_spot_tm(&wb->spots[i], &wb->shared);
 
@@ -293,20 +299,6 @@ static int _wb_postparse(struct beam_workspace *wb) {
 
 /* osh_beamdef.h name arrays (osh_beam_mscat_names etc.) included via osh_beam.h */
 
-static void _print_primary(struct particle const *part) {
-    if (!part) {
-        return;
-    }
-    osh_info("Primary particle:");
-    osh_info(OSH_LOG_HLINE);
-    osh_info("%-18s : %i", "PDG code", part->pdg);
-    osh_info("%-18s : %i", "Z", (int) part->z);
-    osh_info("%-18s : %i", "A", (int) part->a);
-    osh_info("%-18s : %-12.5f MeV/c^2", "Mass", part->mass);
-    osh_info("%-18s : %-12.5f u", "Mass", part->mass / OSH_AMU);
-    osh_info("%-18s : %i", "Generation", (int) part->gen);
-    osh_info("%-18s : %f", "Stat.weight", part->weight);
-}
 
 void osh_beam_print(struct beam_workspace const *wb) {
     if (!wb) {
@@ -357,7 +349,7 @@ void osh_beam_print_spot(struct beam_spot const *spot) {
 
     if (spot->part) {
         osh_info("%s", "");
-        _print_primary(spot->part);
+        osh_print_particle(spot->part);
     }
 
     osh_info("%s", "");

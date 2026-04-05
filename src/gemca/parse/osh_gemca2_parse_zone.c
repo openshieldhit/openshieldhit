@@ -15,7 +15,7 @@
 // static char* _skip_zone_op(char *s);
 static int _key_is_zone_continuation(char const *key);
 static struct body *_body_from_name(char *bname, struct gemca_workspace *g);
-static void _rewind_oshfile(struct oshfile *shf);
+static int _rewind_oshfile(struct oshfile *shf);
 
 static struct cgnode *_new_node_comp(struct stack *st, char operator);
 static struct cgnode *_new_node_body(struct body *b);
@@ -44,7 +44,8 @@ int osh_gemca_zone_init(struct zone **zone) {
     z = calloc(1, sizeof(struct zone));
 
     if (z == NULL) {
-        osh_error(EX_UNAVAILABLE, "osh_gemca_zone_init: could not allocate memory\n");
+        osh_error("osh_gemca_zone_init: could not allocate memory\n");
+        return 0;
     }
 
     z->medium = 0;
@@ -74,7 +75,9 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
     int nzone = 0;
     int in_block = 0;
 
-    _rewind_oshfile(shf);
+    if (!_rewind_oshfile(shf)) {
+        return 0;
+    }
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
         if (strcasecmp(OSH_GEMCA_KEY_END, key) != 0) {
@@ -133,7 +136,9 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
     int len;
 
     /* move to the second end statement */
-    _rewind_oshfile(shf);
+    if (!_rewind_oshfile(shf)) {
+        return 0;
+    }
 
     /* forward to the first line after the first END statement */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
@@ -168,7 +173,11 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
         if (_key_is_zone_continuation(key)) {
             /* Continuation before any zone header is illegal */
             if (!zone_active) {
-                osh_error(EX_CONFIG, "zone continuation before first zone at line %d", lineno);
+                osh_error("zone continuation before first zone at line %d", lineno);
+                free(line);
+                free(bstr);
+                free(tstr);
+                return 0;
             }
             _concat(&bstr, key);
         } else {
@@ -232,7 +241,7 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
     free(bstr);
     free(tstr);
 
-    return 0;
+    return 1;
 }
 
 /* @brief Check if the given key is a zone continuation operator */
@@ -247,11 +256,13 @@ static int _key_is_zone_continuation(char const *key) {
  *
  * @returns Nothing. Exits via `osh_error()` if rewinding fails.
  */
-static void _rewind_oshfile(struct oshfile *shf) {
+static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+        osh_error("Failed to rewind geometry file '%s'\n", shf->filename);
+        return 0;
     }
     shf->lineno = 0;
+    return 1;
 }
 
 /**
@@ -395,7 +406,7 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
                 }
             }
             if (opst == NULL) {
-                osh_error(EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
+                osh_error("%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
             }
         } else {
             /* this is a simple body / leaf node. Push it to the stack as such, */
@@ -403,7 +414,7 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
             /* But first, lookup body from token name. */
             b = _body_from_name(token, g);
             if (b == NULL) {
-                osh_error(EX_CONFIG, "_build_ast() coudn't find body names '%s'", token);
+                osh_error("_build_ast() coudn't find body names '%s'", token);
             }
             node = _new_node_body(b);
 
@@ -419,7 +430,7 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
         si = osh_gemca_stack_pop(opst);
 
         if ((si->v.op == '(') || (si->v.op == ')')) {
-            osh_error(EX_CONFIG, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
+            osh_error("%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
         } else {
             /* make csgnode from popped and push to csgstack */
             node = _new_node_comp(st, si->v.op);
@@ -433,7 +444,7 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
     /* what is left on the stack is the AST object. */
     si = osh_gemca_stack_pop(st);
     if (si == NULL) {
-        osh_error(EX_CONFIG, "empty zone description");
+        osh_error("empty zone description");
     }
     z->node = *si->v.cgnode;
     free(si);
@@ -477,7 +488,7 @@ static size_t _reformat(char const *input, char **output) {
     }
     *output = realloc(*output, ol * sizeof(char));
     if (*output == NULL) {
-        osh_error(EX_UNAVAILABLE, "_reformat(): cannot malloc");
+        osh_error("_reformat(): cannot malloc");
     }
     memset(*output, 0, ol);
 
@@ -504,7 +515,7 @@ static size_t _reformat(char const *input, char **output) {
         /* do not add '+' or '-' if there was a leading '(' */
         if ((*output)[j - 1] == '(') {
             if (input[i] == '-') {
-                osh_error(EX_CONFIG, "leading body cannot be a '-' body, only '+'");
+                osh_error("leading body cannot be a '-' body, only '+'");
             } else if (input[i] == '+') {
                 /* do not add unary '+' to output stream, i.e. (+2-1) -> (2-1) */
                 i++;
@@ -539,7 +550,7 @@ static size_t _reformat(char const *input, char **output) {
             ol += 0x100; /* add another 256 bytes */
             *output = realloc(*output, ol * sizeof(char));
             if (*output == NULL) {
-                osh_error(EX_UNAVAILABLE, "_reformat(): cannot realloc #2");
+                osh_error("_reformat(): cannot realloc #2");
             }
         }
 
@@ -551,7 +562,7 @@ static size_t _reformat(char const *input, char **output) {
     /* trim size of output string to the memory actually needed */
     *output = realloc(*output, (j + 1) * sizeof(char));
     if (*output == NULL) {
-        osh_error(EX_UNAVAILABLE, "_reformat(): cannot realloc #3");
+        osh_error("_reformat(): cannot realloc #3");
     }
 
     return j;
@@ -601,7 +612,7 @@ static int _tokenizer(char const *input, char ***ptokens) {
 
     *ptokens = (char **) calloc(n, sizeof(char *));
     if (*ptokens == NULL) {
-        osh_error(EX_UNAVAILABLE, "_tokenizer(): cannot allocate token list");
+        osh_error("_tokenizer(): cannot allocate token list");
     }
 
     /* Now repeat the loop, while also adding the tokens to the token list. */
@@ -726,7 +737,7 @@ static void _concat(char **a, char const *b) {
 
     *a = realloc(*a, sizeof(char) * (la + lb + 1));
     if (*a == NULL) {
-        osh_error(EX_SOFTWARE, "_concat(): cannot reallocate memory");
+        osh_error("_concat(): cannot reallocate memory");
     }
 
     strncat(*a, b, lb);

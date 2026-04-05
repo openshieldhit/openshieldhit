@@ -23,6 +23,8 @@ struct particle {
 /* helper functions */
 
 int osh_particle_from_pdg(struct particle *p, int pdg);
+int osh_particle_pdg_from_name(char const *name, int *pdg_out);
+int osh_particle_from_name(struct particle *p, char const *name);
 
 int osh_particle_pdg_is_ion(int pdg);
 

@@ -17,7 +17,8 @@ int osh_readline(struct oshfile *oshf, char **line, int *lineno) {
     int i;
 
     if (!oshf || !oshf->fp) {
-        osh_error(EX_SOFTWARE, "osh_readline: file pointer is NULL");
+        osh_error("osh_readline: file pointer is NULL");
+        return -1;
     }
 
     if (*line == NULL) {

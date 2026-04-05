@@ -42,21 +42,14 @@ int osh_gemca_workspace_free(struct gemca_workspace *wg) {
 }
 
 int osh_gemca_load(char const *filename, struct gemca_workspace *g) {
-    /* NOTE: osh_gemca_parse() and osh_gemca_body_setup() call osh_error() on
-     * parse failures, which internally calls exit(). This means malformed input
-     * terminates the process directly rather than returning 0 here.  As a
-     * result the OPENSHIELDHIT_STATUS_PARSE_ERROR path in openshieldhit_run()
-     * is never reached on parse errors; the exit code observed by the caller
-     * (e.g. EX_CONFIG=78) comes from exit() inside the parser, not from the
-     * public API return value.
-     *
-     * TODO: make the parser non-terminating so failures propagate back through
-     * this return value (see TODO.md "Make gemca parser library-safe"). */
-
-    osh_gemca_parse(filename, g);
+    if (!osh_gemca_parse(filename, g)) {
+        return 0;
+    }
 
     printf("--- SETUP BODIES \n");
-    osh_gemca_body_setup(g);
+    if (!osh_gemca_body_setup(g)) {
+        return 0;
+    }
     printf("--- SETUP BODIES COMPLETED ---- \n\n");
 
     return 1;

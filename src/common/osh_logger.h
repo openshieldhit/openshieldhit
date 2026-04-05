@@ -14,8 +14,6 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-#include "osh_exit.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -376,15 +374,19 @@ void osh_warn(char const *fmt, ...)
     ;
 
 /**
- * @brief Log an error message and exit using the default logger.
+ * @brief Log an error message using the default logger.
  *
- * @param[in] exit_code The exit code as in osh_exit.h.
+ * @details Logs at OSH_LOG_ERROR level and returns to the caller.
+ * The caller is responsible for returning an appropriate error code.
+ * Use osh_alloc_failed() or an explicit exit() call at the CLI boundary
+ * for conditions that require process termination.
+ *
  * @param[in] fmt The format string.
  * @param[in] ... The variable arguments.
  */
-void osh_error(int exit_code, char const *fmt, ...)
+void osh_error(char const *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
-    __attribute__((format(printf, 2, 3), noreturn))
+    __attribute__((format(printf, 1, 2)))
 #endif
     ;
 

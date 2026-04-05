@@ -13,7 +13,7 @@
 
 int _assign_material(struct gemca_workspace *g, char *args, int lineno);
 int _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g);
-static void _rewind_oshfile(struct oshfile *shf);
+static int _rewind_oshfile(struct oshfile *shf);
 
 /**
  * @brief Parse zone information
@@ -45,7 +45,9 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
     int lineno;
 
     /* move to the second end statement */
-    _rewind_oshfile(shf);
+    if (!_rewind_oshfile(shf)) {
+        return 0;
+    }
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
         if (strcasecmp(OSH_GEMCA_KEY_END, key) == 0) {
@@ -64,7 +66,10 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
 
         /* optionally, materials can also be assigned to zones by the (paritally) FLUKA compatible ASSIGNMAT key */
         if ((strcasecmp(OSH_GEMCA_KEY_ASSIGNMAT, key) == 0) || (strcasecmp(OSH_GEMCA_KEY_ASSIGNMA, key) == 0)) {
-            _assign_material(g, args, lineno);
+            if (!_assign_material(g, args, lineno)) {
+                free(line);
+                return 0;
+            }
             free(line);
             continue; /* next line */
         }
@@ -86,7 +91,9 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
                         "    Found zones %llu, but expected %llu\n",
                         (long long unsigned int) izone,
                         (long long unsigned int) g->nzones);
-                osh_error(EX_CONFIG, "Too many zones found %s line number %i\n", g->filename, lineno);
+                osh_error("Too many zones found %s line number %i\n", g->filename, lineno);
+                free(line);
+                return 0;
             }
             /* again, if we are in the media block, assign it */
             if (in_media) {
@@ -134,13 +141,15 @@ int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
     if (arg != NULL) {
         medium = atoi(arg);
     } else {
-        osh_error(EX_CONFIG, "No medium index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        osh_error("No medium index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        return 0;
     }
 
     /* next two arguments are the zone indices, or a range of zone indices */
     arg = strtok(NULL, " ");
     if (arg == NULL) {
-        osh_error(EX_CONFIG, "No zone index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        osh_error("No zone index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        return 0;
     }
     /* check if zone name was given, if so, get the index for that zone name */
     iz = _get_zoneid_from_name(arg, g);
@@ -172,18 +181,19 @@ int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
     if (arg != NULL) {
         stride = atoi(arg);
         if (stride == 0) {
-            osh_error(EX_CONFIG, "Invalid stride 0 in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+            osh_error("Invalid stride 0 in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+            return 0;
         }
     }
 
     /* assign the medium to the zones in the specified range */
     for (iz = zone_start; iz <= zone_end; iz += stride) {
         if (iz == 0 || iz > g->nzones) {
-            osh_error(EX_CONFIG,
-                      "Zone index %llu out of range in ASSIGNMA(T) %s line number %i\n",
+            osh_error("Zone index %llu out of range in ASSIGNMA(T) %s line number %i\n",
                       (long long unsigned int) iz,
                       g->filename,
                       lineno);
+            return 0;
         }
         g->zones[iz - 1]->medium = medium;
         printf("    Assigned medium %i to zoneID %llu named '%s'\n",
@@ -212,9 +222,11 @@ int _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g) {
  *
  * @returns Nothing. Exits via `osh_error()` if rewinding fails.
  */
-static void _rewind_oshfile(struct oshfile *shf) {
+static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error(EX_IOERR, "Failed to rewind geometry file '%s'\n", shf->filename);
+        osh_error("Failed to rewind geometry file '%s'\n", shf->filename);
+        return 0;
     }
     shf->lineno = 0;
+    return 1;
 }

@@ -77,7 +77,7 @@ void osh_trace(char const *fmt, ...);
 void osh_debug(char const *fmt, ...);
 void osh_info(char const *fmt, ...);
 void osh_warn(char const *fmt, ...);
-void osh_error(int exit_code, char const *fmt, ...);
+void osh_error(char const *fmt, ...);
 void osh_alloc_failed(char const *fmt, ...);
 
 /* formatting / output helpers (file-local) */
@@ -774,14 +774,11 @@ void osh_warn(char const *fmt, ...) {
     va_end(ap);
 }
 
-void osh_error(int exit_code, char const *fmt, ...) {
+void osh_error(char const *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    osh_logger_logv_ex(osh_log_default(), OSH_LOG_FATAL, 0u, __FILE__, __LINE__, __func__, fmt, ap);
+    osh_logger_logv_ex(osh_log_default(), OSH_LOG_ERROR, 0u, __FILE__, __LINE__, __func__, fmt, ap);
     va_end(ap);
-
-    osh_log_flush();
-    exit(exit_code);
 }
 
 void osh_alloc_failed(char const *fmt, ...) {
