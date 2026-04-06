@@ -1,2 +1,3 @@
 add_subdirectory(01_sdl_viewer)
 add_subdirectory(02_bnct)
+add_subdirectory(03_bench)

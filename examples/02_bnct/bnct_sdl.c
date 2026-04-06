@@ -137,7 +137,7 @@ int main(int argc, char *argv[]) {
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
     fflush(stdout);
-    if (osh_gemca_load(argv[1], &g) != 1) {
+    if (osh_gemca_load(argv[1], &g) != OSH_OK) {
         fprintf(stderr, "bnct_sdl: osh_gemca_load() failed for '%s'\n", argv[1]);
         return EXIT_FAILURE;
     }
