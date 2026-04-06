@@ -1,6 +1,5 @@
-* Water mean excitation energy = 78 eV
 MATERIAL Water
-STATE 2
+STATE 1
 RHO 1.000
 NUCLID    1     2
 IVALUE    22.9      ! Override mean excitation energy of hydrogen

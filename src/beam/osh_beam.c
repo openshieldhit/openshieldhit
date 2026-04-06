@@ -98,7 +98,7 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
         return rc;
     }
 
-    if (osh_log_get_level() <= OSH_LOG_DEBUG) {
+    if (osh_log_get_level() <= OSH_LOG_INFO) {
         osh_beam_print(wb);
     }
 
