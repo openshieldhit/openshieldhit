@@ -1,6 +1,5 @@
 #include "osh_gemca2_parse_stack.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "common/osh_logger.h"
@@ -9,10 +8,7 @@ struct stackitem *osh_gemca_stack_pop(struct stack *s) {
     struct stackitem *si;
 
     (s->ni)--;
-    // printf("READ FROM INDEX: %li\n", s->ni);
     si = s->si[s->ni];
-    // printf("POPPED: %p from %p\n", si, s);
-    // osh_gemca_stack_print(s);
     return si;
 }
 
@@ -28,8 +24,6 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
     /* check if stack exists, if not, allocate memory */
     if (*ps == NULL) {
         /* allocate memory to the stack */
-        // printf("Allocate memory to stack\n");
-
         s = (struct stack *) calloc(1, sizeof(struct stack));
         if (s == NULL) {
             osh_alloc_failed("osh_gemca_stack_push(): stack");
@@ -64,13 +58,10 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
         s->n = new_n;
     }
 
-    // printf("WRITE TO INDEX: %li\n", s->ni - 1);
-    // printf("PUSHED: %p on %p\n", i, s);
     /* push pointer onto stack */
     s->si[(s->ni) - 1] = i;
     *ps = s;
 
-    // osh_gemca_stack_print(s);
     return s->ni;
 }
 
@@ -88,20 +79,23 @@ void osh_gemca_stack_free(struct stack **ps) {
 
 void osh_gemca_stack_print(struct stack *s) {
     size_t i;
-    printf("\n");
-    printf("-------------\n");
-    printf("STACK : %p\n", (void *) s);
-    printf("NELEM : %llu\n", (unsigned long long) s->ni);
-    printf("NMEM  : %llu\n", (unsigned long long) s->n);
+    osh_debug(OSH_LOG_HLINE);
+    osh_debug("STACK : %p\n", (void *) s);
+    osh_debug("NELEM : %llu\n", (unsigned long long) s->ni);
+    osh_debug("NMEM  : %llu\n", (unsigned long long) s->n);
 
     for (i = 0; i < s->ni; i++) {
-        printf("    StackITEM: %llu: %p  type: %i   ", (unsigned long long) i, (void *) s->si[i], s->si[i]->type);
         if (s->si[i]->type == _OSH_GEMCA_STACKITEM_OPERATOR) {
-            printf("'%c'\n", s->si[i]->v.op);
+            osh_debug("    StackITEM: %llu: %p  type: %i  '%c'\n",
+                      (unsigned long long) i,
+                      (void *) s->si[i],
+                      s->si[i]->type,
+                      s->si[i]->v.op);
         } else {
-            printf("\n");
+            osh_debug("    StackITEM: %llu: %p  type: %i\n",
+                      (unsigned long long) i,
+                      (void *) s->si[i],
+                      s->si[i]->type);
         }
     }
-
-    printf("\n");
 }

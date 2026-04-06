@@ -100,7 +100,7 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
         free(line);
     }
     free(line);
-    printf("Found %i zones in geo.dat file\n", nzone);
+    osh_info("Found %i zones in geo.dat file\n", nzone);
     return nzone;
 }
 
@@ -164,8 +164,6 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
     izone = 0;
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
-        // printf("LINE %i: KEY='%s' ARGS='%s'\n", lineno, key, args);
-
         /**
          * Checks if the KEY is an existing body name and if the args start with a valid operator.
          * If KEY matches a body name AND args begins with '+', '-', or '|' operator,
@@ -187,24 +185,22 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
             }
             _concat(&bstr, key);
         } else {
-            // printf("Found ZONE name or END: '%s'\n", key);
             /* key is not a body, then it must be a new zone name or the END card.
                1) Process the old zone and attach it to the zone */
             if (zone_active && strlen(bstr) > 0) {
 
-                printf("\n");
-                printf("------------------------------------------------------------------------------\n");
-                printf("ZONE: #%3lli - '%s'\n", (long long int) g->zones[izone]->id, g->zones[izone]->name);
-                printf("USERGIVEN STRING: '%s'\n", bstr);
+                osh_debug(OSH_LOG_HLINE);
+                osh_debug("ZONE: #%3lli - '%s'\n", (long long int) g->zones[izone]->id, g->zones[izone]->name);
+                osh_debug("USERGIVEN STRING: '%s'\n", bstr);
                 _reformat(bstr, &tstr);
-                printf("PRE-TOKEN STRING: '%s'\n", tstr);
+                osh_debug("PRE-TOKEN STRING: '%s'\n", tstr);
                 ntokens = _tokenizer(tstr, &tokens);
                 _reverse_tokens(tokens, ntokens);
 
-                printf("number of tokens: %i\n", ntokens);
+                osh_debug("number of tokens: %i\n", ntokens);
 
                 for (i = 0; i < ntokens; i++) {
-                    printf("token #%i '%s'\n", i, tokens[i]);
+                    osh_debug("token #%i '%s'\n", i, tokens[i]);
                 }
                 /* attach the tokens of this zone to the geometry */
                 g->zones[izone]->tokens = tokens;
@@ -300,10 +296,8 @@ static struct body *_body_from_name(char *bname, struct gemca_workspace *g) {
 
     size_t i = 0;
 
-    // printf("_body_from_name()  '%s'\n", bname);
     for (i = 0; i < g->nbodies; i++) {
         if (strcmp(bname, g->bodies[i]->name) == 0) {
-            // printf("_body_from_name()  found '%s'\n", g->bodies[i]->name);
             return g->bodies[i];
         }
     }
@@ -680,32 +674,19 @@ static void _reverse_tokens(char **tokens, int ntokens) {
     size_t len;
     size_t j;
 
-    for (i = 0; i < ntokens; i++) {
-        // printf("Tokens: '%s'\n", tokens[i]);
-    }
-
     for (i = 0; i < ntokens / 2; i++) {
         c = tokens[i]; /* temporarily save the first pointer */
         tokens[i] = tokens[ntokens - i - 1];
         tokens[ntokens - i - 1] = c;
     }
 
-    printf("\n");
-    for (i = 0; i < ntokens; i++) {
-        // printf("Tokens: '%s'\n", tokens[i]);
-    }
-
     for (i = 0; i < ntokens; i++) {
         /* reverse any parentheses */
         len = strlen(tokens[i]);
-        // printf("len : %li\n", len);
         for (j = 0; j < len; j++) {
-            // printf("%s '%c'\n", tokens[i], tokens[i][j]);
             if (tokens[i][j] == '(') {
-                // printf("flipped a (\n");
                 tokens[i][j] = ')';
             } else if (tokens[i][j] == ')') {
-                // printf("flipped a )\n");
                 tokens[i][j] = '(';
             }
         }

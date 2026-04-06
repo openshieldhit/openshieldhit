@@ -87,11 +87,11 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
             izone++;
 
             if (izone > g->nzones) {
-                fprintf(stderr,
-                        "    Found zones %llu, but expected %llu\n",
-                        (long long unsigned int) izone,
-                        (long long unsigned int) g->nzones);
-                osh_error("Too many zones found %s line number %i\n", g->filename, lineno);
+                osh_error("Too many zones found: %llu (expected %llu) in %s line %i\n",
+                          (long long unsigned int) izone,
+                          (long long unsigned int) g->nzones,
+                          g->filename,
+                          lineno);
                 free(line);
                 return OSH_EPARSE;
             }
@@ -201,10 +201,10 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
             return OSH_EPARSE;
         }
         g->zones[iz - 1]->medium = medium;
-        printf("    Assigned medium %i to zoneID %llu named '%s'\n",
-               medium,
-               (long long unsigned int) iz,
-               g->zones[iz - 1]->name);
+        osh_debug("    Assigned medium %i to zoneID %llu named '%s'\n",
+                  medium,
+                  (long long unsigned int) iz,
+                  g->zones[iz - 1]->name);
     }
     return OSH_OK;
 }

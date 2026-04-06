@@ -104,6 +104,8 @@ int main(int argc, char *argv[]) {
     struct gemca_workspace g = {0};
     int zone = 1;
 
+    osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
+
     /* Handle --version flag */
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
         printf("bnct_sdl version %s\n", OSH_VERSION);

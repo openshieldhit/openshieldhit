@@ -1,7 +1,6 @@
 #include "gemca/osh_gemca2_dist.h"
 
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "common/osh_coord.h"
@@ -53,8 +52,6 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
     double total_distance;
     struct ray rr;
 
-    // printf("osh_gemca_get_distance(): calculating distance to zone boundary for zone '%s'\n", z->name);
-
     total_distance = 0.0;
     rr = *r; /* make a copy of the ray */
 
@@ -68,7 +65,6 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
         if (!z->node._is_inside) {     /* keep advancing until we left the zone */
             break;
         }
-        // printf("  Currently inside zone '%s', advancing %.9e to next boundary\n", z->name, d);
         if (d < 0.0) {
             osh_error("osh_gemca_get_distance(): negative distance to zone boundary");
         }
@@ -95,15 +91,9 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
             return OSH_GEMCA_INFINITY;
         }
 
-        // osh_gemca_print_body(self->body);
-        // osh_transport_print_ray(r);
-        // osh_transport_print_ray(&tr);
-
         d = _dist_body(self->body,
                        &tr); /* Calculate distance to body's surface. It may, or may not be at a zone boudnary. */
         self->_is_inside = _inside_body(self->body, &tr); /* Check if ray is inside the body */
-        // printf("  is inside body '%s' = %d\n", self->body->name, self->_is_inside);
-        // printf("  Shortest distance to body '%s' is %f\n", self->body->name, d);
         return d;
     } else {
         d1 = _dist_zone(self->left, r);  // Distance to left child
@@ -127,8 +117,6 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
             break;
         }
         /* return smallest possible distance */
-        // printf("Result of operation %c: _is_inside = %d\n", self->op, self->_is_inside);
-
         return _minpos(d1, d2);
     }
 }
@@ -139,15 +127,10 @@ static inline int _inside_body(struct body const *b, struct ray const *r) {
     struct surface *sf;
     int inside;
 
-    // printf("_inside_body '%s'?\n", b->name);
-    // osh_transport_print_ray(r);
-
     for (i = 0; i < b->nsurfs; i++) {
 
-        sf = b->surfs[i]; /* get surface number i*/
-        // printf("  Checking surface %d:   type: %d\n", i, sf->type);
+        sf = b->surfs[i];                              /* get surface number i*/
         inside = osh_gemca2_check_surface_side(sf, r); /* Check if ray is inside the surface */
-        // printf("  .... RESULT Inside surface %d: %d\n", i, inside);
         if (!inside) {
             return 0;
         }
@@ -162,27 +145,17 @@ static inline double _dist_body(struct body const *b, struct ray const *r) {
     int i;
     double d;
     double _d;
-    struct ray rr;
 
     _d = OSH_GEMCA_INFINITY;
-
-    // printf("******* _dist_body() %s\n", b->name);
-    // osh_gemca_print_body(b);
 
     for (i = 0; i < b->nsurfs; i++) {
 
         sf = b->surfs[i]; /* get surface number i*/
 
         d = _dist_surface(sf, r); /* calculate distance to surface along ray (postive direction only) */
-        // printf("  Distance to surface %i is %f\n", i, _d);
 
         if (d > 0.0 && d < _d) { /* check if positive and closer than current minimal distance */
             _d = d;
-
-            // DEBUG: show the next intersection point
-            _ray_advance(_d, r, &rr); /* rr will have next intersection point */
-            // printf("  Intersection at %f %f %f in body %s\n", rr.p[0], rr.p[1], rr.p[2], b->name);
-
         } /* end if distance is positve */
     } /* end loop over each surface */
     return _d;
@@ -223,11 +196,6 @@ static inline double _dist_surface(struct surface const *sf, struct ray const *r
         break;
     case OSH_GEMCA_SURF_PLANEZ:
         d = _dist_plane_xyz(2, sf, r);
-        // printf(" Surface parameters (transformed): %f %f\n", sf->p[0], sf->p[1]);
-        // printf(" Ray coordinates (transformed): %f %f %f - %f %f %f\n", r->p[0], r->p[1], r->p[2], r->cp[0],
-        // r->cp[1],
-        //        r->cp[2]);
-        // printf(" Distance to plane: %f\n", d);
         break;
     case OSH_GEMCA_SURF_PLANE: // TODO: refactor to OSH_GEMCA_SURF_PLANE
         _dist_plane(sf, r);
@@ -257,15 +225,12 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
     int i;
     int j;
 
-    // printf("_transform_to_local() %s   coord: %i\n", b->name, b->coord);
-    //  For now, just copy all elements of the ray. Later this can be optimized.
+    // For now, just copy all elements of the ray. Later this can be optimized.
     for (i = 0; i < 3; i++) {
         tr->p[i] = r->p[i];
         tr->cp[i] = r->cp[i];
     }
     tr->system = (unsigned char) b->coord;
-    // printf("_transform_to_local() ray after transform:\n");
-    // osh_transport_print_ray(tr);
 
     // then overwrite the values which may change:
     switch (b->coord) {
@@ -278,7 +243,6 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
             j = i * 4;
             tr->p[i] = r->p[i] + b->t[j + 3]; // notice, that in osh_coord.h see comment
             tr->cp[i] = r->cp[i];
-            // printf(" tr->p[%i] = %f + %f = %f\n", i, r->p[i],  b->t[j+3], r->p[i] + b->t[j+3]);
         }
         break;
 

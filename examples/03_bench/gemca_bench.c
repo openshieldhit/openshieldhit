@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "common/osh_logger.h"
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
@@ -114,6 +115,8 @@ int main(int argc, char *argv[]) {
     double t0;
     double t1;
     double elapsed;
+
+    osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
 
     /* --- argument handling ------------------------------------------------ */
     if (argc < 2) {

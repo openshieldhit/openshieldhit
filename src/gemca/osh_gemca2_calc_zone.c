@@ -1,6 +1,5 @@
 #include "gemca/osh_gemca2_calc_zone.h"
 
-#include <stdio.h>
 #include <stdlib.h> // exit()
 
 #include "common/osh_coord.h"
@@ -37,7 +36,6 @@ size_t osh_gemca_get_zone(struct gemca_workspace *g, struct ray *r) {
     size_t i;
 
     for (i = 0; i < g->nzones; i++) {
-        // printf("\n --- _get_zone(), test zone %li '%s' ----------------- \n", g->zones[i]->id, g->zones[i]->name);
         if (_in_zone(g->zones[i], r)) {
             return g->zones[i]->id;
         }
@@ -60,7 +58,6 @@ size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r) {
     size_t i;
 
     for (i = 0; i < g->nzones; i++) {
-        // printf("\n --- _get_zone(), test zone %li '%s' ----------------- \n", g->zones[i]->id, g->zones[i]->name);
         if (_in_zone(g->zones[i], r)) {
             return i;
         }
@@ -175,8 +172,6 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
         tr->cp[i] = r->cp[i];
     }
     tr->system = (unsigned char) b->coord;
-    // printf("_transform_to_local() ray after transform:\n");
-    // osh_transport_print_ray(tr);
 
     // then overwrite the values which may change:
     switch (b->coord) {
@@ -189,7 +184,6 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
             j = i * 4;
             tr->p[i] = r->p[i] + b->t[j + 3]; // notice, that in osh_coord.h see comment
             tr->cp[i] = r->cp[i];
-            // printf(" tr->p[%i] = %f + %f = %f\n", i, r->p[i],  b->t[j+3], r->p[i] + b->t[j+3]);
         }
         break;
 

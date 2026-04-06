@@ -135,7 +135,6 @@ static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone) {
     if ((*nzone > 1) || (*nbody > 1)) {
         ret = 1;
     }
-    // printf("GEMCA test_format() : Found %lu bodies and %lu zones. %i\n", *nbody, *nzone, ret);
     return ret;
 }
 
