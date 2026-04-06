@@ -286,13 +286,13 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         goto cleanup;
     }
 
-    if (!osh_gemca_workspace_init(&geom)) {
+    if (osh_gemca_workspace_init(&geom) != OSH_OK) {
         ctx_set_error(ctx, err, "%s", "could not allocate geometry workspace");
         rc = OPENSHIELDHIT_STATUS_NO_MEMORY;
         goto cleanup;
     }
 
-    if (!osh_gemca_load(geo_path, geom)) {
+    if (osh_gemca_load(geo_path, geom) != OSH_OK) {
         ctx_set_error(ctx, err, "failed to load geometry: %s", geo_path);
         rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
         goto cleanup;

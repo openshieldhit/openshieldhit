@@ -18,9 +18,10 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r);
 static inline double _dist_body(struct body const *b, struct ray const *r);
 static inline double _dist_surface(struct surface const *sf, struct ray const *r);
 
-static inline int _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr);
-static inline int _ray_advance(double d, struct ray const *r, struct ray *rr); // TODO: move to osh_transport.h
-static inline double _inside_body(struct body const *b, struct ray const *r);
+static inline enum osh_status _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr);
+static inline enum osh_status
+_ray_advance(double d, struct ray const *r, struct ray *rr); // TODO: move to osh_transport.h
+static inline int _inside_body(struct body const *b, struct ray const *r);
 
 static inline double _dist_plane_xyz(int axis, struct surface const *sf, struct ray const *r);
 static inline double _dist_plane(struct surface const *sf, struct ray const *r);
@@ -89,7 +90,7 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
     struct ray tr; /* transformed ray to coordinate system of the body */
 
     if (self->type == _OSH_GEMCA_CGNODE_BODY) { /* we are in the leaf node */
-        if (!_transform_to_local(self->body, r, &tr)) {
+        if (_transform_to_local(self->body, r, &tr) != OSH_OK) {
             self->_is_inside = 0;
             return OSH_GEMCA_INFINITY;
         }
@@ -130,11 +131,10 @@ static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
 
         return _minpos(d1, d2);
     }
-    return OSH_GEMCA_INFINITY; /* Indicate no intersection found or operation not supported */
 }
 
 /* check if ray is inside a body */
-static inline double _inside_body(struct body const *b, struct ray const *r) {
+static inline int _inside_body(struct body const *b, struct ray const *r) {
     int i;
     struct surface *sf;
     int inside;
@@ -248,11 +248,11 @@ static inline double _dist_surface(struct surface const *sf, struct ray const *r
  * @param[in] r - input ray in OSH_COORD_UNIVERSE
  * @param[out] tr - transformed output ray in system given by b->coord
  *
- * @returns 1 on success, 0 on unsupported coordinate system.
+ * @returns OSH_OK on success, OSH_ENOTSUP if the coordinate system is not supported.
  *
  * @author Niels Bassler
  */
-static inline int _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr) {
+static inline enum osh_status _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr) {
 
     int i;
     int j;
@@ -289,9 +289,9 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
 
     default:
         osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
-        return 0;
+        return OSH_ENOTSUP;
     }
-    return 1;
+    return OSH_OK;
 }
 
 /**
@@ -302,16 +302,16 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
  * @param[in,out] rr - The new ray at the intersection point, with the same direction as `r`. Must have been allocated
  * before calling this function.
  *
- * @return 0 if successful, -1 if an error occurred.
+ * @returns OSH_OK on success, OSH_EINVAL if the distance is invalid.
  *
  * @author Niels Bassler
  *
  */
-static inline int _ray_advance(double d, struct ray const *r, struct ray *rr) {
+static inline enum osh_status _ray_advance(double d, struct ray const *r, struct ray *rr) {
     int i;
 
     if (d < 0) {
-        return -1; /* Invalid distance */
+        return OSH_EINVAL;
     }
 
     for (i = 0; i < 3; i++) {
@@ -320,7 +320,7 @@ static inline int _ray_advance(double d, struct ray const *r, struct ray *rr) {
     }
     rr->system = r->system; /* Preserve the coordinate system */
 
-    return 0;
+    return OSH_OK;
 }
 
 /**

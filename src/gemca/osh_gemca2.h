@@ -4,6 +4,7 @@
 #include <float.h>
 #include <stdio.h>
 
+#include "common/osh_rc.h"
 #include "transport/osh_transport.h" /* needed for struct ray */
 
 #define _OSH_GEMCA_CGNODE_BODY 0
@@ -84,9 +85,9 @@ struct surface {  /* surface descriptions */
 };
 
 /* loads filename and prepares *gemca workspace */
-int osh_gemca_workspace_init(struct gemca_workspace **wg);
-int osh_gemca_workspace_free(struct gemca_workspace *wg);
-int osh_gemca_load(char const *filename, struct gemca_workspace *g);
+enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg);
+enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg);
+enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g);
 
 /* for a given ray and *g workspace, return what zone ID (starts at 1) we are in
  */

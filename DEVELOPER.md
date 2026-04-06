@@ -85,6 +85,28 @@ selection, and similar. The goal is that a reader can understand not just
 *what* the code does but *why*, without having to dig through git history.
 
 ### General Coding Conventions
+#### Return Value Conventions
+
+Two distinct return value conventions are used, and they must not be mixed:
+
+**Predicate functions** return `int` with the meaning "yes/no":
+- `1` = true / condition holds
+- `0` = false / condition does not hold
+- Use `if (foo(...))` at call sites.
+- Typically named as questions: `_in_body()`, `_in_zone()`, `osh_gemca2_check_surface_side()`.
+
+**Operation functions** return `enum osh_status` (defined in `common/osh_rc.h`):
+- `OSH_OK = 0` = success
+- Any other value = specific failure reason (see `osh_rc.h`)
+- Use `if (foo(...) != OSH_OK)` at call sites.
+- Note that `OSH_OK = 0` means success, which is the **opposite** of predicate convention — do not confuse the two.
+
+Functions that return actual computed values (zone IDs, distances, counts) use their natural type (`size_t`, `double`, etc.) and document their sentinel/error value in the Doxygen `@returns` field.
+
+If a function is trivially infallible (e.g. a pure memcpy wrapper), prefer `void` over a dummy `return 1`.
+
+---
+
 - Public functions have `osh` prefix : `osh_foobar()`
 - Private/internal functions use `static` and no `_osh` prefix : `foobar()`
 - Private/inline functions use `static inline` and `_` prefix: `_foobar()`. This naming may be subject to change later when we settle on a better convention.

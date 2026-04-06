@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "beam/osh_beam.h"
 #include "common/osh_rc.h"
@@ -16,21 +15,20 @@
         }                                                                                                              \
     } while (0)
 
-static void _write_temp_file(char path_template[], char const *content) {
-    int fd;
+static int _tmp_counter = 0;
+
+static void _write_temp_file(char *path, size_t path_cap, char const *content) {
     FILE *fp;
 
-    fd = mkstemp(path_template);
-    ASSERT_TRUE(fd >= 0);
-
-    fp = fdopen(fd, "w");
+    snprintf(path, path_cap, "osh_test_%d.tmp", _tmp_counter++);
+    fp = fopen(path, "w");
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fputs(content, fp) >= 0);
     ASSERT_TRUE(fclose(fp) == 0);
 }
 
 static void test_setup_single_spot_from_beamdat(void) {
-    char beam_path[] = "/tmp/osh_beamdat_singleXXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
@@ -42,7 +40,7 @@ static void test_setup_single_spot_from_beamdat(void) {
              "BEAMPOS 1.0 2.0 -50.0\n"
              "BEAMSIGMA 0.0 0.0\n"
              "BEAMDIV 2.0 3.0 0.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -62,7 +60,7 @@ static void test_setup_single_spot_from_beamdat(void) {
 }
 
 static void test_setup_beamdiv_without_focus_defaults_to_zero(void) {
-    char beam_path[] = "/tmp/osh_beamdat_beamdiv2XXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
@@ -73,7 +71,7 @@ static void test_setup_beamdiv_without_focus_defaults_to_zero(void) {
              "TMAX0 120.0 0.0\n"
              "BEAMPOS 0.0 0.0 -10.0\n"
              "BEAMDIV 2.0 3.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -89,8 +87,8 @@ static void test_setup_beamdiv_without_focus_defaults_to_zero(void) {
 }
 
 static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
-    char beam_path[] = "/tmp/osh_beamdat_spotlistXXXXXX";
-    char spot_path[] = "/tmp/osh_spotlist7XXXXXX";
+    char beam_path[512];
+    char spot_path[512];
     char beam_text[1024];
     char spot_text[1024];
     struct beam_workspace *wb = NULL;
@@ -114,7 +112,7 @@ static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
              fwhm_y0,
              fwhm_x1,
              fwhm_y1);
-    _write_temp_file(spot_path, spot_text);
+    _write_temp_file(spot_path, sizeof(spot_path), spot_text);
 
     snprintf(beam_text,
              sizeof beam_text,
@@ -125,7 +123,7 @@ static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
              "BEAMDIV 4.0 6.0 0.0\n"
              "USECBEAM %s\n",
              spot_path);
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -166,8 +164,8 @@ static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
 }
 
 static void test_setup_spotlist_overrides_optional_columns(void) {
-    char beam_path[] = "/tmp/osh_beamdat_spotlist11XXXXXX";
-    char spot_path[] = "/tmp/osh_spotlist11XXXXXX";
+    char beam_path[512];
+    char spot_path[512];
     char beam_text[1024];
     char spot_text[1024];
     struct beam_workspace *wb = NULL;
@@ -179,7 +177,7 @@ static void test_setup_spotlist_overrides_optional_columns(void) {
     fwhm_y = 0.35 * (2.0 * sqrt(2.0 * log(2.0)));
 
     snprintf(spot_text, sizeof spot_text, "0.125 0.001 2.0 -1.0 %.17g %.17g 10.0 20.0 0.3 -0.4 42\n", fwhm_x, fwhm_y);
-    _write_temp_file(spot_path, spot_text);
+    _write_temp_file(spot_path, sizeof(spot_path), spot_text);
 
     snprintf(beam_text,
              sizeof beam_text,
@@ -190,7 +188,7 @@ static void test_setup_spotlist_overrides_optional_columns(void) {
              "BEAMDIV 4.0 6.0 0.0\n"
              "USECBEAM %s\n",
              spot_path);
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -216,13 +214,13 @@ static void test_setup_spotlist_overrides_optional_columns(void) {
 }
 
 static void test_setup_primary_name_resolves_particle(void) {
-    char beam_path[] = "/tmp/osh_beamdat_primarynameXXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -238,13 +236,13 @@ static void test_setup_primary_name_resolves_particle(void) {
 }
 
 static void test_setup_primary_pdg_resolves_particle(void) {
-    char beam_path[] = "/tmp/osh_beamdat_primarypdgXXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY 2212\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -260,13 +258,13 @@ static void test_setup_primary_pdg_resolves_particle(void) {
 }
 
 static void test_setup_primary_za_resolves_ion(void) {
-    char beam_path[] = "/tmp/osh_beamdat_primaryzaXXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY 6 12\nTMAX0 1200.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -284,13 +282,13 @@ static void test_setup_primary_za_resolves_ion(void) {
 }
 
 static void test_setup_primary_invalid_returns_einval(void) {
-    char beam_path[] = "/tmp/osh_beamdat_primarybadXXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY nosuchparticle\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -301,13 +299,13 @@ static void test_setup_primary_invalid_returns_einval(void) {
 }
 
 static void test_setup_missing_primary_returns_einval(void) {
-    char beam_path[] = "/tmp/osh_beamdat_noprimaryXXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "TMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -318,13 +316,13 @@ static void test_setup_missing_primary_returns_einval(void) {
 }
 
 static void test_setup_unknown_key_returns_eparse(void) {
-    char beam_path[] = "/tmp/osh_beamdat_badkeyXXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBANANA 1 2 3\nBEAMPOS 0.0 0.0 -10.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -335,13 +333,13 @@ static void test_setup_unknown_key_returns_eparse(void) {
 }
 
 static void test_setup_beamsigma_single_value_sets_symmetric_xy(void) {
-    char beam_path[] = "/tmp/osh_beamdat_sigma1XXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nBEAMSIGMA 1.0\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -356,13 +354,13 @@ static void test_setup_beamsigma_single_value_sets_symmetric_xy(void) {
 }
 
 static void test_setup_nstat_single_value_defaults_nsave_to_zero(void) {
-    char beam_path[] = "/tmp/osh_beamdat_nstat1XXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1234\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 
@@ -376,13 +374,13 @@ static void test_setup_nstat_single_value_defaults_nsave_to_zero(void) {
 }
 
 static void test_setup_nstat_negative_save_disables_nsave(void) {
-    char beam_path[] = "/tmp/osh_beamdat_nstat2XXXXXX";
+    char beam_path[512];
     char beam_text[512];
     struct beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1000 -1\n");
-    _write_temp_file(beam_path, beam_text);
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
 

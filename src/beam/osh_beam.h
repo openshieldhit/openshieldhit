@@ -195,7 +195,7 @@ struct beam_workspace {
  * @param path   Path to the beam input file (not retained).
  * @param lg     Logger for diagnostics; NULL uses the global default logger.
  * @param wb_out Receives the allocated workspace pointer on success.
- * @return OSH_OK on success, negative OSH_E* code on failure.
+ * @return OSH_OK on success, OSH_E* code on failure.
  *
  * Future constructor variants follow the same signature pattern:
  *   osh_beam_setup_from_pipe(fd,   lg, wb_out)

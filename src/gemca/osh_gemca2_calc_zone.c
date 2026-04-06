@@ -14,7 +14,7 @@
 static inline int _in_zone(struct zone const *z, struct ray const *r);
 static inline int _in_node(struct cgnode const *self, struct ray const *r);
 static inline int _in_body(struct body const *b, struct ray const *r);
-static inline int _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr);
+static inline enum osh_status _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr);
 
 /*
    TODO: Recursive evaluation of the AST can become computationally expensive, especially for complex geometries.
@@ -150,7 +150,7 @@ inline int _in_body(struct body const *b, struct ray const *r) {
     int i;
     struct ray tr; /* ray in body-coordinate system */
 
-    if (!_transform_to_local(b, r, &tr)) {
+    if (_transform_to_local(b, r, &tr) != OSH_OK) {
         return 0;
     }
 
@@ -172,11 +172,11 @@ inline int _in_body(struct body const *b, struct ray const *r) {
  * @param[in] r - input ray in OSH_COORD_UNIVERSE
  * @param[out] tr - transformed output ray in system given by b->coord
  *
- * @returns 1 on success, 0 on unsupported coordinate system.
+ * @returns OSH_OK on success, OSH_ENOTSUP if the coordinate system is not supported.
  *
  * @author Niels Bassler
  */
-static inline int _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr) {
+static inline enum osh_status _transform_to_local(struct body const *b, struct ray const *r, struct ray *tr) {
 
     int i;
     int j;
@@ -212,7 +212,7 @@ static inline int _transform_to_local(struct body const *b, struct ray const *r,
 
     default:
         osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
-        return 0;
+        return OSH_ENOTSUP;
     }
-    return 1;
+    return OSH_OK;
 }

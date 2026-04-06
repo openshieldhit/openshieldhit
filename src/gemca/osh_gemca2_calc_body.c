@@ -12,7 +12,7 @@
 #include "gemca/osh_gemca2_calc_surface.h"
 #include "gemca/osh_gemca2_defines.h"
 
-static int setup_body(struct body *b);
+static enum osh_status setup_body(struct body *b);
 
 static int _setup_sph(struct body *b);
 static int _setup_wed(struct body *b);
@@ -46,18 +46,22 @@ static void _vertex_index_arb_fluka(double d, int *i);
  * @param[in] - a gemca object
  * @param[out] - a gemca object
  *
- * @returns 1
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca_body_setup(struct gemca_workspace *g) {
+enum osh_status osh_gemca_body_setup(struct gemca_workspace *g) {
 
+    enum osh_status rc;
     size_t i;
 
     for (i = 0; i < g->nbodies; i++) {
-        setup_body(g->bodies[i]);
+        rc = setup_body(g->bodies[i]);
+        if (rc != OSH_OK) {
+            return rc;
+        }
     }
-    return 1;
+    return OSH_OK;
 }
 
 /**
@@ -68,11 +72,11 @@ int osh_gemca_body_setup(struct gemca_workspace *g) {
  * @param[in] b - the body which will be setup
  * @param[out] b - the body which will be setup
  *
- * @returns 1
+ * @returns OSH_OK on success, OSH_ENOTSUP for unknown body types.
  *
  * @author Niels Bassler
  */
-static int setup_body(struct body *b) {
+static enum osh_status setup_body(struct body *b) {
 
     switch (b->type) {
     case OSH_GEMCA_BODY_SPH:
@@ -132,9 +136,9 @@ static int setup_body(struct body *b) {
         break;
 
     default:
-        break;
+        return OSH_ENOTSUP;
     }
-    return 1;
+    return OSH_OK;
 }
 
 /**

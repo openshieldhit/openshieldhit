@@ -28,21 +28,38 @@ static int _inside_plane_xyz(int axis, struct surface const *sf, struct ray cons
  * @param[in,out] b - a body were the surfaces will be memory allocated
  * @param[in] n - the number of sufraces which will be allocated
  *
- * @returns 1
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca2_add_surfaces(struct body *b, int n) {
+enum osh_status osh_gemca2_add_surfaces(struct body *b, int n) {
     int i;
+    int j;
+
+    if (n <= 0) {
+        return OSH_EINVAL;
+    }
 
     b->nsurfs = n;
     b->surfs = (struct surface **) calloc(n, sizeof(struct surface *));
+    if (b->surfs == NULL) {
+        return OSH_ENOMEM;
+    }
 
     for (i = 0; i < n; i++) {
         b->surfs[i] = calloc(1, sizeof(struct surface));
+        if (b->surfs[i] == NULL) {
+            for (j = 0; j < i; j++) {
+                free(b->surfs[j]);
+            }
+            free(b->surfs);
+            b->surfs = NULL;
+            b->nsurfs = 0;
+            return OSH_ENOMEM;
+        }
     }
 
-    return 1;
+    return OSH_OK;
 }
 
 /**
@@ -51,11 +68,11 @@ int osh_gemca2_add_surfaces(struct body *b, int n) {
  * @param[in,out] s - a given surface
  * @param[in] type - a surface type of OSH_GEMCA_SURF_* as given in osh_gemca2_defines.h
  *
- * @returns 1
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca2_add_surf_pars(struct surface *s, int type) {
+enum osh_status osh_gemca2_add_surf_pars(struct surface *s, int type) {
 
     switch (type) {
     case OSH_GEMCA_SURF_PLANEX:
@@ -87,11 +104,14 @@ int osh_gemca2_add_surf_pars(struct surface *s, int type) {
         break;
     default:
         osh_error("_add_surf_pars: unknown surface type: %i", type);
-        break;
+        return OSH_EINVAL;
     }
     s->p = calloc(s->np, sizeof(double));
+    if (s->p == NULL) {
+        return OSH_ENOMEM;
+    }
     s->type = type;
-    return 1;
+    return OSH_OK;
 }
 
 /**

@@ -11,7 +11,7 @@
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/parse/osh_gemca2_parse_keys.h"
 
-static int _save_body(struct body *b, char *nstr, double *par, int npar, int btype);
+static enum osh_status _save_body(struct body *b, char *nstr, double *par, int npar, int btype);
 static int _body_from_key(char const *key);
 static int _rewind_oshfile(struct oshfile *shf);
 
@@ -20,18 +20,18 @@ static int _rewind_oshfile(struct oshfile *shf);
  *
  * @param[in,out] **body - body to be initialized, memory will be allocated and zeroed.
  *
- * @returns 1
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca_body_init(struct body **body) {
+enum osh_status osh_gemca_body_init(struct body **body) {
 
     *body = calloc(1, sizeof(struct body));
     if (*body == NULL) {
         osh_error("osh_gemca_body_init() cannot allocate memory\n");
-        return 0;
+        return OSH_ENOMEM;
     }
-    return 1;
+    return OSH_OK;
 }
 
 /**
@@ -79,11 +79,11 @@ size_t osh_gemca_parse_count_bodies(struct oshfile *shf) {
  * @param[in] *shf - pointer to oshfile which also keeps track of line numbers.
  * @param[out] *g - workspace struct, where g->bodies list will be made.
  *
- * @returns 1 // TODO could also be number of bodies found.
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
+enum osh_status osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
     char *key = NULL;
     char *args = NULL;
     char *line = NULL;
@@ -120,9 +120,16 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
                 osh_error("Error parsing geometry line %li - END encountered before any body definition\n",
                           (long int) lineno);
                 free(line);
-                return 0;
+                return OSH_EPARSE;
             }
-            _save_body(current_body, nstr, par, npar, btype);
+            if (_save_body(current_body, nstr, par, npar, btype) != OSH_OK) {
+                free(line);
+                return OSH_ENOMEM;
+            }
+            /* lineno_b is always assigned before current_body becomes non-NULL; MSVC cannot see this invariant */
+#ifdef _MSC_VER
+#pragma warning(suppress : 4701)
+#endif
             current_body->lineno = lineno_b;
             break;
         }
@@ -133,7 +140,10 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
 
             /* save previous body if any */
             if (current_body != NULL) {
-                _save_body(current_body, nstr, par, npar, btype);
+                if (_save_body(current_body, nstr, par, npar, btype) != OSH_OK) {
+                    free(line);
+                    return OSH_ENOMEM;
+                }
                 current_body->lineno = lineno_b;
             }
 
@@ -143,7 +153,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
                           (long int) lineno,
                           (long int) g->nbodies);
                 free(line);
-                return 0;
+                return OSH_EPARSE;
             }
 
             /* start new body */
@@ -154,7 +164,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
             if (args == NULL) {
                 osh_error("Error parsing geometry line %li - missing body name/parameters\n", (long int) lineno);
                 free(line);
-                return 0;
+                return OSH_EPARSE;
             }
 
             // TODO: sscanf("%s", ...) is unsafe because %s is unbounded and may overflow nstr.
@@ -169,7 +179,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
                               nstr,
                               (long int) g->bodies[_ib]->lineno);
                     free(line);
-                    return 0;
+                    return OSH_EPARSE;
                 }
             }
 
@@ -193,7 +203,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
                           off + 5,
                           OSH_GEMCA_NARGS_MAX - 1);
                 free(line);
-                return 0;
+                return OSH_EPARSE;
             }
 
             nt = sscanf(key, "%lf", &par[off]);
@@ -224,7 +234,7 @@ int osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspace *g) {
 
     free(line);
     line = NULL;
-    return 1;
+    return OSH_OK;
 }
 
 /**
@@ -323,21 +333,29 @@ static int _rewind_oshfile(struct oshfile *shf) {
  * @param[in] *npar - length of *par array
  * @param[in] btype - type of body, see osh_gemca2_defines.h
  *
- * @returns always 1
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  *
  * @author Niels Bassler
  */
-static int _save_body(struct body *b, char *nstr, double *par, int npar, int btype) {
+static enum osh_status _save_body(struct body *b, char *nstr, double *par, int npar, int btype) {
 
     int i = 0;
 
     b->type = btype;
 
     b->name = calloc(strlen(nstr) + 1, sizeof(char));
+    if (b->name == NULL) {
+        return OSH_ENOMEM;
+    }
     snprintf(b->name, strlen(nstr) + 1, "%s", nstr);
 
     b->na = npar;
     b->a = calloc(npar, sizeof(double));
+    if ((npar > 0) && (b->a == NULL)) {
+        free(b->name);
+        b->name = NULL;
+        return OSH_ENOMEM;
+    }
 
     memset(b->t, 0x00, 16 * sizeof(double)); // should not be necessary
 
@@ -345,5 +363,5 @@ static int _save_body(struct body *b, char *nstr, double *par, int npar, int bty
     for (i = 0; i < npar; i++) {
         b->a[i] = par[i];
     }
-    return 1;
+    return OSH_OK;
 }
