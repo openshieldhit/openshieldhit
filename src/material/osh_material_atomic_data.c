@@ -5,8 +5,7 @@
 /*
  * Natural-element atomic weights [Da].
  *
- * Source: libdedx periodic-table metadata (`dedx_periodic_table.h`), authored by
- * the OpenShieldHIT/libdedx maintainer. These values represent natural elements
+ * Source: IUPAC standard atomic weights. These values represent natural elements
  * and must not be confused with isotope masses from particle/.
  */
 static double const natural_atomic_masses_da[] = {

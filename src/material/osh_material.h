@@ -5,12 +5,11 @@
 
 #include "common/osh_logger.h"
 #include "common/osh_rc.h"
+#include "material/osh_material_icru.h" /* enum osh_material_state */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-enum osh_material_state { OSH_MATERIAL_STATE_UNSET = 0, OSH_MATERIAL_STATE_CONDENSED = 1, OSH_MATERIAL_STATE_GAS = 2 };
 
 enum { OSH_MATERIAL_INDEX_BLACKHOLE = 0, OSH_MATERIAL_INDEX_VACUUM = 1, OSH_MATERIAL_INDEX_FIRST_USER = 2 };
 
