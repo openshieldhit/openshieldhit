@@ -630,6 +630,18 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct ma
 
 /**
  * @brief Derive normalized mass fractions from relative atom counts.
+ *
+ * @details
+ * For each element i with relative atom count n_i and atomic mass M_i [Da],
+ * the mass fraction is:
+ *
+ *   w_i = (n_i * M_i) / sum_j(n_j * M_j)
+ *
+ * The resulting w_i sum to 1.
+ *
+ * @param[in,out] mat  Material whose mass_fraction fields are to be filled.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL/OSH_ESTATE on invalid element data.
  */
 static enum osh_status material_derive_mass_fractions_from_atom_counts(struct material *mat) {
     enum osh_status rc;
