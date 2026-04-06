@@ -45,6 +45,7 @@ cache-friendly runtime material database.
 - [x] Parse explicit composition cards and ICRU references as alternative composition sources
 - [x] Store scalar user overrides: `RHO`, `STATE`, material/element mean excitation, `LOADDEDX`
 - [ ] Import or regenerate the ICRU material database from `_temp_shieldhit/material`
+- [ ] Refresh material data with ICRU90 density, stopping-power, and mean-excitation updates from `_temp_libdedx`
 - [ ] Add a material assembly layer after all input files are parsed
 - [ ] Expand ICRU references into composition, density, state, and mean excitation defaults
 - [ ] Preserve explicit scalar user overrides when filling unset ICRU/default properties

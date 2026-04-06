@@ -9,6 +9,7 @@
 #include "common/osh_rc.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
+#include "material/osh_material.h"
 
 /* ---- Internal constants -------------------------------------------------- */
 
@@ -224,6 +225,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     char *detect_path = NULL;
     struct beam_workspace *beam = NULL;
     struct gemca_workspace *geom = NULL;
+    struct material_workspace *mat = NULL;
     enum openshieldhit_status rc = OPENSHIELDHIT_STATUS_OK;
 
     if (!ctx) {
@@ -322,12 +324,51 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         }
     }
 
-    /* TODO: wire material loader */
+    if (!file_exists(mat_path)) {
+        ctx_set_error(ctx, err, "material file not found: %s", mat_path);
+        rc = OPENSHIELDHIT_STATUS_IO_ERROR;
+        goto cleanup;
+    }
+
+    if (osh_material_setup_from_path(mat_path, NULL, &mat) != OSH_OK) {
+        ctx_set_error(ctx, err, "failed to load materials: %s", mat_path);
+        rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+        goto cleanup;
+    }
     if (out) {
-        fprintf(out,
-                "Material file %s (loader wiring pending): %s\n",
-                file_exists(mat_path) ? "found" : "missing",
-                mat_path);
+        fprintf(out, "Loaded materials: %s\n", mat_path);
+    }
+
+    /* Resolve zone->material_name strings to dense material indices. */
+    {
+        size_t iz;
+        for (iz = 0; iz < geom->nzones; iz++) {
+            struct zone *z;
+            struct material const *m;
+
+            z = geom->zones[iz];
+            if (!z->material_name) {
+                ctx_set_error(ctx, err, "zone '%s' has no material assigned", z->name ? z->name : "(unnamed)");
+                rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+                goto cleanup;
+            }
+            m = osh_material_by_name(mat, z->material_name);
+            if (!m) {
+                char msg[OSH_LAST_ERROR_SIZE];
+                snprintf(msg,
+                         sizeof(msg),
+                         "zone '%s': unknown material '%s'",
+                         z->name ? z->name : "(unnamed)",
+                         z->material_name);
+                ctx_set_error(ctx, err, "%s", msg);
+                rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+                goto cleanup;
+            }
+            z->material_idx = m->index;
+        }
+    }
+    if (out) {
+        fprintf(out, "Material assembly complete: %llu zones resolved.\n", (unsigned long long) geom->nzones);
     }
 
     /* TODO: wire scoring/detect loader */
@@ -343,6 +384,9 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
 cleanup:
+    if (mat) {
+        osh_material_workspace_free(mat);
+    }
     if (beam) {
         osh_beam_workspace_free(beam);
     }

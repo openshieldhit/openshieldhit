@@ -1,5 +1,6 @@
 #include "material/osh_material.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,9 +24,13 @@ static enum osh_status material_complete_composition(struct material *mat);
 static enum osh_status material_complete_icru(struct material *mat);
 static enum osh_status material_derive_atom_counts_from_mass_fractions(struct material *mat);
 static enum osh_status material_derive_mass_fractions_from_atom_counts(struct material *mat);
+static void material_default_state_if_unset(struct material *mat);
 static enum osh_status material_element_mass(unsigned int z, unsigned int a, double *mass_out);
 static enum osh_status material_set_elements_from_icru(struct material *mat,
                                                        struct osh_material_icru_entry const *entry);
+static enum osh_status material_complete_mean_excitation_energy(struct material *mat);
+static enum osh_status material_fill_element_mee_defaults(struct material *mat);
+static enum osh_status material_derive_compound_mee(struct material *mat);
 static void material_free_fields(struct material *mat);
 static char const *material_state_name(int state);
 
@@ -99,7 +104,7 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct mat
         return rc;
     }
 
-    if (osh_log_get_level() <= OSH_LOG_DEBUG) {
+    if (osh_log_get_level() <= OSH_LOG_INFO) {
         osh_material_print(wm);
     }
 
@@ -174,9 +179,21 @@ void osh_material_print(struct material_workspace const *wm) {
         mat = &wm->materials[i];
         osh_info("%s", "");
         osh_info("Material[%zu]: index=%zu name=%s", i, mat->index, mat->name ? mat->name : "(unset)");
-        osh_info("%-24s : %i", "ICRU id", mat->icru_id);
-        osh_info("%-24s : %.8g g/cm^3", "Density RHO", mat->rho);
-        osh_info("%-24s : %.8g eV", "Mean excitation energy", mat->mean_excitation_energy);
+        if (mat->icru_id == 0) {
+            osh_info("%-24s : %s", "ICRU id", "(unset)");
+        } else {
+            osh_info("%-24s : %i", "ICRU id", mat->icru_id);
+        }
+        if (mat->rho < 0.0) {
+            osh_info("%-24s : %s", "Density RHO", "(N/A)");
+        } else {
+            osh_info("%-24s : %.6f g/cm^3", "Density RHO", mat->rho);
+        }
+        if (mat->mean_excitation_energy < 0.0) {
+            osh_info("%-24s : %s", "Mean excitation energy", "(N/A)");
+        } else {
+            osh_info("%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
+        }
         osh_info("%-24s : %s", "dE/dx table", mat->dedx_table_path ? mat->dedx_table_path : "(unset)");
         osh_info("%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
         osh_info("%-24s : %s", "State", material_state_name(mat->state));
@@ -185,13 +202,22 @@ void osh_material_print(struct material_workspace const *wm) {
         j = 0;
         while (j < mat->nelements) {
             elem = &mat->elements[j];
-            osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.8g eV",
-                     j,
-                     elem->z,
-                     elem->a,
-                     elem->atom_count,
-                     elem->mass_fraction,
-                     elem->mean_excitation_energy);
+            if (elem->mean_excitation_energy < 0.0) {
+                osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=(N/A)",
+                         j,
+                         elem->z,
+                         elem->a,
+                         elem->atom_count,
+                         elem->mass_fraction);
+            } else {
+                osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.4f eV",
+                         j,
+                         elem->z,
+                         elem->a,
+                         elem->atom_count,
+                         elem->mass_fraction,
+                         elem->mean_excitation_energy);
+            }
             j++;
         }
 
@@ -225,8 +251,8 @@ static void material_set_rgba(struct material *mat, float r, float g, float b, f
  *
  * @details
  * Reserved slots occupy indices 0 and 1 so that user materials always start at
- * OSH_MATERIAL_INDEX_FIRST_USER. Blackhole is opaque black (alpha=1); vacuum is
- * fully transparent (alpha=0) with rho=0.
+ * OSH_MATERIAL_INDEX_FIRST_USER. Blackhole is opaque black (alpha=1) with no
+ * physical density; vacuum is fully transparent (alpha=0) with rho=0.
  *
  * @param[in,out] wm  Workspace to initialize.
  *
@@ -474,6 +500,22 @@ static enum osh_status material_workspace_validate_completed(struct material_wor
 
 /**
  * @brief Complete one user material in place.
+ *
+ * @details
+ * Runs four sub-steps in order:
+ *  1. ICRU expansion fills rho, state, MEE and element list from the ICRU
+ *     database when an ICRU card is present.
+ *  2. Composition derivation computes the missing complementary field
+ *     (atom counts from mass fractions or vice versa).
+ *  3. State default makes materials condensed unless set explicitly or
+ *     by ICRU.
+ *  4. Mean-excitation completion preserves fixed material MEE values or, when
+ *     material MEE is unset, fills element defaults and derives the material
+ *     value with Bragg additivity.
+ *
+ * @param[in,out] mat  Material to complete.
+ *
+ * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
 static enum osh_status material_complete(struct material *mat) {
     enum osh_status rc;
@@ -487,7 +529,23 @@ static enum osh_status material_complete(struct material *mat) {
         return rc;
     }
 
-    return material_complete_composition(mat);
+    rc = material_complete_composition(mat);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    material_default_state_if_unset(mat);
+
+    return material_complete_mean_excitation_energy(mat);
+}
+
+/**
+ * @brief Default user-defined materials to condensed matter.
+ */
+static void material_default_state_if_unset(struct material *mat) {
+    if (mat->state == OSH_MATERIAL_STATE_UNSET) {
+        mat->state = OSH_MATERIAL_STATE_CONDENSED;
+    }
 }
 
 /**
@@ -574,6 +632,153 @@ static enum osh_status material_set_elements_from_icru(struct material *mat,
 }
 
 /**
+ * @brief Complete material and element mean excitation energies.
+ *
+ * @details
+ * Material-level MEE is authoritative for compounds. If it is already known
+ * from ICRU or a user MATERIALI/MIVALUE/MIAV card, compound element MEE values
+ * are left unset because the inverse Bragg problem is underdetermined. For a
+ * single-element material, the element can safely inherit the material value.
+ *
+ * If material-level MEE is unset, missing element MEE values are filled from
+ * ICRU defaults with ICRU-49 in-compound corrections where available, then the
+ * material value is derived using Bragg additivity.
+ *
+ * @param[in,out] mat  Material to complete.
+ *
+ * @returns OSH_OK on success, or an OSH_E* code on failure.
+ */
+static enum osh_status material_complete_mean_excitation_energy(struct material *mat) {
+    enum osh_status rc;
+    size_t i;
+
+    if (mat->nelements == 0u) {
+        return OSH_OK;
+    }
+
+    if (mat->mean_excitation_energy >= 0.0) {
+        if (mat->nelements == 1u) {
+            mat->elements[0].mean_excitation_energy = mat->mean_excitation_energy;
+            return OSH_OK;
+        }
+
+        i = 0;
+        while (i < mat->nelements) {
+            mat->elements[i].mean_excitation_energy = -1.0;
+            i++;
+        }
+        return OSH_OK;
+    }
+
+    rc = material_fill_element_mee_defaults(mat);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    return material_derive_compound_mee(mat);
+}
+
+/**
+ * @brief Fill per-element mean excitation energies from ICRU data.
+ *
+ * @details
+ * For each element whose mean_excitation_energy is unset (< 0), looks up the
+ * ICRU elemental entry (ICRU id == Z for pure elements). For compounds, ICRU 49
+ * Table 2.11 gives adjusted element mean excitation energies for selected
+ * elements in gaseous or condensed compounds; those are used when available.
+ * This matters for common compounds such as water, where pure oxygen (95 eV)
+ * would otherwise under-estimate the compound-derived material MEE.
+ *
+ * Elements with an explicit user IVALUE override are left unchanged. If the
+ * lookup fails, the element MEE remains -1; the subsequent Bragg-additivity
+ * step will then skip compound MEE derivation, and the user or a dE/dx table
+ * must supply it.
+ *
+ * @param[in,out] mat  Material whose element MEE fields are to be filled.
+ *
+ * @returns OSH_OK on success.
+ */
+static enum osh_status material_fill_element_mee_defaults(struct material *mat) {
+    struct osh_material_icru_entry entry;
+    size_t i;
+
+    i = 0;
+    while (i < mat->nelements) {
+        if (mat->elements[i].mean_excitation_energy < 0.0) {
+            if (osh_material_icru_lookup((int) mat->elements[i].z, &entry) == OSH_OK) {
+                if (mat->nelements > 1u) {
+                    mat->elements[i].mean_excitation_energy = osh_material_icru_compound_element_mean_excitation_energy(
+                        mat->elements[i].z, mat->state, entry.mean_excitation_energy);
+                } else {
+                    mat->elements[i].mean_excitation_energy = entry.mean_excitation_energy;
+                }
+            }
+        }
+        i++;
+    }
+
+    return OSH_OK;
+}
+
+/**
+ * @brief Derive the material mean excitation energy via Bragg additivity.
+ *
+ * @details
+ * When the material-level mean excitation energy is unset (< 0) and all
+ * elements have known MEE values, this function applies the Bragg-additivity
+ * rule from ICRU Report 37:
+ *
+ *   ln(I) = sum_i(w_i * (Z_i/A_i) * ln(I_i)) / sum_i(w_i * Z_i/A_i)
+ *
+ * where w_i is the mass fraction, Z_i the atomic number, A_i the atomic mass
+ * [Da] from either the natural element or explicit isotope, and I_i the mean
+ * excitation energy of element i [eV].
+ *
+ * If any element still has an unset MEE, the derivation is skipped and the
+ * material MEE remains -1 (to be supplied by the user or a dE/dx table).
+ * A user-set or ICRU-set material-level MEE is never overwritten.
+ *
+ * @param[in,out] mat  Material whose mean_excitation_energy is to be derived.
+ *
+ * @returns OSH_OK on success, or an error code from the atomic-mass lookup.
+ */
+static enum osh_status material_derive_compound_mee(struct material *mat) {
+    enum osh_status rc;
+    double numerator;
+    double denominator;
+    double mass;       /* atomic mass of natural element or explicit isotope [Da] */
+    double zi_over_ai; /* Z_i / A_i  [1/Da] */
+    size_t i;
+
+    if (mat->mean_excitation_energy >= 0.0 || mat->nelements == 0u) {
+        return OSH_OK;
+    }
+
+    numerator = 0.0;
+    denominator = 0.0;
+    i = 0;
+    while (i < mat->nelements) {
+        if (mat->elements[i].mean_excitation_energy < 0.0 || mat->elements[i].mass_fraction < 0.0) {
+            return OSH_OK; /* incomplete data; skip derivation */
+        }
+        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        if (rc != OSH_OK) {
+            return rc;
+        }
+        zi_over_ai = (double) mat->elements[i].z / mass;
+        numerator += mat->elements[i].mass_fraction * zi_over_ai * log(mat->elements[i].mean_excitation_energy);
+        denominator += mat->elements[i].mass_fraction * zi_over_ai;
+        i++;
+    }
+
+    if (denominator > 0.0) {
+        mat->mean_excitation_energy = exp(numerator / denominator);
+    }
+
+    return OSH_OK;
+}
+
+/**
  * @brief Derive relative atom counts from mass fractions.
  *
  * @details
@@ -591,8 +796,8 @@ static enum osh_status material_set_elements_from_icru(struct material *mat,
  */
 static enum osh_status material_derive_atom_counts_from_mass_fractions(struct material *mat) {
     enum osh_status rc;
-    double mass;       /* atomic mass of current element [Da] */
-    double sum_moles;  /* sum of mass_fraction/mass across all elements [1/Da] */
+    double mass;      /* atomic mass of current element [Da] */
+    double sum_moles; /* sum of mass_fraction/mass across all elements [1/Da] */
     size_t i;
 
     sum_moles = 0.0;
@@ -645,8 +850,8 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct ma
  */
 static enum osh_status material_derive_mass_fractions_from_atom_counts(struct material *mat) {
     enum osh_status rc;
-    double mass;        /* atomic mass of current element [Da] */
-    double total_mass;  /* sum of atom_count * mass across all elements [Da] */
+    double mass;       /* atomic mass of current element [Da] */
+    double total_mass; /* sum of atom_count * mass across all elements [Da] */
     size_t i;
 
     total_mass = 0.0;

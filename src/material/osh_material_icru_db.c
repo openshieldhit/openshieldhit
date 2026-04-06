@@ -1,6 +1,6 @@
-#include "material/osh_material_icru.h"
-
 #include <string.h>
+
+#include "material/osh_material_icru.h"
 
 /* ICRU ids start at 1. Elements occupy [1..98], compounds [99..278], and
  * graphite has the special external id 906. Internally graphite is mapped to
@@ -241,6 +241,42 @@ static int icru_db_is_gas(int icru_id) {
         i++;
     }
     return 0;
+}
+
+double osh_material_icru_compound_element_mean_excitation_energy(unsigned int z, int state, double pure_element_mee) {
+    if (state == OSH_MATERIAL_STATE_GAS) {
+        switch (z) {
+        case 6u:
+            return 70.0; /* carbon in gaseous compounds */
+        case 7u:
+            return 82.0; /* nitrogen in gaseous compounds */
+        case 8u:
+            return 97.0; /* oxygen in gaseous compounds */
+        default:
+            return pure_element_mee;
+        }
+    }
+
+    if (state == OSH_MATERIAL_STATE_CONDENSED) {
+        switch (z) {
+        case 1u:
+            return 19.2; /* hydrogen in condensed compounds */
+        case 6u:
+            return 85.9; /* carbon in condensed compounds */
+        case 7u:
+            return 81.0; /* nitrogen in condensed compounds */
+        case 8u:
+            return 106.0; /* oxygen in condensed compounds */
+        case 9u:
+            return 112.0; /* fluorine in condensed compounds */
+        case 17u:
+            return 180.0; /* chlorine in condensed compounds */
+        default:
+            return pure_element_mee;
+        }
+    }
+
+    return pure_element_mee;
 }
 
 /**

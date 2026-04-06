@@ -26,6 +26,40 @@ static void write_temp_file(char *path, size_t path_cap, char const *content) {
     ASSERT_TRUE(fclose(fp) == 0);
 }
 
+static double test_material_element_mass_da(struct material_element const *elem) {
+    if (elem->a == 0u && elem->z == 1u) {
+        return 1.00794;
+    }
+    if (elem->a == 0u && elem->z == 8u) {
+        return 15.9994;
+    }
+    fprintf(stderr, "unsupported test element Z=%u A=%u\n", elem->z, elem->a);
+    exit(1);
+}
+
+static double test_material_bragg_mean_excitation_energy(struct material const *mat) {
+    double numerator;
+    double denominator;
+    double mass;
+    double weight;
+    size_t i;
+
+    numerator = 0.0;
+    denominator = 0.0;
+
+    i = 0;
+    while (i < mat->nelements) {
+        mass = test_material_element_mass_da(&mat->elements[i]);
+        weight = mat->elements[i].mass_fraction * (double) mat->elements[i].z / mass;
+        numerator += weight * log(mat->elements[i].mean_excitation_energy);
+        denominator += weight;
+        i++;
+    }
+
+    ASSERT_TRUE(denominator > 0.0);
+    return exp(numerator / denominator);
+}
+
 static void test_material_fixture_icru_and_rho(void) {
     char path[512];
     struct material_workspace *wm = NULL;
@@ -43,6 +77,7 @@ static void test_material_fixture_icru_and_rho(void) {
     ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_VACUUM) != NULL);
     ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_BLACKHOLE)->name != NULL);
     ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_VACUUM)->name != NULL);
+    ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_BLACKHOLE)->rho < 0.0);
     ASSERT_TRUE(fabs(osh_material_by_index(wm, OSH_MATERIAL_INDEX_BLACKHOLE)->rgba[3] - 1.0f) < 1e-6);
     ASSERT_TRUE(fabs(osh_material_by_index(wm, OSH_MATERIAL_INDEX_VACUUM)->rgba[3]) < 1e-6);
 
@@ -59,10 +94,12 @@ static void test_material_fixture_icru_and_rho(void) {
     ASSERT_TRUE(mat->elements[0].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[0].mass_fraction - 0.111894) < 1e-7);
     ASSERT_TRUE(mat->elements[0].atom_count > 0.0);
+    ASSERT_TRUE(mat->elements[0].mean_excitation_energy < 0.0);
     ASSERT_TRUE(mat->elements[1].z == 8u);
     ASSERT_TRUE(mat->elements[1].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[1].mass_fraction - 0.888106) < 1e-7);
     ASSERT_TRUE(mat->elements[1].atom_count > 0.0);
+    ASSERT_TRUE(mat->elements[1].mean_excitation_energy < 0.0);
     ASSERT_TRUE(fabs(mat->elements[0].atom_count + mat->elements[1].atom_count - 1.0) < 1e-12);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
@@ -85,8 +122,9 @@ static void test_material_fixture_composition(void) {
     mat = osh_material_by_name(wm, "Water");
     ASSERT_TRUE(mat != NULL);
     ASSERT_TRUE(mat->index == OSH_MATERIAL_INDEX_FIRST_USER);
-    ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_GAS);
+    ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_CONDENSED);
     ASSERT_TRUE(fabs(mat->rho - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(mat->mean_excitation_energy - 78.02104963) < 1e-8);
     ASSERT_TRUE(mat->nelements == 2u);
     ASSERT_TRUE(mat->elements[0].z == 1u);
     ASSERT_TRUE(mat->elements[0].a == 0u);
@@ -97,7 +135,8 @@ static void test_material_fixture_composition(void) {
     ASSERT_TRUE(mat->elements[1].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[1].atom_count - 1.0) < 1e-12);
     ASSERT_TRUE(fabs(mat->elements[1].mass_fraction - 0.8881016559) < 1e-6);
-    ASSERT_TRUE(mat->elements[1].mean_excitation_energy < 0.0);
+    ASSERT_TRUE(fabs(mat->elements[1].mean_excitation_energy - 106.0) < 1e-12);
+    ASSERT_TRUE(fabs(test_material_bragg_mean_excitation_energy(mat) - mat->mean_excitation_energy) < 1e-12);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
@@ -156,9 +195,41 @@ static void test_material_level_mean_excitation_and_dedx_table(void) {
     mat = osh_material_by_name(wm, "Water");
     ASSERT_TRUE(mat != NULL);
     ASSERT_TRUE(fabs(mat->mean_excitation_energy - 80.0) < 1e-12);
+    ASSERT_TRUE(mat->elements[0].mean_excitation_energy < 0.0);
+    ASSERT_TRUE(mat->elements[1].mean_excitation_energy < 0.0);
     ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_GAS);
     ASSERT_TRUE(mat->dedx_table_path != NULL);
     ASSERT_TRUE(strcmp(mat->dedx_table_path, "tables/water_dedx.dat") == 0);
+
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
+static void test_material_level_mean_excitation_clears_compound_element_values(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    struct material const *mat;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL Water\n"
+                    "RHO 1.0\n"
+                    "MATERIALI 75.0\n"
+                    "ELEMENT 1 2\n"
+                    "IVALUE 22.9\n"
+                    "ELEMENT 8 1\n"
+                    "END\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+    mat = osh_material_by_name(wm, "Water");
+    ASSERT_TRUE(mat != NULL);
+    ASSERT_TRUE(fabs(mat->mean_excitation_energy - 75.0) < 1e-12);
+    ASSERT_TRUE(mat->elements[0].mean_excitation_energy < 0.0);
+    ASSERT_TRUE(mat->elements[1].mean_excitation_energy < 0.0);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(path) == 0);
@@ -223,6 +294,31 @@ static void test_material_explicit_isotope_uses_mass_number(void) {
     ASSERT_TRUE(remove(path) == 0);
 }
 
+static void test_material_defaults_state_to_condensed(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    struct material const *mat;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL DefaultState\n"
+                    "RHO 1.0\n"
+                    "NUCLID 1 1.0\n"
+                    "END\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+    mat = osh_material_by_name(wm, "DefaultState");
+    ASSERT_TRUE(mat != NULL);
+    ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_CONDENSED);
+
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
 static void test_material_icru_element_expands_to_natural_element(void) {
     char path[512];
     struct material_workspace *wm = NULL;
@@ -250,6 +346,7 @@ static void test_material_icru_element_expands_to_natural_element(void) {
     ASSERT_TRUE(mat->elements[0].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[0].mass_fraction - 1.0) < 1e-12);
     ASSERT_TRUE(fabs(mat->elements[0].atom_count - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(mat->elements[0].mean_excitation_energy - 40.0) < 1e-12);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(path) == 0);
@@ -390,8 +487,10 @@ int main(void) {
     test_material_fixture_composition();
     test_material_keys_and_state_are_case_insensitive();
     test_material_level_mean_excitation_and_dedx_table();
+    test_material_level_mean_excitation_clears_compound_element_values();
     test_material_mass_fraction_input_completes_atom_counts();
     test_material_explicit_isotope_uses_mass_number();
+    test_material_defaults_state_to_condensed();
     test_material_icru_element_expands_to_natural_element();
     test_material_rejects_key_outside_material();
     test_material_rejects_end_outside_material();
