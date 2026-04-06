@@ -33,7 +33,7 @@ The project emphasizes hardware-aware programming, with explicit attention to:
 - Branching patterns
 - CPU efficiency
 - Minimal hidden abstractions
-The intention is to expose the physics and the computational structure, rather than obscuring it behind heavy object hierarchies or opaque frameworks.Monte Carlo Particle Transport
+The intention is to expose the physics and the computational structure, rather than obscuring it behind heavy object hierarchies or opaque frameworks.
 
 
 ## Requirements
@@ -63,8 +63,8 @@ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 - [x] readline for tag and key parsing
 - [x] prng
 - [x] geometry parser
-- [ ] beam parser
-- [ ] material parser
+- [x] beam parser
+- [x] material parser
 - [ ] detector parser
 - [x] raytracer
 - [ ] transport
