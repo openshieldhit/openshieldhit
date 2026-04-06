@@ -34,7 +34,8 @@ static double test_material_element_mass_da(struct material_element const *elem)
         return 15.9994;
     }
     fprintf(stderr, "unsupported test element Z=%u A=%u\n", elem->z, elem->a);
-    exit(1);
+    ASSERT_TRUE(0);
+    return 0.0;
 }
 
 static double test_material_bragg_mean_excitation_energy(struct material const *mat) {
