@@ -175,9 +175,18 @@ enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspa
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the RHO / DENSITY card.
+ *
+ * @param[in,out] wm    Material workspace; the current material receives the density.
+ * @param[in]     oshf  Open input file (used for error location).
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
+ */
 static enum osh_status parse_density(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
-    double rho;
+    double rho; /* [g/cm³] */
     char extra;
 
     mat = material_current(wm);
@@ -198,6 +207,17 @@ static enum osh_status parse_density(struct material_workspace *wm, struct oshfi
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the COLOR / COLOUR card.
+ *
+ * @details Expects four floating-point values in [0,1]: red, green, blue, alpha.
+ *
+ * @param[in,out] wm    Material workspace.
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
+ */
 static enum osh_status parse_color(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     float rgba[4];
@@ -229,6 +249,18 @@ static enum osh_status parse_color(struct material_workspace *wm, struct oshfile
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the ELEMENTBYMASS card.
+ *
+ * @details Appends an element specified by Z (and optionally A) with a mass
+ * fraction. Atom count is derived during post-parse completion.
+ *
+ * @param[in,out] wm    Material workspace.
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
+ */
 static enum osh_status parse_element_by_mass(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     unsigned int z;
@@ -250,6 +282,18 @@ static enum osh_status parse_element_by_mass(struct material_workspace *wm, stru
     return material_push_element(mat, oshf, z, a, -1.0, mass_fraction);
 }
 
+/**
+ * @brief Handle the NUCLID / ELEMENT / ELEMENTBYNUMBER card.
+ *
+ * @details Appends an element specified by Z (and optionally A) with a relative
+ * atom count. Mass fraction is derived during post-parse completion.
+ *
+ * @param[in,out] wm    Material workspace.
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
+ */
 static enum osh_status parse_element_by_number(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     unsigned int z;
@@ -271,6 +315,15 @@ static enum osh_status parse_element_by_number(struct material_workspace *wm, st
     return material_push_element(mat, oshf, z, a, atom_count, -1.0);
 }
 
+/**
+ * @brief Handle the END card closing a MATERIAL block.
+ *
+ * @param[in,out] wm    Material workspace (unused; present for dispatch signature).
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line; must be empty.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE if trailing arguments are present.
+ */
 static enum osh_status parse_end(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     (void) wm;
 
@@ -282,6 +335,18 @@ static enum osh_status parse_end(struct material_workspace *wm, struct oshfile *
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the ELEMENTI / IVALUE / IAV card.
+ *
+ * @details Sets the mean excitation energy [eV] on the most recently parsed
+ * element. Must follow a NUCLID/ELEMENT/ELEMENTBYMASS card.
+ *
+ * @param[in,out] wm    Material workspace.
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input or ordering error.
+ */
 static enum osh_status
 parse_element_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
@@ -308,6 +373,18 @@ parse_element_mean_excitation_energy(struct material_workspace *wm, struct oshfi
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the LOADDEDX card.
+ *
+ * @details Stores a path to an external dE/dx table for later loading. Relative
+ * paths are resolved against the directory of the material input file.
+ *
+ * @param[in,out] wm    Material workspace (wdir used for path resolution).
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
+ */
 static enum osh_status parse_loaddedx(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     char path[512];
@@ -336,6 +413,18 @@ static enum osh_status parse_loaddedx(struct material_workspace *wm, struct oshf
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the MATERIALI / MIVALUE / MIAV card.
+ *
+ * @details Sets the material-level mean excitation energy [eV]. This acts as a
+ * fallback for transport projectiles not covered by an external dE/dx table.
+ *
+ * @param[in,out] wm    Material workspace.
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
+ */
 static enum osh_status
 parse_material_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
@@ -359,6 +448,19 @@ parse_material_mean_excitation_energy(struct material_workspace *wm, struct oshf
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the ICRU card.
+ *
+ * @details Records an ICRU material id for lookup during post-parse completion.
+ * Density, state, and elemental composition are filled from the embedded ICRU
+ * database unless overridden by explicit cards.
+ *
+ * @param[in,out] wm    Material workspace.
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
+ */
 static enum osh_status parse_icru(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     int icru_id;
@@ -387,6 +489,19 @@ static enum osh_status parse_material_start(struct material_workspace *wm, struc
     return material_push(wm, oshf, args);
 }
 
+/**
+ * @brief Handle the STATE card.
+ *
+ * @details Accepts an integer (1=condensed, 2=gas) or a keyword
+ * ("condensed", "solid", "liquid", "gas"). Overrides the ICRU default state
+ * when both are present.
+ *
+ * @param[in,out] wm    Material workspace.
+ * @param[in]     oshf  Open input file.
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on unknown value.
+ */
 static enum osh_status parse_state(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     enum osh_status rc;
     struct material *mat;
@@ -421,6 +536,13 @@ static enum osh_status parse_state(struct material_workspace *wm, struct oshfile
     return OSH_OK;
 }
 
+/**
+ * @brief Return a pointer to the material currently being built (the last one).
+ *
+ * @param[in] wm  Material workspace.
+ *
+ * @returns Pointer to the last material in the array, or NULL if none exist.
+ */
 static struct material *material_current(struct material_workspace *wm) {
     if (!wm || wm->nmaterials == 0u) {
         return NULL;
@@ -429,6 +551,14 @@ static struct material *material_current(struct material_workspace *wm) {
     return &wm->materials[wm->nmaterials - 1u];
 }
 
+/**
+ * @brief Reset all fields of @p mat to their unset sentinel values.
+ *
+ * @details Negative doubles signal "unset" for rho and mean_excitation_energy
+ * so that explicit user cards take precedence over ICRU defaults.
+ *
+ * @param[out] mat  Material to reset. Must point to allocated storage.
+ */
 static void material_defaults(struct material *mat) {
     mat->elements = NULL;
     mat->name = NULL;
@@ -446,11 +576,21 @@ static void material_defaults(struct material *mat) {
     mat->state = OSH_MATERIAL_STATE_UNSET;
 }
 
+/**
+ * @brief Parse a single non-negative floating-point mean excitation energy [eV].
+ *
+ * @param[out] mean_excitation_energy_out  Receives the parsed value [eV].
+ * @param[in]  oshf                        Open input file (for error location).
+ * @param[in]  args                        Argument string to parse.
+ * @param[in]  key_name                    Card name used in error messages.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
+ */
 static enum osh_status parse_mean_excitation_energy_value(double *mean_excitation_energy_out,
                                                           struct oshfile *oshf,
                                                           char const *args,
                                                           char const *key_name) {
-    double mean_excitation_energy;
+    double mean_excitation_energy; /* [eV] */
     char extra;
 
     if (!args || sscanf(args, "%lf %c", &mean_excitation_energy, &extra) != 1) {
@@ -533,6 +673,14 @@ static enum osh_status parse_element_card_args(unsigned int *z_out,
     return OSH_OK;
 }
 
+/**
+ * @brief Parse a single double from a token string, rejecting trailing garbage.
+ *
+ * @param[out] value_out  Receives the parsed value.
+ * @param[in]  token      NUL-terminated token to parse.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE if the token is not a bare number.
+ */
 static enum osh_status parse_double_token(double *value_out, char const *token) {
     double value;
     char extra;
@@ -544,6 +692,14 @@ static enum osh_status parse_double_token(double *value_out, char const *token) 
     return OSH_OK;
 }
 
+/**
+ * @brief Parse a single unsigned int from a token string, rejecting trailing garbage.
+ *
+ * @param[out] value_out  Receives the parsed value.
+ * @param[in]  token      NUL-terminated token to parse.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE if the token is not a bare integer.
+ */
 static enum osh_status parse_uint_token(unsigned int *value_out, char const *token) {
     unsigned int value;
     char extra;
@@ -555,6 +711,18 @@ static enum osh_status parse_uint_token(unsigned int *value_out, char const *tok
     return OSH_OK;
 }
 
+/**
+ * @brief Append a new material slot to the workspace and set its name.
+ *
+ * @details All fields are set to unset sentinels via material_defaults(). The
+ * dense index is assigned as the current array length before growing it.
+ *
+ * @param[in,out] wm    Material workspace to grow.
+ * @param[in]     oshf  Open input file (for error location).
+ * @param[in]     args  MATERIAL card argument: one name token.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on missing/duplicate name, OSH_ENOMEM on failure.
+ */
 static enum osh_status material_push(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *materials;
     struct material *mat;
@@ -589,6 +757,22 @@ static enum osh_status material_push(struct material_workspace *wm, struct oshfi
     return copy_string(&mat->name, name);
 }
 
+/**
+ * @brief Append one element to a material's composition array.
+ *
+ * @details Exactly one of @p atom_count or @p mass_fraction must be positive;
+ * the other must be negative (sentinel for "unset"). Mixed input modes within
+ * a single material are rejected.
+ *
+ * @param[in,out] mat           Material to extend.
+ * @param[in]     oshf          Open input file (for error location).
+ * @param[in]     z             Atomic number (must be > 0).
+ * @param[in]     a             Mass number; 0 = natural element.
+ * @param[in]     atom_count    Relative atom count (dimensionless); < 0 if unset.
+ * @param[in]     mass_fraction Mass fraction (dimensionless, 0–1); < 0 if unset.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input, OSH_ENOMEM on failure.
+ */
 static enum osh_status material_push_element(struct material *mat,
                                              struct oshfile *oshf,
                                              unsigned int z,
@@ -639,6 +823,16 @@ static enum osh_status material_push_element(struct material *mat,
     return OSH_OK;
 }
 
+/**
+ * @brief Duplicate @p src into a new heap allocation and store it at @p dst.
+ *
+ * @details Any previous allocation at @p *dst is freed before overwriting.
+ *
+ * @param[in,out] dst  Receives the newly allocated copy.
+ * @param[in]     src  NUL-terminated source string.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status copy_string(char **dst, char const *src) {
     char *copy;
     size_t len;
@@ -656,6 +850,17 @@ static enum osh_status copy_string(char **dst, char const *src) {
     return OSH_OK;
 }
 
+/**
+ * @brief Interpret a lowercase state token as an osh_material_state value.
+ *
+ * @details Accepts numeric codes (1=condensed, 2=gas) and keywords
+ * "condensed", "solid", "liquid", and "gas".
+ *
+ * @param[out] state_out  Receives the matched enum osh_material_state value.
+ * @param[in]  token      Lowercase token to interpret.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE if the token is not recognized.
+ */
 static enum osh_status parse_state_value(int *state_out, char const *token) {
     int state;
     char extra;

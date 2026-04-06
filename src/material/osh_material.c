@@ -220,6 +220,18 @@ static void material_set_rgba(struct material *mat, float r, float g, float b, f
     mat->rgba[3] = a;
 }
 
+/**
+ * @brief Allocate and populate the two reserved material slots (blackhole, vacuum).
+ *
+ * @details
+ * Reserved slots occupy indices 0 and 1 so that user materials always start at
+ * OSH_MATERIAL_INDEX_FIRST_USER. Blackhole is opaque black (alpha=1); vacuum is
+ * fully transparent (alpha=0) with rho=0.
+ *
+ * @param[in,out] wm  Workspace to initialize.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status material_workspace_init_reserved(struct material_workspace *wm) {
     struct material *materials;
     enum osh_status rc;
@@ -252,6 +264,14 @@ static enum osh_status material_workspace_init_reserved(struct material_workspac
     return OSH_OK;
 }
 
+/**
+ * @brief Copy @p name into owned heap storage and assign it to @p mat.
+ *
+ * @param[in,out] mat   Material to update.
+ * @param[in]     name  NUL-terminated name string to copy.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status material_set_name(struct material *mat, char const *name) {
     char *copy;
     size_t len;
@@ -387,7 +407,7 @@ static enum osh_status material_workspace_validate_completed(struct material_wor
     size_t j;
     struct material const *mat;
     struct material_element const *elem;
-    double mass_fraction_sum;
+    double mass_fraction_sum; /* dimensionless, must sum to 1 */
 
     if (!wm) {
         return OSH_EINVAL;
@@ -557,13 +577,22 @@ static enum osh_status material_set_elements_from_icru(struct material *mat,
  * @brief Derive relative atom counts from mass fractions.
  *
  * @details
- * The derived atom counts are normalized to sum to one. They remain relative
- * counts; exact stoichiometric integer ratios are not required for transport.
+ * For each element i with mass fraction w_i and atomic mass M_i [Da], the
+ * normalized atom count is:
+ *
+ *   n_i = (w_i / M_i) / sum_j(w_j / M_j)
+ *
+ * The resulting n_i sum to 1. They are relative mole fractions; exact
+ * stoichiometric integer ratios are not required for transport.
+ *
+ * @param[in,out] mat  Material whose atom_count fields are to be filled.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL/OSH_ESTATE on invalid element data.
  */
 static enum osh_status material_derive_atom_counts_from_mass_fractions(struct material *mat) {
     enum osh_status rc;
-    double mass;
-    double sum_moles;
+    double mass;       /* atomic mass of current element [Da] */
+    double sum_moles;  /* sum of mass_fraction/mass across all elements [1/Da] */
     size_t i;
 
     sum_moles = 0.0;
@@ -604,8 +633,8 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct ma
  */
 static enum osh_status material_derive_mass_fractions_from_atom_counts(struct material *mat) {
     enum osh_status rc;
-    double mass;
-    double total_mass;
+    double mass;        /* atomic mass of current element [Da] */
+    double total_mass;  /* sum of atom_count * mass across all elements [Da] */
     size_t i;
 
     total_mass = 0.0;
@@ -662,6 +691,13 @@ static enum osh_status material_element_mass(unsigned int z, unsigned int a, dou
     return OSH_OK;
 }
 
+/**
+ * @brief Free all heap-owned fields of @p mat and reset it to defaults.
+ *
+ * @details Does not free @p mat itself; the caller owns the struct storage.
+ *
+ * @param[in,out] mat  Material whose fields are to be released.
+ */
 static void material_free_fields(struct material *mat) {
     if (!mat) {
         return;
