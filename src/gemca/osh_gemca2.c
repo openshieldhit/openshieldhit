@@ -113,17 +113,15 @@ void osh_gemca_print_gemca(struct gemca_workspace const *g) {
 
     size_t i;
 
-    osh_info("Gemca->nBodies %llu ->nZones%llu", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
+    osh_debug("Gemca->nBodies %llu ->nZones %llu", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
 
     for (i = 0; i < g->nbodies; i++) {
         osh_gemca_print_body(g->bodies[i]);
     }
 
-    osh_info("%s", "");
     for (i = 0; i < g->nzones; i++) {
         osh_gemca_print_zone(g->zones[i]);
     }
-    osh_info("%s", "");
 }
 
 /**
@@ -152,16 +150,13 @@ void osh_gemca_print_body(struct body const *b) {
     for (i = 0; i < b->na; i++) {
         osh_debug("%.2f ", b->a[i]);
     }
-    osh_debug("%s", "");
     osh_debug("    Body surfaces...");
     for (i = 0; i < b->nsurfs; i++) {
         osh_debug("    " OSH_LOG_INDENT "Surface %i type %i  params:", i, b->surfs[i]->type);
         for (j = 0; j < b->surfs[i]->np; j++) {
             osh_debug(" %.2f", b->surfs[i]->p[j]);
         }
-        osh_debug("%s", "");
     }
-    osh_debug("%s", "");
 }
 
 /**

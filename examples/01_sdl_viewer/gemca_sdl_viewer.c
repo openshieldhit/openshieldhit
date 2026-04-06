@@ -43,6 +43,7 @@ int main(int argc, char *argv[]) {
 
     struct gemca_workspace g = {0};
 
+    /* Setup logger, select OSH_LOG_DEBUG for more information. */
     osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
 
     /* Handle --version flag */
