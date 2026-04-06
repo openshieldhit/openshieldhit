@@ -29,10 +29,12 @@ struct material_element {
 struct material {
     struct material_element *elements;
     char *name;
+    char *dedx_table_path; /* External dE/dx table path, owned; NULL if unset. */
 
-    double rho;                    /* Density [g/cm^3], < 0 if unset. */
-    double mean_excitation_energy; /* Material-level mean excitation energy [eV], < 0 if unset. */
-    float rgba[4];                 /* Rendering color [0,1]: red, green, blue, alpha. */
+    double rho; /* Density [g/cm^3], < 0 if unset. */
+    /* Material-level mean excitation energy [eV], < 0 if unset; fallback for uncovered dE/dx. */
+    double mean_excitation_energy;
+    float rgba[4]; /* Rendering color [0,1]: red, green, blue, alpha. */
 
     size_t nelements;
     size_t lineno; /* Input line where this material was defined. */
@@ -57,6 +59,11 @@ struct material_workspace {
  * expand ICRU materials, calculate stopping-power tables, or derive optical
  * depths. Relative paths used by future material cards are resolved against the
  * parsed file's directory, which is retained in material_workspace::wdir.
+ *
+ * User materials are defined either by explicit element composition cards or by
+ * an ICRU material reference. Later material assembly should fill unset scalar
+ * properties from ICRU/default tables while preserving explicit user overrides
+ * such as RHO, STATE, MATERIALI/MIVALUE/MIAV, and LOADDEDX.
  *
  * @param[in]  path    Path to the material input file.
  * @param[in]  lg      Logger for diagnostics; NULL uses the global default logger.

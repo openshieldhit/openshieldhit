@@ -1,10 +1,12 @@
 #include "material/osh_material_parse.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
+#include "common/osh_file.h"
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
 #include "material/osh_material_parse_keys.h"
@@ -13,15 +15,22 @@ static enum osh_status parse_density(struct material_workspace *wm, struct oshfi
 static enum osh_status parse_color(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_element_by_mass(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_element_by_number(struct material_workspace *wm, struct oshfile *oshf, char const *args);
-static enum osh_status parse_end(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status
-parse_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args);
+parse_element_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args);
+static enum osh_status parse_end(struct material_workspace *wm, struct oshfile *oshf, char const *args);
+static enum osh_status parse_loaddedx(struct material_workspace *wm, struct oshfile *oshf, char const *args);
+static enum osh_status
+parse_material_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_icru(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_material_start(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_state(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 
 static struct material *material_current(struct material_workspace *wm);
 static void material_defaults(struct material *mat);
+static enum osh_status parse_mean_excitation_energy_value(double *mean_excitation_energy_out,
+                                                          struct oshfile *oshf,
+                                                          char const *args,
+                                                          char const *key_name);
 static enum osh_status material_push(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status material_push_element(struct material *mat,
                                              struct oshfile *oshf,
@@ -37,21 +46,36 @@ struct material_dispatch_entry {
     enum osh_status (*handler)(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 };
 
-static struct material_dispatch_entry dispatch_table[] = {{OSH_MATERIAL_KEY_COLOR, parse_color},
-                                                          {OSH_MATERIAL_KEY_COLOUR, parse_color},
-                                                          {OSH_MATERIAL_KEY_DENSITY, parse_density},
-                                                          {OSH_MATERIAL_KEY_ELEMENT, parse_element_by_number},
-                                                          {OSH_MATERIAL_KEY_ELEMENTBYMASS, parse_element_by_mass},
-                                                          {OSH_MATERIAL_KEY_ELEMENTBYNUMBER, parse_element_by_number},
-                                                          {OSH_MATERIAL_KEY_END, parse_end},
-                                                          {OSH_MATERIAL_KEY_IAV, parse_mean_excitation_energy},
-                                                          {OSH_MATERIAL_KEY_ICRU, parse_icru},
-                                                          {OSH_MATERIAL_KEY_IVALUE, parse_mean_excitation_energy},
-                                                          {OSH_MATERIAL_KEY_MATERIAL, parse_material_start},
-                                                          {OSH_MATERIAL_KEY_NUCLID, parse_element_by_number},
-                                                          {OSH_MATERIAL_KEY_RHO, parse_density},
-                                                          {OSH_MATERIAL_KEY_STATE, parse_state},
-                                                          {NULL, NULL}};
+/*
+ * Preferred mean-excitation keys are MATERIALI for material-level fallback
+ * data and ELEMENTI for the last parsed element. MIVALUE/MIAV and IVALUE/IAV
+ * are kept as short aliases for those two explicit scopes.
+ *
+ * ICRU and explicit element cards are alternative composition sources. Scalar
+ * cards such as RHO, STATE, MATERIALI, and LOADDEDX remain user overrides that
+ * later material assembly should preserve when it fills unset defaults.
+ */
+static struct material_dispatch_entry dispatch_table[] = {
+    {OSH_MATERIAL_KEY_COLOR, parse_color},
+    {OSH_MATERIAL_KEY_COLOUR, parse_color},
+    {OSH_MATERIAL_KEY_DENSITY, parse_density},
+    {OSH_MATERIAL_KEY_ELEMENT, parse_element_by_number},
+    {OSH_MATERIAL_KEY_ELEMENTBYMASS, parse_element_by_mass},
+    {OSH_MATERIAL_KEY_ELEMENTBYNUMBER, parse_element_by_number},
+    {OSH_MATERIAL_KEY_ELEMENTI, parse_element_mean_excitation_energy},
+    {OSH_MATERIAL_KEY_END, parse_end},
+    {OSH_MATERIAL_KEY_IAV, parse_element_mean_excitation_energy},
+    {OSH_MATERIAL_KEY_ICRU, parse_icru},
+    {OSH_MATERIAL_KEY_IVALUE, parse_element_mean_excitation_energy},
+    {OSH_MATERIAL_KEY_LOADDEDX, parse_loaddedx},
+    {OSH_MATERIAL_KEY_MATERIAL, parse_material_start},
+    {OSH_MATERIAL_KEY_MATERIALI, parse_material_mean_excitation_energy},
+    {OSH_MATERIAL_KEY_MIAV, parse_material_mean_excitation_energy},
+    {OSH_MATERIAL_KEY_MIVALUE, parse_material_mean_excitation_energy},
+    {OSH_MATERIAL_KEY_NUCLID, parse_element_by_number},
+    {OSH_MATERIAL_KEY_RHO, parse_density},
+    {OSH_MATERIAL_KEY_STATE, parse_state},
+    {NULL, NULL}};
 
 enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspace *wm) {
     enum osh_status rc;
@@ -230,30 +254,78 @@ static enum osh_status parse_end(struct material_workspace *wm, struct oshfile *
 }
 
 static enum osh_status
-parse_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
+parse_element_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     double mean_excitation_energy;
-    char extra;
+    enum osh_status rc;
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: IVALUE outside MATERIAL block", oshf->filename, oshf->lineno);
+        osh_error("in %s line %i: ELEMENTI/IVALUE/IAV outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
-    if (!args || sscanf(args, "%lf %c", &mean_excitation_energy, &extra) != 1) {
-        osh_error("in %s line %i: IVALUE expects one floating point value", oshf->filename, oshf->lineno);
-        return OSH_EPARSE;
-    }
-    if (mean_excitation_energy < 0.0) {
-        osh_error("in %s line %i: IVALUE must be >= 0", oshf->filename, oshf->lineno);
+    if (mat->nelements == 0u) {
+        osh_error("in %s line %i: ELEMENTI/IVALUE/IAV requires a preceding element card", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
-    if (mat->nelements > 0u) {
-        mat->elements[mat->nelements - 1u].mean_excitation_energy = mean_excitation_energy;
-    } else {
-        mat->mean_excitation_energy = mean_excitation_energy;
+    rc = parse_mean_excitation_energy_value(&mean_excitation_energy, oshf, args, "ELEMENTI/IVALUE/IAV");
+    if (rc != OSH_OK) {
+        return rc;
     }
+
+    mat->elements[mat->nelements - 1u].mean_excitation_energy = mean_excitation_energy;
+
+    return OSH_OK;
+}
+
+static enum osh_status parse_loaddedx(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
+    struct material *mat;
+    char path[512];
+    char extra;
+    char *resolved_path;
+
+    mat = material_current(wm);
+    if (!mat) {
+        osh_error("in %s line %i: LOADDEDX outside MATERIAL block", oshf->filename, oshf->lineno);
+        return OSH_EPARSE;
+    }
+    if (!args || sscanf(args, "%511s %c", path, &extra) != 1) {
+        osh_error("in %s line %i: LOADDEDX expects one path", oshf->filename, oshf->lineno);
+        return OSH_EPARSE;
+    }
+
+    /* Store the table path only. Table loading and projectile coverage are resolved during setup. */
+    resolved_path = NULL;
+    if (osh_relative_path_to_file(&resolved_path, wm->wdir, path) != 0) {
+        return OSH_ENOMEM;
+    }
+
+    free(mat->dedx_table_path);
+    mat->dedx_table_path = resolved_path;
+
+    return OSH_OK;
+}
+
+static enum osh_status
+parse_material_mean_excitation_energy(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
+    struct material *mat;
+    double mean_excitation_energy;
+    enum osh_status rc;
+
+    mat = material_current(wm);
+    if (!mat) {
+        osh_error("in %s line %i: MATERIALI outside MATERIAL block", oshf->filename, oshf->lineno);
+        return OSH_EPARSE;
+    }
+
+    rc = parse_mean_excitation_energy_value(&mean_excitation_energy, oshf, args, "MATERIALI/MIVALUE/MIAV");
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    /* This value remains the fallback for projectiles not covered by external dE/dx tables. */
+    mat->mean_excitation_energy = mean_excitation_energy;
 
     return OSH_OK;
 }
@@ -277,6 +349,7 @@ static enum osh_status parse_icru(struct material_workspace *wm, struct oshfile 
         return OSH_EPARSE;
     }
 
+    /* ICRU selects predefined material composition/density defaults; mean excitation is configured separately. */
     mat->icru_id = icru_id;
     return OSH_OK;
 }
@@ -323,6 +396,7 @@ static struct material *material_current(struct material_workspace *wm) {
 static void material_defaults(struct material *mat) {
     mat->elements = NULL;
     mat->name = NULL;
+    mat->dedx_table_path = NULL;
     mat->rho = -1.0;
     mat->mean_excitation_energy = -1.0;
     mat->rgba[0] = 0.8f;
@@ -334,6 +408,26 @@ static void material_defaults(struct material *mat) {
     mat->index = 0u;
     mat->icru_id = 0;
     mat->state = OSH_MATERIAL_STATE_UNSET;
+}
+
+static enum osh_status parse_mean_excitation_energy_value(double *mean_excitation_energy_out,
+                                                          struct oshfile *oshf,
+                                                          char const *args,
+                                                          char const *key_name) {
+    double mean_excitation_energy;
+    char extra;
+
+    if (!args || sscanf(args, "%lf %c", &mean_excitation_energy, &extra) != 1) {
+        osh_error("in %s line %i: %s expects one floating point value", oshf->filename, oshf->lineno, key_name);
+        return OSH_EPARSE;
+    }
+    if (mean_excitation_energy < 0.0) {
+        osh_error("in %s line %i: %s must be >= 0", oshf->filename, oshf->lineno, key_name);
+        return OSH_EPARSE;
+    }
+
+    *mean_excitation_energy_out = mean_excitation_energy;
+    return OSH_OK;
 }
 
 static enum osh_status material_push(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
