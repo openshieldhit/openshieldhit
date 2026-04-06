@@ -1,5 +1,6 @@
 #include "gemca/parse/osh_gemca2_parse_medium.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@ static enum osh_status
 _assign_material_name_to_zone(struct gemca_workspace *g, struct zone *z, char const *raw_name, int lineno);
 static int _get_zone_index_from_name(char const *zname, struct gemca_workspace const *g, size_t *index_out);
 static char const *_normalize_material_name(char const *raw_name, struct gemca_workspace const *g, int lineno);
+static char *_next_token(char **cursor);
 static int _rewind_oshfile(struct oshfile *shf);
 
 static char const GEMCA_MATERIAL_NAME_BLACKHOLE[] = "blackhole";
@@ -41,6 +43,7 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
     char *args = NULL;
     char *line = NULL;
     char *arg = NULL;
+    char *cursor = NULL;
     enum osh_status rc;
 
     /* The legacy implicit material assignment consists of two sets of data.
@@ -113,7 +116,8 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
 
         /* next run trough the remaining args on the line */
 
-        arg = strtok(args, " ");
+        cursor = args;
+        arg = _next_token(&cursor);
         while (arg != NULL) {
             izone++;
 
@@ -134,7 +138,7 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
                     return rc;
                 }
             }
-            arg = strtok(NULL, " "); /* next arguments */
+            arg = _next_token(&cursor); /* next arguments */
         }
 
         /* check if we have read all the expected zones */
@@ -163,6 +167,7 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
 static enum osh_status _assign_material(struct gemca_workspace *g, char *args, int lineno) {
 
     char *arg;
+    char *cursor;
     enum osh_status rc;
 
     size_t zone_start_index;
@@ -178,7 +183,8 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
     }
 
     /* first argument is the material name */
-    arg = strtok(args, " ");
+    cursor = args;
+    arg = _next_token(&cursor);
     if (arg != NULL) {
         material_name = arg;
     } else {
@@ -188,7 +194,7 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
 
     /* next two arguments are exact zone names, or a range delimited by two exact zone names.
      * There is intentionally no numeric fallback: "001" and "1" are different zone names. */
-    arg = strtok(NULL, " ");
+    arg = _next_token(&cursor);
     if (arg == NULL) {
         osh_error("No zone name found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
         return OSH_EPARSE;
@@ -198,7 +204,7 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
         return OSH_EPARSE;
     }
 
-    arg = strtok(NULL, " ");
+    arg = _next_token(&cursor);
     if (arg != NULL) {
         if (!_get_zone_index_from_name(arg, g, &zone_end_index)) {
             osh_error("Unknown zone name '%s' in ASSIGNMA(T) %s line number %i", arg, g->filename, lineno);
@@ -209,7 +215,7 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
     }
 
     /* last supported argument is stride of the range */
-    arg = strtok(NULL, " ");
+    arg = _next_token(&cursor);
     stride = 1; /* default stride */
     if (arg != NULL) {
         stride = atoi(arg);
@@ -242,6 +248,20 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
     return OSH_OK;
 }
 
+/**
+ * @brief Assign a material name to a zone.
+ *
+ * @details Normalizes only the explicitly supported legacy material names
+ * "0" and "1000". All other material names are stored exactly as strings and
+ * are resolved against mat.dat later by the pre-simulation assembly layer.
+ *
+ * @param[in] g         GEMCA workspace for diagnostics.
+ * @param[in,out] z     Zone to update.
+ * @param[in] raw_name  Material name token from geo.dat.
+ * @param[in] lineno    geo.dat line number for diagnostics.
+ *
+ * @returns OSH_OK on success, OSH_E* on failure.
+ */
 static enum osh_status
 _assign_material_name_to_zone(struct gemca_workspace *g, struct zone *z, char const *raw_name, int lineno) {
     char const *material_name;
@@ -266,6 +286,21 @@ _assign_material_name_to_zone(struct gemca_workspace *g, struct zone *z, char co
     return OSH_OK;
 }
 
+/**
+ * @brief Normalize supported legacy material-name tokens.
+ *
+ * @details "0" maps to "blackhole" and "1000" maps to "vacuum" for
+ * compatibility with old geo.dat files. Numeric-looking names otherwise remain
+ * ordinary strings.
+ *
+ * @param[in] raw_name  Material name token from geo.dat.
+ * @param[in] g         GEMCA workspace for diagnostics.
+ * @param[in] lineno    geo.dat line number for diagnostics.
+ *
+ * @returns Normalized material name pointer. The return value is either a
+ *          static string or @p raw_name; callers must copy it if they need
+ *          ownership.
+ */
 static char const *_normalize_material_name(char const *raw_name, struct gemca_workspace const *g, int lineno) {
     if (strcmp(raw_name, "0") == 0) {
         osh_warn("%s line %i: legacy material name '0' maps to '%s'; use '%s' explicitly",
@@ -287,6 +322,17 @@ static char const *_normalize_material_name(char const *raw_name, struct gemca_w
     return raw_name;
 }
 
+/**
+ * @brief Find a zone by exact user-facing name.
+ *
+ * @details Zone names are strings; "001" and "1" are intentionally different.
+ *
+ * @param[in]  zname      Zone name to find.
+ * @param[in]  g          GEMCA workspace to search.
+ * @param[out] index_out  Receives the dense internal zone index on success.
+ *
+ * @returns 1 if found, 0 if no matching zone exists.
+ */
 static int _get_zone_index_from_name(char const *zname, struct gemca_workspace const *g, size_t *index_out) {
     size_t iz;
 
@@ -297,6 +343,51 @@ static int _get_zone_index_from_name(char const *zname, struct gemca_workspace c
         }
     }
     return 0; /* not found */
+}
+
+/**
+ * @brief Return the next whitespace-delimited token from a mutable string.
+ *
+ * @details This helper intentionally replaces `strtok()`: MSVC warns about
+ * `strtok()` as unsafe, while `strtok_s()` is not portable across the C
+ * libraries we support. The parser only needs simple in-place whitespace
+ * tokenization, so a local helper is clearer than platform-specific wrappers.
+ *
+ * @param[in,out] cursor  On input, current parse position. On output, position
+ *                        after the returned token.
+ *
+ * @returns Pointer to the next token inside the input buffer, or NULL when no
+ *          token remains. The input buffer is modified by inserting NUL
+ *          terminators.
+ */
+static char *_next_token(char **cursor) {
+    char *start;
+    char *end;
+
+    if (!cursor || !*cursor) {
+        return NULL;
+    }
+
+    start = *cursor;
+    while (*start != '\0' && isspace((unsigned char) *start)) {
+        start++;
+    }
+    if (*start == '\0') {
+        *cursor = start;
+        return NULL;
+    }
+
+    end = start;
+    while (*end != '\0' && !isspace((unsigned char) *end)) {
+        end++;
+    }
+    if (*end != '\0') {
+        *end = '\0';
+        end++;
+    }
+
+    *cursor = end;
+    return start;
 }
 
 /**
