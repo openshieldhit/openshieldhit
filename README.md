@@ -33,7 +33,10 @@ The project emphasizes hardware-aware programming, with explicit attention to:
 - Branching patterns
 - CPU efficiency
 - Minimal hidden abstractions
-The intention is to expose the physics and the computational structure, rather than obscuring it behind heavy object hierarchies or opaque frameworks.
+The intention is to keep the physics and computational structure inspectable in
+the implementation, rather than burying it behind heavy object hierarchies.
+The public C API still uses an opaque context handle to preserve a stable
+boundary for applications.
 
 
 ## Requirements
@@ -51,6 +54,17 @@ or for debugging:
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
 ```
+
+## Command-line and public API
+
+OpenShieldHIT has a small public C API in `include/openshieldhit/openshieldhit.h`.
+The public API is context-based: callers create an opaque
+`openshieldhit_context_t`, configure it with `openshieldhit_config_t`, call
+`openshieldhit_run()`, and then destroy the context.
+
+The command-line parser in `src/cli/` is an internal front-end. It translates CLI
+options into the same public configuration structure, but CLI-specific types are
+not part of the public API.
 
 # Try out the examples
 ```bash

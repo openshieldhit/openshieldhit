@@ -19,20 +19,22 @@ The repo has moved past the original bootstrap phase. We now have:
 
 ## Beam loader — next steps
 
-The struct layout and constructor API for the beam subsystem are finalised.
-The parser exists but is not yet connected to the new API. Work to do in order:
+The beam parser is wired into validate mode. Remaining items are follow-ups,
+not blockers for the current material-runtime work:
 
-- [ ] Fix `osh_beam_setup_from_path()` body — currently still calls `osh_beam_shared_init(wb->shared)` on a NULL pointer (shared is a pointer, not embedded value); decide: embed `beam_shared` by value in `beam_workspace` or allocate it
-- [ ] Fix parser references to `beam->spot0` (field does not exist) → use `wb->spots[0]`
-- [ ] Fix parser references to fields that moved (e.g. `sad`, `focus`, `use_div`, `use_sad` now in `beam_shared`; `tcut`, `pcut` moved to `beam_workspace`)
-- [ ] Implement post-parse init step in `osh_beam_setup_from_path()`:
-  - Derive `wdir` from path (done) and store `fname`
-  - Convert p0/psigma from t0/tsigma using particle mass (relativistic)
-  - Compute `shared->emax` and `shared->pmax` over all spots
-  - Build `_tm[16]` rotation+translation matrix per spot from `shared->theta/phi` and `spot->p[]`
-- [ ] Declare `osh_relative_path_to_file()` in `osh_file.h` (currently used in parser but undeclared)
-- [ ] Wire `osh_beam_setup_from_path()` into `openshieldhit_run()` in `src/openshieldhit.c`
-- [ ] Apply CLI override: after beam load, overwrite `wb->nstat` if `cfg->has_nstat` is set
+- [x] Fix `osh_beam_setup_from_path()` shared initialisation for embedded `beam_shared`
+- [x] Fix parser references to `beam->spot0`; parser writes through `wb->spots[0]`
+- [x] Fix parser references to moved fields such as `sad`, `focus`, `use_div`, `use_sad`, `tcut`, and `pcut`
+- [x] Derive `wdir` from the beam file path
+- [ ] Store the parsed beam file path in `beam_workspace::fname`
+- [x] Convert p0/psigma from t0/tsigma using particle mass (relativistic)
+- [x] Compute `shared.emax` and `shared.pmax` over all spots
+- [x] Build `_tm[16]` rotation+translation matrix per spot from `shared.theta/phi` and `spot->p[]`
+- [x] Declare `osh_relative_path_to_file()` in `osh_file.h`
+- [x] Wire `osh_beam_setup_from_path()` into `openshieldhit_run()` in `src/openshieldhit.c`
+- [x] Apply CLI `--nstat` override after beam load when `cfg->has_nstat` is set
+- [ ] Add ridge-modulator / ripple-filter support; both should share the same implementation path
+- [ ] Add MCPL phase-space import
 
 ## Material Runtime Design
 
@@ -44,13 +46,14 @@ cache-friendly runtime material database.
 - [x] Reserve material index 0 for `blackhole` and index 1 for `vacuum`
 - [x] Parse explicit composition cards and ICRU references as alternative composition sources
 - [x] Store scalar user overrides: `RHO`, `STATE`, material/element mean excitation, `LOADDEDX`
-- [ ] Import or regenerate the ICRU material database from `_temp_shieldhit/material`
+- [x] Import or regenerate the ICRU material database from `_temp_shieldhit/material` / `_temp_libdedx`
 - [ ] Refresh material data with ICRU90 density, stopping-power, and mean-excitation updates from `_temp_libdedx`
-- [ ] Add a material assembly layer after all input files are parsed
-- [ ] Expand ICRU references into composition, density, state, and mean excitation defaults
-- [ ] Preserve explicit scalar user overrides when filling unset ICRU/default properties
-- [ ] Derive complementary composition fields: atom counts, mass fractions, number densities, electron densities
-- [ ] Resolve GEMCA `zone->material_name` to dense `zone->material_idx`
+- [x] Add a material assembly layer after material parsing
+- [x] Expand ICRU references into composition, density, state, and mean excitation defaults
+- [x] Preserve explicit scalar user overrides when filling unset ICRU/default properties
+- [x] Derive complementary composition fields: atom counts and mass fractions
+- [ ] Derive number densities and electron densities
+- [x] Resolve GEMCA `zone->material_name` to dense `zone->material_idx` in validate-mode setup
 
 Runtime representation should separate atomic transport data from nuclear target
 sampling data. Atomic transport can then work before the fragmentation generator
@@ -60,6 +63,7 @@ exists.
   - stopping power / dE/dx
   - range
   - optical depth
+- [x] Add initial runtime table layout sketch in `src/material/osh_material_runtime.h`
 - [ ] Keep transport tables in dense, cache-friendly arrays indexed by material, projectile, and energy grid
 - [ ] Build a separate nuclear target-sampling table per material from elemental/isotopic composition
 - [ ] Use the nuclear table only when a nuclear interaction is sampled, then pass the sampled target to the future fragmentation generator
@@ -70,6 +74,7 @@ CT/voxel geometry needs an extra calibration layer. `RHO` in `MATERIAL` should
 be treated as the default/reference density, while voxel geometry may provide a
 local density per step from the CT image.
 
+- [ ] Add GEMCA voxel geometry support
 - [ ] Keep `HU -> material_idx` segmentation in the voxel/CT geometry layer, not in `struct material`
 - [ ] Keep `HU -> rho` density calibration in the voxel/CT geometry layer, not in `struct material`
 - [ ] Represent `HU -> rho` and `HU -> WEPL` calibrations as piecewise-linear tables with precomputed coefficients
@@ -79,8 +84,8 @@ local density per step from the CT image.
 
 ## Current High-Priority TODO
 
-- [ ] Wire beam loading into `openshieldhit_run()`
-- [ ] Wire material loading into `openshieldhit_run()`
+- [x] Wire beam loading into `openshieldhit_run()`
+- [x] Wire material loading into `openshieldhit_run()`
 - [ ] Wire detect/scoring loading into `openshieldhit_run()`
 - [ ] Implement `OPENSHIELDHIT_RUN_NORMAL`
   - Current state: returns `OPENSHIELDHIT_STATUS_NOT_SUPPORTED`.
@@ -103,10 +108,10 @@ local density per step from the CT image.
 
 - [ ] Make gemca parser library-safe (non-terminating)
   - Current state: `osh_gemca_parse()` calls `osh_error()` / `exit()` on failures, bypassing the `OPENSHIELDHIT_STATUS_PARSE_ERROR` return path. The `03_malformed_geometry` test exits with code 78 by accident (via `exit(EX_CONFIG)` inside the parser). See comment in `src/gemca/osh_gemca2.c`.
-- [ ] Make beam parser library-safe (non-terminating)
-  - Same pattern as gemca: all `osh_err()` call sites in `src/beam/osh_beam_parse.c` call `exit()`.
+- [x] Make beam parser library-safe (non-terminating)
+  - `src/beam/osh_beam_parse.c` now reports parse/allocation failures via return codes instead of process exit.
 - [ ] Improve validation diagnostics — include file and line info from parsers
-- [ ] Wire `osh_beam_print` / `osh_beam_print_spot` to logger instead of stdout
+- [x] Wire `osh_beam_print` / `osh_beam_print_spot` to logger instead of stdout
 - [ ] Revisit public API once beam/material/detect loading are wired
 
 ## Notes
