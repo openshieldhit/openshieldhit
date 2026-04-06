@@ -1,8 +1,6 @@
-#include "material/osh_material_icru_db.h"
+#include "material/osh_material_icru.h"
 
 #include <string.h>
-
-#include "material/osh_material.h"
 
 /* ICRU ids start at 1. Elements occupy [1..98], compounds [99..278], and
  * graphite has the special external id 906. Internally graphite is mapped to
@@ -22,7 +20,8 @@ static int const _icru_db_compound_element_counts[] = {
     3, 2, 3, 2, 13, 2, 2, 13, 4, 4,  4, 2, 2, 3, 4,  2, 2, 2, 2, 4,  4, 3, 2, 2, 2,  1,
 };
 
-/* Index offsets for compounds (1-based) */
+/* Start indices into _icru_db_compound_elements/_fractions for each compound.
+ * Stored as 1-based; subtract 1 to get the zero-based array index. */
 static int const _icru_db_compound_index_offsets1[] = {
     1,   7,   10,  12,  15,  28,  32,  36,  38,  41,  43,  46,  48,  54,  57,  59,  62,  64,  66,  69,  83,  91,  100,
     102, 104, 117, 119, 122, 127, 129, 132, 135, 137, 139, 142, 145, 147, 149, 152, 155, 159, 164, 166, 168, 171, 174,
@@ -59,6 +58,9 @@ static int const _icru_db_compound_elements[] = {
     74, 6,  92, 6,  92, 8,  92, 1,  6,  7,  8,  1,  6,  7,  8,  1,  6,  9,  1,  8,  1,  8,  1,  6,  6,
 };
 
+/* All three tables below are stored as float to keep binary size small.
+ * The lookup functions widen to double on return; the source data does not
+ * carry more than ~6 significant digits anyway. */
 static float const _icru_db_compound_fractions[] = {
     1.01327e-01f, 7.75501e-01f, 3.50570e-02f, 5.23160e-02f, 1.74220e-02f, 1.83780e-02f, 1.04122e-01f, 6.20405e-01f,
     2.75473e-01f, 7.74180e-02f, 9.22582e-01f, 3.72940e-02f, 4.44430e-01f, 5.18275e-01f, 1.19477e-01f, 6.37240e-01f,

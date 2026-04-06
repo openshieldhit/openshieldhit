@@ -9,6 +9,14 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Physical state of a material.
+ *
+ * The ICRU database is the authoritative source for gas/condensed classification,
+ * so the enum lives here rather than in osh_material.h.
+ */
+enum osh_material_state { OSH_MATERIAL_STATE_UNSET = 0, OSH_MATERIAL_STATE_CONDENSED = 1, OSH_MATERIAL_STATE_GAS = 2 };
+
 #define OSH_MATERIAL_ICRU_MAX_ELEMENTS 16u
 
 struct osh_material_icru_element {
