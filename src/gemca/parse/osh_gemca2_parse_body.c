@@ -88,7 +88,7 @@ enum osh_status osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspa
     char *args = NULL;
     char *line = NULL;
     int lineno;
-    int lineno_b; /* valid only when current_body != NULL */
+    int lineno_b = 0; /* valid only when current_body != NULL */
 
     int nt;
     int btype = OSH_GEMCA_BODY_NONE;
@@ -126,10 +126,6 @@ enum osh_status osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspa
                 free(line);
                 return OSH_ENOMEM;
             }
-            /* lineno_b is always assigned before current_body becomes non-NULL; MSVC cannot see this invariant */
-#ifdef _MSC_VER
-#pragma warning(suppress : 4701)
-#endif
             current_body->lineno = lineno_b;
             break;
         }
