@@ -21,6 +21,7 @@
 #define OSH_GEMCA_STEPLIM                                                                                              \
     1e-8 /* minimal step to avoid getting stuck on                                                                     \
                surface due to numerical precision */
+#define OSH_GEMCA_ZONE_INDEX_INVALID ((size_t) -1)
 
 struct gemca_workspace {  /* workspace for gemca */
     struct body **bodies; /* list of pointers to all bodies */
@@ -94,10 +95,10 @@ enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg);
 enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg);
 enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g);
 
-/* for a given ray and *g workspace, return the dense internal zone index */
+/* Return the dense internal zone index for a ray, or OSH_GEMCA_ZONE_INDEX_INVALID if no zone contains it. */
 size_t osh_gemca_zone(struct gemca_workspace g, struct ray r);
-size_t osh_gemca_zone_index(struct gemca_workspace g, struct ray r); /* return index of zone, can be used
-                                                                       directly on g->zones[index]*/
+/* Return a dense zone index. Callers must check OSH_GEMCA_ZONE_INDEX_INVALID before indexing g.zones[index]. */
+size_t osh_gemca_zone_index(struct gemca_workspace g, struct ray r);
 
 /* for a given ray and *g workspace, return distance to nearest surface along
  * ray */

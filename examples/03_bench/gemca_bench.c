@@ -180,6 +180,9 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < nrays; i++) {
         _random_ray(&r, &rng, bbox_min, bbox_max);
         zone_idx = osh_gemca_zone_index(g, r);
+        if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
+            continue;
+        }
         dsink = osh_gemca_dist(g.zones[zone_idx], &r);
     }
     t1 = _now();

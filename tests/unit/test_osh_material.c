@@ -165,6 +165,55 @@ static void test_material_rejects_key_outside_material(void) {
     ASSERT_TRUE(remove(path) == 0);
 }
 
+static void test_material_rejects_end_outside_material(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), "END\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(wm == NULL);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
+static void test_material_rejects_end_arguments(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL Water\n"
+                    "ICRU 276\n"
+                    "END trailing\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(wm == NULL);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
+static void test_material_rejects_missing_end(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL Water\n"
+                    "ICRU 276\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(wm == NULL);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
 static void test_material_rejects_element_i_before_element(void) {
     char path[512];
     struct material_workspace *wm = NULL;
@@ -235,6 +284,9 @@ int main(void) {
     test_material_state_keyword_is_case_insensitive();
     test_material_level_mean_excitation_and_dedx_table();
     test_material_rejects_key_outside_material();
+    test_material_rejects_end_outside_material();
+    test_material_rejects_end_arguments();
+    test_material_rejects_missing_end();
     test_material_rejects_element_i_before_element();
     test_material_rejects_mixed_icru_and_elements();
     test_material_numeric_name_is_still_a_name();
