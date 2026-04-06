@@ -62,12 +62,12 @@ enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g) 
         return rc;
     }
 
-    printf("--- SETUP BODIES \n");
+    osh_debug("setting up bodies\n");
     rc = osh_gemca_body_setup(g);
     if (rc != OSH_OK) {
         return rc;
     }
-    printf("--- SETUP BODIES COMPLETED ---- \n\n");
+    osh_debug("body setup complete\n");
 
     return OSH_OK;
 }
@@ -113,17 +113,17 @@ void osh_gemca_print_gemca(struct gemca_workspace const *g) {
 
     size_t i;
 
-    printf("Gemca->nBodies %lli ->nZones%lli\n", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
+    osh_info("Gemca->nBodies %lli ->nZones%lli\n", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
 
     for (i = 0; i < g->nbodies; i++) {
         osh_gemca_print_body(g->bodies[i]);
     }
 
-    printf("\n");
+    osh_info("\n");
     for (i = 0; i < g->nzones; i++) {
         osh_gemca_print_zone(g->zones[i]);
     }
-    printf("\n");
+    osh_info("\n");
 }
 
 /**
@@ -143,27 +143,25 @@ void osh_gemca_print_body(struct body const *b) {
     int i;
     int j;
 
-    printf("----- PRINT BODY ----------------------------\n");
-    printf("    Body name   : '%s'\n", b->name);
-    printf("    Body type   : %i\n", b->type);
-    printf("    Body nargs  : %i\n", b->na);
-    printf("    Body nsurfs : %i\n", b->nsurfs);
-    printf("    Body args   : ");
+    osh_debug(OSH_LOG_HLINE);
+    osh_debug("    Body name   : '%s'\n", b->name);
+    osh_debug("    Body type   : %i\n", b->type);
+    osh_debug("    Body nargs  : %i\n", b->na);
+    osh_debug("    Body nsurfs : %i\n", b->nsurfs);
+    osh_debug("    Body args   : ");
     for (i = 0; i < b->na; i++) {
-        printf("%.2f ", b->a[i]);
+        osh_debug("%.2f ", b->a[i]);
     }
-    printf("\n");
-    printf("    Body surfaces... \n");
+    osh_debug("\n");
+    osh_debug("    Body surfaces...\n");
     for (i = 0; i < b->nsurfs; i++) {
-        printf("         Surface %i is of type %i ", i, b->surfs[i]->type);
-        printf("   parameters: ");
+        osh_debug("    " OSH_LOG_INDENT "Surface %i type %i  params:", i, b->surfs[i]->type);
         for (j = 0; j < b->surfs[i]->np; j++) {
-            printf("%.2f ", b->surfs[i]->p[j]);
+            osh_debug(" %.2f", b->surfs[i]->p[j]);
         }
-        printf("\n");
+        osh_debug("\n");
     }
-
-    printf("\n");
+    osh_debug("\n");
 }
 
 /**
@@ -179,25 +177,25 @@ void osh_gemca_print_body(struct body const *b) {
  * @author Niels Bassler
  */
 void osh_gemca_print_zone(struct zone const *z) {
-    printf("----- PRINT ZONE ----------------------------\n");
-    printf("    Zone name   : '%s'\n", z->name);
-    printf("    Zone id     :  %llu\n", (unsigned long long) z->id);
-    printf("    Zone medium :  %llu\n", (unsigned long long) z->medium);
-    printf("    Zone tree follows...\n");
+    osh_debug(OSH_LOG_HLINE);
+    osh_debug("    Zone name   : '%s'\n", z->name);
+    osh_debug("    Zone id     :  %llu\n", (unsigned long long) z->id);
+    osh_debug("    Zone medium :  %llu\n", (unsigned long long) z->medium);
+    osh_debug("    Zone tree follows...\n");
     osh_gemca_print_cgnodes(&z->node);
 }
 
 void osh_gemca_print_surface(struct surface const *s) {
     int i;
 
-    printf("----- PRINT SURFACE -------------------------\n");
-    printf("    Surface type : %i\n", s->type);
-    printf("    Surface np   : %i\n", s->np);
-    printf("    Surface params: ");
+    osh_debug(OSH_LOG_HLINE);
+    osh_debug("    Surface type : %i\n", s->type);
+    osh_debug("    Surface np   : %i\n", s->np);
+    osh_debug("    Surface params:");
     for (i = 0; i < s->np; i++) {
-        printf("%.2f ", s->p[i]);
+        osh_debug(" %.2f", s->p[i]);
     }
-    printf("\n\n");
+    osh_debug("\n");
 }
 
 /**
@@ -213,16 +211,15 @@ void osh_gemca_print_surface(struct surface const *s) {
  * @author Niels Bassler
  */
 void osh_gemca_print_cgnodes(struct cgnode const *self) {
-    printf("        This node pointer   : %p\n", (void *) self);
+    osh_debug("        This node pointer   : %p\n", (void *) self);
 
     if (self->type == _OSH_GEMCA_CGNODE_BODY) {
-        printf("        Node type           : BODY '%s'\n", self->body->name);
-        // printf("   '%s'\n", self->body->name);
+        osh_debug("        Node type           : BODY '%s'\n", self->body->name);
     } else {
-        printf("        Node type           : CGNODE\n");
-        printf("        ->Left * -  Right    : %p '%c' %p\n", (void *) self->left, self->op, (void *) self->right);
+        osh_debug("        Node type           : CGNODE\n");
+        osh_debug("        ->Left * -  Right    : %p '%c' %p\n", (void *) self->left, self->op, (void *) self->right);
     }
-    printf("\n");
+    osh_debug("\n");
 
     if (self->left != NULL) {
         osh_gemca_print_cgnodes(self->left);
