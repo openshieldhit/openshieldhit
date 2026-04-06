@@ -44,7 +44,7 @@ enum osh_status osh_gemca_zone_init(struct zone **zone) {
     z = calloc(1, sizeof(struct zone));
 
     if (z == NULL) {
-        osh_error("osh_gemca_zone_init: could not allocate memory\n");
+        osh_error("osh_gemca_zone_init: could not allocate memory");
         return OSH_ENOMEM;
     }
 
@@ -100,7 +100,7 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
         free(line);
     }
     free(line);
-    osh_info("Found %i zones in geo.dat file\n", nzone);
+    osh_info("Found %i zones in geo.dat file", nzone);
     return nzone;
 }
 
@@ -190,17 +190,17 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
             if (zone_active && strlen(bstr) > 0) {
 
                 osh_debug(OSH_LOG_HLINE);
-                osh_debug("ZONE: #%3lli - '%s'\n", (long long int) g->zones[izone]->id, g->zones[izone]->name);
-                osh_debug("USERGIVEN STRING: '%s'\n", bstr);
+                osh_debug("ZONE: #%3lli - '%s'", (long long int) g->zones[izone]->id, g->zones[izone]->name);
+                osh_debug("USERGIVEN STRING: '%s'", bstr);
                 _reformat(bstr, &tstr);
-                osh_debug("PRE-TOKEN STRING: '%s'\n", tstr);
+                osh_debug("PRE-TOKEN STRING: '%s'", tstr);
                 ntokens = _tokenizer(tstr, &tokens);
                 _reverse_tokens(tokens, ntokens);
 
-                osh_debug("number of tokens: %i\n", ntokens);
+                osh_debug("number of tokens: %i", ntokens);
 
                 for (i = 0; i < ntokens; i++) {
-                    osh_debug("token #%i '%s'\n", i, tokens[i]);
+                    osh_debug("token #%i '%s'", i, tokens[i]);
                 }
                 /* attach the tokens of this zone to the geometry */
                 g->zones[izone]->tokens = tokens;
@@ -227,7 +227,7 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
             }
             /* we may have crossed the END card, which will exceed the number of zones */
             if (izone >= g->nzones) {
-                osh_error("Error parsing geometry line %li - too many zones (max=%li)\n",
+                osh_error("Error parsing geometry line %li - too many zones (max=%li)",
                           (long int) lineno,
                           (long int) g->nzones);
                 free(line);
@@ -274,7 +274,7 @@ static int _key_is_zone_continuation(char const *key) {
  */
 static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error("Failed to rewind geometry file '%s'\n", shf->filename);
+        osh_error("Failed to rewind geometry file '%s'", shf->filename);
         return 0;
     }
     shf->lineno = 0;

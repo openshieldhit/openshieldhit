@@ -83,7 +83,7 @@ void osh_vect_norm(double *u) {
     if (d > 0.0) {
         d = 1.0 / sqrt(d);
     } else {
-        osh_error("osh_vect_norm() division by zero.\n");
+        osh_error("osh_vect_norm() division by zero.");
     }
 
     for (i = 0; i < OSH_VECT_DIM; i++) {
@@ -103,7 +103,7 @@ void osh_vect_norm2(double const *u, double *v) {
     if (d > 0.0) {
         d = 1.0 / sqrt(d);
     } else {
-        osh_error("osh_vect_norm2() division by zero.\n");
+        osh_error("osh_vect_norm2() division by zero.");
     }
 
     for (i = 0; i < OSH_VECT_DIM; i++) {

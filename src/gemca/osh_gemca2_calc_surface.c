@@ -168,11 +168,11 @@ int osh_gemca2_check_surface_side(struct surface const *sf, struct ray const *r)
         break;
 
     case OSH_GEMCA_SURF_NONE:
-        osh_error("_check_surface_side(): NONE surface type %i\n", sf->type);
+        osh_error("_check_surface_side(): NONE surface type %i", sf->type);
         break;
 
     default:
-        osh_error("_check_surface_side(): unknown surface type %i\n", sf->type);
+        osh_error("_check_surface_side(): unknown surface type %i", sf->type);
         break;
     }
     return 1; /* is inside */

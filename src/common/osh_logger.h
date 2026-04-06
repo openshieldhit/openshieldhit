@@ -6,6 +6,10 @@
  *  - builds on POSIX + Windows (MinGW)
  *  - minimal surface area
  *  - no user-defined typedefs
+ *  - record-oriented messages: each emitted log record gets one newline
+ *
+ * Callers should not include trailing newlines in logger format strings unless
+ * the message is intentionally multi-line.
  */
 
 #ifndef OSH_LOGGER_H

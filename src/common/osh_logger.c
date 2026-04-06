@@ -548,6 +548,8 @@ static void _write_record_unlocked(
         }
     }
 
+    /* Logger calls are records; every sink gets one trailing newline here. */
+
     /* Make copies BEFORE any consumption */
     va_list ap_primary;
     va_list ap_file;
