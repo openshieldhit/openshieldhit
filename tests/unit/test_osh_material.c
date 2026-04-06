@@ -88,7 +88,7 @@ static void test_material_fixture_composition(void) {
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
 
-static void test_material_state_keyword_is_case_insensitive(void) {
+static void test_material_keys_and_state_are_case_insensitive(void) {
     char path[512];
     struct material_workspace *wm = NULL;
     struct material const *mat;
@@ -96,12 +96,12 @@ static void test_material_state_keyword_is_case_insensitive(void) {
 
     write_temp_file(path,
                     sizeof(path),
-                    "MATERIAL Water\n"
-                    "STATE GaS\n"
-                    "COLOUR 0.1 0.2 0.3 0.4\n"
-                    "RHO 0.001\n"
-                    "NUCLID 1 1\n"
-                    "END\n");
+                    "MaTeRiAl Water\n"
+                    "StAtE GaS\n"
+                    "CoLoUr 0.1 0.2 0.3 0.4\n"
+                    "rHo 0.001\n"
+                    "nUcLiD 1 1\n"
+                    "eNd\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
@@ -281,7 +281,7 @@ static void test_material_numeric_name_is_still_a_name(void) {
 int main(void) {
     test_material_fixture_icru_and_rho();
     test_material_fixture_composition();
-    test_material_state_keyword_is_case_insensitive();
+    test_material_keys_and_state_are_case_insensitive();
     test_material_level_mean_excitation_and_dedx_table();
     test_material_rejects_key_outside_material();
     test_material_rejects_end_outside_material();

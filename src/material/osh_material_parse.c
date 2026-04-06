@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 #include "common/osh_file.h"
 #include "common/osh_logger.h"
@@ -379,6 +378,7 @@ static enum osh_status parse_state(struct material_workspace *wm, struct oshfile
     char state_token[32];
     char extra;
     int state;
+    int i;
 
     mat = material_current(wm);
     if (!mat) {
@@ -388,6 +388,12 @@ static enum osh_status parse_state(struct material_workspace *wm, struct oshfile
     if (!args || sscanf(args, "%31s %c", state_token, &extra) != 1) {
         osh_error("in %s line %i: STATE expects an integer or keyword", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
+    }
+
+    i = 0;
+    while (state_token[i] != '\0') {
+        state_token[i] = (char) tolower((unsigned char) state_token[i]);
+        i++;
     }
 
     rc = parse_state_value(&state, state_token);
@@ -558,11 +564,11 @@ static enum osh_status parse_state_value(int *state_out, char const *token) {
         return OSH_EPARSE;
     }
 
-    if (strcasecmp(token, "condensed") == 0 || strcasecmp(token, "solid") == 0 || strcasecmp(token, "liquid") == 0) {
+    if (strcmp(token, "condensed") == 0 || strcmp(token, "solid") == 0 || strcmp(token, "liquid") == 0) {
         *state_out = OSH_MATERIAL_STATE_CONDENSED;
         return OSH_OK;
     }
-    if (strcasecmp(token, "gas") == 0) {
+    if (strcmp(token, "gas") == 0) {
         *state_out = OSH_MATERIAL_STATE_GAS;
         return OSH_OK;
     }
