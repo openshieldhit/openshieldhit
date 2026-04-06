@@ -94,6 +94,7 @@ int random_ray(struct ray *r);
 int zero_ray(struct ray *r);
 int plot(struct gemca_workspace *g, int nrays, int zone);
 void setRendererColor(SDL_Renderer *renderer, int zid);
+static size_t material_debug_index(char const *material_name);
 void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
 int ray_cast_statistics(struct gemca_workspace *g, int nstat);
 static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray ray0, double max_range_cm);
@@ -443,7 +444,7 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
             double const range_cm = RANGE_B10_HE * 100.0;
 
             size_t zi0 = osh_gemca_zone_index(*g, r);
-            size_t medium0 = g->zones[zi0]->medium;
+            size_t medium0 = material_debug_index(g->zones[zi0]->material_name);
 
             if (medium0 != (size_t) zone) {
                 continue; /* skip if we are not in a medium of interest */
@@ -498,6 +499,25 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
 void setRendererColor(SDL_Renderer *renderer, int zid) {
     SDL_Color color = colormap[zid % 6]; // Use zid to index into the colormap, modulo to cycle through
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+}
+
+static size_t material_debug_index(char const *material_name) {
+    unsigned long value;
+    char *endptr;
+
+    if (!material_name) {
+        return 0u;
+    }
+    if (strcmp(material_name, "blackhole") == 0 || strcmp(material_name, "vacuum") == 0) {
+        return 0u;
+    }
+
+    value = strtoul(material_name, &endptr, 10);
+    if (endptr != material_name && *endptr == '\0') {
+        return (size_t) value;
+    }
+
+    return 0u;
 }
 
 void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius) {
@@ -568,7 +588,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
             while (1) {
                 random_ray_3d(r);
                 zi = osh_gemca_zone_index(*g, *r);
-                medium = g->zones[zi]->medium; /* check medium */
+                medium = material_debug_index(g->zones[zi]->material_name);
                 if (medium == 1 || medium == 2 || medium == 3) {
                     // if (medium == 3 )
                     break;
@@ -593,7 +613,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
                 // printf("in while loop\n");
                 zi = osh_gemca_zone_index(*g, *r);
                 // printf("get medium\n");
-                medium = g->zones[zi]->medium;
+                medium = material_debug_index(g->zones[zi]->material_name);
 
                 // printf("Zone: %li, zone_name, %s, medium: %li\n", zi, g->zones[zi]->name, medium);
 
@@ -660,7 +680,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
 
     while (remaining > 0.0) {
         size_t zi = osh_gemca_zone_index(*g, r);
-        size_t medium = g->zones[zi]->medium;
+        size_t medium = material_debug_index(g->zones[zi]->material_name);
 
         double d_to_bnd = osh_gemca_dist(g->zones[zi], &r);
 
@@ -715,7 +735,7 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots) {
         random_pos(&r);
 
         size_t zidx = osh_gemca_zone_index(*g, r);
-        size_t medium = g->zones[zidx]->medium;
+        size_t medium = material_debug_index(g->zones[zidx]->material_name);
 
         int px;
         int pz;

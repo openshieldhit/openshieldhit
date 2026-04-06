@@ -167,7 +167,9 @@ enum osh_status osh_gemca_parse_bodies(struct oshfile *shf, struct gemca_workspa
                 return OSH_EPARSE;
             }
 
-            // TODO: sscanf("%s", ...) is unsafe because %s is unbounded and may overflow nstr.
+            /* Body names are user-facing strings. Numeric-looking names from legacy inputs, e.g. "1", stay strings and
+             * are not interpreted as integer IDs. The body array index is internal and used only indirectly through the
+             * workspace. TODO: sscanf("%s", ...) is unsafe because %s is unbounded and may overflow nstr. */
             nt = sscanf(args, "%s %lf %lf %lf %lf %lf %lf", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
 
             /* check if body name is already used, and raise an error if that is the case */
@@ -357,7 +359,7 @@ static enum osh_status _save_body(struct body *b, char *nstr, double *par, int n
         return OSH_ENOMEM;
     }
 
-    memset(b->t, 0x00, 16 * sizeof(double)); // should not be necessary
+    memset(b->t, 0x00, 16 * sizeof(double)); /* should not be necessary */
 
     /* copy the arguments into the body array */
     for (i = 0; i < npar; i++) {

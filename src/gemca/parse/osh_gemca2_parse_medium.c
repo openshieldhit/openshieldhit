@@ -1,6 +1,5 @@
 #include "gemca/parse/osh_gemca2_parse_medium.h"
 
-#include <ctype.h> /* isalpha() */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,14 +11,23 @@
 #include "gemca/parse/osh_gemca2_parse_keys.h"
 
 static enum osh_status _assign_material(struct gemca_workspace *g, char *args, int lineno);
-static size_t _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g);
+static enum osh_status
+_assign_material_name_to_zone(struct gemca_workspace *g, struct zone *z, char const *raw_name, int lineno);
+static int _get_zone_index_from_name(char const *zname, struct gemca_workspace const *g, size_t *index_out);
+static char const *_normalize_material_name(char const *raw_name, struct gemca_workspace const *g, int lineno);
 static int _rewind_oshfile(struct oshfile *shf);
+
+static char const GEMCA_MATERIAL_NAME_BLACKHOLE[] = "blackhole";
+static char const GEMCA_MATERIAL_NAME_VACUUM[] = "vacuum";
 
 /**
  * @brief Parse zone information
  *
  * @details This function parses the material part of the geo.dat file.
  * (1st part is body description, 2nd is zone description, 3rd is material description)
+ * Material names and zone names are stored as strings here. The parser does not look up material definitions and does
+ * not populate zone::material_idx; that cross-reference is resolved later by the pre-simulation assembly layer after
+ * both geometry and material workspaces exist.
  *
  * @param[in] fp - file pointer to file open for reading.
  * @param[in,out] g - gemca workspace pointer
@@ -33,13 +41,17 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
     char *args = NULL;
     char *line = NULL;
     char *arg = NULL;
+    enum osh_status rc;
 
-    /* The material assignment consists of two sets of data.
+    /* The legacy implicit material assignment consists of two sets of data.
      *   - First set is a list of body numbers. This will only be counted, but not parsed.
-     *   - Second set contains the media data
+     *   - Second set contains the material names
      * These two sets are matched one by one.
+     * This legacy format is discouraged because it relies on positional zone ordering. Prefer ASSIGNMAT with explicit
+     * material and zone names.
      */
     int in_media = 0; /* flag whether we are in the media set */
+    int warned_legacy_media_list = 0;
     size_t izone = 0;
 
     int lineno;
@@ -59,6 +71,7 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
         free(line);
     }
     free(line);
+    in_media = 0;
 
     /* we know how many zones there are, so we will read exactly this number of zones into the medium list. */
     /* readline is maybe not so optimal, since there is no key */
@@ -66,18 +79,36 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
 
         /* optionally, materials can also be assigned to zones by the (paritally) FLUKA compatible ASSIGNMAT key */
         if ((strcasecmp(OSH_GEMCA_KEY_ASSIGNMAT, key) == 0) || (strcasecmp(OSH_GEMCA_KEY_ASSIGNMA, key) == 0)) {
-            if (_assign_material(g, args, lineno) != OSH_OK) {
+            rc = _assign_material(g, args, lineno);
+            if (rc != OSH_OK) {
                 free(line);
-                return OSH_EPARSE;
+                return rc;
             }
             free(line);
             continue; /* next line */
         }
 
         izone++; /* first zone in the line just read, will always be in the key, so count it. */
+        if (izone > g->nzones) {
+            osh_error("Too many zones found: %llu (expected %llu) in %s line %i",
+                      (long long unsigned int) izone,
+                      (long long unsigned int) g->nzones,
+                      g->filename,
+                      lineno);
+            free(line);
+            return OSH_EPARSE;
+        }
         /* if we are in the media block, assign the value */
         if (in_media) {
-            g->zones[izone - 1]->medium = atoi(key);
+            if (!warned_legacy_media_list) {
+                osh_warn("Implicit geo.dat material lists are legacy; use ASSIGNMAT <material-name> <zone> instead");
+                warned_legacy_media_list = 1;
+            }
+            rc = _assign_material_name_to_zone(g, g->zones[izone - 1], key, lineno);
+            if (rc != OSH_OK) {
+                free(line);
+                return rc;
+            }
         }
 
         /* next run trough the remaining args on the line */
@@ -97,7 +128,11 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
             }
             /* again, if we are in the media block, assign it */
             if (in_media) {
-                g->zones[izone - 1]->medium = atoi(arg);
+                rc = _assign_material_name_to_zone(g, g->zones[izone - 1], arg, lineno);
+                if (rc != OSH_OK) {
+                    free(line);
+                    return rc;
+                }
             }
             arg = strtok(NULL, " "); /* next arguments */
         }
@@ -128,56 +163,49 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
 static enum osh_status _assign_material(struct gemca_workspace *g, char *args, int lineno) {
 
     char *arg;
+    enum osh_status rc;
 
-    size_t zone_start;
-    size_t zone_end;
+    size_t zone_start_index;
+    size_t zone_end_index;
     size_t stride;
     size_t iz;
 
-    int medium = 0;
+    char const *material_name;
 
     if (args == NULL) {
         osh_error("No arguments found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
         return OSH_EPARSE;
     }
 
-    /* first argument is the material index (names will be supported later)*/
+    /* first argument is the material name */
     arg = strtok(args, " ");
     if (arg != NULL) {
-        medium = atoi(arg);
+        material_name = arg;
     } else {
-        osh_error("No medium index found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
+        osh_error("No material name found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
         return OSH_EPARSE;
     }
 
-    /* next two arguments are the zone indices, or a range of zone indices */
+    /* next two arguments are exact zone names, or a range delimited by two exact zone names.
+     * There is intentionally no numeric fallback: "001" and "1" are different zone names. */
     arg = strtok(NULL, " ");
     if (arg == NULL) {
-        osh_error("No zone index found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
+        osh_error("No zone name found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
         return OSH_EPARSE;
     }
-    /* check if zone name was given, if so, get the index for that zone name */
-    iz = _get_zoneid_from_name(arg, g);
-    if (iz > 0 && iz <= g->nzones) {
-        /* zone name found, set both start and end to this index +1 (since zones are 1-based) */
-        zone_start = iz;
-    } else {
-        /* not a zone name, assume its a zone index or range */
-        zone_start = atoi(arg);
+    if (!_get_zone_index_from_name(arg, g, &zone_start_index)) {
+        osh_error("Unknown zone name '%s' in ASSIGNMA(T) %s line number %i", arg, g->filename, lineno);
+        return OSH_EPARSE;
     }
 
     arg = strtok(NULL, " ");
     if (arg != NULL) {
-        /* check if zone name was given, if so, get the index for that zone name */
-        iz = _get_zoneid_from_name(arg, g);
-        if (iz > 0 && iz <= g->nzones) {
-            zone_end = iz;
-        } else {
-            zone_end = atoi(arg);
+        if (!_get_zone_index_from_name(arg, g, &zone_end_index)) {
+            osh_error("Unknown zone name '%s' in ASSIGNMA(T) %s line number %i", arg, g->filename, lineno);
+            return OSH_EPARSE;
         }
     } else {
-        /* only a single zone index given, set end to start */
-        zone_end = zone_start;
+        zone_end_index = zone_start_index;
     }
 
     /* last supported argument is stride of the range */
@@ -191,30 +219,81 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
         }
     }
 
-    /* assign the medium to the zones in the specified range */
-    for (iz = zone_start; iz <= zone_end; iz += stride) {
-        if (iz == 0 || iz > g->nzones) {
-            osh_error("Zone index %llu out of range in ASSIGNMA(T) %s line number %i",
-                      (long long unsigned int) iz,
-                      g->filename,
-                      lineno);
-            return OSH_EPARSE;
+    if (zone_end_index < zone_start_index) {
+        osh_error("Zone range '%s' to '%s' ends before it starts in ASSIGNMA(T) %s line number %i",
+                  g->zones[zone_start_index]->name,
+                  g->zones[zone_end_index]->name,
+                  g->filename,
+                  lineno);
+        return OSH_EPARSE;
+    }
+
+    /* assign the material to the zones in the specified range */
+    for (iz = zone_start_index; iz <= zone_end_index; iz += stride) {
+        rc = _assign_material_name_to_zone(g, g->zones[iz], material_name, lineno);
+        if (rc != OSH_OK) {
+            return rc;
         }
-        g->zones[iz - 1]->medium = medium;
-        osh_debug("    Assigned medium %i to zoneID %llu named '%s'",
-                  medium,
+        osh_debug("    Assigned material '%s' to zone index %llu named '%s'",
+                  g->zones[iz]->material_name,
                   (long long unsigned int) iz,
-                  g->zones[iz - 1]->name);
+                  g->zones[iz]->name);
     }
     return OSH_OK;
 }
 
-static size_t _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g) {
+static enum osh_status
+_assign_material_name_to_zone(struct gemca_workspace *g, struct zone *z, char const *raw_name, int lineno) {
+    char const *material_name;
+    char *copy;
+    size_t len;
+
+    if (!z || !raw_name) {
+        return OSH_EINVAL;
+    }
+
+    material_name = _normalize_material_name(raw_name, g, lineno);
+    len = strlen(material_name);
+    copy = (char *) malloc(len + 1u);
+    if (!copy) {
+        return OSH_ENOMEM;
+    }
+    memcpy(copy, material_name, len + 1u);
+
+    free(z->material_name);
+    z->material_name = copy;
+
+    return OSH_OK;
+}
+
+static char const *_normalize_material_name(char const *raw_name, struct gemca_workspace const *g, int lineno) {
+    if (strcmp(raw_name, "0") == 0) {
+        osh_warn("%s line %i: legacy material name '0' maps to '%s'; use '%s' explicitly",
+                 g->filename,
+                 lineno,
+                 GEMCA_MATERIAL_NAME_BLACKHOLE,
+                 GEMCA_MATERIAL_NAME_BLACKHOLE);
+        return GEMCA_MATERIAL_NAME_BLACKHOLE;
+    }
+    if (strcmp(raw_name, "1000") == 0) {
+        osh_warn("%s line %i: legacy material name '1000' maps to '%s'; use '%s' explicitly",
+                 g->filename,
+                 lineno,
+                 GEMCA_MATERIAL_NAME_VACUUM,
+                 GEMCA_MATERIAL_NAME_VACUUM);
+        return GEMCA_MATERIAL_NAME_VACUUM;
+    }
+
+    return raw_name;
+}
+
+static int _get_zone_index_from_name(char const *zname, struct gemca_workspace const *g, size_t *index_out) {
     size_t iz;
 
     for (iz = 0; iz < g->nzones; iz++) {
         if (strcmp(zname, g->zones[iz]->name) == 0) {
-            return g->zones[iz]->id;
+            *index_out = iz;
+            return 1;
         }
     }
     return 0; /* not found */

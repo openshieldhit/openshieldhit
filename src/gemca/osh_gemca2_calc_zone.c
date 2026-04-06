@@ -1,6 +1,6 @@
 #include "gemca/osh_gemca2_calc_zone.h"
 
-#include <stdlib.h> // exit()
+#include <stdlib.h>
 
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
@@ -27,7 +27,7 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
  * @param[in] g - a gemca object
  * @param[in] r - a ray
  *
- * @returns The zone number we are in.
+ * @returns Dense internal zone index, or (size_t)-1 if no zone contains the ray.
  *
  * @author Niels Bassler
  */
@@ -37,10 +37,10 @@ size_t osh_gemca_get_zone(struct gemca_workspace *g, struct ray *r) {
 
     for (i = 0; i < g->nzones; i++) {
         if (_in_zone(g->zones[i], r)) {
-            return g->zones[i]->id;
+            return g->zones[i]->index;
         }
     }
-    return 0; // TODO, -1 for invalid
+    return (size_t) -1;
 }
 
 /**
@@ -49,7 +49,7 @@ size_t osh_gemca_get_zone(struct gemca_workspace *g, struct ray *r) {
  * @param[in] g - a gemca object
  * @param[in] r - a ray
  *
- * @returns The zone number we are in.
+ * @returns Dense internal zone index, or (size_t)-1 if no zone contains the ray.
  *
  * @author Niels Bassler
  */
@@ -62,7 +62,7 @@ size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r) {
             return i;
         }
     }
-    return 0; // TODO, -1 for invalid
+    return (size_t) -1;
 }
 
 /**
@@ -91,8 +91,6 @@ static inline int _in_zone(struct zone const *z, struct ray const *r) {
  */
 static inline int _in_node(struct cgnode const *self, struct ray const *r) {
 
-    int a;
-    int b;
     int op;
 
     if (self->type == _OSH_GEMCA_CGNODE_BODY) {
@@ -166,14 +164,14 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
     int i;
     int j;
 
-    // TODO: For now, just copy all elements of the ray. Later this can be optimized.
+    /* TODO: For now, just copy all elements of the ray. Later this can be optimized. */
     for (i = 0; i < 3; i++) {
         tr->p[i] = r->p[i];
         tr->cp[i] = r->cp[i];
     }
     tr->system = (unsigned char) b->coord;
 
-    // then overwrite the values which may change:
+    /* then overwrite the values which may change: */
     switch (b->coord) {
     case OSH_COORD_UNIVERSE:
         break;
@@ -182,7 +180,7 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
         /* simple translation */
         for (i = 0; i < 3; i++) {
             j = i * 4;
-            tr->p[i] = r->p[i] + b->t[j + 3]; // notice, that in osh_coord.h see comment
+            tr->p[i] = r->p[i] + b->t[j + 3]; /* notice, that in osh_coord.h see comment */
             tr->cp[i] = r->cp[i];
         }
         break;

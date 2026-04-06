@@ -43,6 +43,7 @@ enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg) {
         for (i = 0; i < wg->nzones; i++) {
             if (wg->zones[i] != NULL) {
                 free(wg->zones[i]->name);
+                free(wg->zones[i]->material_name);
                 free(wg->zones[i]);
             }
         }
@@ -93,7 +94,7 @@ size_t osh_gemca_zone_index(struct gemca_workspace g, struct ray r) {
 double osh_gemca_dist(struct zone *z, struct ray const *r) {
     double d;
 
-    d = osh_gemca_get_distance(z, r); // TODO: this double calling is just during debugging
+    d = osh_gemca_get_distance(z, r); /* TODO: this double calling is just during debugging */
     return d;
 }
 
@@ -174,8 +175,9 @@ void osh_gemca_print_body(struct body const *b) {
 void osh_gemca_print_zone(struct zone const *z) {
     osh_debug(OSH_LOG_HLINE);
     osh_debug("    Zone name   : '%s'", z->name);
-    osh_debug("    Zone id     :  %llu", (unsigned long long) z->id);
-    osh_debug("    Zone medium :  %llu", (unsigned long long) z->medium);
+    osh_debug("    Zone index  :  %llu", (unsigned long long) z->index);
+    osh_debug("    Zone material :  %s", z->material_name ? z->material_name : "(unset)");
+    osh_debug("    Zone material index :  %llu", (unsigned long long) z->material_idx);
     osh_debug("    Zone tree follows...");
     osh_gemca_print_cgnodes(&z->node);
 }

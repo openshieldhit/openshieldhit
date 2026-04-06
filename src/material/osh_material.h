@@ -1,0 +1,110 @@
+#ifndef OSH_MATERIAL_H
+#define OSH_MATERIAL_H
+
+#include <stddef.h>
+
+#include "common/osh_logger.h"
+#include "common/osh_rc.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+enum osh_material_state { OSH_MATERIAL_STATE_UNSET = 0, OSH_MATERIAL_STATE_CONDENSED = 1, OSH_MATERIAL_STATE_GAS = 2 };
+
+enum { OSH_MATERIAL_INDEX_BLACKHOLE = 0, OSH_MATERIAL_INDEX_VACUUM = 1, OSH_MATERIAL_INDEX_FIRST_USER = 2 };
+
+#define OSH_MATERIAL_NAME_BLACKHOLE "blackhole"
+#define OSH_MATERIAL_NAME_VACUUM "vacuum"
+
+struct material_element {
+    double atom_count;             /* Relative atom count, < 0 until derived for mass-fraction input. */
+    double mass_fraction;          /* Mass fraction, < 0 until derived for atom-count input. */
+    double mean_excitation_energy; /* Element-level mean excitation override [eV], < 0 if unset. */
+    size_t lineno;                 /* Input line where this element was defined. */
+    unsigned int z;                /* Atomic number Z parsed from NUCLID/ELEMENT cards. */
+    unsigned int a;                /* Optional mass number, 0 if unset. */
+};
+
+struct material {
+    struct material_element *elements;
+    char *name;
+
+    double rho;                    /* Density [g/cm^3], < 0 if unset. */
+    double mean_excitation_energy; /* Material-level mean excitation energy [eV], < 0 if unset. */
+    float rgba[4];                 /* Rendering color [0,1]: red, green, blue, alpha. */
+
+    size_t nelements;
+    size_t lineno; /* Input line where this material was defined. */
+    size_t index;  /* Dense internal index: 0 blackhole, 1 vacuum, >=2 user-defined. */
+
+    int icru_id; /* ICRU id, 0 if unset. */
+    int state;   /* enum osh_material_state value. */
+};
+
+struct material_workspace {
+    struct material *materials;
+    char *wdir;
+    char *fname;
+    size_t nmaterials;
+};
+
+/**
+ * @brief Allocate, parse, and validate a material workspace from a mat.dat path.
+ *
+ * @details
+ * This first-pass loader stores raw material definitions only. It does not
+ * expand ICRU materials, calculate stopping-power tables, or derive optical
+ * depths. Relative paths used by future material cards are resolved against the
+ * parsed file's directory, which is retained in material_workspace::wdir.
+ *
+ * @param[in]  path    Path to the material input file.
+ * @param[in]  lg      Logger for diagnostics; NULL uses the global default logger.
+ * @param[out] wm_out  Receives the allocated workspace on success.
+ *
+ * @returns OSH_OK on success, or an OSH_E* code on failure.
+ */
+enum osh_status
+osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct material_workspace **wm_out);
+
+/**
+ * @brief Release a material workspace and all owned resources.
+ *
+ * @param[in] wm  Workspace to release. Safe to call with NULL.
+ *
+ * @returns OSH_OK.
+ */
+enum osh_status osh_material_workspace_free(struct material_workspace *wm);
+
+/**
+ * @brief Look up a material by internal dense index.
+ *
+ * @param[in] wm     Material workspace to search.
+ * @param[in] index  Internal dense material index.
+ *
+ * @returns Pointer to the matching material, or NULL if no match exists.
+ */
+struct material const *osh_material_by_index(struct material_workspace const *wm, size_t index);
+
+/**
+ * @brief Look up a material by user-facing MATERIAL name.
+ *
+ * @param[in] wm    Material workspace to search.
+ * @param[in] name  Material name from mat.dat.
+ *
+ * @returns Pointer to the matching material, or NULL if no match exists.
+ */
+struct material const *osh_material_by_name(struct material_workspace const *wm, char const *name);
+
+/**
+ * @brief Print a concise material workspace summary through the logger.
+ *
+ * @param[in] wm  Workspace to print.
+ */
+void osh_material_print(struct material_workspace const *wm);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* OSH_MATERIAL_H */

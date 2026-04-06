@@ -12,7 +12,6 @@
 #include "gemca/parse/osh_gemca2_parse_keys.h"
 #include "gemca/parse/osh_gemca2_parse_stack.h"
 
-// static char* _skip_zone_op(char *s);
 static int _key_is_zone_continuation(char const *key);
 static struct body *_body_from_name(char *bname, struct gemca_workspace *g);
 static int _rewind_oshfile(struct oshfile *shf);
@@ -48,10 +47,10 @@ enum osh_status osh_gemca_zone_init(struct zone **zone) {
         return OSH_ENOMEM;
     }
 
-    z->medium = 0;
-    z->id = 0;
-    // z->node = NULL;
+    z->index = 0;
+    z->material_idx = (size_t) -1;
     z->name = NULL;
+    z->material_name = NULL;
 
     *zone = z;
     return OSH_OK;
@@ -190,7 +189,7 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
             if (zone_active && strlen(bstr) > 0) {
 
                 osh_debug(OSH_LOG_HLINE);
-                osh_debug("ZONE: #%3lli - '%s'", (long long int) g->zones[izone]->id, g->zones[izone]->name);
+                osh_debug("ZONE: #%3lli - '%s'", (long long int) g->zones[izone]->index, g->zones[izone]->name);
                 osh_debug("USERGIVEN STRING: '%s'", bstr);
                 _reformat(bstr, &tstr);
                 osh_debug("PRE-TOKEN STRING: '%s'", tstr);
@@ -219,7 +218,9 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
                 break; /* break out of while loop */
             }
 
-            /* 3) new zone: increment zone index and allocate memory for the name, and copy it into the placeholder.*/
+            /* 3) new zone: increment the internal zone index and copy the user-facing zone name.
+             * Numeric-looking zone names from legacy inputs, e.g. "001", stay strings and must be referenced exactly as
+             * such by later material assignments. */
             if (!zone_active) {
                 zone_active = 1;
             } else {
@@ -243,7 +244,7 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
                 free(tstr);
                 return OSH_ENOMEM;
             }
-            g->zones[izone]->id = izone + 1;  /* zone IDs start at 1, not at 0 */
+            g->zones[izone]->index = izone;
             g->zones[izone]->lineno = lineno; /* save the line number where this zone was defined */
             strncpy(g->zones[izone]->name, key, len + 1);
         }
@@ -325,8 +326,6 @@ static struct cgnode *_new_node_comp(struct stack *st, char operator) {
     node = calloc(1, sizeof(struct cgnode));
     node->type = _OSH_GEMCA_CGNODE_COMPOSITE;
     node->op = operator;
-
-    // osh_gemca_stack_print(st);
 
     /* first element popped must go on the left leg */
     si = osh_gemca_stack_pop(st);

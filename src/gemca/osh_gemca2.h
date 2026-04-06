@@ -46,8 +46,8 @@ struct body {               /* a body primitive */
 };
 
 struct cgnode {
-    double bb_max[3];     /* bounding box max // TODO  */
-    double bb_min[3];     /* bounding box min // TODO */
+    double bb_max[3];     /* bounding box max, TODO */
+    double bb_min[3];     /* bounding box min, TODO */
     struct cgnode *left;  /* used only if this is a composite node */
     struct cgnode *right; /* used only if this is a composite node */
     struct body *body;    /* used only if this is a leaf (=body) node */
@@ -58,15 +58,20 @@ struct cgnode {
                              outside node */
 };
 
-struct zone {           /* zone description */
-    struct cgnode node; /* top level node of the abstract syntax tree which holds
-                           the body description */
-    size_t id;          /* number of this zone, starting at 1 */
-    size_t lineno;      /* first line number where this zone was defined */
-    size_t medium;      /* medium/material ID of this zone */
-    size_t ntokens;     /* number of tokens */
-    char **tokens;      /* list of tokens */
-    char *name;         /* user given name of this zone */
+/* User-facing geometry references are strings. Body names, zone names, and material names are never converted to
+ * integer IDs during parsing; e.g. "001" is a name distinct from "1". Dense indices are internal array indices used
+ * for lookup/runtime data and should appear only in debug output or resolver code. material_idx is filled later by the
+ * pre-simulation assembly layer after both geo.dat and mat.dat have been parsed. */
+struct zone {            /* zone description */
+    struct cgnode node;  /* top level node of the abstract syntax tree which holds
+                            the body description */
+    size_t index;        /* Dense internal index, 0-based. */
+    size_t material_idx; /* Dense material index; unresolved as (size_t)-1 until post-parse resolution. */
+    size_t lineno;       /* first line number where this zone was defined */
+    size_t ntokens;      /* number of tokens */
+    char **tokens;       /* list of tokens */
+    char *name;          /* user given name of this zone */
+    char *material_name; /* user-facing material name assigned to this zone */
 
     /* TODO: per-zone transport cutoff overrides. When set, these take
      * precedence over the global defaults in beam_workspace at simulation
@@ -89,8 +94,7 @@ enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg);
 enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg);
 enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g);
 
-/* for a given ray and *g workspace, return what zone ID (starts at 1) we are in
- */
+/* for a given ray and *g workspace, return the dense internal zone index */
 size_t osh_gemca_zone(struct gemca_workspace g, struct ray r);
 size_t osh_gemca_zone_index(struct gemca_workspace g, struct ray r); /* return index of zone, can be used
                                                                        directly on g->zones[index]*/
