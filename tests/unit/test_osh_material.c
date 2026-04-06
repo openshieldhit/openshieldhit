@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "common/osh_rc.h"
 #include "material/osh_material.h"
@@ -119,6 +120,34 @@ static void test_material_state_keyword_is_case_insensitive(void) {
     ASSERT_TRUE(remove(path) == 0);
 }
 
+static void test_material_level_mean_excitation_and_dedx_table(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    struct material const *mat;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL Water\n"
+                    "MIVALUE 75.0\n"
+                    "LOADDEDX tables/water_dedx.dat\n"
+                    "ICRU 276\n"
+                    "END\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+    mat = osh_material_by_name(wm, "Water");
+    ASSERT_TRUE(mat != NULL);
+    ASSERT_TRUE(fabs(mat->mean_excitation_energy - 75.0) < 1e-12);
+    ASSERT_TRUE(mat->dedx_table_path != NULL);
+    ASSERT_TRUE(strcmp(mat->dedx_table_path, "tables/water_dedx.dat") == 0);
+
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
 static void test_material_rejects_key_outside_material(void) {
     char path[512];
     struct material_workspace *wm = NULL;
@@ -127,6 +156,46 @@ static void test_material_rejects_key_outside_material(void) {
     write_temp_file(path,
                     sizeof(path),
                     "RHO 1.0\n"
+                    "END\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(wm == NULL);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
+static void test_material_rejects_element_i_before_element(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL Water\n"
+                    "RHO 1.0\n"
+                    "IVALUE 22.9\n"
+                    "NUCLID 1 1\n"
+                    "END\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(wm == NULL);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
+static void test_material_rejects_mixed_icru_and_elements(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL Water\n"
+                    "ICRU 276\n"
+                    "RHO 1.0\n"
+                    "NUCLID 1 2\n"
                     "END\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
@@ -164,7 +233,10 @@ int main(void) {
     test_material_fixture_icru_and_rho();
     test_material_fixture_composition();
     test_material_state_keyword_is_case_insensitive();
+    test_material_level_mean_excitation_and_dedx_table();
     test_material_rejects_key_outside_material();
+    test_material_rejects_element_i_before_element();
+    test_material_rejects_mixed_icru_and_elements();
     test_material_numeric_name_is_still_a_name();
     return 0;
 }

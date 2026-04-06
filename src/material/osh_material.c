@@ -152,6 +152,7 @@ void osh_material_print(struct material_workspace const *wm) {
         osh_info("%-24s : %i", "ICRU id", mat->icru_id);
         osh_info("%-24s : %.8g g/cm^3", "Density RHO", mat->rho);
         osh_info("%-24s : %.8g eV", "Mean excitation energy", mat->mean_excitation_energy);
+        osh_info("%-24s : %s", "dE/dx table", mat->dedx_table_path ? mat->dedx_table_path : "(unset)");
         osh_info("%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
         osh_info("%-24s : %s", "State", material_state_name(mat->state));
         osh_info("%-24s : %zu", "Elements", mat->nelements);
@@ -176,6 +177,7 @@ void osh_material_print(struct material_workspace const *wm) {
 static void material_defaults(struct material *mat) {
     mat->elements = NULL;
     mat->name = NULL;
+    mat->dedx_table_path = NULL;
     mat->rho = -1.0;
     mat->mean_excitation_energy = -1.0;
     material_set_rgba(mat, 0.8f, 0.8f, 0.8f, 1.0f);
@@ -279,6 +281,10 @@ static enum osh_status material_workspace_validate(struct material_workspace con
             osh_error("material: material '%s' defines neither ICRU nor elemental composition", mat->name);
             return OSH_EPARSE;
         }
+        if (mat->icru_id != 0 && mat->nelements > 0u) {
+            osh_error("material: material '%s' mixes ICRU and explicit elemental composition", mat->name);
+            return OSH_EPARSE;
+        }
         if (mat->icru_id == 0 && mat->nelements > 0u && mat->rho < 0.0) {
             osh_error("material: material '%s' requires RHO for elemental composition", mat->name);
             return OSH_EPARSE;
@@ -320,6 +326,7 @@ static void material_free_fields(struct material *mat) {
 
     free(mat->elements);
     free(mat->name);
+    free(mat->dedx_table_path);
     material_defaults(mat);
 }
 
