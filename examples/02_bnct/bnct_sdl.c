@@ -444,6 +444,9 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
             double const range_cm = RANGE_B10_HE * 100.0;
 
             size_t zi0 = osh_gemca_zone_index(*g, r);
+            if (zi0 == OSH_GEMCA_ZONE_INDEX_INVALID) {
+                continue;
+            }
             size_t medium0 = material_debug_index(g->zones[zi0]->material_name);
 
             if (medium0 != (size_t) zone) {
@@ -588,6 +591,9 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
             while (1) {
                 random_ray_3d(r);
                 zi = osh_gemca_zone_index(*g, *r);
+                if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
+                    continue;
+                }
                 medium = material_debug_index(g->zones[zi]->material_name);
                 if (medium == 1 || medium == 2 || medium == 3) {
                     // if (medium == 3 )
@@ -612,6 +618,9 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
                 /* get what zone and medium we are in */
                 // printf("in while loop\n");
                 zi = osh_gemca_zone_index(*g, *r);
+                if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
+                    break;
+                }
                 // printf("get medium\n");
                 medium = material_debug_index(g->zones[zi]->material_name);
 
@@ -680,6 +689,9 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
 
     while (remaining > 0.0) {
         size_t zi = osh_gemca_zone_index(*g, r);
+        if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
+            break;
+        }
         size_t medium = material_debug_index(g->zones[zi]->material_name);
 
         double d_to_bnd = osh_gemca_dist(g->zones[zi], &r);
@@ -735,6 +747,9 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots) {
         random_pos(&r);
 
         size_t zidx = osh_gemca_zone_index(*g, r);
+        if (zidx == OSH_GEMCA_ZONE_INDEX_INVALID) {
+            continue;
+        }
         size_t medium = material_debug_index(g->zones[zidx]->material_name);
 
         int px;

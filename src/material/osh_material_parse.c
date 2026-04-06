@@ -112,6 +112,11 @@ enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspa
         }
 
         if (strcmp(OSH_MATERIAL_KEY_END, key) == 0) {
+            if (!material_active) {
+                osh_error("in %s line %d: END outside MATERIAL block", oshf->filename, lineno);
+                free(line);
+                return OSH_EPARSE;
+            }
             rc = parse_end(wm, oshf, args);
             free(line);
             line = NULL;
@@ -149,6 +154,12 @@ enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspa
             free(line);
             return OSH_EPARSE;
         }
+    }
+
+    if (material_active) {
+        osh_error("in %s: MATERIAL block missing END", oshf->filename);
+        free(line);
+        return OSH_EPARSE;
     }
 
     return OSH_OK;
@@ -248,8 +259,12 @@ static enum osh_status parse_element_by_number(struct material_workspace *wm, st
 
 static enum osh_status parse_end(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     (void) wm;
-    (void) oshf;
-    (void) args;
+
+    if (args && args[0] != '\0') {
+        osh_error("in %s line %i: END expects no arguments", oshf->filename, oshf->lineno);
+        return OSH_EPARSE;
+    }
+
     return OSH_OK;
 }
 

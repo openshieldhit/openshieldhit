@@ -149,13 +149,13 @@ int plot(struct gemca_workspace *g, int ndots) {
     int pointLocationy2;
     int i = 0;
     int quit = 0;
-    int zi;
+    size_t zi;
 
     struct ray r;
     float x;
     float z;
     double dist;
-    size_t zid; /* zone id */
+    size_t zidx;
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         return 1;
@@ -186,7 +186,10 @@ int plot(struct gemca_workspace *g, int ndots) {
         scanning_ray(&r);
         random_ray(&r);
 
-        zid = osh_gemca_zone(*g, r);
+        zidx = osh_gemca_zone(*g, r);
+        if (zidx == OSH_GEMCA_ZONE_INDEX_INVALID) {
+            continue;
+        }
 
         /* relative position in window */
         coord2pixel(r.p[0], r.p[2], &pointLocationx, &pointLocationy);
@@ -196,10 +199,10 @@ int plot(struct gemca_workspace *g, int ndots) {
                r.p[2],
                pointLocationx,
                pointLocationy,
-               zid,
-               g->zones[zid - 1]->name);
+               zidx,
+               g->zones[zidx]->name);
         // Set our color for the draw functions
-        setRendererColor(s, zid);
+        setRendererColor(s, (int) zidx);
         SDL_RenderDrawPoint(s, pointLocationx, pointLocationy);
     }
 
@@ -247,6 +250,9 @@ int plot(struct gemca_workspace *g, int ndots) {
         // exit(0);
 
         zi = osh_gemca_zone_index(*g, r);
+        if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
+            continue;
+        }
         dist = osh_gemca_dist(g->zones[zi], &r);
         printf("dist: %f\n", dist);
         if (dist > 20.0) {
@@ -260,7 +266,7 @@ int plot(struct gemca_workspace *g, int ndots) {
         coord2pixel(x, z, &pointLocationx2, &pointLocationy2);
 
         /* draw each line segment with a new color */
-        setRendererColor(s, zi);
+        setRendererColor(s, (int) zi);
         SDL_RenderDrawLine(s, pointLocationx, pointLocationy, pointLocationx2, pointLocationy2);
         /* and add a thick dot for the start position of the ray */
         drawDot(s, pointLocationx, pointLocationy, 3);
