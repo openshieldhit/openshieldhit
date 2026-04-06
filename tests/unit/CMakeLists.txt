@@ -59,6 +59,7 @@ foreach(test_src ${UNIT_SOURCES})
         osh_common
         osh_random
         osh_beam
+        osh_material
         osh_particle
     )
 
@@ -66,6 +67,7 @@ foreach(test_src ${UNIT_SOURCES})
     # relying on fragile relative paths from the build directory.
     target_compile_definitions(${test_name} PRIVATE
         OSH_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../fixtures"
+        OSH_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     )
 
     add_test(NAME "unit::${test_name}" COMMAND $<TARGET_FILE:${test_name}>)

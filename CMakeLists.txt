@@ -78,6 +78,7 @@ add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
 add_subdirectory(src/common)
 add_subdirectory(src/random)
 add_subdirectory(src/beam)
+add_subdirectory(src/material)
 add_subdirectory(src/particle)
 add_subdirectory(src/gemca)
 add_subdirectory(src/transport)
@@ -88,6 +89,7 @@ target_link_libraries(osh_all INTERFACE
     osh_common
     osh_random
     osh_beam
+    osh_material
     osh_particle
     osh_gemca2
     osh_transport

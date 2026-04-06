@@ -10,5 +10,6 @@
   002          +2     -1
   003          +3     -2      
   END
-    1    2    3
-    1 1000    0
+  ASSIGNMAT Water 001
+  ASSIGNMAT vacuum 002
+  ASSIGNMAT blackhole 003
