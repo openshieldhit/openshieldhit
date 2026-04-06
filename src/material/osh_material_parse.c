@@ -30,6 +30,14 @@ static enum osh_status parse_mean_excitation_energy_value(double *mean_excitatio
                                                           struct oshfile *oshf,
                                                           char const *args,
                                                           char const *key_name);
+static enum osh_status parse_element_card_args(unsigned int *z_out,
+                                               unsigned int *a_out,
+                                               double *amount_out,
+                                               struct oshfile *oshf,
+                                               char const *args,
+                                               char const *key_name);
+static enum osh_status parse_double_token(double *value_out, char const *token);
+static enum osh_status parse_uint_token(unsigned int *value_out, char const *token);
 static enum osh_status material_push(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status material_push_element(struct material *mat,
                                              struct oshfile *oshf,
@@ -53,6 +61,9 @@ struct material_dispatch_entry {
  * ICRU and explicit element cards are alternative composition sources. Scalar
  * cards such as RHO, STATE, MATERIALI, and LOADDEDX remain user overrides that
  * later material assembly should preserve when it fills unset defaults.
+ *
+ * Element cards use `Z amount` for natural elements (A=0 internally) and
+ * `Z A amount` for explicit isotopes.
  */
 static struct material_dispatch_entry dispatch_table[] = {
     {OSH_MATERIAL_KEY_COLOR, parse_color},
@@ -221,39 +232,43 @@ static enum osh_status parse_color(struct material_workspace *wm, struct oshfile
 static enum osh_status parse_element_by_mass(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     unsigned int z;
+    unsigned int a;
     double mass_fraction;
-    char extra;
+    enum osh_status rc;
 
     mat = material_current(wm);
     if (!mat) {
         osh_error("in %s line %i: ELEMENTBYMASS outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
-    if (!args || sscanf(args, "%u %lf %c", &z, &mass_fraction, &extra) != 2) {
-        osh_error("in %s line %i: ELEMENTBYMASS expects '<Z> <fraction>'", oshf->filename, oshf->lineno);
-        return OSH_EPARSE;
+
+    rc = parse_element_card_args(&z, &a, &mass_fraction, oshf, args, "ELEMENTBYMASS");
+    if (rc != OSH_OK) {
+        return rc;
     }
 
-    return material_push_element(mat, oshf, z, 0u, -1.0, mass_fraction);
+    return material_push_element(mat, oshf, z, a, -1.0, mass_fraction);
 }
 
 static enum osh_status parse_element_by_number(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
     struct material *mat;
     unsigned int z;
+    unsigned int a;
     double atom_count;
-    char extra;
+    enum osh_status rc;
 
     mat = material_current(wm);
     if (!mat) {
         osh_error("in %s line %i: NUCLID outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
-    if (!args || sscanf(args, "%u %lf %c", &z, &atom_count, &extra) != 2) {
-        osh_error("in %s line %i: NUCLID expects '<Z> <amount>'", oshf->filename, oshf->lineno);
-        return OSH_EPARSE;
+
+    rc = parse_element_card_args(&z, &a, &atom_count, oshf, args, "NUCLID/ELEMENT");
+    if (rc != OSH_OK) {
+        return rc;
     }
 
-    return material_push_element(mat, oshf, z, 0u, atom_count, -1.0);
+    return material_push_element(mat, oshf, z, a, atom_count, -1.0);
 }
 
 static enum osh_status parse_end(struct material_workspace *wm, struct oshfile *oshf, char const *args) {
@@ -448,6 +463,95 @@ static enum osh_status parse_mean_excitation_energy_value(double *mean_excitatio
     }
 
     *mean_excitation_energy_out = mean_excitation_energy;
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse element composition arguments with optional isotope mass number.
+ *
+ * @details
+ * `Z amount` means natural element and stores A=0. `Z A amount` means an
+ * explicit isotope and requires A>0.
+ */
+static enum osh_status parse_element_card_args(unsigned int *z_out,
+                                               unsigned int *a_out,
+                                               double *amount_out,
+                                               struct oshfile *oshf,
+                                               char const *args,
+                                               char const *key_name) {
+    enum osh_status rc;
+    char tok0[32];
+    char tok1[32];
+    char tok2[32];
+    char extra[32];
+    int ntok;
+    unsigned int z;
+    unsigned int a;
+    double amount;
+
+    if (!args) {
+        osh_error(
+            "in %s line %i: %s expects '<Z> <amount>' or '<Z> <A> <amount>'", oshf->filename, oshf->lineno, key_name);
+        return OSH_EPARSE;
+    }
+
+    ntok = sscanf(args, "%31s %31s %31s %31s", tok0, tok1, tok2, extra);
+    if (ntok != 2 && ntok != 3) {
+        osh_error(
+            "in %s line %i: %s expects '<Z> <amount>' or '<Z> <A> <amount>'", oshf->filename, oshf->lineno, key_name);
+        return OSH_EPARSE;
+    }
+
+    rc = parse_uint_token(&z, tok0);
+    if (rc != OSH_OK || z == 0u) {
+        osh_error("in %s line %i: %s element Z must be a positive integer", oshf->filename, oshf->lineno, key_name);
+        return OSH_EPARSE;
+    }
+
+    if (ntok == 2) {
+        a = 0u;
+        rc = parse_double_token(&amount, tok1);
+    } else {
+        rc = parse_uint_token(&a, tok1);
+        if (rc != OSH_OK || a == 0u) {
+            osh_error("in %s line %i: %s isotope A must be a positive integer when provided",
+                      oshf->filename,
+                      oshf->lineno,
+                      key_name);
+            return OSH_EPARSE;
+        }
+        rc = parse_double_token(&amount, tok2);
+    }
+    if (rc != OSH_OK || amount <= 0.0) {
+        osh_error("in %s line %i: %s amount must be a positive number", oshf->filename, oshf->lineno, key_name);
+        return OSH_EPARSE;
+    }
+
+    *z_out = z;
+    *a_out = a;
+    *amount_out = amount;
+    return OSH_OK;
+}
+
+static enum osh_status parse_double_token(double *value_out, char const *token) {
+    double value;
+    char extra;
+
+    if (sscanf(token, "%lf%c", &value, &extra) != 1) {
+        return OSH_EPARSE;
+    }
+    *value_out = value;
+    return OSH_OK;
+}
+
+static enum osh_status parse_uint_token(unsigned int *value_out, char const *token) {
+    unsigned int value;
+    char extra;
+
+    if (sscanf(token, "%u%c", &value, &extra) != 1) {
+        return OSH_EPARSE;
+    }
+    *value_out = value;
     return OSH_OK;
 }
 
