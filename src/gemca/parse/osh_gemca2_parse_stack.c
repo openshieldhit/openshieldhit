@@ -92,10 +92,7 @@ void osh_gemca_stack_print(struct stack *s) {
                       s->si[i]->type,
                       s->si[i]->v.op);
         } else {
-            osh_debug("    StackITEM: %llu: %p  type: %i\n",
-                      (unsigned long long) i,
-                      (void *) s->si[i],
-                      s->si[i]->type);
+            osh_debug("    StackITEM: %llu: %p  type: %i\n", (unsigned long long) i, (void *) s->si[i], s->si[i]->type);
         }
     }
 }
