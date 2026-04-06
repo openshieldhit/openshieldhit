@@ -34,6 +34,48 @@ The parser exists but is not yet connected to the new API. Work to do in order:
 - [ ] Wire `osh_beam_setup_from_path()` into `openshieldhit_run()` in `src/openshieldhit.c`
 - [ ] Apply CLI override: after beam load, overwrite `wb->nstat` if `cfg->has_nstat` is set
 
+## Material Runtime Design
+
+The material parser should remain a raw input layer. Before transport starts,
+the parsed `material_workspace` needs a material assembly step that builds a
+cache-friendly runtime material database.
+
+- [x] Parse named `MATERIAL` blocks with dense internal material indices
+- [x] Reserve material index 0 for `blackhole` and index 1 for `vacuum`
+- [x] Parse explicit composition cards and ICRU references as alternative composition sources
+- [x] Store scalar user overrides: `RHO`, `STATE`, material/element mean excitation, `LOADDEDX`
+- [ ] Import or regenerate the ICRU material database from `_temp_shieldhit/material`
+- [ ] Add a material assembly layer after all input files are parsed
+- [ ] Expand ICRU references into composition, density, state, and mean excitation defaults
+- [ ] Preserve explicit scalar user overrides when filling unset ICRU/default properties
+- [ ] Derive complementary composition fields: atom counts, mass fractions, number densities, electron densities
+- [ ] Resolve GEMCA `zone->material_name` to dense `zone->material_idx`
+
+Runtime representation should separate atomic transport data from nuclear target
+sampling data. Atomic transport can then work before the fragmentation generator
+exists.
+
+- [ ] Build atomic transport tables for each material/projectile pair:
+  - stopping power / dE/dx
+  - range
+  - optical depth
+- [ ] Keep transport tables in dense, cache-friendly arrays indexed by material, projectile, and energy grid
+- [ ] Build a separate nuclear target-sampling table per material from elemental/isotopic composition
+- [ ] Use the nuclear table only when a nuclear interaction is sampled, then pass the sampled target to the future fragmentation generator
+- [ ] Add a projectile table registry with a default ion set and dense projectile indices
+- [ ] Support lazy extension of material/projectile tables at safe setup or batch boundaries, not inside the hot stepping loop
+
+CT/voxel geometry needs an extra calibration layer. `RHO` in `MATERIAL` should
+be treated as the default/reference density, while voxel geometry may provide a
+local density per step from the CT image.
+
+- [ ] Keep `HU -> material_idx` segmentation in the voxel/CT geometry layer, not in `struct material`
+- [ ] Keep `HU -> rho` density calibration in the voxel/CT geometry layer, not in `struct material`
+- [ ] Represent `HU -> rho` and `HU -> WEPL` calibrations as piecewise-linear tables with precomputed coefficients
+- [ ] Represent `HU -> material_idx` as piecewise-constant HU bins mapped to dense material indices
+- [ ] Prefer mass-normalized transport tables so local density scaling is cheap: mass stopping power, mass range, and mass interaction coefficients where applicable
+- [ ] Let the transport step carry or query both `material_idx` and local `rho`; constant-density geometry uses the material default
+
 ## Current High-Priority TODO
 
 - [ ] Wire beam loading into `openshieldhit_run()`
