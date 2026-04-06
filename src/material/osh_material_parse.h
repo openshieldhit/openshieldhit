@@ -16,6 +16,11 @@ extern "C" {
  * Reads key-value lines from @p oshf and appends raw material definitions to
  * @p wm. No derived material properties or transport tables are computed here.
  *
+ * Element composition cards use a natural element when only Z is provided:
+ * `NUCLID <Z> <amount>` stores A=0. An explicit isotope is selected by adding
+ * a mass number: `NUCLID <Z> <A> <amount>`. The same Z/[A]/amount rule applies
+ * to ELEMENT, ELEMENTBYNUMBER, and ELEMENTBYMASS.
+ *
  * @param[in,out] oshf  Open material file positioned at the start.
  * @param[in,out] wm    Workspace to populate.
  *

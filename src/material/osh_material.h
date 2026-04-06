@@ -23,7 +23,7 @@ struct material_element {
     double mean_excitation_energy; /* Element-level mean excitation override [eV], < 0 if unset. */
     size_t lineno;                 /* Input line where this element was defined. */
     unsigned int z;                /* Atomic number Z parsed from NUCLID/ELEMENT cards. */
-    unsigned int a;                /* Optional mass number, 0 if unset. */
+    unsigned int a;                /* Mass number A; 0 means natural element, >0 means explicit isotope. */
 };
 
 struct material {
@@ -55,15 +55,18 @@ struct material_workspace {
  * @brief Allocate, parse, and validate a material workspace from a mat.dat path.
  *
  * @details
- * This first-pass loader stores raw material definitions only. It does not
- * expand ICRU materials, calculate stopping-power tables, or derive optical
- * depths. Relative paths used by future material cards are resolved against the
- * parsed file's directory, which is retained in material_workspace::wdir.
+ * This loader parses raw material definitions and performs the setup-time
+ * assembly needed before transport-table generation: ICRU convenience
+ * definitions are expanded, scalar user overrides are preserved, and explicit
+ * element compositions are completed with mass fractions or relative atom
+ * counts. It does not calculate stopping-power tables or derive optical depths.
+ * Relative paths used by future material cards are resolved against the parsed
+ * file's directory, which is retained in material_workspace::wdir.
  *
  * User materials are defined either by explicit element composition cards or by
- * an ICRU material reference. Later material assembly should fill unset scalar
- * properties from ICRU/default tables while preserving explicit user overrides
- * such as RHO, STATE, MATERIALI/MIVALUE/MIAV, and LOADDEDX.
+ * an ICRU material reference. ICRU/default tables fill unset scalar properties,
+ * while explicit user overrides such as RHO, STATE, MATERIALI/MIVALUE/MIAV, and
+ * LOADDEDX remain authoritative.
  *
  * @param[in]  path    Path to the material input file.
  * @param[in]  lg      Logger for diagnostics; NULL uses the global default logger.
