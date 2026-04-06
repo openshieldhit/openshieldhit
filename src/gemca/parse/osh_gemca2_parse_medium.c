@@ -11,8 +11,8 @@
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/parse/osh_gemca2_parse_keys.h"
 
-int _assign_material(struct gemca_workspace *g, char *args, int lineno);
-int _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g);
+static enum osh_status _assign_material(struct gemca_workspace *g, char *args, int lineno);
+static size_t _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g);
 static int _rewind_oshfile(struct oshfile *shf);
 
 /**
@@ -24,11 +24,11 @@ static int _rewind_oshfile(struct oshfile *shf);
  * @param[in] fp - file pointer to file open for reading.
  * @param[in,out] g - gemca workspace pointer
  *
- * @returns 1 if format is OK, 0 otherwise
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
+enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
     char *key = NULL;
     char *args = NULL;
     char *line = NULL;
@@ -46,7 +46,7 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
 
     /* move to the second end statement */
     if (!_rewind_oshfile(shf)) {
-        return 0;
+        return OSH_EIO;
     }
 
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
@@ -66,9 +66,9 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
 
         /* optionally, materials can also be assigned to zones by the (paritally) FLUKA compatible ASSIGNMAT key */
         if ((strcasecmp(OSH_GEMCA_KEY_ASSIGNMAT, key) == 0) || (strcasecmp(OSH_GEMCA_KEY_ASSIGNMA, key) == 0)) {
-            if (!_assign_material(g, args, lineno)) {
+            if (_assign_material(g, args, lineno) != OSH_OK) {
                 free(line);
-                return 0;
+                return OSH_EPARSE;
             }
             free(line);
             continue; /* next line */
@@ -93,7 +93,7 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
                         (long long unsigned int) g->nzones);
                 osh_error("Too many zones found %s line number %i\n", g->filename, lineno);
                 free(line);
-                return 0;
+                return OSH_EPARSE;
             }
             /* again, if we are in the media block, assign it */
             if (in_media) {
@@ -111,7 +111,7 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
         free(line);
     } /* end of while loop */
     free(line);
-    return 1;
+    return OSH_OK;
 }
 
 /**
@@ -121,11 +121,11 @@ int osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspace *g) {
  * @param[in] args Arguments string containing material and zone information
  * @param[in] lineno Line number in the input file for error reporting
  *
- * @return int Returns 1 on success
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
+static enum osh_status _assign_material(struct gemca_workspace *g, char *args, int lineno) {
 
     char *arg;
 
@@ -136,24 +136,29 @@ int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
 
     int medium = 0;
 
+    if (args == NULL) {
+        osh_error("No arguments found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        return OSH_EPARSE;
+    }
+
     /* first argument is the material index (names will be supported later)*/
     arg = strtok(args, " ");
     if (arg != NULL) {
         medium = atoi(arg);
     } else {
         osh_error("No medium index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
-        return 0;
+        return OSH_EPARSE;
     }
 
     /* next two arguments are the zone indices, or a range of zone indices */
     arg = strtok(NULL, " ");
     if (arg == NULL) {
         osh_error("No zone index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
-        return 0;
+        return OSH_EPARSE;
     }
     /* check if zone name was given, if so, get the index for that zone name */
     iz = _get_zoneid_from_name(arg, g);
-    if (iz > 0 && iz < g->nzones) {
+    if (iz > 0 && iz <= g->nzones) {
         /* zone name found, set both start and end to this index +1 (since zones are 1-based) */
         zone_start = iz;
     } else {
@@ -165,7 +170,7 @@ int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
     if (arg != NULL) {
         /* check if zone name was given, if so, get the index for that zone name */
         iz = _get_zoneid_from_name(arg, g);
-        if (iz > 0 && iz < g->nzones) {
+        if (iz > 0 && iz <= g->nzones) {
             zone_end = iz;
         } else {
             zone_end = atoi(arg);
@@ -182,7 +187,7 @@ int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
         stride = atoi(arg);
         if (stride == 0) {
             osh_error("Invalid stride 0 in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
-            return 0;
+            return OSH_EPARSE;
         }
     }
 
@@ -193,7 +198,7 @@ int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
                       (long long unsigned int) iz,
                       g->filename,
                       lineno);
-            return 0;
+            return OSH_EPARSE;
         }
         g->zones[iz - 1]->medium = medium;
         printf("    Assigned medium %i to zoneID %llu named '%s'\n",
@@ -201,10 +206,10 @@ int _assign_material(struct gemca_workspace *g, char *args, int lineno) {
                (long long unsigned int) iz,
                g->zones[iz - 1]->name);
     }
-    return 1;
+    return OSH_OK;
 }
 
-int _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g) {
+static size_t _get_zoneid_from_name(char const *zname, struct gemca_workspace const *g) {
     size_t iz;
 
     for (iz = 0; iz < g->nzones; iz++) {

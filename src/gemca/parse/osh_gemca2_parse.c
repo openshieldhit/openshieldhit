@@ -20,12 +20,13 @@ static int _rewind_oshfile(struct oshfile *shf);
  *
  * @param[in,out] *g - pointer to gemca workspace, may be initialized with NULL, when invoking this function.
  *
- * @returns 1
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
+enum osh_status osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
 
+    enum osh_status rc;
     size_t i;
     size_t nbody; /* number of bodies */
     size_t nzone; /* number of zones */
@@ -35,21 +36,21 @@ int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
 
     struct oshfile *shf = osh_fopen(filename);
     if (!shf) {
-        return 0;
+        return OSH_EIO;
     }
 
     /* test_format() also counts the number of bodies and zones */
     if (!_test_format(shf, &nbody, &nzone)) {
         osh_error("Unknown format of %s\n", filename);
         osh_fclose(shf);
-        return 0;
+        return OSH_EPARSE;
     }
 
     g->filename = calloc(strlen(filename) + 1, sizeof(char));
     if (!g->filename) {
         osh_alloc_failed("g->filename");
         osh_fclose(shf);
-        return 0;
+        return OSH_ENOMEM;
     }
     snprintf(g->filename, strlen(filename) + 1, "%s", filename);
 
@@ -58,27 +59,27 @@ int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
     if (body == NULL) {
         osh_alloc_failed("*body");
         osh_fclose(shf);
-        return 0;
+        return OSH_ENOMEM;
     }
     zone = (struct zone **) calloc(nzone, sizeof(struct zone *));
     if (zone == NULL) {
         osh_alloc_failed("*zone");
         free(body);
         osh_fclose(shf);
-        return 0;
+        return OSH_ENOMEM;
     }
 
     /* allocate memory for every list item */
     for (i = 0; i < nbody; i++) {
-        if (!osh_gemca_body_init(&body[i])) {
+        if (osh_gemca_body_init(&body[i]) != OSH_OK) {
             osh_fclose(shf);
-            return 0;
+            return OSH_ENOMEM;
         }
     }
     for (i = 0; i < nzone; i++) {
-        if (!osh_gemca_zone_init(&zone[i])) {
+        if (osh_gemca_zone_init(&zone[i]) != OSH_OK) {
             osh_fclose(shf);
-            return 0;
+            return OSH_ENOMEM;
         }
     }
 
@@ -88,22 +89,25 @@ int osh_gemca_parse(char const *filename, struct gemca_workspace *g) {
     g->nbodies = nbody;
     g->nzones = nzone;
 
-    if (!osh_gemca_parse_bodies(shf, g)) {
+    rc = osh_gemca_parse_bodies(shf, g);
+    if (rc != OSH_OK) {
         osh_fclose(shf);
-        return 0;
+        return rc;
     }
-    if (!osh_gemca_parse_zones(shf, g)) {
+    rc = osh_gemca_parse_zones(shf, g);
+    if (rc != OSH_OK) {
         osh_fclose(shf);
-        return 0;
+        return rc;
     }
-    if (!osh_gemca_parse_media(shf, g)) {
+    rc = osh_gemca_parse_media(shf, g);
+    if (rc != OSH_OK) {
         osh_fclose(shf);
-        return 0;
+        return rc;
     }
 
     osh_fclose(shf);
 
-    return 1;
+    return OSH_OK;
 }
 
 /**

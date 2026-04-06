@@ -10,49 +10,66 @@
 #include "gemca/osh_gemca2_dist.h"
 #include "gemca/parse/osh_gemca2_parse.h"
 
-int osh_gemca_workspace_init(struct gemca_workspace **wg) {
+enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg) {
 
-    *wg = malloc(sizeof(struct gemca_workspace));
+    *wg = calloc(1, sizeof(struct gemca_workspace));
     if (*wg == NULL) {
         osh_alloc_failed("osh_gemca_workspace_init()");
-        return 0;
+        return OSH_ENOMEM;
     }
-    return 1;
+    return OSH_OK;
 }
 
-int osh_gemca_workspace_free(struct gemca_workspace *wg) {
+enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg) {
 
     size_t i;
 
-    for (i = 0; i < wg->nbodies; i++) {
-        free(wg->bodies[i]->name);
-        free(wg->bodies[i]->a);
-        free(wg->bodies[i]);
+    if (wg == NULL) {
+        return OSH_OK;
+    }
+
+    if (wg->bodies != NULL) {
+        for (i = 0; i < wg->nbodies; i++) {
+            if (wg->bodies[i] != NULL) {
+                free(wg->bodies[i]->name);
+                free(wg->bodies[i]->a);
+                free(wg->bodies[i]);
+            }
+        }
     }
     free((void *) wg->bodies);
 
-    for (i = 0; i < wg->nzones; i++) {
-        free(wg->zones[i]->name);
-        free(wg->zones[i]);
+    if (wg->zones != NULL) {
+        for (i = 0; i < wg->nzones; i++) {
+            if (wg->zones[i] != NULL) {
+                free(wg->zones[i]->name);
+                free(wg->zones[i]);
+            }
+        }
     }
     free((void *) wg->zones);
 
+    free(wg->filename);
     free(wg);
-    return 0;
+    return OSH_OK;
 }
 
-int osh_gemca_load(char const *filename, struct gemca_workspace *g) {
-    if (!osh_gemca_parse(filename, g)) {
-        return 0;
+enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g) {
+    enum osh_status rc;
+
+    rc = osh_gemca_parse(filename, g);
+    if (rc != OSH_OK) {
+        return rc;
     }
 
     printf("--- SETUP BODIES \n");
-    if (!osh_gemca_body_setup(g)) {
-        return 0;
+    rc = osh_gemca_body_setup(g);
+    if (rc != OSH_OK) {
+        return rc;
     }
     printf("--- SETUP BODIES COMPLETED ---- \n\n");
 
-    return 1;
+    return OSH_OK;
 }
 
 /* for a given ray and *g workspace, return what zone we are in */

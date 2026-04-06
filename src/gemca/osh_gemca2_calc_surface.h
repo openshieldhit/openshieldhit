@@ -3,8 +3,8 @@
 
 #include "gemca/osh_gemca2.h"
 
-int osh_gemca2_add_surfaces(struct body *b, int n);
-int osh_gemca2_add_surf_pars(struct surface *s, int type);
+enum osh_status osh_gemca2_add_surfaces(struct body *b, int n);
+enum osh_status osh_gemca2_add_surf_pars(struct surface *s, int type);
 int osh_gemca2_check_surface_side(struct surface const *sf, struct ray const *r);
 
 #endif /* OSH_GEMCA2_CALC_SURFACE_H */

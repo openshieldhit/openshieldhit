@@ -23,7 +23,7 @@ static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g);
 
 static size_t _reformat(char const *input, char **output);
 static int _tokenizer(char const *input, char ***t);
-static int _reverse_tokens(char **tokens, int ntokens);
+static void _reverse_tokens(char **tokens, int ntokens);
 static int _is_operator(char o);
 static void _concat(char **a, char const *b);
 
@@ -33,11 +33,11 @@ static void _concat(char **a, char const *b);
  * @param[in,out] **body - body to be initialized, memory will be allocated and zeroed,
  *    and memory will also be allocated to the sub-bodies in this zone.
  *
- * @returns 1
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca_zone_init(struct zone **zone) {
+enum osh_status osh_gemca_zone_init(struct zone **zone) {
 
     struct zone *z;
 
@@ -45,7 +45,7 @@ int osh_gemca_zone_init(struct zone **zone) {
 
     if (z == NULL) {
         osh_error("osh_gemca_zone_init: could not allocate memory\n");
-        return 0;
+        return OSH_ENOMEM;
     }
 
     z->medium = 0;
@@ -54,7 +54,7 @@ int osh_gemca_zone_init(struct zone **zone) {
     z->name = NULL;
 
     *zone = z;
-    return 1;
+    return OSH_OK;
 }
 
 /**
@@ -113,11 +113,11 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
  * @param[in] *fp - file pointer to file open for reading.
  * @param[in,out] *g - gemca workspace
  *
- * @returns 1 if format is OK, 0 otherwise
+ * @returns OSH_OK on success, OSH_E* on failure.
  *
  * @author Niels Bassler
  */
-int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
+enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
 
     char *key = NULL;
     char *args = NULL;
@@ -137,7 +137,7 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
 
     /* move to the second end statement */
     if (!_rewind_oshfile(shf)) {
-        return 0;
+        return OSH_EIO;
     }
 
     /* forward to the first line after the first END statement */
@@ -153,9 +153,15 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
     /* important: it must hold a NULL byte, so the _concat() function will work. */
     bstr = calloc(1, sizeof(char));
     tstr = calloc(1, sizeof(char));
+    if ((bstr == NULL) || (tstr == NULL)) {
+        free(bstr);
+        free(tstr);
+        return OSH_ENOMEM;
+    }
 
     /* now proceed parsing */
     zone_active = 0;
+    izone = 0;
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
         // printf("LINE %i: KEY='%s' ARGS='%s'\n", lineno, key, args);
@@ -177,7 +183,7 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
                 free(line);
                 free(bstr);
                 free(tstr);
-                return 0;
+                return OSH_EPARSE;
             }
             _concat(&bstr, key);
         } else {
@@ -220,13 +226,27 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
             /* 3) new zone: increment zone index and allocate memory for the name, and copy it into the placeholder.*/
             if (!zone_active) {
                 zone_active = 1;
-                izone = 0;
             } else {
                 izone++;
             }
             /* we may have crossed the END card, which will exceed the number of zones */
+            if (izone >= g->nzones) {
+                osh_error("Error parsing geometry line %li - too many zones (max=%li)\n",
+                          (long int) lineno,
+                          (long int) g->nzones);
+                free(line);
+                free(bstr);
+                free(tstr);
+                return OSH_EPARSE;
+            }
             len = strlen(key);
             g->zones[izone]->name = calloc(len + 1, sizeof(char));
+            if (g->zones[izone]->name == NULL) {
+                free(line);
+                free(bstr);
+                free(tstr);
+                return OSH_ENOMEM;
+            }
             g->zones[izone]->id = izone + 1;  /* zone IDs start at 1, not at 0 */
             g->zones[izone]->lineno = lineno; /* save the line number where this zone was defined */
             strncpy(g->zones[izone]->name, key, len + 1);
@@ -241,7 +261,7 @@ int osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
     free(bstr);
     free(tstr);
 
-    return 1;
+    return OSH_OK;
 }
 
 /* @brief Check if the given key is a zone continuation operator */
@@ -653,7 +673,7 @@ static int _tokenizer(char const *input, char ***ptokens) {
  *
  * @author Niels Bassler
  */
-static int _reverse_tokens(char **tokens, int ntokens) {
+static void _reverse_tokens(char **tokens, int ntokens) {
 
     char *c; /* temporary placeholder for a pointer to string */
     int i;
@@ -690,7 +710,6 @@ static int _reverse_tokens(char **tokens, int ntokens) {
             }
         }
     }
-    return 1;
 }
 
 /**

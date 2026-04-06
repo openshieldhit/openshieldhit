@@ -69,7 +69,7 @@
  * @param part_out Receives n particle-species pointers (owned by wb).
  * @param ray_out  Receives n sampled rays in OSH_COORD_UNIVERSE.
  *                 ray_out[i].p[3] holds total kinetic energy [MeV].
- * @return OSH_OK on success, negative OSH_E* on error. */
+ * @return OSH_OK on success, OSH_E* on error. */
 int osh_beam_new_primaries(
     struct beam_workspace const *wb, struct osh_rng *rng, size_t n, struct particle **part_out, struct ray_v *ray_out);
 
