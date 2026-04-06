@@ -80,19 +80,19 @@ void osh_gemca_stack_free(struct stack **ps) {
 void osh_gemca_stack_print(struct stack *s) {
     size_t i;
     osh_debug(OSH_LOG_HLINE);
-    osh_debug("STACK : %p\n", (void *) s);
-    osh_debug("NELEM : %llu\n", (unsigned long long) s->ni);
-    osh_debug("NMEM  : %llu\n", (unsigned long long) s->n);
+    osh_debug("STACK : %p", (void *) s);
+    osh_debug("NELEM : %llu", (unsigned long long) s->ni);
+    osh_debug("NMEM  : %llu", (unsigned long long) s->n);
 
     for (i = 0; i < s->ni; i++) {
         if (s->si[i]->type == _OSH_GEMCA_STACKITEM_OPERATOR) {
-            osh_debug("    StackITEM: %llu: %p  type: %i  '%c'\n",
+            osh_debug("    StackITEM: %llu: %p  type: %i  '%c'",
                       (unsigned long long) i,
                       (void *) s->si[i],
                       s->si[i]->type,
                       s->si[i]->v.op);
         } else {
-            osh_debug("    StackITEM: %llu: %p  type: %i\n", (unsigned long long) i, (void *) s->si[i], s->si[i]->type);
+            osh_debug("    StackITEM: %llu: %p  type: %i", (unsigned long long) i, (void *) s->si[i], s->si[i]->type);
         }
     }
 }

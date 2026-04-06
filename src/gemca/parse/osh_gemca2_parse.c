@@ -41,7 +41,7 @@ enum osh_status osh_gemca_parse(char const *filename, struct gemca_workspace *g)
 
     /* test_format() also counts the number of bodies and zones */
     if (!_test_format(shf, &nbody, &nzone)) {
-        osh_error("Unknown format of %s\n", filename);
+        osh_error("Unknown format of %s", filename);
         osh_fclose(shf);
         return OSH_EPARSE;
     }
@@ -147,7 +147,7 @@ static int _test_format(struct oshfile *shf, size_t *nbody, size_t *nzone) {
  */
 static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error("Failed to rewind geometry file '%s'\n", shf->filename);
+        osh_error("Failed to rewind geometry file '%s'", shf->filename);
         return 0;
     }
     shf->lineno = 0;

@@ -87,7 +87,7 @@ enum osh_status osh_gemca_parse_media(struct oshfile *shf, struct gemca_workspac
             izone++;
 
             if (izone > g->nzones) {
-                osh_error("Too many zones found: %llu (expected %llu) in %s line %i\n",
+                osh_error("Too many zones found: %llu (expected %llu) in %s line %i",
                           (long long unsigned int) izone,
                           (long long unsigned int) g->nzones,
                           g->filename,
@@ -137,7 +137,7 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
     int medium = 0;
 
     if (args == NULL) {
-        osh_error("No arguments found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        osh_error("No arguments found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
         return OSH_EPARSE;
     }
 
@@ -146,14 +146,14 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
     if (arg != NULL) {
         medium = atoi(arg);
     } else {
-        osh_error("No medium index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        osh_error("No medium index found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
         return OSH_EPARSE;
     }
 
     /* next two arguments are the zone indices, or a range of zone indices */
     arg = strtok(NULL, " ");
     if (arg == NULL) {
-        osh_error("No zone index found in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+        osh_error("No zone index found in ASSIGNMA(T) %s line number %i", g->filename, lineno);
         return OSH_EPARSE;
     }
     /* check if zone name was given, if so, get the index for that zone name */
@@ -186,7 +186,7 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
     if (arg != NULL) {
         stride = atoi(arg);
         if (stride == 0) {
-            osh_error("Invalid stride 0 in ASSIGNMA(T) %s line number %i\n", g->filename, lineno);
+            osh_error("Invalid stride 0 in ASSIGNMA(T) %s line number %i", g->filename, lineno);
             return OSH_EPARSE;
         }
     }
@@ -194,14 +194,14 @@ static enum osh_status _assign_material(struct gemca_workspace *g, char *args, i
     /* assign the medium to the zones in the specified range */
     for (iz = zone_start; iz <= zone_end; iz += stride) {
         if (iz == 0 || iz > g->nzones) {
-            osh_error("Zone index %llu out of range in ASSIGNMA(T) %s line number %i\n",
+            osh_error("Zone index %llu out of range in ASSIGNMA(T) %s line number %i",
                       (long long unsigned int) iz,
                       g->filename,
                       lineno);
             return OSH_EPARSE;
         }
         g->zones[iz - 1]->medium = medium;
-        osh_debug("    Assigned medium %i to zoneID %llu named '%s'\n",
+        osh_debug("    Assigned medium %i to zoneID %llu named '%s'",
                   medium,
                   (long long unsigned int) iz,
                   g->zones[iz - 1]->name);
@@ -229,7 +229,7 @@ static size_t _get_zoneid_from_name(char const *zname, struct gemca_workspace co
  */
 static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error("Failed to rewind geometry file '%s'\n", shf->filename);
+        osh_error("Failed to rewind geometry file '%s'", shf->filename);
         return 0;
     }
     shf->lineno = 0;
