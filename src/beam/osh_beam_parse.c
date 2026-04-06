@@ -929,7 +929,6 @@ static int _parse_usebmod(struct beam_workspace *beam, struct oshfile *oshf, cha
 static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, char const *args) {
     char tmpstr[256];
     char *_path = NULL;
-    size_t len;
     if (sscanf(args, "%255s", tmpstr) != 1) {
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
@@ -937,14 +936,11 @@ static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, ch
     if (osh_relative_path_to_file(&_path, beam->wdir, tmpstr) != 0) {
         return OSH_ENOMEM;
     }
-    len = strlen(_path);
     free(beam->fname_spotlist);
-    beam->fname_spotlist = (char *) malloc(len + 1);
-    if (!beam->fname_spotlist) {
-        free(_path);
-        return OSH_ENOMEM;
-    }
-    memcpy(beam->fname_spotlist, _path, len + 1);
+    /* _path is already an owned heap string. Move that ownership into the
+     * workspace instead of allocating a second string and copying bytes. */
+    beam->fname_spotlist = _path;
+    _path = NULL; /* local pointer no longer owns the allocation */
     osh_info("USECBEAM enabled: queued external spotlist %s", beam->fname_spotlist);
     free(_path);
     beam->beam_mode = OSH_BEAM_MODE_SOBP;
