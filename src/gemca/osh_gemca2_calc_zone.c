@@ -100,37 +100,25 @@ static inline int _in_node(struct cgnode const *self, struct ray const *r) {
 
     if (self->type == _OSH_GEMCA_CGNODE_BODY) {
         return _in_body(self->body, r);
-    } else {
-        a = _in_node(self->left, r);
-        b = _in_node(self->right, r);
-        op = (unsigned char) self->op;
-
-        switch (op) { // TODO: use defines instead of checking on char
-
-        case '+':
-            if (a && b) {
-                return 1;
-            }
-            break;
-
-        case '-':
-            if (a && !b) {
-                return 1;
-            }
-            break;
-
-        case '|':
-            if (a || b) {
-                return 1;
-            }
-            break;
-
-        default:
-            osh_error("_in_node(): unknown operator");
-            break;
-        }
     }
-    return 0;
+
+    op = (unsigned char) self->op;
+
+    switch (op) { /* TODO: use defines instead of checking on char */
+
+    case '+': /* intersection: both must be inside */
+        return _in_node(self->left, r) && _in_node(self->right, r);
+
+    case '-': /* difference: inside left, outside right */
+        return _in_node(self->left, r) && !_in_node(self->right, r);
+
+    case '|': /* union: either side suffices */
+        return _in_node(self->left, r) || _in_node(self->right, r);
+
+    default:
+        osh_error("_in_node(): unknown operator");
+        return 0;
+    }
 }
 
 /**
