@@ -185,7 +185,7 @@ static float const _icru_db_densities[] = {
 /* Mean excitation energies taken (eV) from NIST estar materials
     https://physics.nist.gov/cgi-bin/Star/compos.pl?matno=001
 */
-float const _icru_db_mean_excitation_energies[] = {
+static float const _icru_db_mean_excitation_energies[] = {
     19.20f,  41.80f,  40.00f,  63.70f,  76.00f,  81.00f,  82.00f,  95.00f,  115.00f, 137.00f, 149.00f, 156.00f, 166.00f,
     173.00f, 173.00f, 180.00f, 174.00f, 188.00f, 190.00f, 191.00f, 216.00f, 233.00f, 245.00f, 257.00f, 272.00f, 286.00f,
     297.00f, 311.00f, 322.00f, 330.00f, 334.00f, 350.00f, 347.00f, 348.00f, 343.00f, 352.00f, 363.00f, 366.00f, 379.00f,
