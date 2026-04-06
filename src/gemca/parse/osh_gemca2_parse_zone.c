@@ -72,7 +72,7 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
     char *args = NULL;
     char *line = NULL;
 
-    int nzone = 0;
+    size_t nzone = 0;
     int in_block = 0;
 
     if (!_rewind_oshfile(shf)) {
@@ -100,7 +100,7 @@ size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
         free(line);
     }
     free(line);
-    osh_info("Found %i zones in geo.dat file", nzone);
+    osh_info("Found %zu zones in geo.dat file", nzone);
     return nzone;
 }
 

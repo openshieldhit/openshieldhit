@@ -113,7 +113,7 @@ void osh_gemca_print_gemca(struct gemca_workspace const *g) {
 
     size_t i;
 
-    osh_info("Gemca->nBodies %lli ->nZones%lli", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
+    osh_info("Gemca->nBodies %llu ->nZones%llu", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
 
     for (i = 0; i < g->nbodies; i++) {
         osh_gemca_print_body(g->bodies[i]);
