@@ -116,6 +116,7 @@ int main(int argc, char *argv[]) {
     double t1;
     double elapsed;
 
+    /* Setup logger, select OSH_LOG_DEBUG for more information. */
     osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
 
     /* --- argument handling ------------------------------------------------ */
