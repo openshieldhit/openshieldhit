@@ -934,12 +934,15 @@ static int _parse_usecbeam(struct beam_workspace *beam, struct oshfile *oshf, ch
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
-    osh_relative_path_to_file(&_path, beam->wdir, tmpstr);
+    if (osh_relative_path_to_file(&_path, beam->wdir, tmpstr) != 0) {
+        return OSH_ENOMEM;
+    }
     len = strlen(_path);
     free(beam->fname_spotlist);
     beam->fname_spotlist = (char *) malloc(len + 1);
     if (!beam->fname_spotlist) {
-        osh_alloc_failed("beam->fname_spotlist");
+        free(_path);
+        return OSH_ENOMEM;
     }
     memcpy(beam->fname_spotlist, _path, len + 1);
     osh_info("USECBEAM enabled: queued external spotlist %s", beam->fname_spotlist);
