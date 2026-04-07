@@ -186,7 +186,7 @@ int plot(struct gemca_workspace *g, int ndots) {
         scanning_ray(&r);
         random_ray(&r);
 
-        zidx = osh_gemca_zone(*g, r);
+        zidx = osh_gemca_get_zone_index(g, &r);
         if (zidx == OSH_GEMCA_ZONE_INDEX_INVALID) {
             continue;
         }
@@ -249,7 +249,7 @@ int plot(struct gemca_workspace *g, int ndots) {
         printf("Ray: (%.3f,%.3f,%.3f) (%.3f,%.3f,%.3f)\n", r.p[0], r.p[1], r.p[2], r.cp[0], r.cp[1], r.cp[2]);
         // exit(0);
 
-        zi = osh_gemca_zone_index(*g, r);
+        zi = osh_gemca_get_zone_index(g, &r);
         if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
             continue;
         }

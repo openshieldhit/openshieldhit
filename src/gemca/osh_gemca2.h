@@ -66,7 +66,6 @@ struct cgnode {
 struct zone {            /* zone description */
     struct cgnode node;  /* top level node of the abstract syntax tree which holds
                             the body description */
-    size_t index;        /* Dense internal index, 0-based. */
     size_t material_idx; /* Dense material index; unresolved as (size_t)-1 until post-parse resolution. */
     size_t lineno;       /* first line number where this zone was defined */
     size_t ntokens;      /* number of tokens */
@@ -96,9 +95,7 @@ enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg);
 enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g);
 
 /* Return the dense internal zone index for a ray, or OSH_GEMCA_ZONE_INDEX_INVALID if no zone contains it. */
-size_t osh_gemca_zone(struct gemca_workspace g, struct ray r);
-/* Return a dense zone index. Callers must check OSH_GEMCA_ZONE_INDEX_INVALID before indexing g.zones[index]. */
-size_t osh_gemca_zone_index(struct gemca_workspace g, struct ray r);
+size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r);
 
 /* for a given ray and *g workspace, return distance to nearest surface along
  * ray */

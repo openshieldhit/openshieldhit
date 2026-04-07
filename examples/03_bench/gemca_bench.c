@@ -161,7 +161,7 @@ int main(int argc, char *argv[]) {
     t0 = _now();
     for (i = 0; i < nrays; i++) {
         _random_ray(&r, &rng, bbox_min, bbox_max);
-        sink = osh_gemca_zone_index(g, r);
+        sink = osh_gemca_get_zone_index(&g, &r);
     }
     t1 = _now();
     elapsed = t1 - t0;
@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
     t0 = _now();
     for (i = 0; i < nrays; i++) {
         _random_ray(&r, &rng, bbox_min, bbox_max);
-        zone_idx = osh_gemca_zone_index(g, r);
+        zone_idx = osh_gemca_get_zone_index(&g, &r);
         if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
             continue;
         }

@@ -47,7 +47,6 @@ enum osh_status osh_gemca_zone_init(struct zone **zone) {
         return OSH_ENOMEM;
     }
 
-    z->index = 0;
     z->material_idx = (size_t) -1;
     z->name = NULL;
     z->material_name = NULL;
@@ -189,7 +188,7 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
             if (zone_active && strlen(bstr) > 0) {
 
                 osh_debug(OSH_LOG_HLINE);
-                osh_debug("ZONE: #%3lli - '%s'", (long long int) g->zones[izone]->index, g->zones[izone]->name);
+                osh_debug("ZONE: #%3lli - '%s'", (long long int) izone, g->zones[izone]->name);
                 osh_debug("USERGIVEN STRING: '%s'", bstr);
                 _reformat(bstr, &tstr);
                 osh_debug("PRE-TOKEN STRING: '%s'", tstr);
@@ -244,7 +243,6 @@ enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspac
                 free(tstr);
                 return OSH_ENOMEM;
             }
-            g->zones[izone]->index = izone;
             g->zones[izone]->lineno = lineno; /* save the line number where this zone was defined */
             strncpy(g->zones[izone]->name, key, len + 1);
         }
