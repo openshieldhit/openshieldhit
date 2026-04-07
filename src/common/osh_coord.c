@@ -136,11 +136,9 @@ int osh_coord_trans_point(double const p[3], double pt[3], double const t[16]) {
     /* this expands the given coodinates to homogeonous coords, and applies affine transformation */
     for (i = 0; i < 3; i++) {
         j = i * 4;
+        /* TODO: subtracting t[j+3] is non-standard — it should be added, with the
+         * corresponding matrix values stored negative. Kept as-is for GEMCA compatibility. */
         pt[i] = p[0] * t[j] + p[1] * t[j + 1] + p[2] * t[j + 2] - t[j + 3];
-        // TODO:
-        // subtracting the translation t[j+3] is non-strandard. It should be added, an instead the
-        // cooresponding t values should be stored negative.
-        // Keeping this for now, in order to be compatible to gemca.f
     }
     return 1;
 }
@@ -219,8 +217,8 @@ int osh_coord_trans_ray(struct ray_v const *r, struct ray_v *rt, double const t[
     return 1;
 }
 
-// as before, but with struct ray instead of struct ray_v. Temporary solution, until struct ray_v has been renamed to
-// struct ray.
+/* Same transform as osh_coord_trans_ray but for struct ray (uses cp field).
+ * Temporary — remove once struct ray is renamed to struct ray_v. */
 int osh_coord_trans_ray_r(struct ray const *r, struct ray *rt, double const t[16]) {
     int i;
     int j;
@@ -233,10 +231,7 @@ int osh_coord_trans_ray_r(struct ray const *r, struct ray *rt, double const t[16
     return 1;
 }
 
-// TODO:
-// int osh_coord_transinv_step(struct step st, struct step stt, double const t[4][4]) {
-//     return 1;
-// }
+/* TODO: implement osh_coord_transinv_step once struct step is defined */
 
 /**
  * @brief Inverts a 4x4 matrix stored in serially C-style.

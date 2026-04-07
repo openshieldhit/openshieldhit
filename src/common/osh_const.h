@@ -1,6 +1,6 @@
 /* Various physical and mathematical constants */
-#ifndef _OSH_CONST
-#define _OSH_CONST
+#ifndef OSH_CONST_H
+#define OSH_CONST_H
 
 /* taken from NIST: https://physics.nist.gov/cuu/Constants/index.html */
 /* OSH_AMU         Changed in 2020, old definition was 931.4940954  MeV/c**2 */
@@ -17,4 +17,4 @@
 
 #define OSH_SIGMA2FWHM 2.3548200450309493  /* factor to convert 1 sigma to FWHM of Gaussian dist 2*sqrt(2*ln(2)) */
 #define OSH_FWHM2SIGMA 0.42466090014400953 /* = 1.0 / OSH_SIGMA2FWHM */
-#endif                                     /* !_OSH_CONST */
+#endif /* OSH_CONST_H */
