@@ -1,5 +1,5 @@
-#ifndef _OSH_BEAM
-#define _OSH_BEAM
+#ifndef OSH_BEAM_H
+#define OSH_BEAM_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -183,34 +183,73 @@ struct beam_workspace {
 
 /* ---- API ------------------------------------------------------------------ */
 
-/* Allocate, parse, and fully initialise a beam workspace from a file path.
+/**
+ * @brief Allocate, parse, and fully initialise a beam workspace from a file.
  *
+ * @details
  * The working directory for resolving relative paths inside the file (spot
- * lists, USEBMOD, USEPARLEV etc.) is derived from dirname(path) automatically.
+ * lists, USEBMOD, USEPARLEV, etc.) is derived from dirname(path) automatically.
+ * The sequence is: open file → parse raw keys → load external spot list (if
+ * any) → validate → post-parse (derive energies, build affine matrices,
+ * accumulate cumulative weights).
  *
- * On success, *wb_out owns all allocated resources and must be released with
+ * On success *wb_out owns all allocated resources and must be released with
  * osh_beam_workspace_free(). On failure *wb_out is left unmodified and no
  * memory is leaked.
  *
- * @param path   Path to the beam input file (not retained).
- * @param lg     Logger for diagnostics; NULL uses the global default logger.
- * @param wb_out Receives the allocated workspace pointer on success.
- * @return OSH_OK on success, OSH_E* code on failure.
- *
  * Future constructor variants follow the same signature pattern:
  *   osh_beam_setup_from_pipe(fd,   lg, wb_out)
- *   osh_beam_setup_from_json(json, lg, wb_out) */
+ *   osh_beam_setup_from_json(json, lg, wb_out)
+ *
+ * @param[in]  path    Path to the beam input file (not retained after return).
+ * @param[in]  lg      Logger for diagnostics; NULL uses the global default.
+ * @param[out] wb_out  Receives the allocated workspace pointer on success.
+ *
+ * @returns OSH_OK on success, OSH_E* on failure.
+ */
 int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct beam_workspace **wb_out);
 
-/* Release a beam workspace and all owned resources. Safe to call with NULL. */
+/**
+ * @brief Release a beam workspace and all owned resources.
+ *
+ * @details
+ * Frees spots, cum_wt, phsp, rifi, parlev, wdir, fname, and fname_spotlist.
+ * The embedded beam_shared is not heap-allocated and needs no separate free.
+ * Safe to call with NULL.
+ *
+ * @param[in] wb  Workspace to release; may be NULL.
+ *
+ * @returns OSH_OK always.
+ */
 int osh_beam_workspace_free(struct beam_workspace *wb);
+
+/**
+ * @brief Release a phase-space source and all its owned arrays.
+ *
+ * @details
+ * Frees the six SoA arrays (p[0..2], d[0..2]), e, wt, pdg, and fname,
+ * then frees the struct itself. Safe to call with NULL.
+ *
+ * @param[in] phsp  Phase-space source to release; may be NULL.
+ *
+ * @returns OSH_OK always.
+ */
+int osh_beam_phsp_free(struct beam_phsp *phsp);
 
 /* TODO: osh_beam_get_primary() — sample next primary ray from workspace */
 
-/* Print a concise summary of the workspace (debugging / logging). */
+/**
+ * @brief Print a concise summary of the beam workspace to the info logger.
+ *
+ * @param[in] wb  Workspace to print; silently ignored when NULL.
+ */
 void osh_beam_print(struct beam_workspace const *wb);
 
-/* Print a concise summary of a single beam spot (debugging / logging). */
+/**
+ * @brief Print a concise summary of one beam spot to the info logger.
+ *
+ * @param[in] spot  Spot to print; silently ignored when NULL.
+ */
 void osh_beam_print_spot(struct beam_spot const *spot);
 
-#endif /* !_OSH_BEAM */
+#endif /* OSH_BEAM_H */
