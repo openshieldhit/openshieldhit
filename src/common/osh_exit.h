@@ -1,8 +1,9 @@
 #ifndef OSH_EXIT_H
 #define OSH_EXIT_H
 
-/* Keep this file synchronized with exitcodes.inc and be compatible to
- * /usr/include/sysexits.h for  Windows MSCV. */
+/* Keep this file synchronized with exitcodes.inc and compatible with
+ * /usr/include/sysexits.h values. This header provides those codes on
+ * platforms such as MSVC where sysexits.h is not available. */
 
 // clang-format off
 #define EX_OK       0   /* successful termination */

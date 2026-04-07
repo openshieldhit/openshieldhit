@@ -17,7 +17,7 @@
  * local density per step without rebuilding material tables for every density.
  */
 struct osh_material_runtime_tables {
-    double *energy_grid; /* Kinetic-energy grid [MeV or MeV/n], length nenergy. */
+    double *energy_grid; /* Kinetic-energy-per-nucleon grid [MeV/nucleon], length nenergy. */
 
     float *default_rho;            /* [nmaterials], reference density [g/cm^3]. */
     float *mean_excitation_energy; /* [nmaterials], material-level MEE [eV]. */

@@ -415,7 +415,7 @@ static int _parse_deltae(struct beam_workspace *beam, struct oshfile *oshf, char
  * Syntax: DEMIN \<e\>  [MeV/nucleon]
  *
  * Prevents the step-size algorithm from producing infinitely small steps
- * near the Bragg peak where dE/dx diverges.  Typical value: 0.025 MeV/u.
+ * near the Bragg peak where dE/dx diverges.  Typical value: 0.025 MeV/nucleon.
  *
  * @param[in,out] beam  Writes beam->demin.
  * @param[in]     oshf  Used for error diagnostics.
@@ -793,7 +793,7 @@ static int _parse_stragg(struct beam_workspace *beam, struct oshfile *oshf, char
  * Syntax: TMAX0 \<value\> [\<spread\>]
  *
  * Sign convention (inherited from SHIELD-HIT12A):
- *   positive value — total kinetic energy T0 [MeV/nucleon]
+ *   positive value — kinetic energy T0 [MeV/nucleon] for ions, [MeV] otherwise
  *   negative value — total momentum p0 [MeV/c] (stored as |value|)
  *
  * The same sign convention applies to the optional spread parameter.
@@ -820,11 +820,13 @@ static int _parse_tmax0(struct beam_workspace *beam, struct oshfile *oshf, char 
     if (_f[0] < 0.0f) {
         beam->spots[0].p0 = fabs((double) _f[0]); /* momentum given */
         beam->spots[0].t0 = 0.0;
+        beam->spots[0].t0_per_nucleon = 0;
     } else {
-        beam->spots[0].t0 = (double) _f[0]; /* energy given */
+        beam->spots[0].t0 = (double) _f[0]; /* energy per nucleon until post-parse for ions */
         beam->spots[0].p0 = 0.0;
+        beam->spots[0].t0_per_nucleon = 1;
         if (_f[0] < OSH_BEAM_TMIN) {
-            osh_error("in %s line %i: TMAX0 %.4f MeV is below transport threshold %.4f MeV",
+            osh_error("in %s line %i: TMAX0 %.4f MeV/nucleon is below transport threshold %.4f MeV/nucleon",
                       oshf->filename,
                       oshf->lineno,
                       (double) _f[0],
@@ -836,9 +838,11 @@ static int _parse_tmax0(struct beam_workspace *beam, struct oshfile *oshf, char 
     if (_f[1] < 0.0f) {
         beam->spots[0].psigma = fabs((double) _f[1]); /* momentum spread given */
         beam->spots[0].tsigma = 0.0;
+        beam->spots[0].tsigma_per_nucleon = 0;
     } else {
-        beam->spots[0].tsigma = (double) _f[1]; /* energy spread given */
+        beam->spots[0].tsigma = (double) _f[1]; /* energy spread per nucleon until post-parse for ions */
         beam->spots[0].psigma = 0.0;
+        beam->spots[0].tsigma_per_nucleon = 1;
     }
 
     return OSH_OK;

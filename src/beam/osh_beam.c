@@ -244,9 +244,12 @@ static int _wb_validate(const struct beam_workspace *wb) {
  * @brief Derive whichever of t0/p0 and tsigma/psigma was not given by the parser.
  *
  * @details
- * The parser stores either t0 (positive TMAX0 input) or p0 (negative input,
- * stored as fabs). This function fills in the missing quantity using the
- * particle rest mass via the relativistic energy-momentum relation:
+ * The parser stores either t0 (positive TMAX0 input or spot-list energy) or p0
+ * (negative TMAX0 input, stored as fabs). Positive user-facing ion energies
+ * are specific energies; this function first converts marked t0 and tsigma values
+ * to total MeV by multiplying by A for ions with A > 1. It then fills in the
+ * missing quantity using the particle rest mass via the relativistic
+ * energy-momentum relation:
  *
  *   p = sqrt(T² + 2*T*m)    (momentum from kinetic energy)
  *   T = sqrt(p² + m²) - m   (kinetic energy from momentum)
@@ -263,12 +266,28 @@ static int _wb_validate(const struct beam_workspace *wb) {
  */
 static void _postparse_spot_energy(struct beam_spot *spot) {
     double mass;
+    double scale;
 
     if (!spot->part) {
         return;
     }
 
     mass = spot->part->mass;
+
+    if (spot->t0_per_nucleon || spot->tsigma_per_nucleon) {
+        scale = 1.0;
+        if (spot->part->is_nucleus && spot->part->a > 1u) {
+            scale = (double) spot->part->a;
+        }
+        if (spot->t0_per_nucleon) {
+            spot->t0 *= scale;
+            spot->t0_per_nucleon = 0;
+        }
+        if (spot->tsigma_per_nucleon) {
+            spot->tsigma *= scale;
+            spot->tsigma_per_nucleon = 0;
+        }
+    }
 
     if (spot->t0 > 0.0 && spot->p0 == 0.0) {
         spot->p0 = osh_physics_momentum(spot->t0, mass);
@@ -290,7 +309,7 @@ static void _postparse_spot_energy(struct beam_spot *spot) {
  * @details
  * Converts the beam direction (theta, phi) to a unit direction vector r,
  * then calls osh_vect_setup_tmatrix_bzalign_affine() to build a 4x4
- * column-major matrix that maps beam-local PZALIGN coordinates to UNIVERSE:
+ * row-major matrix that maps beam-local PZALIGN coordinates to UNIVERSE:
  *
  *   p_universe = R * p_local + R * spot->p
  *
@@ -409,7 +428,7 @@ void osh_beam_print(struct beam_workspace const *wb) {
     osh_info("%s", "");
     osh_info("%-18s : %f", "DeltaE/E", wb->deltae);
     osh_info("%-18s : %f MeV", "Neutron cut", wb->ncut);
-    osh_info("%-18s : %f MeV/n", "DeltaE min", wb->demin);
+    osh_info("%-18s : %f MeV/nucleon", "DeltaE min", wb->demin);
     osh_info("%s", "");
     osh_info("%-18s : %s", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);
     osh_info("%-18s : %s", "Straggling mode", osh_beam_stragg_names[(int) wb->straggl]);

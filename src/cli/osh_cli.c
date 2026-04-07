@@ -141,6 +141,9 @@ static int parse_u64(char const *s, unsigned long long *out) {
     if (!s || !*s || !out) {
         return 0;
     }
+    if (s[0] < '0' || s[0] > '9') {
+        return 0;
+    }
 
     errno = 0;
     v = strtoull(s, &end, 10);
