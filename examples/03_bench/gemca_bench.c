@@ -2,7 +2,7 @@
  * gemca_bench.c - Headless geometry raycasting benchmark.
  *
  * Loads a geo.dat file, fires N random rays uniformly across the geometry
- * bounding box, and measures throughput of osh_gemca_zone_index() and
+ * bounding box, and measures throughput of osh_gemca_get_zone_index() and
  * osh_gemca_get_distance() calls.  Reports wall-clock time and rays/second so that
  * algorithmic improvements (or regressions) are immediately visible.
  *

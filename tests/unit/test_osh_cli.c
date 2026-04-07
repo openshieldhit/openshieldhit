@@ -54,6 +54,31 @@ static void test_nstat_and_overrides(void) {
     ASSERT_TRUE(opt.beam_path != NULL && strcmp(opt.beam_path, "beam_override.dat") == 0);
 }
 
+static void test_nstat_rejects_leading_whitespace(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--nstat", " 123", NULL};
+
+    int rc = osh_cli_parse(3, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
+}
+
+static void test_nstat_rejects_sign_prefix(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv_plus[] = {"openshieldhit", "--nstat=+5", NULL};
+    char *argv_minus[] = {"openshieldhit", "-N", "-1", NULL};
+
+    int rc = osh_cli_parse(2, argv_plus, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
+
+    rc = osh_cli_parse(3, argv_minus, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
+}
+
 static void test_rejects_extra_positional_argument(void) {
     char err[256];
     struct osh_cli_options opt;
@@ -77,6 +102,14 @@ static int run_named_test(char const *name) {
         test_nstat_and_overrides();
         return 0;
     }
+    if (strcmp(name, "nstat_rejects_leading_whitespace") == 0) {
+        test_nstat_rejects_leading_whitespace();
+        return 0;
+    }
+    if (strcmp(name, "nstat_rejects_sign_prefix") == 0) {
+        test_nstat_rejects_sign_prefix();
+        return 0;
+    }
     if (strcmp(name, "rejects_extra_positional_argument") == 0) {
         test_rejects_extra_positional_argument();
         return 0;
@@ -92,6 +125,8 @@ int main(int argc, char *argv[]) {
     test_version_short_flag();
     test_verbose_and_dir_options();
     test_nstat_and_overrides();
+    test_nstat_rejects_leading_whitespace();
+    test_nstat_rejects_sign_prefix();
     test_rejects_extra_positional_argument();
     return 0;
 }

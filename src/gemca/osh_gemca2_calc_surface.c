@@ -5,7 +5,6 @@
 #include <stdlib.h>
 
 #include "common/osh_coord.h"
-#include "common/osh_exit.h"
 #include "common/osh_logger.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"

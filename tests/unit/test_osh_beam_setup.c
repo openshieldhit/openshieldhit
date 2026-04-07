@@ -263,7 +263,7 @@ static void test_setup_primary_za_resolves_ion(void) {
     struct beam_workspace *wb = NULL;
     int rc;
 
-    snprintf(beam_text, sizeof beam_text, "PRIMARY 6 12\nTMAX0 1200.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    snprintf(beam_text, sizeof beam_text, "PRIMARY 6 12\nTMAX0 400.0 1.0\nBEAMPOS 0.0 0.0 -10.0\n");
     _write_temp_file(beam_path, sizeof(beam_path), beam_text);
 
     rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
@@ -275,6 +275,9 @@ static void test_setup_primary_za_resolves_ion(void) {
     ASSERT_TRUE(wb->primary.z == 6);
     ASSERT_TRUE(wb->primary.a == 12);
     ASSERT_TRUE(wb->spots[0].part == &wb->primary);
+    ASSERT_TRUE(fabs(wb->spots[0].t0 - 4800.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].tsigma - 12.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->shared.emax - 4800.0) < 1e-12);
     ASSERT_TRUE(fabs(wb->spots[0].p0) > 0.0);
 
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);

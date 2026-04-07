@@ -133,7 +133,7 @@ int osh_coord_point2sph(double const *v, double *theta, double *phi) {
 int osh_coord_trans_point(double const p[3], double pt[3], double const t[16]) {
     int i;
     int j;
-    /* this expands the given coodinates to homogeonous coords, and applies affine transformation */
+    /* this expands the given coordinates to homogeneous coords, and applies affine transformation */
     for (i = 0; i < 3; i++) {
         j = i * 4;
         /* TODO: subtracting t[j+3] is non-standard — it should be added, with the
@@ -144,7 +144,7 @@ int osh_coord_trans_point(double const p[3], double pt[3], double const t[16]) {
 }
 
 /**
- * @brief transposes a homogeonous coordinate point p[4] to h.c. point pt[4] using
+ * @brief transposes a homogeneous coordinate point p[4] to h.c. point pt[4] using
  * 4x4 affine transformation matrix t.
  *
  * @details this function is prepared for future use for possible shear transformations and similar.

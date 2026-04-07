@@ -17,8 +17,10 @@ struct parlev;        /* LEVERS parameter block — defined in osh_beam_parlev.h
 
 /* A single beam spot.
  *
- * All energies are TOTAL kinetic energy in MeV — NOT MeV/nucleon, NOT specific
- * energy. The transport engine divides by part->a (nucleon number A) when it
+ * After osh_beam_setup_from_path(), all energies are TOTAL kinetic energy in
+ * MeV — NOT MeV/nucleon, NOT specific energy. User-facing beam inputs such as
+ * TMAX0 use MeV/nucleon for ions and are converted during post-parse once the
+ * primary particle is known. The transport engine divides by part->a when it
  * needs specific energy for stopping-power table lookup. Storing total values
  * here avoids per-primary multiplications in the inner transport loop.
  *
@@ -56,9 +58,11 @@ struct beam_spot {
     unsigned int spot_id;
     unsigned int layer_id;
 
-    struct particle *part; /* particle species — pointer into a shared table, NOT owned here */
-    char shape;            /* lateral profile shape: OSH_BEAM_SHAPE_* */
-    char tsigma_type;      /* energy spread distribution: OSH_RANDOM_DIST_* */
+    struct particle *part;   /* particle species — pointer into a shared table, NOT owned here */
+    char shape;              /* lateral profile shape: OSH_BEAM_SHAPE_* */
+    char tsigma_type;        /* energy spread distribution: OSH_RANDOM_DIST_* */
+    char t0_per_nucleon;     /* parser input marker; post-parse converts t0 to total MeV */
+    char tsigma_per_nucleon; /* parser input marker; post-parse converts tsigma to total MeV */
 };
 
 /* ---- beam_shared ---------------------------------------------------------- */

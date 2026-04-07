@@ -382,7 +382,9 @@ static int _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct be
  * the beam direction (theta, phi) and the BEAMPOS offset.
  *
  * @param[in,out] ray   Ray in PZALIGN on entry; converted to UNIVERSE in place.
- * @param[in]     spot  Provides the 4x4 column-major affine matrix _tm[16].
+ * @param[in]     spot  Provides the 4x4 row-major affine matrix _tm[16],
+ *                      as consumed by osh_vect_trans_point_affine() and
+ *                      osh_vect_trans_vector_affine().
  */
 static void _apply_transform(struct ray_v *ray, struct beam_spot const *spot) {
     double p[3];

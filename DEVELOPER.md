@@ -110,6 +110,10 @@ If a function is trivially infallible (e.g. a pure memcpy wrapper), prefer `void
 - Public functions have `osh` prefix : `osh_foobar()`
 - Private/internal functions use `static` and no `_osh` prefix : `foobar()`
 - Private/inline functions use `static inline` and `_` prefix: `_foobar()`. This naming may be subject to change later when we settle on a better convention.
+- Do not add helper functions merely to shorten one call site. First look for an
+  existing function in the module that owns the concept. Add a new helper only
+  when it has a clear owner, captures reusable non-obvious logic, or prevents a
+  real consistency bug across call sites.
 - Prefer `enum` instead of `#define` numbered lists.
 - Avoid magic numbers in implementation code:
   - Use named constants (`enum`, `static const`, or `#define` where appropriate) for option IDs, buffer sizes, exit codes, default filenames, and similar values.

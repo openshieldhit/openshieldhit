@@ -118,6 +118,7 @@ static int _spotlist_fill_spot(struct beam_spot *spot, double const values[OSH_S
 
     spot->t0 = values[0] * 1000.0;
     spot->p0 = 0.0;
+    spot->t0_per_nucleon = 1;
 
     switch (ncols) {
     case 5:
@@ -135,6 +136,7 @@ static int _spotlist_fill_spot(struct beam_spot *spot, double const values[OSH_S
     case 7:
         spot->tsigma = values[1] * 1000.0;
         spot->psigma = 0.0;
+        spot->tsigma_per_nucleon = 1;
         sx = values[4] * fwhm_to_sigma;
         sy = values[5] * fwhm_to_sigma;
         spot->wt = values[6];
@@ -143,6 +145,7 @@ static int _spotlist_fill_spot(struct beam_spot *spot, double const values[OSH_S
     case 9:
         spot->tsigma = values[1] * 1000.0;
         spot->psigma = 0.0;
+        spot->tsigma_per_nucleon = 1;
         sx = values[4] * fwhm_to_sigma;
         sy = values[5] * fwhm_to_sigma;
         spot->div[0] = values[6] * 0.001;
@@ -153,6 +156,7 @@ static int _spotlist_fill_spot(struct beam_spot *spot, double const values[OSH_S
     case 11:
         spot->tsigma = values[1] * 1000.0;
         spot->psigma = 0.0;
+        spot->tsigma_per_nucleon = 1;
         sx = values[4] * fwhm_to_sigma;
         sy = values[5] * fwhm_to_sigma;
         spot->div[0] = values[6] * 0.001;
