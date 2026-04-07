@@ -443,7 +443,7 @@ int plot(struct gemca_workspace *g, int nrays, int zone) {
 
             double const range_cm = RANGE_B10_HE * 100.0;
 
-            size_t zi0 = osh_gemca_zone_index(*g, r);
+            size_t zi0 = osh_gemca_get_zone_index(g, &r);
             if (zi0 == OSH_GEMCA_ZONE_INDEX_INVALID) {
                 continue;
             }
@@ -590,7 +590,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
             ra->dist[i] = range_debug; /* temporary assumption on max length */
             while (1) {
                 random_ray_3d(r);
-                zi = osh_gemca_zone_index(*g, *r);
+                zi = osh_gemca_get_zone_index(g, r);
                 if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
                     continue;
                 }
@@ -617,7 +617,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
             while (dist_rest > 0) {
                 /* get what zone and medium we are in */
                 // printf("in while loop\n");
-                zi = osh_gemca_zone_index(*g, *r);
+                zi = osh_gemca_get_zone_index(g, r);
                 if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
                     break;
                 }
@@ -688,7 +688,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
     (void) dummy;
 
     while (remaining > 0.0) {
-        size_t zi = osh_gemca_zone_index(*g, r);
+        size_t zi = osh_gemca_get_zone_index(g, &r);
         if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
             break;
         }
@@ -746,7 +746,7 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots) {
     for (i = 0; i < ndots; i++) {
         random_pos(&r);
 
-        size_t zidx = osh_gemca_zone_index(*g, r);
+        size_t zidx = osh_gemca_get_zone_index(g, &r);
         if (zidx == OSH_GEMCA_ZONE_INDEX_INVALID) {
             continue;
         }

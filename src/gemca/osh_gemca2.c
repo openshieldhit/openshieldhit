@@ -73,22 +73,6 @@ enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g) 
     return OSH_OK;
 }
 
-/* for a given ray and *g workspace, return what zone we are in */
-size_t osh_gemca_zone(struct gemca_workspace g, struct ray r) {
-    size_t zone;
-
-    zone = osh_gemca_get_zone(&g, &r);
-    return zone;
-}
-
-/* for a given ray and *g workspace, return what zone we are in */
-size_t osh_gemca_zone_index(struct gemca_workspace g, struct ray r) {
-    size_t zidx;
-
-    zidx = osh_gemca_get_zone_index(&g, &r);
-    return zidx;
-}
-
 /* for a given ray and zone workspace, return distance to nearest surface along
  * ray */
 double osh_gemca_dist(struct zone *z, struct ray const *r) {
@@ -175,7 +159,6 @@ void osh_gemca_print_body(struct body const *b) {
 void osh_gemca_print_zone(struct zone const *z) {
     osh_debug(OSH_LOG_HLINE);
     osh_debug("    Zone name   : '%s'", z->name);
-    osh_debug("    Zone index  :  %llu", (unsigned long long) z->index);
     osh_debug("    Zone material :  %s", z->material_name ? z->material_name : "(unset)");
     osh_debug("    Zone material index :  %llu", (unsigned long long) z->material_idx);
     osh_debug("    Zone tree follows...");

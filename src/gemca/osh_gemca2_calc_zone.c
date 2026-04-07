@@ -31,32 +31,6 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
  *
  * @author Niels Bassler
  */
-size_t osh_gemca_get_zone(struct gemca_workspace *g, struct ray *r) {
-
-    size_t i;
-
-    if (!g || !r) {
-        return OSH_GEMCA_ZONE_INDEX_INVALID;
-    }
-
-    for (i = 0; i < g->nzones; i++) {
-        if (_in_zone(g->zones[i], r)) {
-            return g->zones[i]->index;
-        }
-    }
-    return OSH_GEMCA_ZONE_INDEX_INVALID;
-}
-
-/**
- * @brief For a given ray, check what zone we are in.
- *
- * @param[in] g - a gemca object
- * @param[in] r - a ray
- *
- * @returns Dense internal zone index, or OSH_GEMCA_ZONE_INDEX_INVALID if no zone contains the ray.
- *
- * @author Niels Bassler
- */
 size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r) {
 
     size_t i;
