@@ -13,7 +13,7 @@
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-static inline double _dist_zone(struct cgnode *self, struct ray const *r);
+static inline double _dist_zone(struct cgnode const *self, struct ray const *r, int *is_inside);
 static inline double _dist_body(struct body const *b, struct ray const *r);
 static inline double _dist_surface(struct surface const *sf, struct ray const *r);
 
@@ -57,12 +57,11 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
 
     osh_vect_norm(rr.cp); /* normalize the direction vector */
 
-    /* per definition, we are always inside this zone *z we begin with */
-    z->node._is_inside = 1; // is this really needed?
+    int is_inside;
 
     while (1) {
-        d = _dist_zone(&z->node, &rr); /* find shortest distance to closest body */
-        if (!z->node._is_inside) {     /* keep advancing until we left the zone */
+        d = _dist_zone(&z->node, &rr, &is_inside); /* find shortest distance to closest body */
+        if (!is_inside) {                          /* keep advancing until we left the zone */
             break;
         }
         if (d < 0.0) {
@@ -79,41 +78,44 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
     return total_distance;
 }
 
-static inline double _dist_zone(struct cgnode *self, struct ray const *r) {
+static inline double _dist_zone(struct cgnode const *self, struct ray const *r, int *is_inside) {
     double d;
     double d1;
     double d2;
+    int left_inside;
+    int right_inside;
     struct ray tr; /* transformed ray to coordinate system of the body */
 
     if (self->type == _OSH_GEMCA_CGNODE_BODY) { /* we are in the leaf node */
         if (_transform_to_local(self->body, r, &tr) != OSH_OK) {
-            self->_is_inside = 0;
+            *is_inside = 0;
             return OSH_GEMCA_INFINITY;
         }
 
         d = _dist_body(self->body,
-                       &tr); /* Calculate distance to body's surface. It may, or may not be at a zone boudnary. */
-        self->_is_inside = _inside_body(self->body, &tr); /* Check if ray is inside the body */
+                       &tr); /* Calculate distance to body's surface. It may, or may not be at a zone boundary. */
+        *is_inside = _inside_body(self->body, &tr);
         return d;
     } else {
-        d1 = _dist_zone(self->left, r);  // Distance to left child
-        d2 = _dist_zone(self->right, r); // Distance to right child
+        d1 = _dist_zone(self->left, r, &left_inside);   /* Distance to left child */
+        d2 = _dist_zone(self->right, r, &right_inside); /* Distance to right child */
 
         /* Apply the appropriate operation based on self->op */
         /* This is following table 3 in Scott D. Roth's algorithm from "Ray Casting for Modeling Solids"
            (Computer Graphics, Vol. 18, No. 3, July 1982) */
         switch (self->op) {
         case '|': // Union
-            self->_is_inside = self->left->_is_inside || self->right->_is_inside;
+            *is_inside = left_inside || right_inside;
             break;
         case '+': // Intersection
-            self->_is_inside = self->left->_is_inside && self->right->_is_inside;
+            *is_inside = left_inside && right_inside;
             break;
         case '-': // Difference
-            self->_is_inside = self->left->_is_inside && !self->right->_is_inside;
+            *is_inside = left_inside && !right_inside;
             break;
         default:
             osh_error("_dist_zone(): unknown operator");
+            *is_inside = 0;
             break;
         }
         /* return smallest possible distance */

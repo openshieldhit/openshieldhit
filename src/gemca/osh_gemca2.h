@@ -55,8 +55,6 @@ struct cgnode {
     int type;             /* _OSH_GEMCA_CGNODE_* : mark if this is a leaf (=body) node or a
                              composite node */
     char op;              /* operator, if this is a composite node */
-    char _is_inside;      /* updated while raycasting to see whether ray is inside or
-                             outside node */
 };
 
 /* User-facing geometry references are strings. Body names, zone names, and material names are never converted to
