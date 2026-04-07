@@ -23,7 +23,7 @@
 
 /** @name Internal node-type tags (do not use outside gemca/) */
 /** @{ */
-#define _OSH_GEMCA_CGNODE_BODY      0 /**< cgnode is a leaf holding a body pointer */
+#define _OSH_GEMCA_CGNODE_BODY 0      /**< cgnode is a leaf holding a body pointer */
 #define _OSH_GEMCA_CGNODE_COMPOSITE 1 /**< cgnode is an interior node with left/right children and an operator */
 /** @} */
 
@@ -35,10 +35,13 @@
 #define OSH_GEMCA_INFINITY 1e300
 #endif
 
-#define OSH_GEMCA_SMALL    1e-12 /**< Epsilon for floating-point comparisons */
-#define OSH_GEMCA_STEPLIM  1e-8  /**< Minimum step size to avoid getting stuck on a surface due to numerical precision */
+#define OSH_GEMCA_SMALL 1e-12 /**< Epsilon for floating-point comparisons */
+#define OSH_GEMCA_STEPLIM                                                                                              \
+    1e-8 /**< Minimum step size to avoid getting stuck on a surface due to numerical precision                         \
+          */
 
 #define OSH_GEMCA_ZONE_INDEX_INVALID ((size_t) -1) /**< Sentinel returned when no zone contains the ray */
+
 /** @} */
 
 /**
@@ -107,13 +110,13 @@ struct cgnode {
  *       beam_workspace at simulation time.
  */
 struct zone {
-    struct cgnode node;   /**< Root of the CSG AST describing this zone's geometry */
-    size_t material_idx;  /**< Dense material array index; (size_t)-1 until post-parse resolution */
-    size_t lineno;        /**< Line number in geo.dat where this zone was first defined */
-    size_t ntokens;       /**< Number of tokens in the raw zone expression */
-    char **tokens;        /**< Tokenised zone expression (reversed, for stack-based parsing) */
-    char *name;           /**< User-given zone name (string key) */
-    char *material_name;  /**< User-facing material name assigned to this zone */
+    struct cgnode node;  /**< Root of the CSG AST describing this zone's geometry */
+    size_t material_idx; /**< Dense material array index; (size_t)-1 until post-parse resolution */
+    size_t lineno;       /**< Line number in geo.dat where this zone was first defined */
+    size_t ntokens;      /**< Number of tokens in the raw zone expression */
+    char **tokens;       /**< Tokenised zone expression (reversed, for stack-based parsing) */
+    char *name;          /**< User-given zone name (string key) */
+    char *material_name; /**< User-facing material name assigned to this zone */
 };
 
 /**
