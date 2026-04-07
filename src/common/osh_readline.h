@@ -3,7 +3,7 @@
 
 #include "osh_file.h"
 
-#define OSH_READLINE_COMMENT "#*!" /* list of characters which will be treated as comment prefix */
+#define OSH_READLINE_COMMENT "#*" /* list of characters which will be treated as comment prefix */
 #define OSH_MAX_LINE_LENGTH 4096   /* maximum line length inside a file to be read in bytes */
 
 /**
