@@ -17,6 +17,8 @@
 static void _wb_defaults(struct beam_workspace *wb);
 static int _wb_validate(const struct beam_workspace *wb);
 static int _wb_postparse(struct beam_workspace *wb);
+static void _postparse_spot_energy(struct beam_spot *spot);
+static void _build_spot_tm(struct beam_spot *spot, struct beam_shared const *sh);
 
 int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct beam_workspace **wb_out) {
     int rc = OSH_OK;
@@ -121,15 +123,14 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     }
     /* wb->shared is embedded by value — no free needed */
     if (wb->phsp) {
-        // TODO osh_beam_phsp_free(wb->phsp);
-        free(wb->phsp);
+        osh_beam_phsp_free(wb->phsp);
     }
     if (wb->rifi) {
-        // TODO osh_beam_rifi_free(wb->rifi);
+        /* TODO: replace with osh_beam_rifi_free() once struct ripple_filter is defined */
         free(wb->rifi);
     }
     if (wb->parlev) {
-        // TODO osh_beam_parlev_free(wb->parlev);
+        /* TODO: replace with osh_beam_parlev_free() once struct parlev is defined */
         free(wb->parlev);
     }
     if (wb->fname) {
@@ -142,6 +143,36 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     return OSH_OK;
 }
 
+int osh_beam_phsp_free(struct beam_phsp *phsp) {
+    int axis;
+
+    if (!phsp) {
+        return OSH_OK;
+    }
+    for (axis = 0; axis < 3; axis++) {
+        free(phsp->p[axis]);
+        free(phsp->d[axis]);
+    }
+    free(phsp->e);
+    free(phsp->wt);
+    free(phsp->pdg);
+    free(phsp->fname);
+    free(phsp);
+    return OSH_OK;
+}
+
+/**
+ * @brief Set all pointer and scalar fields in a freshly-allocated workspace to
+ *        safe zero/NULL values.
+ *
+ * @details
+ * Called immediately after calloc(), which already zero-initialises memory.
+ * The explicit assignments here serve as documentation of every field the
+ * workspace owns and make the intended initial state clear to the reader,
+ * independent of the allocator used.
+ *
+ * @param[in,out] wb  Workspace to initialise; silently ignored when NULL.
+ */
 static void _wb_defaults(struct beam_workspace *wb) {
     if (!wb) {
         return;
@@ -178,6 +209,18 @@ static void _wb_defaults(struct beam_workspace *wb) {
     wb->neutrfast = 0;
 }
 
+/**
+ * @brief Check that the workspace is in a consistent state after parsing.
+ *
+ * @details
+ * Verifies that exactly one source type (spots or phsp) is present, that the
+ * spot array is non-empty when spots mode is active, and that a PRIMARY
+ * particle was resolved for spot-based sources.
+ *
+ * @param[in] wb  Workspace to validate.
+ *
+ * @returns OSH_OK if valid, OSH_EINVAL otherwise.
+ */
 static int _wb_validate(const struct beam_workspace *wb) {
     if (!wb) {
         return OSH_EINVAL;
@@ -197,14 +240,27 @@ static int _wb_validate(const struct beam_workspace *wb) {
     return OSH_OK;
 }
 
-/* Derive missing t0/p0 and tsigma/psigma for one spot.
+/**
+ * @brief Derive whichever of t0/p0 and tsigma/psigma was not given by the parser.
  *
- * The parser stores either t0 (positive input) or p0 (negative input, fabs).
- * Post-parse fills in whichever was not given, using the particle rest mass.
- * psigma is derived from tsigma via the first-order Jacobian dp/dT = E/p,
- * i.e. psigma = tsigma * (t0 + mass) / p0, valid when sigma << T0.
+ * @details
+ * The parser stores either t0 (positive TMAX0 input) or p0 (negative input,
+ * stored as fabs). This function fills in the missing quantity using the
+ * particle rest mass via the relativistic energy-momentum relation:
  *
- * Skipped silently when no primary particle was resolved yet. */
+ *   p = sqrt(T² + 2*T*m)    (momentum from kinetic energy)
+ *   T = sqrt(p² + m²) - m   (kinetic energy from momentum)
+ *
+ * The momentum spread is derived from the energy spread using the first-order
+ * Jacobian dp/dT = E/p = (T + m)/p, which gives:
+ *
+ *   psigma = tsigma * (t0 + mass) / p0
+ *
+ * This linear approximation is valid when sigma << T0.
+ * Silently skipped when spot->part is NULL (PRIMARY not yet resolved).
+ *
+ * @param[in,out] spot  Beam spot whose energy/momentum fields are completed.
+ */
 static void _postparse_spot_energy(struct beam_spot *spot) {
     double mass;
 
@@ -228,14 +284,23 @@ static void _postparse_spot_energy(struct beam_spot *spot) {
     }
 }
 
-/* Build the beam-sampling affine matrix for one spot using the standard
- * local->universe helper in osh_vect.
+/**
+ * @brief Build the affine sampling matrix spot->_tm for one beam spot.
  *
- * Matrix contract (row-major):
+ * @details
+ * Converts the beam direction (theta, phi) to a unit direction vector r,
+ * then calls osh_vect_setup_tmatrix_bzalign_affine() to build a 4x4
+ * column-major matrix that maps beam-local PZALIGN coordinates to UNIVERSE:
+ *
  *   p_universe = R * p_local + R * spot->p
  *
- * spot->p is interpreted as a local beam-frame offset before gantry/table
- * rotation. */
+ * where R is the 3x3 rotation derived from r and spot->p is the BEAMPOS
+ * offset in the local beam frame. The theta == 0 branch skips the
+ * trigonometric evaluation for the common no-rotation case.
+ *
+ * @param[in,out] spot  Spot whose _tm[16] matrix is written.
+ * @param[in]     sh    Shared beam parameters providing theta and phi [rad].
+ */
 static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh) {
     double cs[3];
     double r[3];
@@ -254,6 +319,25 @@ static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh)
     osh_vect_setup_tmatrix_bzalign_affine(spot->p, r, spot->_tm);
 }
 
+/**
+ * @brief Run all post-parse derivations on a fully-parsed beam workspace.
+ *
+ * @details
+ * Iterates over all spots and for each:
+ *   - assigns the resolved primary particle pointer
+ *   - derives missing energy/momentum via _postparse_spot_energy()
+ *   - builds the PZALIGN->UNIVERSE affine matrix via _build_spot_tm()
+ *   - accumulates the cumulative weight array for SOBP spot selection
+ *   - tracks the maximum energy and momentum across all spots
+ *
+ * The cumulative weight array is reallocated on every call so that
+ * _wb_postparse() can be called again after a spot list is replaced.
+ *
+ * @param[in,out] wb  Workspace to finalise; must not be NULL.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure,
+ *          OSH_EINVAL if any spot weight is negative.
+ */
 static int _wb_postparse(struct beam_workspace *wb) {
     size_t i;
     double wt_acc;
