@@ -17,4 +17,4 @@
 
 #define OSH_SIGMA2FWHM 2.3548200450309493  /* factor to convert 1 sigma to FWHM of Gaussian dist 2*sqrt(2*ln(2)) */
 #define OSH_FWHM2SIGMA 0.42466090014400953 /* = 1.0 / OSH_SIGMA2FWHM */
-#endif /* OSH_CONST_H */
+#endif                                     /* OSH_CONST_H */
