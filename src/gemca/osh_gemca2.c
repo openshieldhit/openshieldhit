@@ -63,37 +63,17 @@ enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g) 
         return rc;
     }
 
-    osh_debug("setting up bodies");
+    osh_debug("Setting up bodies...");
     rc = osh_gemca_body_setup(g);
     if (rc != OSH_OK) {
         return rc;
     }
-    osh_debug("body setup complete");
+    osh_debug("Body setup complete.");
 
     return OSH_OK;
 }
 
-/* for a given ray and zone workspace, return distance to nearest surface along
- * ray */
-double osh_gemca_dist(struct zone *z, struct ray const *r) {
-    double d;
-
-    d = osh_gemca_get_distance(z, r); /* TODO: this double calling is just during debugging */
-    return d;
-}
-
-/**
- * @brief Print the gemca workspace
- *
- * @details
- *
- * @param[in]
- * @param[in]
- *
- * @returns
- *
- * @author Niels Bassler
- */
+/** @brief Print all bodies and zones in the workspace to the debug log. */
 void osh_gemca_print_gemca(struct gemca_workspace const *g) {
 
     size_t i;
@@ -109,18 +89,7 @@ void osh_gemca_print_gemca(struct gemca_workspace const *g) {
     }
 }
 
-/**
- * @brief Print a given body
- *
- * @details
- *
- * @param[in]
- * @param[in]
- *
- * @returns
- *
- * @author Niels Bassler
- */
+/** @brief Print body parameters (name, type, args, surfaces) to the debug log. */
 void osh_gemca_print_body(struct body const *b) {
 
     int i;
@@ -144,18 +113,7 @@ void osh_gemca_print_body(struct body const *b) {
     }
 }
 
-/**
- * @brief Print the zone data.
- *
- * @details
- *
- * @param[in]
- * @param[in]
- *
- * @returns
- *
- * @author Niels Bassler
- */
+/** @brief Print zone name, material, and CSG tree to the debug log. */
 void osh_gemca_print_zone(struct zone const *z) {
     osh_debug(OSH_LOG_HLINE);
     osh_debug("    Zone name   : '%s'", z->name);
@@ -178,18 +136,7 @@ void osh_gemca_print_surface(struct surface const *s) {
     osh_debug("%s", "");
 }
 
-/**
- * @brief Print the abstract syntax tree.
- *
- * @details
- *
- * @param[in]
- * @param[in]
- *
- * @returns
- *
- * @author Niels Bassler
- */
+/** @brief Recursively print the CSG node tree rooted at `self` to the debug log. */
 void osh_gemca_print_cgnodes(struct cgnode const *self) {
     osh_debug("        This node pointer   : %p", (void *) self);
 

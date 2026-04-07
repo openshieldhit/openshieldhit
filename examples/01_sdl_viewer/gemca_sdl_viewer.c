@@ -253,7 +253,7 @@ int plot(struct gemca_workspace *g, int ndots) {
         if (zi == OSH_GEMCA_ZONE_INDEX_INVALID) {
             continue;
         }
-        dist = osh_gemca_dist(g->zones[zi], &r);
+        dist = osh_gemca_get_distance(g->zones[zi], &r);
         printf("dist: %f\n", dist);
         if (dist > 20.0) {
             dist = 20.0;
