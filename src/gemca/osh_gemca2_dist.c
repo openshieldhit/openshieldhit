@@ -33,19 +33,6 @@ static inline double _dist_ellipsoid(double ra2, double rb2, double rc2, struct 
 static inline double _quadratic_solver(double a, double b, double c);
 static inline double _minpos(double a, double b);
 
-/**
- * @brief For a given ray and given zone, get smallest postive distance to zone surface along ray.
- *
- * @details The ray is forward propagated until it leaves the zone given by `z`.
- *          The total distance travelled inside the zone is returned.
- *
- * @param[in] z - current zone the ray is in
- * @param[in] r - a ray
- *
- * @returns distance to next zone boundary
- *
- * @author Niels Bassler
- */
 double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
 
     double d;
