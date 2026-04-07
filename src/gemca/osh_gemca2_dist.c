@@ -154,12 +154,12 @@ static inline double _dist_body(struct body const *b, struct ray const *r) {
 
         sf = b->surfs[i]; /* get surface number i*/
 
-        d = _dist_surface(sf, r); /* calculate distance to surface along ray (postive direction only) */
+        d = _dist_surface(sf, r); /* distance to surface along ray (positive direction only) */
 
-        if (d > 0.0 && d < _d) { /* check if positive and closer than current minimal distance */
+        if (d > 0.0 && d < _d) {
             _d = d;
-        } /* end if distance is positve */
-    } /* end loop over each surface */
+        }
+    }
     return _d;
 }
 
@@ -199,8 +199,8 @@ static inline double _dist_surface(struct surface const *sf, struct ray const *r
     case OSH_GEMCA_SURF_PLANEZ:
         d = _dist_plane_xyz(2, sf, r);
         break;
-    case OSH_GEMCA_SURF_PLANE: // TODO: refactor to OSH_GEMCA_SURF_PLANE
-        _dist_plane(sf, r);
+    case OSH_GEMCA_SURF_PLANE:
+        d = _dist_plane(sf, r);
         break;
     default:
         break;

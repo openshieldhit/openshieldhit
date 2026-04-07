@@ -53,7 +53,7 @@ size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r) {
  * @details This function is recursive and will traverse the AST of the zone.
  *
  * @param[in] z - a zone
- * @param[out] r - a ray
+ * @param[in] r - a ray
  *
  * @returns 1 if ray is in zone, 0 if not.
  *
@@ -81,7 +81,7 @@ static inline int _in_node(struct cgnode const *self, struct ray const *r) {
 
     op = (unsigned char) self->op;
 
-    switch (op) { /* TODO: use defines instead of checking on char */
+    switch (op) {
 
     case '+': /* intersection: both must be inside */
         return _in_node(self->left, r) && _in_node(self->right, r);
@@ -110,7 +110,7 @@ static inline int _in_node(struct cgnode const *self, struct ray const *r) {
  *
  * @author Niels Bassler
  */
-inline int _in_body(struct body const *b, struct ray const *r) {
+static inline int _in_body(struct body const *b, struct ray const *r) {
 
     int i;
     struct ray tr; /* ray in body-coordinate system */
@@ -146,14 +146,12 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
     int i;
     int j;
 
-    /* TODO: For now, just copy all elements of the ray. Later this can be optimized. */
     for (i = 0; i < 3; i++) {
         tr->p[i] = r->p[i];
         tr->cp[i] = r->cp[i];
     }
     tr->system = (unsigned char) b->coord;
 
-    /* then overwrite the values which may change: */
     switch (b->coord) {
     case OSH_COORD_UNIVERSE:
         break;
@@ -162,7 +160,7 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
         /* simple translation */
         for (i = 0; i < 3; i++) {
             j = i * 4;
-            tr->p[i] = r->p[i] + b->t[j + 3]; /* notice, that in osh_coord.h see comment */
+            tr->p[i] = r->p[i] + b->t[j + 3];
             tr->cp[i] = r->cp[i];
         }
         break;

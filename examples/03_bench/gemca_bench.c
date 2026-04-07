@@ -3,7 +3,7 @@
  *
  * Loads a geo.dat file, fires N random rays uniformly across the geometry
  * bounding box, and measures throughput of osh_gemca_zone_index() and
- * osh_gemca_dist() calls.  Reports wall-clock time and rays/second so that
+ * osh_gemca_get_distance() calls.  Reports wall-clock time and rays/second so that
  * algorithmic improvements (or regressions) are immediately visible.
  *
  * Usage: gemca_bench <geo.dat> [nrays]
@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
         if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
             continue;
         }
-        dsink = osh_gemca_dist(g.zones[zone_idx], &r);
+        dsink = osh_gemca_get_distance(g.zones[zone_idx], &r);
     }
     t1 = _now();
     elapsed = t1 - t0;

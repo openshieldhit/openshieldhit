@@ -635,7 +635,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
                 // printf("get distance\n");
                 // printf("Zone: %li, medium: %li\n", zi, medium);
                 // osh_transport_print_ray(r);
-                dist = osh_gemca_dist(g->zones[zi], r);
+                dist = osh_gemca_get_distance(g->zones[zi], r);
                 // printf("dist: %f\n", dist);
 
                 if (dist > dist_rest) { /* stop particles travleling too far */
@@ -694,7 +694,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
         }
         size_t medium = material_debug_index(g->zones[zi]->material_name);
 
-        double d_to_bnd = osh_gemca_dist(g->zones[zi], &r);
+        double d_to_bnd = osh_gemca_get_distance(g->zones[zi], &r);
 
         /* guard: if geometry gives nonsense, avoid infinite loops */
         if (!(d_to_bnd > 0.0) || !isfinite(d_to_bnd)) {
