@@ -1,5 +1,5 @@
-#ifndef _OSH_COORD
-#define _OSH_COORD
+#ifndef OSH_COORD_H
+#define OSH_COORD_H
 
 /* list of coordinate system identifiers */
 #define OSH_COORD_UNKNOWN 0  /* Unknown or not set */
@@ -46,14 +46,10 @@ int osh_coord_trans_point(double const p[3], double pt[3], double const t[16]);
 int osh_coord_trans_point_hc(double const p[4], double pt[4], double const t[16]);
 int osh_coord_trans_pos(struct position const *p, struct position *pt, double const t[16]);
 int osh_coord_trans_ray(struct ray_v const *r, struct ray_v *rt, double const t[16]);
-int osh_coord_trans_ray_r(
-    struct ray const *r,
-    struct ray *rt,
-    double const t[16]); // TODO temporary solution, until struct ray_v has been renamed to struct ray
-
-// int osh_coord_trans_step(struct step st, struct step stt, double const t[4][4]);
-// int osh_coord_transinv_step(struct step st, struct step stt, double const t[4][4]);
+int osh_coord_trans_ray_r(struct ray const *r,
+                          struct ray *rt,
+                          double const t[16]); /* TODO: temporary — remove once struct ray is renamed to struct ray_v */
 
 int osh_invert_matrix(double const m[16], double im[16]);
 
-#endif /* !_OSH_COORD */
+#endif /* OSH_COORD_H */

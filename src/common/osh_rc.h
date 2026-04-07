@@ -1,5 +1,5 @@
-#ifndef _OSH_RC_H
-#define _OSH_RC_H
+#ifndef OSH_RC_H
+#define OSH_RC_H
 
 /* Library-level status return codes */
 enum osh_status {
@@ -15,4 +15,4 @@ enum osh_status {
 
 char const *osh_strerr(int code);
 
-#endif /* !_OSH_RC_H */
+#endif /* OSH_RC_H */

@@ -215,7 +215,7 @@ void osh_vect_matrix4_print(double const *tm) {
     printf("Transformation matrix:\n");
     printf("    ");
     for (i = 0; i < 16; i++) {
-        printf("% .3f ", tm[i]); // fixed width printout
+        printf("% .3f ", tm[i]); /* fixed width printout */
         if (!((i + 1) % 4)) {
             printf("\n    ");
         }
