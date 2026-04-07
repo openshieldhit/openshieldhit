@@ -11,14 +11,9 @@
 
 #define OSH_SPOTLIST_MAX_COLS 11
 
-static int _spotlist_is_comment(char c);
 static int _spotlist_parse_values(char *line, double values[OSH_SPOTLIST_MAX_COLS], int *ncols_out);
 static int _spotlist_detect_layout(FILE *fp, size_t *nspots_out, int *ncols_out);
 static int _spotlist_fill_spot(struct beam_spot *spot, double const values[OSH_SPOTLIST_MAX_COLS], int ncols);
-
-static int _spotlist_is_comment(char c) {
-    return c == '#' || c == '*' || c == '!';
-}
 
 static int _spotlist_parse_values(char *line, double values[OSH_SPOTLIST_MAX_COLS], int *ncols_out) {
     char *p;
@@ -36,7 +31,7 @@ static int _spotlist_parse_values(char *line, double values[OSH_SPOTLIST_MAX_COL
         while (isspace((unsigned char) *p)) {
             p++;
         }
-        if (*p == '\0' || _spotlist_is_comment(*p)) {
+        if (*p == '\0' || strchr(OSH_READLINE_COMMENT, (unsigned char) *p)) {
             break;
         }
         if (ncols >= OSH_SPOTLIST_MAX_COLS) {

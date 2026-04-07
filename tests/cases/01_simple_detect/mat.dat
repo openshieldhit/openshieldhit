@@ -2,6 +2,6 @@ MATERIAL Water
 STATE 1
 RHO 1.000
 NUCLID    1     2
-IVALUE    22.9      ! Override mean excitation energy of hydrogen
+IVALUE    22.9      # Override mean excitation energy of hydrogen
 NUCLID    8     1
 END

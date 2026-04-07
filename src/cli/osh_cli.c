@@ -99,6 +99,21 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "  Input overrides replace only the corresponding default file.\n");
 }
 
+/**
+ * @brief Write a formatted error message into err and return 1.
+ *
+ * @details
+ * Convenience so callers can write `return set_err(...)` in one statement.
+ * fmt must contain exactly one %s placeholder, which is filled by arg.
+ * Always returns 1 regardless of whether err is NULL.
+ *
+ * @param[out] err      Destination buffer; silently ignored when NULL.
+ * @param[in]  err_cap  Capacity of err in bytes.
+ * @param[in]  fmt      printf-style format string with exactly one %s.
+ * @param[in]  arg      String substituted for %s.
+ *
+ * @returns 1 always, so callers can `return set_err(...)`.
+ */
 static int set_err(char *err, size_t err_cap, char const *fmt, char const *arg) {
     if (err && (err_cap > 0)) {
         (void) snprintf(err, err_cap, fmt, arg);
@@ -107,6 +122,18 @@ static int set_err(char *err, size_t err_cap, char const *fmt, char const *arg) 
     return 1;
 }
 
+/**
+ * @brief Parse a decimal unsigned 64-bit integer from a string.
+ *
+ * @details
+ * Rejects empty strings, leading whitespace, sign prefixes, and any trailing
+ * non-digit characters. Uses strtoull with base 10.
+ *
+ * @param[in]  s    Null-terminated string to parse.
+ * @param[out] out  Receives the parsed value on success.
+ *
+ * @returns 1 on success, 0 if the string is invalid or out-of-range.
+ */
 static int parse_u64(char const *s, unsigned long long *out) {
     unsigned long long v;
     char *end = NULL;
@@ -125,6 +152,24 @@ static int parse_u64(char const *s, unsigned long long *out) {
     return 1;
 }
 
+/**
+ * @brief Parse a single long option from argv[*idx].
+ *
+ * @details
+ * Handles both `--name=value` and `--name value` forms. After a successful
+ * parse, *idx points at the last token consumed; the main loop will advance
+ * it once more before the next iteration.
+ *
+ * @param[in]     argc     Total argument count.
+ * @param[in]     argv     Argument vector.
+ * @param[in,out] idx      Index of the current `--...` token; may be
+ *                         advanced when the value is a separate token.
+ * @param[in,out] opt      Options struct to update.
+ * @param[out]    err      Error message buffer.
+ * @param[in]     err_cap  Capacity of err in bytes.
+ *
+ * @returns 0 on success, 1 on error.
+ */
 static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_options *opt, char *err, size_t err_cap) {
     char *eq;
     char const *arg = argv[*idx];
@@ -215,6 +260,23 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
     return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
 }
 
+/**
+ * @brief Parse all short options packed in argv[*idx] (e.g. `-vvN 1000`).
+ *
+ * @details
+ * Iterates over each character in the flag cluster. Flags that take a value
+ * (-N, -o) consume either the remainder of the current token or the next
+ * argv token, then return immediately since no further flags can follow.
+ *
+ * @param[in]     argc     Total argument count.
+ * @param[in]     argv     Argument vector.
+ * @param[in,out] idx      Index of the current `-...` token; may be advanced.
+ * @param[in,out] opt      Options struct to update.
+ * @param[out]    err      Error message buffer.
+ * @param[in]     err_cap  Capacity of err in bytes.
+ *
+ * @returns 0 on success, 1 on error.
+ */
 static int
 parse_short_options(int argc, char *argv[], int *idx, struct osh_cli_options *opt, char *err, size_t err_cap) {
     char const *arg = argv[*idx];
@@ -263,6 +325,23 @@ parse_short_options(int argc, char *argv[], int *idx, struct osh_cli_options *op
     return 0;
 }
 
+/**
+ * @brief Advance the argument index and return the next argv token as a value.
+ *
+ * @details
+ * Used when an option's value is a separate token (e.g. `--geo file.dat`
+ * rather than `--geo=file.dat`). Increments *idx so the main loop does not
+ * consume the value token a second time.
+ *
+ * @param[in]     argc       Total argument count.
+ * @param[in]     argv       Argument vector.
+ * @param[in,out] idx        Current index; incremented to point at the value.
+ * @param[in]     current    The option token requiring a value (used only to
+ *                           guard against a NULL or empty current argument).
+ * @param[out]    value_out  Receives a pointer into argv[*idx].
+ *
+ * @returns 1 if a value token was found, 0 if argv is exhausted.
+ */
 static int consume_option_arg(int argc, char *argv[], int *idx, char const *current, char const **value_out) {
     if ((current != NULL) && (current[0] != '\0')) {
         ++(*idx);

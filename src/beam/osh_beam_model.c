@@ -10,9 +10,22 @@
 
 /* ---- Step 1: spot selection ---------------------------------------------- */
 
-/* Return a pointer to the spot to use for this history.
- * Single-spot and phase-space modes always return spots[0].
- * SOBP mode draws a spot from the list weighted by spot->wt. */
+/**
+ * @brief Return a pointer to the beam spot to use for this primary history.
+ *
+ * @details
+ * Single-spot beams always return spots[0]. SOBP mode draws from the spot
+ * list using inverse-CDF sampling on the cumulative weight array cum_wt:
+ * a uniform deviate scaled to [0, wt_sum] is located with an upper-bound
+ * binary search, giving each spot a selection probability proportional to
+ * its weight.
+ *
+ * @param[in] wb   Beam workspace with a fully initialised spot list and
+ *                 cumulative weight array.
+ * @param[in] rng  Random-number generator; only consumed in SOBP mode.
+ *
+ * @returns Pointer into wb->spots, or NULL on invalid input.
+ */
 static struct beam_spot const *_select_spot(struct beam_workspace const *wb, struct osh_rng *rng) {
     double w;
     long int idx;
@@ -37,9 +50,19 @@ static struct beam_spot const *_select_spot(struct beam_workspace const *wb, str
 
 /* ---- Step 2: energy sampling --------------------------------------------- */
 
-/* Sample total kinetic energy [MeV] from the spot's energy distribution.
- * Current implementation uses Gaussian sampling around t0 with sigma tsigma,
- * clamped at zero. */
+/**
+ * @brief Sample total kinetic energy [MeV] for one primary.
+ *
+ * @details
+ * Draws from a Gaussian N(t0, tsigma²) and clamps the result to zero to
+ * avoid unphysical negative energies. When tsigma <= 0 the beam is
+ * mono-energetic and t0 is returned directly.
+ *
+ * @param[in] rng   Random-number generator.
+ * @param[in] spot  Beam spot carrying t0 [MeV] and tsigma [MeV].
+ *
+ * @returns Sampled kinetic energy in MeV, >= 0.
+ */
 static double _sample_energy(struct osh_rng *rng, struct beam_spot const *spot) {
     double e;
 
@@ -56,10 +79,51 @@ static double _sample_energy(struct osh_rng *rng, struct beam_spot const *spot) 
 
 /* ---- Step 3: transverse phase-space sampling ----------------------------- */
 
+/**
+ * @brief Sample from a symmetric uniform distribution U(-half_width, +half_width).
+ *
+ * @param[in] rng        Random-number generator.
+ * @param[in] half_width Half-width of the interval.
+ *
+ * @returns A value in (-half_width, +half_width).
+ */
 static double _sample_uniform_symmetric(struct osh_rng *rng, double half_width) {
     return (2.0 * osh_rng_double(rng) - 1.0) * half_width;
 }
 
+/**
+ * @brief Return the RMS width of the beam profile along one transverse axis.
+ *
+ * @details
+ * Used in the position-angle correlation formula as sigma_pos, i.e. the
+ * denominator in  ang = div * (rho * pos/sigma_pos + sqrt(1-rho²) * z).
+ * For Gaussian beams sigma_pos is also used to draw the position itself.
+ *
+ * Derivations per shape:
+ *
+ *   PENCIL   — zero width by definition; sigma = 0.
+ *
+ *   GAUSSIAN — size[axis] is already the Gaussian sigma; sigma = size[axis].
+ *
+ *   SQUARE   — uniform on [-w, +w] where w = size[axis].
+ *              Var[x] = (1/2w) * integral_{-w}^{w} x² dx = w²/3,
+ *              so sigma = w / sqrt(3).
+ *
+ *   CIRCULAR — uniform annulus with inner radius r_in, outer radius r_out.
+ *              E[x²] = (1 / pi*(r_out²-r_in²))
+ *                      * integral_0^{2pi} cos²(theta) d(theta)
+ *                      * integral_{r_in}^{r_out} r³ dr
+ *                    = (r_out⁴ - r_in⁴) / (4*(r_out²-r_in²))
+ *                    = (r_out² + r_in²) / 4,
+ *              so sigma = 0.5 * sqrt(r_in² + r_out²).
+ *              The parser always sets size[1]=0 (solid disk), giving
+ *              sigma = r_out / 2.
+ *
+ * @param[in] spot  Beam spot carrying shape and size[].
+ * @param[in] axis  Transverse axis index: 0 = x, 1 = y.
+ *
+ * @returns RMS sigma >= 0, or -1.0 for an unrecognised shape.
+ */
 static double _shape_sigma_1d(struct beam_spot const *spot, int axis) {
     double rin;
     double rout;
@@ -84,6 +148,25 @@ static double _shape_sigma_1d(struct beam_spot const *spot, int axis) {
     }
 }
 
+/**
+ * @brief Sample the transverse position (x, y) from the beam spot's spatial profile.
+ *
+ * @details
+ * Only called for non-Gaussian shapes; the Gaussian case is handled inline
+ * in _sample_phase_space_xy to allow joint position-angle sampling.
+ *
+ * PENCIL   — pos = (0, 0).
+ * SQUARE   — two independent uniform draws on [-size[0], +size[0]] and
+ *            [-size[1], +size[1]].
+ * CIRCULAR — polar sampling: phi uniform on [0, 2*pi), r² uniform on
+ *            [r_in², r_out²], giving a uniform density over the annular area.
+ *
+ * @param[in]  rng   Random-number generator.
+ * @param[in]  spot  Beam spot with shape and size[].
+ * @param[out] pos   Sampled position {x, y} in cm (beam-local PZALIGN frame).
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for an invalid or unrecognised shape.
+ */
 static int _sample_position_xy(struct osh_rng *rng, struct beam_spot const *spot, double pos[2]) {
     double rin;
     double rout;
@@ -124,21 +207,40 @@ static int _sample_position_xy(struct osh_rng *rng, struct beam_spot const *spot
     }
 }
 
-/* Sample the complete transverse phase space in beam-local coordinates.
+/**
+ * @brief Sample the complete transverse phase space in beam-local coordinates.
  *
- * Output:
- *   pos[0], pos[1] = sampled transverse offsets x,y at the beam start plane
- *   ang[0], ang[1] = sampled small-angle slopes x'=dx/dz, y'=dy/dz
+ * @details
+ * The two transverse planes (x/x' and y/y') are treated independently;
+ * there are no cross-plane coupling terms.
  *
- * The current beam model treats the two transverse planes independently:
- *   - size[0], div[0], cor[0] describe the x/x' plane
- *   - size[1], div[1], cor[1] describe the y/y' plane
- *   - there are no cross-plane x-y coupling terms yet
+ * For each plane the angle is drawn from the correlated Gaussian model:
  *
- * Gaussian spots sample position and angle together in each plane so the
- * requested position-angle correlation is exact. Non-Gaussian shapes first
- * sample the transverse position from the requested profile, then derive the
- * angle using the RMS width of that profile in the same correlation formula. */
+ *   ang = sigma_ang * (rho * z_pos + sqrt(1 - rho²) * z_ang)
+ *
+ * where z_pos = pos / sigma_pos and z_ang are independent N(0,1) draws, rho
+ * is the position-angle correlation coefficient (spot->cor[axis]), and
+ * sigma_ang = spot->div[axis].  This gives Cor(pos, ang) = rho exactly,
+ * regardless of the spatial profile shape, because E[pos * ang] / (sigma_pos
+ * * sigma_ang) = rho * E[z_pos²] = rho.
+ *
+ * Gaussian spots: position and angle are sampled together in one step so
+ * both marginals are exactly Gaussian and the joint distribution is a proper
+ * bivariate Gaussian (emittance ellipse).
+ *
+ * Non-Gaussian spots (SQUARE, CIRCULAR): position is sampled first from the
+ * requested spatial profile, then the angle is derived via the formula above
+ * using _shape_sigma_1d() for sigma_pos.  The angular marginal is still
+ * Gaussian; the joint distribution is not bivariate Gaussian but preserves
+ * the correct RMS divergence and correlation coefficient.
+ *
+ * @param[in]  rng   Random-number generator.
+ * @param[in]  spot  Beam spot with shape, size[], div[], and cor[].
+ * @param[out] pos   Sampled transverse offsets {x, y} [cm] in PZALIGN frame.
+ * @param[out] ang   Sampled small-angle slopes {x'=dx/dz, y'=dy/dz} [rad].
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for an unrecognised shape.
+ */
 static int _sample_phase_space_xy(struct osh_rng *rng, struct beam_spot const *spot, double pos[2], double ang[2]) {
     double sigma_pos[2];
     double rho[2];
@@ -220,17 +322,27 @@ static int _sample_phase_space_xy(struct osh_rng *rng, struct beam_spot const *s
 
 /* ---- Step 4: SAD correction ---------------------------------------------- */
 
-/* Apply source-axis-distance correction in PZALIGN.
+/**
+ * @brief Apply source-axis-distance (SAD) fan-out correction in PZALIGN.
  *
- * SAD is a positive source-to-isocenter distance to an upstream virtual
- * source, not a signed z coordinate. It is defined relative to
- * isocenter/focal geometry, not relative to the beam start plane. The actual
- * local start position is therefore
- *   spot->p + ray->p
- * and the fan-out slope for each plane is taken from a virtual source at
- *   z = -sad[axis]
- * pointing to that start point. Since BEAMPOS is already backprojected by the
- * caller, this updates only the direction, not the start position. */
+ * @details
+ * SAD models a scanning magnet whose virtual source lies a distance sad[axis]
+ * upstream of isocenter.  The fan-out angle for each transverse plane is:
+ *
+ *   ray->v[axis] += (spot->p[axis] + ray->p[axis]) / (spot->p[2] + ray->p[2] + sad[axis])
+ *
+ * where the numerator is the full transverse offset at the start plane and
+ * the denominator is the downstream distance from the virtual source.
+ * BEAMPOS is already folded into spot->p by the parser, so this function
+ * updates only the direction vector, not the start position.
+ *
+ * @param[in,out] ray  Ray in PZALIGN; direction updated in place.
+ * @param[in]     spot Current beam spot (provides the nominal start position).
+ * @param[in]     sh   Shared beam parameters carrying sad[0] and sad[1] [cm].
+ *
+ * @returns OSH_OK on success, OSH_ESTATE if the virtual-source distance is
+ *          non-positive (degenerate geometry).
+ */
 static int _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct beam_shared const *sh) {
     double x;
     double y;
@@ -255,12 +367,23 @@ static int _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct be
 
 /* ---- Step 5: standard affine transform PZALIGN → UNIVERSE ---------------- */
 
-/* Apply the beam-model sampling matrix:
- *   p_u = R * p_l + t
- *   v_u = R * v_l
- * where R,t are stored in spot->_tm. This intentionally does NOT use
- * osh_coord_trans_ray(), which follows the legacy SHIELD-HIT/GEMCA sign
- * convention for translation. */
+/**
+ * @brief Apply the precomputed affine transform PZALIGN -> UNIVERSE.
+ *
+ * @details
+ * Executes the standard rigid-body transform stored in spot->_tm[16]:
+ *
+ *   p_universe = R * p_local + t
+ *   v_universe = R * v_local
+ *
+ * This intentionally does NOT use osh_coord_trans_ray(), which follows the
+ * legacy SHIELD-HIT/GEMCA sign convention for the translation component.
+ * The matrix spot->_tm is built by the post-parse step and already folds in
+ * the beam direction (theta, phi) and the BEAMPOS offset.
+ *
+ * @param[in,out] ray   Ray in PZALIGN on entry; converted to UNIVERSE in place.
+ * @param[in]     spot  Provides the 4x4 column-major affine matrix _tm[16].
+ */
 static void _apply_transform(struct ray_v *ray, struct beam_spot const *spot) {
     double p[3];
     double v[3];
@@ -276,6 +399,26 @@ static void _apply_transform(struct ray_v *ray, struct beam_spot const *spot) {
 
 /* ---- Sampling kernel ----------------------------------------------------- */
 
+/**
+ * @brief Sample one complete primary particle in UNIVERSE coordinates.
+ *
+ * @details
+ * Executes the full five-step sampling pipeline:
+ *   1. Select beam spot (weighted draw for SOBP, spots[0] otherwise).
+ *   2. Sample kinetic energy around spot->t0 with spread spot->tsigma.
+ *   3. Sample transverse phase space (x, y, x', y') in PZALIGN.
+ *   4. Apply SAD fan-out correction if shared.use_sad is set.
+ *   5. Normalise the direction vector and apply the affine transform to UNIVERSE.
+ *
+ * @param[in]  wb        Fully initialised beam workspace.
+ * @param[in]  rng       Random-number generator.
+ * @param[out] part_out  Receives a pointer to the sampled particle species
+ *                       (owned by wb; caller must not free).
+ * @param[out] ray_out   Receives the sampled ray in OSH_COORD_UNIVERSE;
+ *                       ray_out->p[3] holds total kinetic energy [MeV].
+ *
+ * @returns OSH_OK on success, OSH_E* on error.
+ */
 static int _sample_one_primary(struct beam_workspace const *wb,
                                struct osh_rng *rng,
                                struct particle **part_out,
