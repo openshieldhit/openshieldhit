@@ -54,4 +54,14 @@ int osh_tokenise(char *line, char **words, int max_words);
  */
 int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aargs, int *lineno);
 
+/**
+ * @brief Lower-case a NUL-terminated string in-place.
+ *
+ * @details Used for case-insensitive keyword dispatch: lower-case the key
+ * before looking it up in a dispatch table.
+ *
+ * @param[in,out] s  String to lower-case.  May be NULL (no-op).
+ */
+void osh_lower_inplace(char *s);
+
 #endif /* OSH_READLINE_H */

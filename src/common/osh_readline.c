@@ -14,11 +14,15 @@ int osh_tokenise(char *line, char **words, int max_words) {
     char *p = line;
 
     while (*p && n < max_words) {
-        while (*p && isspace((unsigned char)*p)) ++p;
-        if (!*p) break;
+        while (*p && isspace((unsigned char) *p))
+            ++p;
+        if (!*p)
+            break;
         words[n++] = p;
-        while (*p && !isspace((unsigned char)*p)) ++p;
-        if (*p) *p++ = '\0';
+        while (*p && !isspace((unsigned char) *p))
+            ++p;
+        if (*p)
+            *p++ = '\0';
     }
     return n;
 }
@@ -149,6 +153,11 @@ int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aar
     *kkey = NULL;
     *aargs = NULL;
     return -1;
+}
+
+void osh_lower_inplace(char *s) {
+    for (; s && *s; ++s)
+        *s = (char) tolower((unsigned char) *s);
 }
 
 /**

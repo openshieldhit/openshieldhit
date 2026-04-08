@@ -145,9 +145,148 @@ static void test_reject_output_missing_filename(void) {
     remove(path);
 }
 
+static void test_parse_filter_rules(void) {
+    char path[512];
+    char const *text = "Filter\n"
+                       "    Name MyFilter\n"
+                       "    Z = 6\n"
+                       "    A = 12\n"
+                       "    E > 0.1\n"
+                       "\n"
+                       "Geometry Mesh\n"
+                       "    Name G\n"
+                       "\n"
+                       "Output\n"
+                       "    Filename out.bdo\n"
+                       "    Geo G\n"
+                       "    Quantity DOSE\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_filter_def const *fil;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), text);
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+
+    fil = osh_scoring_filter_by_name(ws, "MyFilter");
+    ASSERT_TRUE(fil != NULL);
+    ASSERT_TRUE(fil->nrules == 3u);
+    ASSERT_TRUE(strcmp(fil->rules[0].field, "Z") == 0);
+    ASSERT_TRUE(strcmp(fil->rules[0].op, "=") == 0);
+    ASSERT_TRUE(fil->rules[0].value == 6.0);
+    ASSERT_TRUE(strcmp(fil->rules[1].field, "A") == 0);
+    ASSERT_TRUE(fil->rules[1].value == 12.0);
+    ASSERT_TRUE(strcmp(fil->rules[2].field, "E") == 0);
+    ASSERT_TRUE(strcmp(fil->rules[2].op, ">") == 0);
+    ASSERT_TRUE(fil->rules[2].value == 0.1);
+
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+static void test_parse_geometry_axes(void) {
+    char path[512];
+    char const *text = "Geometry Mesh\n"
+                       "    Name MyMesh\n"
+                       "    X -5.0  5.0  10\n"
+                       "    Y -5.0  5.0  10\n"
+                       "    Z  0.0 30.0  60\n"
+                       "\n"
+                       "Geometry Cyl\n"
+                       "    Name MyCyl\n"
+                       "    R  0.0  3.0  5\n"
+                       "    Z  0.0 30.0 60\n"
+                       "\n"
+                       "Output\n"
+                       "    Filename mesh.bdo\n"
+                       "    Geo MyMesh\n"
+                       "    Quantity DOSE\n"
+                       "\n"
+                       "Output\n"
+                       "    Filename cyl.bdo\n"
+                       "    Geo MyCyl\n"
+                       "    Quantity DOSE\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_geometry_def const *mesh;
+    struct osh_scoring_geometry_def const *cyl;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), text);
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+    ASSERT_TRUE(ws->ngeometries == 2u);
+
+    mesh = osh_scoring_geometry_by_name(ws, "MyMesh");
+    ASSERT_TRUE(mesh != NULL);
+    ASSERT_TRUE(strcmp(mesh->kind, "Mesh") == 0);
+    ASSERT_TRUE(mesh->naxes == 3u);
+    ASSERT_TRUE(strcmp(mesh->axes[0].label, "X") == 0);
+    ASSERT_TRUE(mesh->axes[0].lo == -5.0);
+    ASSERT_TRUE(mesh->axes[0].hi == 5.0);
+    ASSERT_TRUE(mesh->axes[0].nbins == 10);
+    ASSERT_TRUE(strcmp(mesh->axes[2].label, "Z") == 0);
+    ASSERT_TRUE(mesh->axes[2].nbins == 60);
+
+    cyl = osh_scoring_geometry_by_name(ws, "MyCyl");
+    ASSERT_TRUE(cyl != NULL);
+    ASSERT_TRUE(strcmp(cyl->kind, "Cyl") == 0);
+    ASSERT_TRUE(cyl->naxes == 2u);
+    ASSERT_TRUE(strcmp(cyl->axes[0].label, "R") == 0);
+    ASSERT_TRUE(cyl->axes[0].hi == 3.0);
+    ASSERT_TRUE(cyl->axes[0].nbins == 5);
+
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+static void test_fixture_test01_filter_rules(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_filter_def const *mf;
+    struct osh_scoring_filter_def const *g2;
+    enum osh_status rc;
+
+    snprintf(path, sizeof(path), "%s/tests/fixtures/test01/detect.dat", OSH_PROJECT_SOURCE_DIR);
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    mf = osh_scoring_filter_by_name(ws, "MyFilter");
+    ASSERT_TRUE(mf != NULL);
+    ASSERT_TRUE(mf->nrules == 3u); /* Z=6, A=12, E>0.1 */
+
+    g2 = osh_scoring_filter_by_name(ws, "Gen2");
+    ASSERT_TRUE(g2 != NULL);
+    ASSERT_TRUE(g2->nrules == 1u); /* GEN=0 */
+    ASSERT_TRUE(strcmp(g2->rules[0].field, "GEN") == 0);
+    ASSERT_TRUE(g2->rules[0].value == 0.0);
+
+    /* Geometry axes */
+    {
+        struct osh_scoring_geometry_def const *geo = osh_scoring_geometry_by_name(ws, "MyMesh");
+        ASSERT_TRUE(geo != NULL);
+        ASSERT_TRUE(geo->naxes == 3u);
+        ASSERT_TRUE(strcmp(geo->axes[0].label, "X") == 0);
+        ASSERT_TRUE(geo->axes[0].lo == -0.5);
+        ASSERT_TRUE(geo->axes[0].hi == 0.5);
+        ASSERT_TRUE(geo->axes[0].nbins == 1);
+        ASSERT_TRUE(strcmp(geo->axes[2].label, "Z") == 0);
+        ASSERT_TRUE(geo->axes[2].nbins == 10);
+    }
+
+    osh_scoring_workspace_free(ws);
+}
+
 int main(void) {
     test_parse_fixture_test01_detect();
     test_parse_settings_section();
     test_reject_output_missing_filename();
+    test_parse_filter_rules();
+    test_parse_geometry_axes();
+    test_fixture_test01_filter_rules();
     return 0;
 }
