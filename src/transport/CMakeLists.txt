@@ -1,6 +1,7 @@
 add_library(osh_transport
     osh_transport.c
     prepare/osh_transport_material_prepare.c
+    prepare/osh_transport_scoring_prepare.c
 )
 
 # Make sure consumers of the library see the headers
@@ -15,5 +16,6 @@ target_link_libraries(osh_transport
         osh_physics
         osh_material
         osh_particle
+        osh_scoring
         $<$<BOOL:${UNIX}>:m>
 )
