@@ -11,7 +11,7 @@
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
-#include "transport/prepare/osh_transport_prepare.h"
+#include "transport/prepare/osh_transport_material_prepare.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -96,7 +96,7 @@ eval_element_sum_bethe(struct material const *mat, unsigned int proj_z, unsigned
     return sp_sum;
 }
 
-static void print_projectile_slice(struct osh_transport_runtime_tables const *tables,
+static void print_projectile_slice(struct osh_transport_material_runtime const *tables,
                                    size_t mat_idx,
                                    size_t proj_idx,
                                    char const *label,
@@ -111,13 +111,13 @@ static void print_projectile_slice(struct osh_transport_runtime_tables const *ta
         double range;
 
         e = energies[i];
-        sp = osh_transport_sp_lookup(tables, mat_idx, proj_idx, e);
-        range = osh_transport_range_lookup(tables, mat_idx, proj_idx, e);
+        sp = osh_transport_material_sp_lookup(tables, mat_idx, proj_idx, e);
+        range = osh_transport_material_range_lookup(tables, mat_idx, proj_idx, e);
         printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  range=%12.6f g/cm^2\n", e, sp, range);
     }
 }
 
-static void print_projectile_slice_with_diff(struct osh_transport_runtime_tables const *tables,
+static void print_projectile_slice_with_diff(struct osh_transport_material_runtime const *tables,
                                              size_t mat_idx,
                                              size_t ref_mat_idx,
                                              size_t proj_idx,
@@ -138,10 +138,10 @@ static void print_projectile_slice_with_diff(struct osh_transport_runtime_tables
         double d_range_pct;
 
         e = energies[i];
-        sp = osh_transport_sp_lookup(tables, mat_idx, proj_idx, e);
-        range = osh_transport_range_lookup(tables, mat_idx, proj_idx, e);
-        ref_sp = osh_transport_sp_lookup(tables, ref_mat_idx, proj_idx, e);
-        ref_range = osh_transport_range_lookup(tables, ref_mat_idx, proj_idx, e);
+        sp = osh_transport_material_sp_lookup(tables, mat_idx, proj_idx, e);
+        range = osh_transport_material_range_lookup(tables, mat_idx, proj_idx, e);
+        ref_sp = osh_transport_material_sp_lookup(tables, ref_mat_idx, proj_idx, e);
+        ref_range = osh_transport_material_range_lookup(tables, ref_mat_idx, proj_idx, e);
         d_sp = sp - ref_sp;
         d_sp_pct = (ref_sp != 0.0) ? 100.0 * d_sp / ref_sp : 0.0;
         d_range_pct = (ref_range != 0.0) ? 100.0 * (range - ref_range) / ref_range : 0.0;
@@ -157,7 +157,7 @@ static void print_projectile_slice_with_diff(struct osh_transport_runtime_tables
     }
 }
 
-static void print_projectile_direct_bethe_with_diff(struct osh_transport_runtime_tables const *tables,
+static void print_projectile_direct_bethe_with_diff(struct osh_transport_material_runtime const *tables,
                                                     struct material const *mat,
                                                     size_t ref_mat_idx,
                                                     size_t proj_idx,
@@ -181,7 +181,7 @@ static void print_projectile_direct_bethe_with_diff(struct osh_transport_runtime
 
         e = energies[i];
         sp_direct = eval_element_sum_bethe(mat, proj_z, proj_a, e);
-        ref_sp = osh_transport_sp_lookup(tables, ref_mat_idx, proj_idx, e);
+        ref_sp = osh_transport_material_sp_lookup(tables, ref_mat_idx, proj_idx, e);
         d_sp = sp_direct - ref_sp;
         d_sp_pct = (ref_sp != 0.0) ? 100.0 * d_sp / ref_sp : 0.0;
 
@@ -194,7 +194,7 @@ int main(void) {
     char water_path[512];
     char mat_text[4096];
     struct material_workspace *wm;
-    struct osh_transport_runtime_tables tables;
+    struct osh_transport_material_runtime tables;
     struct material const *water_loaded;
     struct material const *water_bethe;
     enum osh_status rc;
@@ -220,7 +220,7 @@ int main(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_transport_prepare(wm, 6u, &tables);
+    rc = osh_transport_material_prepare(wm, 6u, &tables);
     ASSERT_TRUE(rc == OSH_OK);
 
     water_loaded = osh_material_by_name(wm, "WaterLoaded");
@@ -311,7 +311,7 @@ int main(void) {
                                             energies,
                                             sizeof(energies) / sizeof(energies[0]));
 
-    osh_transport_runtime_tables_free(&tables);
+    osh_transport_material_runtime_free(&tables);
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(mat_path) == 0);
     return 0;

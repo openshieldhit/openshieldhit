@@ -1,5 +1,5 @@
 /**
- * @file osh_transport_prepare.c
+ * @file osh_transport_material_prepare.c
  *
  * @brief Build the runtime stopping-power and CSDA-range tables.
  *
@@ -28,7 +28,7 @@
  *   R(E_in) - R(E_out) for each step.
  */
 
-#include "transport/prepare/osh_transport_prepare.h"
+#include "transport/prepare/osh_transport_material_prepare.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -47,7 +47,7 @@
 /**
  * @brief Compute the flat index into the [nmaterials][nprojectiles][nenergy] table.
  */
-static inline size_t rt_index(struct osh_transport_runtime_tables const *t, size_t mat, size_t proj, size_t e) {
+static inline size_t rt_index(struct osh_transport_material_runtime const *t, size_t mat, size_t proj, size_t e) {
     return (mat * t->nprojectiles + proj) * t->nenergy + e;
 }
 
@@ -69,7 +69,7 @@ static inline size_t rt_index(struct osh_transport_runtime_tables const *t, size
  * @param[in]  t        Runtime tables (grid parameters, nenergy).
  */
 static void
-integrate_range(float const *sp, float *range, double a_proj, struct osh_transport_runtime_tables const *t) {
+integrate_range(float const *sp, float *range, double a_proj, struct osh_transport_material_runtime const *t) {
     size_t k;
     double dlog = 1.0 / t->inv_dlog;
     double log_e_prev, log_e_curr, e_prev, e_curr, inv_sp_prev, inv_sp_curr, r;
@@ -226,7 +226,7 @@ static void build_element_bethe_target(struct material_element const *el, struct
  *
  * @returns OSH_OK on success, or OSH_EINVAL if projectile mass data is missing.
  */
-static enum osh_status fill_bethe_projectile_column(struct osh_transport_runtime_tables const *t,
+static enum osh_status fill_bethe_projectile_column(struct osh_transport_material_runtime const *t,
                                                     size_t mat_idx,
                                                     size_t proj_idx,
                                                     double dlog,
@@ -279,7 +279,7 @@ static enum osh_status fill_bethe_projectile_column(struct osh_transport_runtime
  * where w_i is the element mass fraction and S_i is the pure-element mass
  * stopping power evaluated with that element's own Z, A, density and I.
  */
-static enum osh_status fill_bethe_compound_projectile_column(struct osh_transport_runtime_tables const *t,
+static enum osh_status fill_bethe_compound_projectile_column(struct osh_transport_material_runtime const *t,
                                                              size_t mat_idx,
                                                              size_t proj_idx,
                                                              double dlog,
@@ -366,7 +366,7 @@ static enum osh_status fill_bethe_compound_projectile_column(struct osh_transpor
  */
 static void log_runtime_column_summary(char const *material_name,
                                        char const *source_tag,
-                                       struct osh_transport_runtime_tables const *t,
+                                       struct osh_transport_material_runtime const *t,
                                        size_t mat_idx,
                                        size_t proj_idx) {
     size_t base;
@@ -409,14 +409,14 @@ static void log_runtime_column_summary(char const *material_name,
 
 /* ---- Public API ------------------------------------------------------------ */
 
-enum osh_status osh_transport_prepare(struct material_workspace const *wm,
-                                      unsigned int z_max,
-                                      struct osh_transport_runtime_tables *tables) {
+enum osh_status osh_transport_material_prepare(struct material_workspace const *wm,
+                                               unsigned int z_max,
+                                               struct osh_transport_material_runtime *tables) {
     size_t nmat, nproj, ne, nbytes_sp, nbytes_range;
     size_t mat_idx, proj_idx, e_idx, base;
     size_t i;
     double dlog, log_e, e_val;
-    struct osh_transport_runtime_tables t;
+    struct osh_transport_material_runtime t;
     struct material const *mat;
     struct osh_material_loaddedx_table src;
     struct osh_physics_bethe_target tgt;
@@ -429,12 +429,12 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
     memset(&src, 0, sizeof(src));
 
     /* ---- Grid parameters ------------------------------------------------- */
-    ne = OSH_TRANSPORT_NENERGY;
+    ne = OSH_TRANSPORT_MATERIAL_NENERGY;
     t.nenergy = ne;
-    t.emin = OSH_TRANSPORT_EMIN;
-    t.emax = OSH_TRANSPORT_EMAX;
-    t.log_emin = log(OSH_TRANSPORT_EMIN);
-    dlog = log(OSH_TRANSPORT_EMAX / OSH_TRANSPORT_EMIN) / (double) (ne - 1u);
+    t.emin = OSH_TRANSPORT_MATERIAL_EMIN;
+    t.emax = OSH_TRANSPORT_MATERIAL_EMAX;
+    t.log_emin = log(OSH_TRANSPORT_MATERIAL_EMIN);
+    dlog = log(OSH_TRANSPORT_MATERIAL_EMAX / OSH_TRANSPORT_MATERIAL_EMIN) / (double) (ne - 1u);
     t.inv_dlog = 1.0 / dlog;
 
     /* ---- Projectile list -------------------------------------------------- */
@@ -615,11 +615,11 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
     return OSH_OK;
 
 fail:
-    osh_transport_runtime_tables_free(&t);
+    osh_transport_material_runtime_free(&t);
     return rc;
 }
 
-void osh_transport_runtime_tables_free(struct osh_transport_runtime_tables *tables) {
+void osh_transport_material_runtime_free(struct osh_transport_material_runtime *tables) {
     if (!tables)
         return;
     free(tables->mass_stopping_power);
