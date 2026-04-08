@@ -204,10 +204,9 @@ static void test_material_level_mean_excitation_and_dedx_table(void) {
     ASSERT_TRUE(remove(path) == 0);
 }
 
-static void test_material_level_mean_excitation_clears_compound_element_values(void) {
+static void test_material_rejects_conflicting_compound_and_element_mean_excitation(void) {
     char path[512];
     struct material_workspace *wm = NULL;
-    struct material const *mat;
     enum osh_status rc;
 
     write_temp_file(path,
@@ -221,15 +220,8 @@ static void test_material_level_mean_excitation_clears_compound_element_values(v
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    mat = osh_material_by_name(wm, "Water");
-    ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(fabs(mat->mean_excitation_energy - 75.0) < 1e-12);
-    ASSERT_TRUE(mat->elements[0].mean_excitation_energy < 0.0);
-    ASSERT_TRUE(mat->elements[1].mean_excitation_energy < 0.0);
-
-    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(wm == NULL);
     ASSERT_TRUE(remove(path) == 0);
 }
 
@@ -522,7 +514,7 @@ int main(void) {
     test_material_fixture_composition();
     test_material_keys_and_state_are_case_insensitive();
     test_material_level_mean_excitation_and_dedx_table();
-    test_material_level_mean_excitation_clears_compound_element_values();
+    test_material_rejects_conflicting_compound_and_element_mean_excitation();
     test_material_mass_fraction_input_completes_atom_counts();
     test_material_explicit_isotope_uses_mass_number();
     test_material_defaults_state_to_condensed();

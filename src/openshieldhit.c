@@ -10,6 +10,7 @@
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 #include "material/osh_material.h"
+#include "transport/prepare/osh_transport_prepare.h"
 
 /* ---- Internal constants -------------------------------------------------- */
 
@@ -226,6 +227,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     struct beam_workspace *beam = NULL;
     struct gemca_workspace *geom = NULL;
     struct material_workspace *mat = NULL;
+    struct osh_transport_runtime_tables transport_tables;
     enum openshieldhit_status rc = OPENSHIELDHIT_STATUS_OK;
 
     if (!ctx) {
@@ -233,6 +235,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
     ctx->last_error[0] = '\0';
+    memset(&transport_tables, 0, sizeof(transport_tables));
 
     /* Initialise the default logger from ctx->log_level.
      *   0  → WARN  (silent — only warnings and errors)
@@ -371,6 +374,24 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         fprintf(out, "Material assembly complete: %llu zones resolved.\n", (unsigned long long) geom->nzones);
     }
 
+    {
+        unsigned int z_max;
+
+        z_max = (beam->primary.z > 0u) ? (unsigned int) beam->primary.z : 1u;
+        if (osh_transport_prepare(mat, z_max, &transport_tables) != OSH_OK) {
+            ctx_set_error(ctx, err, "%s", "failed to prepare runtime transport tables");
+            rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+            goto cleanup;
+        }
+    }
+    if (out) {
+        fprintf(out,
+                "Transport tables prepared: %llu materials x %llu projectiles x %llu energies.\n",
+                (unsigned long long) transport_tables.nmaterials,
+                (unsigned long long) transport_tables.nprojectiles,
+                (unsigned long long) transport_tables.nenergy);
+    }
+
     /* TODO: wire scoring/detect loader */
     if (out) {
         fprintf(out,
@@ -384,6 +405,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
 cleanup:
+    osh_transport_runtime_tables_free(&transport_tables);
     if (mat) {
         osh_material_workspace_free(mat);
     }

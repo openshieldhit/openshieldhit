@@ -4,23 +4,6 @@
 
 #include "common/osh_logger.h"
 
-/**
- * @brief Linear interpolation in a given table. Single precision version.
- *
- * @details finds y for f(x) where x is given and f() is a table given as a set of *xx and *yy values.
- *
- * @param[in] xin - given x value
- * @param[in] *xx - sorted array holding x values, increasing and guaranteed no double occurences.
- * @param[in] *ff - corresponding array holding y values, i.e. *yy = f(*xx)
- * @param[in] n - size of *xx and *ff array in number of elements.
- * @param[in] mode - set behaviour if out-of-bounds, see OSH_INTERPOLATE_OOB_* defines. Default is extrapolation.
- *
- * @returns y = f(x)
- *
- * @warning *xx array must be increasing monotonically without double occurences.
- *
- * @author Niels Bassler
- */
 double osh_interpolate_flin(float x, float const *xx, float const *ff, unsigned int n, int mode) {
     float x0 = 0, x1 = 0;
     float y0 = 0, y1 = 0;
@@ -82,23 +65,6 @@ double osh_interpolate_flin(float x, float const *xx, float const *ff, unsigned 
     return y;
 }
 
-/**
- * @brief Linear interpolation in a given table. Double precision version.
- *
- * @details finds y for f(x) where x is given and f() is a table given as a set of *xx and *yy values.
- *
- * @param[in] xin - given x value
- * @param[in] *xx - sorted array holding x values, increasing and guaranteed no double occurences.
- * @param[in] *ff - corresponding array holding y values, i.e. *yy = f(*xx)
- * @param[in] n - size of *xx and *ff array in number of elements.
- * @param[in] mode - set behaviour if out-of-bounds, see OSH_INTERPOLATE_OOB_* defines. Default is extrapolation.
- *
- * @returns y = f(x)
- *
- * @warning *xx array must be increasing monotonically without double occurences.
- *
- * @author Niels Bassler
- */
 double osh_interpolate_dlin(double x, double const *xx, double const *ff, unsigned int n, int mode) {
     double x0 = 0, x1 = 0;
     double y0 = 0, y1 = 0;
@@ -160,20 +126,67 @@ double osh_interpolate_dlin(double x, double const *xx, double const *ff, unsign
     return y;
 }
 
-/**
- * @brief Binary search algorithm for moderately fast lookup. Single precision version.
- *
- * @param[in] x - value to look up in *xx
- * @param[in] *xx - sorted array
- * @param[in] len - size of *xx which is equal to number of available elements.
- *
- * @returns  lower index pointing to closest value. I.e. value is between xx[index] and xx[index + 1].
- *           If x <= xx[0] then index = 0 is returned.
- *           If x >= xx[len-1] then index = len-2 is returned.
- *           -1 if trouble.
- *
- * @author Niels Bassler
- */
+double osh_interpolate_dloglog(double xin, double const *xx, float const *ff, unsigned int n, int mode) {
+    long int i;
+    double x0, x1, y0, y1, log_x, log_x0, log_x1, t;
+
+    if (xin < xx[0]) {
+        switch (mode) {
+        case OSH_INTERPOLATE_OOB_ERR:
+            osh_error("osh_interpolate_dloglog: lower bound exceeded.");
+            return NAN;
+        case OSH_INTERPOLATE_OOB_ZERO:
+            return 0.0;
+        case OSH_INTERPOLATE_OOB_NEAREST:
+            return (double) ff[0];
+        default: /* OSH_INTERPOLATE_OOB_EXTRAPOL: use first interval */
+            x0 = xx[0];
+            x1 = xx[1];
+            y0 = (double) ff[0];
+            y1 = (double) ff[1];
+            break;
+        }
+    } else if (xin > xx[n - 1]) {
+        switch (mode) {
+        case OSH_INTERPOLATE_OOB_ERR:
+            osh_error("osh_interpolate_dloglog: upper bound exceeded.");
+            return NAN;
+        case OSH_INTERPOLATE_OOB_ZERO:
+            return 0.0;
+        case OSH_INTERPOLATE_OOB_NEAREST:
+            return (double) ff[n - 1];
+        default: /* OSH_INTERPOLATE_OOB_EXTRAPOL: use last interval */
+            x0 = xx[n - 2];
+            x1 = xx[n - 1];
+            y0 = (double) ff[n - 2];
+            y1 = (double) ff[n - 1];
+            break;
+        }
+    } else {
+        i = osh_binary_search_d(xin, xx, n);
+        if (i < 0) {
+            osh_error("osh_interpolate_dloglog: bad binary_search.");
+            return NAN;
+        }
+        x0 = xx[i];
+        x1 = xx[i + 1];
+        y0 = (double) ff[i];
+        y1 = (double) ff[i + 1];
+    }
+
+    /* Fall back to linear interpolation if endpoints are non-positive. */
+    if (x0 <= 0.0 || x1 <= 0.0 || y0 <= 0.0 || y1 <= 0.0) {
+        t = (xin - x0) / (x1 - x0);
+        return y0 + t * (y1 - y0);
+    }
+
+    log_x = log(xin);
+    log_x0 = log(x0);
+    log_x1 = log(x1);
+    t = (log_x - log_x0) / (log_x1 - log_x0);
+    return exp(log(y0) + t * (log(y1) - log(y0)));
+}
+
 long int osh_binary_search_f(float x, float const *xx, unsigned long int len) {
     unsigned int n0, n1, n2; /* lower, middle, upper index */
 
@@ -200,20 +213,6 @@ long int osh_binary_search_f(float x, float const *xx, unsigned long int len) {
     return -1;
 }
 
-/**
- * @brief Binary search algorithm for moderately fast lookup. Double precision version.
- *
- * @param[in] x - value to look up in *xx
- * @param[in] *xx - sorted array
- * @param[in] len - size of *xx which is equal to number of available elements.
- *
- * @returns  lower index pointing to closest value. I.e. value is between xx[index] and xx[index + 1].
- *           If x <= xx[0] then index = 0 is returned.
- *           If x >= xx[len-1] then index = len-2 is returned, e.g.:  [0|1|2|3|4]  -> 6 planes, last index is 4.
- *           -1 if trouble.
- *
- * @author Niels Bassler
- */
 long int osh_binary_search_d(double x, double const *xx, unsigned long int len) {
     unsigned int n0, n1, n2; /* lower, middle, upper index */
 
@@ -264,20 +263,6 @@ long int osh_binary_search_i2(int16_t x, int16_t const *xx, unsigned long int le
     return -1;
 }
 
-/**
- * @brief Binary search algorithm for moderately fast lookup. Double precision version.
- *
- * @param[in] x - value to look up in *xx
- * @param[in] *xx - sorted array
- * @param[in] len - size of *xx which is equal to number of available elements.
- *
- * @returns  upper index pointing to closest value. I.e. value is between xx[index] and xx[index + 1].
- *           If x <= xx[0] then index = 0 is returned.
- *           If x >= xx[len-1] then index = len-1 is returned
- *           -1 if trouble.
- *
- * @author Niels Bassler
- */
 long int osh_binary_search_upper_d(double x, double const *xx, unsigned long int len) {
     unsigned int n0, n1, n2; /* lower, middle, upper index */
 
@@ -307,24 +292,6 @@ long int osh_binary_search_upper_d(double x, double const *xx, unsigned long int
     return -1;
 }
 
-/**
- * @brief Binary search algorithm NumericalRecipies in C version. Double precision version.
- *
- * @details Note that array size (len) is number of elements (n) + 1.
- *
- * @param[in] x - value to look up in *xx
- * @param[in] *xx - sorted array, first element is stored in xx[1], last element in xx[n].
-                    (Note than array size len = n + 1.
- * @param[in] n - number of available elements which is one less than the array size, i.e. xx[1...n].
- *
- * @returns  lower index pointing to closest value. I.e. value is between xx[index] and xx[index + 1].
- *           If x < xx[1] then index = 0 is returned.
- *           If x = xx[1] then index = 1 is returned.
- *           If x = xx[len-1] then index = n - 1 is returned.
- *           If x > xx[len-1] then index = n     is returned.
- *
- * @author NumericalRecipies, adapted by Niels Bassler
- */
 long int osh_binary_search_nurep_d(double x, double const *xx, unsigned long int n) {
 
     unsigned long int ju, jm, jl;

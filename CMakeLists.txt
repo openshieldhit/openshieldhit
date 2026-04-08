@@ -81,6 +81,7 @@ add_subdirectory(src/beam)
 add_subdirectory(src/material)
 add_subdirectory(src/particle)
 add_subdirectory(src/gemca)
+add_subdirectory(src/physics)
 add_subdirectory(src/transport)
 
 # ---- Umbrella target AFTER the libs exist ----

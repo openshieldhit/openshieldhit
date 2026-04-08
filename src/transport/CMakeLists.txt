@@ -1,5 +1,6 @@
 add_library(osh_transport
     osh_transport.c
+    prepare/osh_transport_prepare.c
 )
 
 # Make sure consumers of the library see the headers
@@ -9,6 +10,9 @@ target_include_directories(osh_transport
 )
 
 # Link math library (Unix/Linux only - Windows has it in the C runtime)
-if(UNIX)
-    target_link_libraries(osh_transport PRIVATE m)
-endif()
+target_link_libraries(osh_transport
+    PRIVATE
+        osh_physics
+        osh_material
+        $<$<BOOL:${UNIX}>:m>
+)

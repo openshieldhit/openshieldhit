@@ -60,7 +60,7 @@ sampling data. Atomic transport can then work before the fragmentation generator
 exists.
 
 - [ ] Add `src/physics/` for Bethe fallback and transport-table generation
-- [ ] Finalise the runtime table contract in `src/material/runtime/osh_material_runtime.h`
+- [ ] Finalise the runtime table contract in `src/transport/prepare/osh_transport_runtime.h`
   - dense row-major ordering: `[material][projectile][energy]`
   - keep `energy_idx` innermost for interpolation-friendly hot-path access
   - store mass stopping power and mass range first; leave nuclear/optical tables separate
@@ -68,7 +68,7 @@ exists.
   - stopping power / dE/dx
   - range
   - optical depth
-- [x] Add initial runtime table layout sketch in `src/material/runtime/osh_material_runtime.h`
+- [x] Add initial runtime table layout sketch in `src/transport/prepare/osh_transport_runtime.h`
 - [ ] Keep transport tables in dense, cache-friendly arrays indexed by material, projectile, and energy grid
 - [ ] Build a separate nuclear target-sampling table per material from elemental/isotopic composition
 - [ ] Use the nuclear table only when a nuclear interaction is sampled, then pass the sampled target to the future fragmentation generator
