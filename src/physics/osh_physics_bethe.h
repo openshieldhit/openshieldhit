@@ -55,14 +55,15 @@ struct osh_physics_bethe_target {
  * @brief Projectile parameters needed by the Bethe model.
  *
  * @details
- * Mass is approximated as 940 * a [MeV/c²], matching the libdedx
- * convention.  For a more accurate mass use the nuclear mass from
- * the particle database and pass it as mass_mev directly.
+ * The kinematics use the fully-stripped nuclear rest mass supplied in
+ * @p mass_mev. Callers should obtain it from the particle module, e.g.
+ * via osh_particle_nuclear_mass_mev_from_za(), rather than using the old
+ * 940*A approximation.
  */
 struct osh_physics_bethe_projectile {
     double z;        /* atomic number */
-    double a;        /* mass number [Da] */
-    double mass_mev; /* rest mass [MeV/c²]; caller fills via 940 * a or exact */
+    double a;        /* integer nucleon number A */
+    double mass_mev; /* fully-stripped nuclear rest mass [MeV/c²] */
 };
 
 /**
