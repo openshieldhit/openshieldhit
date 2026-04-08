@@ -129,8 +129,7 @@ static inline double osh_transport_range_lookup(struct osh_transport_runtime_tab
     }
     frac = x - (double) idx;
     base = (mat_idx * tables->nprojectiles + proj_idx) * tables->nenergy;
-    return (double) tables->range_csda[base + idx] * (1.0 - frac)
-           + (double) tables->range_csda[base + idx + 1u] * frac;
+    return (double) tables->range_csda[base + idx] * (1.0 - frac) + (double) tables->range_csda[base + idx + 1u] * frac;
 }
 
 #ifdef __cplusplus
