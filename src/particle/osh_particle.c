@@ -61,7 +61,7 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
     }
 
     /* set the mass of the particle */
-    if (!osh_particle_mass_from_pdg(pdg, &p->mass)) {
+    if (!osh_particle_nuclear_mass_from_pdg(pdg, &p->mass)) {
         reset_particle(p);
         p->pdg = OSH_PART_PDG_INVALID;
         return 0;
@@ -187,32 +187,63 @@ int osh_particle_symbol_from_pdg(int pdg, char *symbol_buf, size_t buf_size) {
     return 0; /* not found */
 }
 
-int osh_particle_mass_from_pdg(int pdg, double *mass) {
-
+int osh_particle_nuclear_mass_from_pdg(int pdg, double *mass_out) {
     size_t i;
     struct isotope iso;
 
-    /* check first if particle is in particle pdg list */
+    /* Non-ion particles: use PDG table mass directly. */
     for (i = 0; i < osh_particle_db_len; ++i) {
         if (osh_particle_db[i].pdg == pdg) {
-            *mass = osh_particle_db[i].mass_mev;
+            *mass_out = osh_particle_db[i].mass_mev;
             return 1;
         }
     }
 
-    /* For ions with z = 1 and 2 always prefer masses from PDG list, if available
-       since these are more accurate and include electron binding energy, which is important for light ions.
-       If not found, check if it is an ion and look up in isotope db, with approximate nuclear mass.
-    */
+    /*
+     * Ions: derive nuclear (fully-stripped) mass from the isotope database.
+     *
+     *   M_nuclear = amass [amu] * OSH_AMU  -  Z * m_electron
+     *
+     * The PDG table is checked first (above) for light ions (Z=1,2) where
+     * more precise measured masses are available and electron-binding
+     * corrections matter at the 10^-4 level.
+     */
     if (osh_particle_pdg_is_ion(pdg)) {
         if (osh_isotope_from_pdg(&iso, pdg)) {
-            /* convert from atomic mass to nuclear mass */
-            *mass = iso.amass * OSH_AMU - (double) iso.z * OSH_PART_MASS_ELECTRON;
+            *mass_out = iso.amass * OSH_AMU - (double) iso.z * OSH_PART_MASS_ELECTRON;
             return 1;
         }
     }
 
-    return 0; /* not found */
+    return 0;
+}
+
+int osh_particle_atomic_mass_amu_from_za(unsigned int z, unsigned int a, double *amass_out) {
+    struct isotope iso;
+
+    if (!amass_out) return 0;
+
+    if (a == 0u) {
+        /* Natural element: use the default (most abundant) isotope. */
+        unsigned int idx = osh_isotopes_idx_default[z];
+        if (z >= OSH_ISOTOPE_DB_NELEM || idx == OSH_ISOTOPE_DB_ERR) return 0;
+        *amass_out = osh_isotope_db[idx].amass;
+        return 1;
+    }
+
+    if (!osh_isotope_from_za(&iso, z, a)) return 0;
+    *amass_out = iso.amass;
+    return 1;
+}
+
+int osh_particle_nuclear_mass_mev_from_za(unsigned int z, unsigned int a, double *mass_out) {
+    double amass;
+
+    if (!mass_out) return 0;
+    if (!osh_particle_atomic_mass_amu_from_za(z, a, &amass)) return 0;
+
+    *mass_out = amass * OSH_AMU - (double) z * OSH_PART_MASS_ELECTRON;
+    return 1;
 }
 
 void osh_print_particle(struct particle const *p) {

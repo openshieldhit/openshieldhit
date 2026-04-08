@@ -14,5 +14,6 @@ target_link_libraries(osh_transport
     PRIVATE
         osh_physics
         osh_material
+        osh_particle
         $<$<BOOL:${UNIX}>:m>
 )

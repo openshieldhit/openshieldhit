@@ -7,9 +7,8 @@ target_include_directories(osh_physics
         ${PROJECT_SOURCE_DIR}/src
 )
 
-if(UNIX)
-    target_link_libraries(osh_physics
-        PRIVATE
-            m
-    )
-endif()
+target_link_libraries(osh_physics
+    PRIVATE
+        osh_common
+        $<$<BOOL:${UNIX}>:m>
+)
