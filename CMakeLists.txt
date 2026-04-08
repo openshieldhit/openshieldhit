@@ -81,6 +81,7 @@ add_subdirectory(src/beam)
 add_subdirectory(src/material)
 add_subdirectory(src/particle)
 add_subdirectory(src/gemca)
+add_subdirectory(src/scoring)
 add_subdirectory(src/physics)
 add_subdirectory(src/transport)
 
@@ -93,6 +94,7 @@ target_link_libraries(osh_all INTERFACE
     osh_material
     osh_particle
     osh_gemca2
+    osh_scoring
     osh_transport
 )
 target_include_directories(osh_all INTERFACE

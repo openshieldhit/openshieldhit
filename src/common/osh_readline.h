@@ -22,6 +22,23 @@
 int osh_readline(struct oshfile *oshf, char **line, int *lineno);
 
 /**
+ * @brief Split a mutable string into whitespace-delimited tokens in place.
+ *
+ * @details
+ * Walks @p line, NUL-terminates each token in the original buffer, and stores
+ * a pointer to it in @p words[].  No static state is used — safe for nested
+ * calls and avoids the MSVC `strtok` deprecation (strtok uses a hidden static
+ * buffer; strtok_s / strtok_r have incompatible signatures across platforms).
+ *
+ * @param[in,out] line       NUL-terminated string to tokenise in place.
+ * @param[out]    words      Caller-provided array to receive token pointers.
+ * @param[in]     max_words  Capacity of @p words[].
+ *
+ * @returns Number of tokens found (at most @p max_words).
+ */
+int osh_tokenise(char *line, char **words, int max_words);
+
+/**
  * @brief Reads the next non-comment line, splits into key and arguments.
  *
  * Allocates memory for the line; caller must free *lline unless -1 is returned.

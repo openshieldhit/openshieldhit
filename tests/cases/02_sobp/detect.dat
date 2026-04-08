@@ -1,62 +1,38 @@
-*----0---><----1---><----2---><----3---><----4---><----5---><----6--->
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1      4000        -1    ENERGY NB_energy
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25   FLUENCE NB_fluenc
-                   6        12
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        -1   FLUENCENB_fluenc2
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25  CROSSFLU NB_crossf
-                   6        12
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25      DOSE   NB_dose  
-                   6        12
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        -1      DOSE  NB_dose2  
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25      DLET   NB_dlet  
-                   6        12
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25      TLET   NB_tlet  
-                   6        12
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25AVG-ENERGY NB_avener
-                   6        12
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25  AVG-BETA NB_avbeta
-                   6        12
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        25    LETFLU NB_letfl1
-                   6        12         1
-CYL              0.0       0.0       0.0       5.0       7.0      40.0
-                   1         1       400        -1    LETFLU NB_letfl2
-                                       1
-*----0---><----1---><----2---><----3---><----4---><----5---><----6--->
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25    ENERGYNBM_energy
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25   FLUENCENBM_fluenc
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       500        25  CROSSFLUNBM_crossf
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25      DOSE  NBM_dose  
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25      DLET  NBM_dlet  
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25      TLET  NBM_tlet  
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25AVG-ENERGYNBM_avener
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25  AVG-BETANBM_avbeta
-                   6        12
-MSH             -0.5      -0.5       0.0       0.5       0.5      40.0
-                   1         1       400        25    LETFLU NBM_letfl
-                   6        12         1
+# Very simple test of new scoring system
+
+Filter
+    Name MyFilter
+    Z = 6
+    A = 12
+    E > 0.1
+
+
+Filter
+        Name Gen2
+        GEN = 0
+
+
+Geometry Mesh
+    Name MyMesh                    # geometry type
+    X -0.5  0.5    1
+    Y -0.5  0.5    1
+    Z  0.0  40.0   10
+
+Output
+    Filename NB_msh_energy.bdo
+    Geo MyMesh
+    Quantity ENERGY
+
+Output
+    Filename NB_msh_fluence.bdo
+    Geo MyMesh
+    Quantity ENERGY
+    Quantity FLUENCE
+    Quantity FLUENCE MyFilter Gen2  ! add a second page, but with a filter applied
+
+
+Output
+    Filename NB_msh_fludos_z6.bdo
+    Geo MyMesh
+    Quantity FLUENCE MyFilter
+    Quantity DOSE MyFilter

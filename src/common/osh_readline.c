@@ -9,6 +9,20 @@
 
 static int _is_comment(char c);
 
+int osh_tokenise(char *line, char **words, int max_words) {
+    int n = 0;
+    char *p = line;
+
+    while (*p && n < max_words) {
+        while (*p && isspace((unsigned char)*p)) ++p;
+        if (!*p) break;
+        words[n++] = p;
+        while (*p && !isspace((unsigned char)*p)) ++p;
+        if (*p) *p++ = '\0';
+    }
+    return n;
+}
+
 int osh_readline(struct oshfile *oshf, char **line, int *lineno) {
     char buff[OSH_MAX_LINE_LENGTH];
     int pos0;
