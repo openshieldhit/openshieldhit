@@ -67,6 +67,17 @@ struct material_workspace {
  * while explicit user overrides such as RHO, STATE, MATERIALI/MIVALUE/MIAV, and
  * LOADDEDX remain authoritative.
  *
+ * Mean excitation energy (MEE) precedence is:
+ *  - single-element material: material-level and element-level MEE are
+ *    equivalent; a known material MEE is copied to the sole element
+ *  - compound with explicit element MEE values only: element MEE values are
+ *    authoritative, and material MEE is derived by Bragg additivity
+ *  - compound with only material-level MEE: material MEE is authoritative;
+ *    element MEE defaults are filled from ICRU data and uniformly rescaled so
+ *    their Bragg average matches the known material MEE
+ *  - compound with both material-level MEE and explicit element-level MEE:
+ *    invalid input and rejected during raw validation
+ *
  * @param[in]  path    Path to the material input file.
  * @param[in]  lg      Logger for diagnostics; NULL uses the global default logger.
  * @param[out] wm_out  Receives the allocated workspace on success.

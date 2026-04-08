@@ -280,7 +280,13 @@ static int icru_db_is_gas(int icru_id) {
  */
 double osh_material_icru_compound_element_mean_excitation_energy(unsigned int z, int state, double pure_element_mee) {
     if (state == OSH_MATERIAL_STATE_GAS) {
-        /* Source: ICRU 49 (1993), Table 2.11, gaseous compounds column. */
+        /* Source: ICRU 49 (1993), Table 2.11, gaseous compounds column.
+         * Keep these explicit values instead of mirroring libdedx's
+         * condensed-element shortcut rules. libdedx and the historic
+         * SHIELD-HIT path use a convenient approximation for many elements,
+         * but we intentionally stay with the table values here because the
+         * ICRU sources do not present a generic percentage rule.
+         */
         switch (z) {
         case 1u:
             return 19.2;  /* H: unchanged from pure element */
@@ -296,7 +302,11 @@ double osh_material_icru_compound_element_mean_excitation_energy(unsigned int z,
     }
 
     if (state == OSH_MATERIAL_STATE_CONDENSED) {
-        /* Source: ICRU 49 (1993), Table 2.11, liquid/solid compounds column. */
+        /* Source: ICRU 49 (1993), Table 2.11, liquid/solid compounds column.
+         * This intentionally differs from libdedx's blanket condensed-element
+         * scaling shortcut. We prefer the explicit ICRU tabulation here,
+         * because we could not trace a generic 13% rule back to ICRU 49/73.
+         */
         switch (z) {
         case 1u:
             return 19.2;   /* H: unchanged from pure element */
