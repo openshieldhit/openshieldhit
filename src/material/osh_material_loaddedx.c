@@ -6,7 +6,7 @@
 #include "common/osh_file.h"
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
-#include "particle/osh_isotope_db_generated.h"
+#include "particle/osh_particle.h"
 
 enum { OSH_MATERIAL_LOADDEDX_MINPROJECTILES = 18 };
 
@@ -122,18 +122,14 @@ static enum osh_status init_projectile_map(struct osh_material_loaddedx_table *t
 
     for (i = 0; i < nprojectiles; i++) {
         unsigned int z;
-        unsigned int idx_default;
+        unsigned int a;
 
         z = (unsigned int) (i + 1u);
-        if (z >= OSH_ISOTOPE_DB_NELEM) {
-            return OSH_EPARSE;
-        }
-        idx_default = osh_isotopes_idx_default[z];
-        if (idx_default == OSH_ISOTOPE_DB_ERR || idx_default >= OSH_ISOTOPE_DB_NISO) {
+        if (!osh_particle_default_isotope_a(z, &a)) {
             return OSH_EPARSE;
         }
         table->projectile_z[i] = z;
-        table->projectile_a[i] = osh_isotope_db[idx_default].a;
+        table->projectile_a[i] = a;
     }
 
     return OSH_OK;

@@ -187,6 +187,22 @@ int osh_particle_symbol_from_pdg(int pdg, char *symbol_buf, size_t buf_size) {
     return 0; /* not found */
 }
 
+int osh_particle_default_isotope_a(unsigned int z, unsigned int *a_out) {
+    unsigned int idx;
+
+    if (!a_out || z >= OSH_ISOTOPE_DB_NELEM) {
+        return 0;
+    }
+
+    idx = osh_isotopes_idx_default[z];
+    if (idx == OSH_ISOTOPE_DB_ERR || idx >= OSH_ISOTOPE_DB_NISO) {
+        return 0;
+    }
+
+    *a_out = osh_isotope_db[idx].a;
+    return 1;
+}
+
 int osh_particle_nuclear_mass_from_pdg(int pdg, double *mass_out) {
     size_t i;
     struct isotope iso;
@@ -221,17 +237,20 @@ int osh_particle_nuclear_mass_from_pdg(int pdg, double *mass_out) {
 int osh_particle_atomic_mass_amu_from_za(unsigned int z, unsigned int a, double *amass_out) {
     struct isotope iso;
 
-    if (!amass_out) return 0;
+    if (!amass_out)
+        return 0;
 
     if (a == 0u) {
         /* Natural element: use the default (most abundant) isotope. */
         unsigned int idx = osh_isotopes_idx_default[z];
-        if (z >= OSH_ISOTOPE_DB_NELEM || idx == OSH_ISOTOPE_DB_ERR) return 0;
+        if (z >= OSH_ISOTOPE_DB_NELEM || idx == OSH_ISOTOPE_DB_ERR)
+            return 0;
         *amass_out = osh_isotope_db[idx].amass;
         return 1;
     }
 
-    if (!osh_isotope_from_za(&iso, z, a)) return 0;
+    if (!osh_isotope_from_za(&iso, z, a))
+        return 0;
     *amass_out = iso.amass;
     return 1;
 }
@@ -239,8 +258,10 @@ int osh_particle_atomic_mass_amu_from_za(unsigned int z, unsigned int a, double 
 int osh_particle_nuclear_mass_mev_from_za(unsigned int z, unsigned int a, double *mass_out) {
     double amass;
 
-    if (!mass_out) return 0;
-    if (!osh_particle_atomic_mass_amu_from_za(z, a, &amass)) return 0;
+    if (!mass_out)
+        return 0;
+    if (!osh_particle_atomic_mass_amu_from_za(z, a, &amass))
+        return 0;
 
     *mass_out = amass * OSH_AMU - (double) z * OSH_PART_MASS_ELECTRON;
     return 1;

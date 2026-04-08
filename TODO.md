@@ -111,6 +111,9 @@ local density per step from the CT image.
 
 ## Cleanup / Follow-up
 
+- [ ] Revisit data-module structure (`material/`, `particle/`, embedded tables)
+  - Current state: works, but atomic/isotopic/material reference data is split in a way that makes ownership and discovery harder than it should be.
+  - Think through whether a future `src/data/atomic/` and `src/data/material/` split would make lookup helpers and embedded datasets easier to find.
 - [ ] Make gemca parser library-safe (non-terminating)
   - Current state: `osh_gemca_parse()` calls `osh_error()` / `exit()` on failures, bypassing the `OPENSHIELDHIT_STATUS_PARSE_ERROR` return path. The `03_malformed_geometry` test exits with code 78 by accident (via `exit(EX_CONFIG)` inside the parser). See comment in `src/gemca/osh_gemca2.c`.
 - [x] Make beam parser library-safe (non-terminating)

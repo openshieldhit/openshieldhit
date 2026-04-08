@@ -34,14 +34,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_const.h"
 #include "common/osh_interpolate.h"
 #include "common/osh_logger.h"
 #include "material/osh_material.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_loaddedx.h"
-#include "particle/osh_isotope_db.h"
-#include "particle/osh_isotope_db_generated.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
 
@@ -71,7 +68,8 @@ static inline size_t rt_index(struct osh_transport_runtime_tables const *t, size
  * @param[in]  a_proj   Projectile mass number A.
  * @param[in]  t        Runtime tables (grid parameters, nenergy).
  */
-static void integrate_range(float const *sp, float *range, double a_proj, struct osh_transport_runtime_tables const *t) {
+static void
+integrate_range(float const *sp, float *range, double a_proj, struct osh_transport_runtime_tables const *t) {
     size_t k;
     double dlog = 1.0 / t->inv_dlog;
     double log_e_prev, log_e_curr, e_prev, e_curr, inv_sp_prev, inv_sp_curr, r;
@@ -99,82 +97,6 @@ static void integrate_range(float const *sp, float *range, double a_proj, struct
 }
 
 /* ---- Projectile and Bethe helpers ----------------------------------------- */
-
-/**
- * @brief Return the default projectile mass number for a given atomic number.
- *
- * @details
- * Reuse the default-isotope selection from the particle database so LOADDEDX
- * source-table import and Bethe fallback agree on which representative ion a
- * projectile column corresponds to.
- */
-static unsigned int default_isotope_a(unsigned int z) {
-    unsigned int idx_default;
-
-    if (z >= OSH_ISOTOPE_DB_NELEM) {
-        return 0u;
-    }
-
-    idx_default = osh_isotopes_idx_default[z];
-    if (idx_default == OSH_ISOTOPE_DB_ERR || idx_default >= OSH_ISOTOPE_DB_NISO) {
-        return 0u;
-    }
-
-    return osh_isotope_db[idx_default].a;
-}
-
-/**
- * @brief Get the atomic mass to use for one material element.
- *
- * @details
- * Natural elements use the tabulated natural atomic weight from the material
- * atomic-data table. Explicit isotopes use the isotope database. This mirrors
- * material assembly and avoids silently treating explicit isotopes as natural
- * elements during Bethe target preparation.
- */
-static double material_element_mass_da(struct material_element const *el) {
-    struct isotope iso;
-    double mass_da;
-
-    if (!el) {
-        return 0.0;
-    }
-
-    if (el->a > 0u) {
-        if (osh_isotope_from_za(&iso, el->z, el->a)) {
-            return iso.amass;
-        }
-    }
-
-    if (osh_material_natural_atomic_mass_da(el->z, &mass_da) == OSH_OK) {
-        return mass_da;
-    }
-
-    return 2.0 * (double) el->z;
-}
-
-/**
- * @brief Return the nuclear rest mass [MeV/c²] for a projectile (Z, A).
- *
- * @details
- * Looks up the atomic mass from the isotope database and subtracts Z electron
- * masses to obtain the fully-stripped nuclear mass:
- *
- *   M_nuclear = amass [amu] * OSH_AMU  -  Z * m_electron
- *
- * Falls back to A * OSH_AMU (no electron correction) if the isotope is not in
- * the database.  The fallback is accurate to ~0.03% and is only reached for
- * very heavy or exotic nuclei not in the table.
- */
-static double projectile_nuclear_mass_mev(unsigned int z, unsigned int a) {
-    double mass;
-
-    if (osh_particle_nuclear_mass_mev_from_za(z, a, &mass)) {
-        return mass;
-    }
-    /* Fallback: bare A * u, no electron correction. */
-    return (double) a * OSH_AMU;
-}
 
 /**
  * @brief Return 1 when every element in a compound has a known MEE value.
@@ -227,7 +149,9 @@ static void build_bethe_target(struct material const *mat, struct osh_physics_be
         double i_i;
 
         el = &mat->elements[i];
-        a_i = material_element_mass_da(el);
+        if (osh_material_atomic_mass_da(el->z, el->a, &a_i) != OSH_OK) {
+            a_i = 2.0 * (double) el->z;
+        }
         z_i = (double) el->z;
         w_i = (el->mass_fraction >= 0.0) ? el->mass_fraction : 0.0;
 
@@ -282,7 +206,9 @@ static void build_element_bethe_target(struct material_element const *el, struct
     struct osh_material_icru_entry entry;
     double mass_da;
 
-    mass_da = material_element_mass_da(el);
+    if (osh_material_atomic_mass_da(el->z, el->a, &mass_da) != OSH_OK) {
+        mass_da = 2.0 * (double) el->z;
+    }
 
     tgt->z_mean = (double) el->z;
     tgt->a_mean = (mass_da > 0.0) ? mass_da : 2.0 * (double) el->z;
@@ -297,12 +223,14 @@ static void build_element_bethe_target(struct material_element const *el, struct
 
 /**
  * @brief Fill one runtime projectile column with Bethe stopping power and range.
+ *
+ * @returns OSH_OK on success, or OSH_EINVAL if projectile mass data is missing.
  */
-static void fill_bethe_projectile_column(struct osh_transport_runtime_tables const *t,
-                                         size_t mat_idx,
-                                         size_t proj_idx,
-                                         double dlog,
-                                         struct osh_physics_bethe_target const *tgt) {
+static enum osh_status fill_bethe_projectile_column(struct osh_transport_runtime_tables const *t,
+                                                    size_t mat_idx,
+                                                    size_t proj_idx,
+                                                    double dlog,
+                                                    struct osh_physics_bethe_target const *tgt) {
     struct osh_physics_bethe_projectile proj;
     struct osh_physics_bethe_sewn sewn;
     float *sp_col;
@@ -315,7 +243,12 @@ static void fill_bethe_projectile_column(struct osh_transport_runtime_tables con
 
     proj.z = (double) t->projectile_z[proj_idx];
     proj.a = (double) t->projectile_a[proj_idx];
-    proj.mass_mev = projectile_nuclear_mass_mev(t->projectile_z[proj_idx], t->projectile_a[proj_idx]);
+    if (!osh_particle_nuclear_mass_mev_from_za(t->projectile_z[proj_idx], t->projectile_a[proj_idx], &proj.mass_mev)) {
+        osh_error("transport: missing nuclear rest mass for projectile Z=%u A=%u",
+                  t->projectile_z[proj_idx],
+                  t->projectile_a[proj_idx]);
+        return OSH_EINVAL;
+    }
 
     osh_physics_bethe_sewn_compute(&proj, tgt, &sewn);
 
@@ -331,6 +264,7 @@ static void fill_bethe_projectile_column(struct osh_transport_runtime_tables con
 
     rng_col = t->range_csda + base;
     integrate_range(sp_col, rng_col, proj.a, t);
+    return OSH_OK;
 }
 
 /**
@@ -345,11 +279,11 @@ static void fill_bethe_projectile_column(struct osh_transport_runtime_tables con
  * where w_i is the element mass fraction and S_i is the pure-element mass
  * stopping power evaluated with that element's own Z, A, density and I.
  */
-static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_tables const *t,
-                                                  size_t mat_idx,
-                                                  size_t proj_idx,
-                                                  double dlog,
-                                                  struct material const *mat) {
+static enum osh_status fill_bethe_compound_projectile_column(struct osh_transport_runtime_tables const *t,
+                                                             size_t mat_idx,
+                                                             size_t proj_idx,
+                                                             double dlog,
+                                                             struct material const *mat) {
     struct osh_physics_bethe_projectile proj;
     struct osh_physics_bethe_target *elt_tgts;
     struct osh_physics_bethe_sewn *elt_sewns;
@@ -358,10 +292,14 @@ static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_t
     size_t base;
     size_t e_idx;
     size_t i;
-
     proj.z = (double) t->projectile_z[proj_idx];
     proj.a = (double) t->projectile_a[proj_idx];
-    proj.mass_mev = projectile_nuclear_mass_mev(t->projectile_z[proj_idx], t->projectile_a[proj_idx]);
+    if (!osh_particle_nuclear_mass_mev_from_za(t->projectile_z[proj_idx], t->projectile_a[proj_idx], &proj.mass_mev)) {
+        osh_error("transport: missing nuclear rest mass for projectile Z=%u A=%u",
+                  t->projectile_z[proj_idx],
+                  t->projectile_a[proj_idx]);
+        return OSH_EINVAL;
+    }
 
     base = rt_index(t, mat_idx, proj_idx, 0);
     sp_col = t->mass_stopping_power + base;
@@ -414,6 +352,7 @@ static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_t
 
     rng_col = t->range_csda + base;
     integrate_range(sp_col, rng_col, proj.a, t);
+    return OSH_OK;
 }
 
 /**
@@ -541,8 +480,7 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
         unsigned int a;
 
         z = (unsigned int) (proj_idx + 1u);
-        a = default_isotope_a(z);
-        if (a == 0u) {
+        if (!osh_particle_default_isotope_a(z, &a)) {
             osh_error("Unsupported projectile Z=%u: no default isotope in the isotope database", z);
             rc = OSH_EINVAL;
             goto fail;
@@ -617,13 +555,21 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
                          nproj - n_loaddedx);
                 if (mat->nelements > 1u && material_has_complete_element_mee(mat)) {
                     for (proj_idx = n_loaddedx; proj_idx < nproj; ++proj_idx) {
-                        fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, mat);
+                        rc = fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, mat);
+                        if (rc != OSH_OK) {
+                            osh_material_loaddedx_table_free(&src);
+                            goto fail;
+                        }
                         log_runtime_column_summary(mat->name, "Bethe-fallback-elements", &t, mat_idx, proj_idx);
                     }
                 } else {
                     build_bethe_target(mat, &tgt);
                     for (proj_idx = n_loaddedx; proj_idx < nproj; ++proj_idx) {
-                        fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, &tgt);
+                        rc = fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, &tgt);
+                        if (rc != OSH_OK) {
+                            osh_material_loaddedx_table_free(&src);
+                            goto fail;
+                        }
                         log_runtime_column_summary(mat->name, "Bethe-fallback-effective", &t, mat_idx, proj_idx);
                     }
                 }
@@ -641,7 +587,10 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
                          mat->name,
                          nproj);
                 for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
-                    fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, mat);
+                    rc = fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, mat);
+                    if (rc != OSH_OK) {
+                        goto fail;
+                    }
                     log_runtime_column_summary(mat->name, "Bethe-elements", &t, mat_idx, proj_idx);
                 }
             } else {
@@ -652,7 +601,10 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
                 build_bethe_target(mat, &tgt);
 
                 for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
-                    fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, &tgt);
+                    rc = fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, &tgt);
+                    if (rc != OSH_OK) {
+                        goto fail;
+                    }
                     log_runtime_column_summary(mat->name, "Bethe-effective", &t, mat_idx, proj_idx);
                 }
             }

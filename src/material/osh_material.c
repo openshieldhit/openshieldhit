@@ -10,7 +10,6 @@
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
 #include "material/osh_material_parse.h"
-#include "particle/osh_isotope_db.h"
 
 static void material_defaults(struct material *mat);
 static void material_set_rgba(struct material *mat, float r, float g, float b, float a);
@@ -25,7 +24,6 @@ static enum osh_status material_complete_icru(struct material *mat);
 static enum osh_status material_derive_atom_counts_from_mass_fractions(struct material *mat);
 static enum osh_status material_derive_mass_fractions_from_atom_counts(struct material *mat);
 static void material_default_state_if_unset(struct material *mat);
-static enum osh_status material_element_mass(unsigned int z, unsigned int a, double *mass_out);
 static enum osh_status material_set_elements_from_icru(struct material *mat,
                                                        struct osh_material_icru_entry const *entry);
 static enum osh_status material_complete_mean_excitation_energy(struct material *mat);
@@ -775,7 +773,7 @@ static enum osh_status material_derive_compound_mee(struct material *mat) {
         if (mat->elements[i].mean_excitation_energy < 0.0 || mat->elements[i].mass_fraction < 0.0) {
             return OSH_OK; /* incomplete data; skip derivation */
         }
-        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -834,7 +832,7 @@ static enum osh_status material_match_element_mee_to_material(struct material *m
         if (mat->elements[i].mean_excitation_energy <= 0.0 || mat->elements[i].mass_fraction < 0.0) {
             return OSH_OK;
         }
-        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -885,7 +883,7 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct ma
     sum_moles = 0.0;
     i = 0;
     while (i < mat->nelements) {
-        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
             osh_error("material: material '%s' element %zu uses unsupported Z=%u A=%u",
                       mat->name,
@@ -904,7 +902,7 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct ma
 
     i = 0;
     while (i < mat->nelements) {
-        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -939,7 +937,7 @@ static enum osh_status material_derive_mass_fractions_from_atom_counts(struct ma
     total_mass = 0.0;
     i = 0;
     while (i < mat->nelements) {
-        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
             osh_error("material: material '%s' element %zu uses unsupported Z=%u A=%u",
                       mat->name,
@@ -958,7 +956,7 @@ static enum osh_status material_derive_mass_fractions_from_atom_counts(struct ma
 
     i = 0;
     while (i < mat->nelements) {
-        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -966,27 +964,6 @@ static enum osh_status material_derive_mass_fractions_from_atom_counts(struct ma
         i++;
     }
 
-    return OSH_OK;
-}
-
-/**
- * @brief Resolve an element mass for natural elements or explicit isotopes.
- */
-static enum osh_status material_element_mass(unsigned int z, unsigned int a, double *mass_out) {
-    struct isotope iso;
-
-    if (!mass_out || z == 0u) {
-        return OSH_EINVAL;
-    }
-
-    if (a == 0u) {
-        return osh_material_natural_atomic_mass_da(z, mass_out);
-    }
-
-    if (!osh_isotope_from_za(&iso, z, a)) {
-        return OSH_EINVAL;
-    }
-    *mass_out = iso.amass;
     return OSH_OK;
 }
 

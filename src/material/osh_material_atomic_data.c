@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include "particle/osh_particle.h"
+
 /*
  * Natural-element atomic weights [Da].
  *
@@ -32,5 +34,21 @@ enum osh_status osh_material_natural_atomic_mass_da(unsigned int z, double *mass
 
     idx = (size_t) z - 1u;
     *mass_out = natural_atomic_masses_da[idx];
+    return OSH_OK;
+}
+
+enum osh_status osh_material_atomic_mass_da(unsigned int z, unsigned int a, double *mass_out) {
+    if (!mass_out || z == 0u) {
+        return OSH_EINVAL;
+    }
+
+    if (a == 0u) {
+        return osh_material_natural_atomic_mass_da(z, mass_out);
+    }
+
+    if (!osh_particle_atomic_mass_amu_from_za(z, a, mass_out)) {
+        return OSH_EINVAL;
+    }
+
     return OSH_OK;
 }
