@@ -146,7 +146,8 @@ static void print_projectile_slice_with_diff(struct osh_transport_runtime_tables
         d_sp_pct = (ref_sp != 0.0) ? 100.0 * d_sp / ref_sp : 0.0;
         d_range_pct = (ref_range != 0.0) ? 100.0 * (range - ref_range) / ref_range : 0.0;
 
-        printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  range=%12.6f g/cm^2  dSP=%+10.6f  dSP%%=%+8.3f %%  dR=%+8.3f %%\n",
+        printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  range=%12.6f g/cm^2  dSP=%+10.6f  dSP%%=%+8.3f %%  dR=%+8.3f "
+               "%%\n",
                e,
                sp,
                range,

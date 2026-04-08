@@ -23,6 +23,21 @@ extern "C" {
  */
 enum osh_status osh_material_natural_atomic_mass_da(unsigned int z, double *mass_out);
 
+/**
+ * @brief Resolve the atomic mass of a material element [Da].
+ *
+ * @details
+ * Natural elements (`a == 0`) use the tabulated natural atomic weight.
+ * Explicit isotopes (`a > 0`) use the isotope database atomic mass.
+ *
+ * @param[in]  z         Atomic number Z.
+ * @param[in]  a         Mass number A; 0 means natural element.
+ * @param[out] mass_out  Receives atomic mass [Da].
+ *
+ * @returns OSH_OK on success, or OSH_EINVAL if the requested mass is unknown.
+ */
+enum osh_status osh_material_atomic_mass_da(unsigned int z, unsigned int a, double *mass_out);
+
 #ifdef __cplusplus
 }
 #endif

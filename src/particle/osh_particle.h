@@ -32,6 +32,21 @@ int osh_particle_name_from_pdg(int pdg, char *name_buf, size_t buf_size);
 int osh_particle_symbol_from_pdg(int pdg, char *symbol_buf, size_t buf_size);
 
 /**
+ * @brief Return the default (most abundant) isotope mass number for an element.
+ *
+ * @details
+ * This is the representative isotope used when a dense projectile list is
+ * built from atomic number alone, for example when mapping contiguous
+ * LOADDEDX columns or constructing the default runtime ion set.
+ *
+ * @param[in]  z      Atomic number.
+ * @param[out] a_out  Receives the default isotope mass number.
+ *
+ * @returns 1 on success, 0 if Z is outside the isotope database coverage.
+ */
+int osh_particle_default_isotope_a(unsigned int z, unsigned int *a_out);
+
+/**
  * @brief Return the nuclear (fully-stripped) rest mass of a particle [MeV/c²].
  *
  * @details
