@@ -236,7 +236,7 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     ASSERT_TRUE(remove(mat_path) == 0);
 }
 
-static void test_prepare_bethe_selects_expected_compound_mode(void) {
+static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(void) {
     char mat_path[512];
     char mat_text[4096];
     struct material_workspace *wm;
@@ -276,21 +276,21 @@ static void test_prepare_bethe_selects_expected_compound_mode(void) {
     ASSERT_TRUE(mat_effective->nelements == 2u);
     ASSERT_TRUE(mat_elements->elements[0].mean_excitation_energy > 0.0);
     ASSERT_TRUE(mat_elements->elements[1].mean_excitation_energy > 0.0);
-    ASSERT_TRUE(mat_effective->elements[0].mean_excitation_energy < 0.0);
-    ASSERT_TRUE(mat_effective->elements[1].mean_excitation_energy < 0.0);
+    ASSERT_TRUE(mat_effective->elements[0].mean_excitation_energy > 0.0);
+    ASSERT_TRUE(mat_effective->elements[1].mean_excitation_energy > 0.0);
 
     rc = osh_transport_prepare(wm, 1u, &tables);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(tables.nprojectiles == 1u);
 
     expected_elements = eval_element_sum_bethe(mat_elements, 1u, 1u, tables.emin);
-    expected_effective = eval_effective_bethe(mat_effective, 1u, 1u, tables.emin);
+    expected_effective = eval_element_sum_bethe(mat_effective, 1u, 1u, tables.emin);
     got_elements = osh_transport_sp_lookup(&tables, mat_elements->index, 0u, tables.emin);
     got_effective = osh_transport_sp_lookup(&tables, mat_effective->index, 0u, tables.emin);
 
     ASSERT_NEAR(got_elements, expected_elements, 1e-4);
     ASSERT_NEAR(got_effective, expected_effective, 1e-4);
-    ASSERT_TRUE(fabs(got_elements - expected_effective) > 1e-2);
+    ASSERT_TRUE(fabs(got_effective - eval_effective_bethe(mat_effective, 1u, 1u, tables.emin)) > 1e-2);
 
     osh_transport_runtime_tables_free(&tables);
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
@@ -299,6 +299,6 @@ static void test_prepare_bethe_selects_expected_compound_mode(void) {
 
 int main(void) {
     test_prepare_mixed_loaddedx_and_bethe_paths();
-    test_prepare_bethe_selects_expected_compound_mode();
+    test_prepare_bethe_infers_element_mee_from_material_mean_excitation();
     return 0;
 }

@@ -95,13 +95,14 @@ static void test_material_fixture_icru_and_rho(void) {
     ASSERT_TRUE(mat->elements[0].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[0].mass_fraction - 0.111894) < 1e-7);
     ASSERT_TRUE(mat->elements[0].atom_count > 0.0);
-    ASSERT_TRUE(mat->elements[0].mean_excitation_energy < 0.0);
+    ASSERT_TRUE(mat->elements[0].mean_excitation_energy > 0.0);
     ASSERT_TRUE(mat->elements[1].z == 8u);
     ASSERT_TRUE(mat->elements[1].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[1].mass_fraction - 0.888106) < 1e-7);
     ASSERT_TRUE(mat->elements[1].atom_count > 0.0);
-    ASSERT_TRUE(mat->elements[1].mean_excitation_energy < 0.0);
+    ASSERT_TRUE(mat->elements[1].mean_excitation_energy > 0.0);
     ASSERT_TRUE(fabs(mat->elements[0].atom_count + mat->elements[1].atom_count - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(test_material_bragg_mean_excitation_energy(mat) - mat->mean_excitation_energy) < 1e-12);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
@@ -194,8 +195,9 @@ static void test_material_level_mean_excitation_and_dedx_table(void) {
     mat = osh_material_by_name(wm, "Water");
     ASSERT_TRUE(mat != NULL);
     ASSERT_TRUE(fabs(mat->mean_excitation_energy - 80.0) < 1e-12);
-    ASSERT_TRUE(mat->elements[0].mean_excitation_energy < 0.0);
-    ASSERT_TRUE(mat->elements[1].mean_excitation_energy < 0.0);
+    ASSERT_TRUE(mat->elements[0].mean_excitation_energy > 0.0);
+    ASSERT_TRUE(mat->elements[1].mean_excitation_energy > 0.0);
+    ASSERT_TRUE(fabs(test_material_bragg_mean_excitation_energy(mat) - mat->mean_excitation_energy) < 1e-12);
     ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_GAS);
     ASSERT_TRUE(mat->dedx_table_path != NULL);
     ASSERT_TRUE(strcmp(mat->dedx_table_path, "tables/water_dedx.dat") == 0);
