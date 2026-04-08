@@ -289,13 +289,13 @@ double osh_material_icru_compound_element_mean_excitation_energy(unsigned int z,
          */
         switch (z) {
         case 1u:
-            return 19.2;  /* H: unchanged from pure element */
+            return 19.2; /* H: unchanged from pure element */
         case 6u:
-            return 70.0;  /* C */
+            return 70.0; /* C */
         case 7u:
-            return 82.0;  /* N: unchanged from pure element */
+            return 82.0; /* N: unchanged from pure element */
         case 8u:
-            return 97.0;  /* O */
+            return 97.0; /* O */
         default:
             return pure_element_mee;
         }
@@ -309,17 +309,17 @@ double osh_material_icru_compound_element_mean_excitation_energy(unsigned int z,
          */
         switch (z) {
         case 1u:
-            return 19.2;   /* H: unchanged from pure element */
+            return 19.2; /* H: unchanged from pure element */
         case 6u:
-            return 81.0;   /* C */
+            return 81.0; /* C */
         case 7u:
-            return 82.0;   /* N: unchanged from pure element */
+            return 82.0; /* N: unchanged from pure element */
         case 8u:
-            return 106.0;  /* O */
+            return 106.0; /* O */
         case 9u:
-            return 112.0;  /* F */
+            return 112.0; /* F */
         case 17u:
-            return 180.0;  /* Cl */
+            return 180.0; /* Cl */
         default:
             return pure_element_mee;
         }

@@ -55,10 +55,8 @@ static void build_element_target(struct material_element const *el, struct osh_p
     }
 }
 
-static double eval_element_sum_bethe(struct material const *mat,
-                                     unsigned int proj_z,
-                                     unsigned int proj_a,
-                                     double energy_mev_per_u) {
+static double
+eval_element_sum_bethe(struct material const *mat, unsigned int proj_z, unsigned int proj_a, double energy_mev_per_u) {
     struct osh_physics_bethe_projectile proj;
     size_t i;
     double sp_sum;
@@ -169,11 +167,7 @@ static void print_projectile_direct_bethe_with_diff(struct osh_transport_runtime
         d_sp = sp_direct - ref_sp;
         d_sp_pct = (ref_sp != 0.0) ? 100.0 * d_sp / ref_sp : 0.0;
 
-        printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  dSP=%+10.6f  dSP%%=%+8.3f %%\n",
-               e,
-               sp_direct,
-               d_sp,
-               d_sp_pct);
+        printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  dSP=%+10.6f  dSP%%=%+8.3f %%\n", e, sp_direct, d_sp, d_sp_pct);
     }
 }
 
@@ -192,7 +186,8 @@ int main(void) {
     memset(&tables, 0, sizeof(tables));
 
     snprintf(water_path, sizeof(water_path), "%s/tests/cases/04_simple_loaddedx/Water.txt", OSH_PROJECT_SOURCE_DIR);
-    snprintf(mat_path, sizeof(mat_path), "%s/tests/fixtures/test_transport_reference_water.tmp", OSH_PROJECT_SOURCE_DIR);
+    snprintf(
+        mat_path, sizeof(mat_path), "%s/tests/fixtures/test_transport_reference_water.tmp", OSH_PROJECT_SOURCE_DIR);
     snprintf(mat_text,
              sizeof(mat_text),
              "MATERIAL WaterLoaded\n"
