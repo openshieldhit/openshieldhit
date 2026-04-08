@@ -1,9 +1,14 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "common/osh_rc.h"
 #include "material/osh_material.h"
+#include "material/osh_material_atomic_data.h"
+#include "material/osh_material_icru.h"
+#include "particle/osh_isotope_db.h"
+#include "physics/osh_physics_bethe.h"
 #include "transport/prepare/osh_transport_prepare.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
@@ -13,6 +18,71 @@
             exit(1);                                                                                                   \
         }                                                                                                              \
     } while (0)
+
+static double test_material_element_mass_da(struct material_element const *el) {
+    struct isotope iso;
+    double mass_da;
+
+    if (!el) {
+        return 0.0;
+    }
+
+    if (el->a > 0u && osh_isotope_from_za(&iso, el->z, el->a)) {
+        return iso.amass;
+    }
+
+    if (osh_material_natural_atomic_mass_da(el->z, &mass_da) == OSH_OK) {
+        return mass_da;
+    }
+
+    return 2.0 * (double) el->z;
+}
+
+static void build_element_target(struct material_element const *el, struct osh_physics_bethe_target *tgt) {
+    struct osh_material_icru_entry entry;
+    double mass_da;
+
+    mass_da = test_material_element_mass_da(el);
+
+    tgt->z_mean = (double) el->z;
+    tgt->a_mean = (mass_da > 0.0) ? mass_da : 2.0 * (double) el->z;
+    tgt->i_value = el->mean_excitation_energy;
+
+    if (osh_material_icru_lookup((int) el->z, &entry) == OSH_OK && entry.rho > 0.0) {
+        tgt->rho = entry.rho;
+    } else {
+        tgt->rho = 1.0;
+    }
+}
+
+static double eval_element_sum_bethe(struct material const *mat,
+                                     unsigned int proj_z,
+                                     unsigned int proj_a,
+                                     double energy_mev_per_u) {
+    struct osh_physics_bethe_projectile proj;
+    size_t i;
+    double sp_sum;
+
+    proj.z = (double) proj_z;
+    proj.a = (double) proj_a;
+    proj.mass_mev = 940.0 * proj.a;
+    sp_sum = 0.0;
+
+    for (i = 0; i < mat->nelements; ++i) {
+        struct osh_physics_bethe_target tgt;
+        struct osh_physics_bethe_sewn sewn;
+        double sp_i;
+
+        build_element_target(&mat->elements[i], &tgt);
+        osh_physics_bethe_sewn_compute(&proj, &tgt, &sewn);
+        sp_i = osh_physics_bethe_eval(energy_mev_per_u, &proj, &tgt, &sewn);
+        if (sp_i > 0.0) {
+            sp_sum += mat->elements[i].mass_fraction * sp_i;
+        }
+    }
+
+    return sp_sum;
+}
 
 static void print_projectile_slice(struct osh_transport_runtime_tables const *tables,
                                    size_t mat_idx,
@@ -71,6 +141,42 @@ static void print_projectile_slice_with_diff(struct osh_transport_runtime_tables
     }
 }
 
+static void print_projectile_direct_bethe_with_diff(struct osh_transport_runtime_tables const *tables,
+                                                    struct material const *mat,
+                                                    size_t ref_mat_idx,
+                                                    size_t proj_idx,
+                                                    char const *label,
+                                                    double const *energies,
+                                                    size_t nenergies) {
+    size_t i;
+    unsigned int proj_z;
+    unsigned int proj_a;
+
+    proj_z = tables->projectile_z[proj_idx];
+    proj_a = tables->projectile_a[proj_idx];
+
+    printf("%s\n", label);
+    for (i = 0; i < nenergies; ++i) {
+        double e;
+        double sp_direct;
+        double ref_sp;
+        double d_sp;
+        double d_sp_pct;
+
+        e = energies[i];
+        sp_direct = eval_element_sum_bethe(mat, proj_z, proj_a, e);
+        ref_sp = osh_transport_sp_lookup(tables, ref_mat_idx, proj_idx, e);
+        d_sp = sp_direct - ref_sp;
+        d_sp_pct = (ref_sp != 0.0) ? 100.0 * d_sp / ref_sp : 0.0;
+
+        printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  dSP=%+10.6f  dSP%%=%+8.3f %%\n",
+               e,
+               sp_direct,
+               d_sp,
+               d_sp_pct);
+    }
+}
+
 int main(void) {
     char mat_path[512];
     char water_path[512];
@@ -122,6 +228,15 @@ int main(void) {
     printf("Table grid: %zu points from %.4f to %.1f MeV/u\n", tables.nenergy, tables.emin, tables.emax);
     printf("Source 1: LOADDEDX %s\n", water_path);
     printf("Source 2: Bethe fallback from assembled material data\n");
+    printf("WaterBethe inferred element MEE values:\n");
+    printf("  element[0]: Z=%u A=%u I=%.6f eV\n",
+           water_bethe->elements[0].z,
+           water_bethe->elements[0].a,
+           water_bethe->elements[0].mean_excitation_energy);
+    printf("  element[1]: Z=%u A=%u I=%.6f eV\n",
+           water_bethe->elements[1].z,
+           water_bethe->elements[1].a,
+           water_bethe->elements[1].mean_excitation_energy);
     printf("\n");
 
     printf("Material index: %zu (%s)\n", water_loaded->index, water_loaded->name);
@@ -167,6 +282,30 @@ int main(void) {
                                      "Carbon on WaterBethe (C-12, Bethe vs LOADDEDX)",
                                      energies,
                                      sizeof(energies) / sizeof(energies[0]));
+
+    printf("\n");
+    printf("Material index: %zu (%s direct)\n", water_bethe->index, water_bethe->name);
+    print_projectile_direct_bethe_with_diff(&tables,
+                                            water_bethe,
+                                            water_bethe->index,
+                                            0u,
+                                            "Proton on WaterBethe (H-1, direct Bethe vs runtime Bethe)",
+                                            energies,
+                                            sizeof(energies) / sizeof(energies[0]));
+    print_projectile_direct_bethe_with_diff(&tables,
+                                            water_bethe,
+                                            water_bethe->index,
+                                            1u,
+                                            "Alpha on WaterBethe (He-4, direct Bethe vs runtime Bethe)",
+                                            energies,
+                                            sizeof(energies) / sizeof(energies[0]));
+    print_projectile_direct_bethe_with_diff(&tables,
+                                            water_bethe,
+                                            water_bethe->index,
+                                            5u,
+                                            "Carbon on WaterBethe (C-12, direct Bethe vs runtime Bethe)",
+                                            energies,
+                                            sizeof(energies) / sizeof(energies[0]));
 
     osh_transport_runtime_tables_free(&tables);
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);

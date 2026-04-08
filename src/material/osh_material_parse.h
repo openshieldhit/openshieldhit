@@ -21,6 +21,10 @@ extern "C" {
  * a mass number: `NUCLID <Z> <A> <amount>`. The same Z/[A]/amount rule applies
  * to ELEMENT, ELEMENTBYNUMBER, and ELEMENTBYMASS.
  *
+ * MEE cards are parsed raw here and resolved later during material assembly.
+ * For compounds, users may specify either one material-level MEE or element-
+ * level MEE values, but not both in the same material definition.
+ *
  * @param[in,out] oshf  Open material file positioned at the start.
  * @param[in,out] wm    Workspace to populate.
  *
