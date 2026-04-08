@@ -243,39 +243,79 @@ static int icru_db_is_gas(int icru_id) {
     return 0;
 }
 
+/**
+ * @brief Return the state-dependent mean excitation energy for an element in a compound.
+ *
+ * @details
+ * When an element appears inside a compound its effective mean excitation energy
+ * (MEE) differs from its pure-element value because chemical bonding shifts the
+ * outer-shell electron distribution.  ICRU Report 49 (1993), Table 2.11, lists
+ * recommended values for selected elements in gaseous and liquid/solid compounds.
+ * All other elements fall back to their pure-element value (ICRU 49, Table 2.8).
+ *
+ * Gaseous compounds (ICRU 49 Table 2.11):
+ *   H  19.2 eV (pure: 19.2 eV — unchanged)
+ *   C  70.0 eV (pure: 78.0 eV)
+ *   N  82.0 eV (pure: 82.0 eV — unchanged)
+ *   O  97.0 eV (pure: 95.0 eV)
+ *
+ * Liquid/solid compounds — elements with modified values (ICRU 49 Table 2.11):
+ *   H  19.2 eV (pure: 19.2 eV — unchanged)
+ *   C  81.0 eV (pure: 78.0 eV)
+ *   N  82.0 eV (pure: 82.0 eV — unchanged)
+ *   O 106.0 eV (pure: 95.0 eV)
+ *   F 112.0 eV (pure: 115.0 eV)
+ *  Cl 180.0 eV (pure: 174.0 eV)
+ *
+ * @note When @p state is OSH_MATERIAL_STATE_UNSET the pure-element value is
+ *       returned unchanged.  This is intentional: the caller should resolve
+ *       state before calling this function if a more accurate result is needed.
+ *
+ * @param[in] z                 Atomic number.
+ * @param[in] state             Physical state of the compound (enum osh_material_state).
+ * @param[in] pure_element_mee  Pure-element MEE from the ICRU elemental table [eV].
+ *
+ * @returns Compound-adjusted MEE [eV] for the listed elements, @p pure_element_mee
+ *          for all others.
+ */
 double osh_material_icru_compound_element_mean_excitation_energy(unsigned int z, int state, double pure_element_mee) {
     if (state == OSH_MATERIAL_STATE_GAS) {
+        /* Source: ICRU 49 (1993), Table 2.11, gaseous compounds column. */
         switch (z) {
+        case 1u:
+            return 19.2;  /* H: unchanged from pure element */
         case 6u:
-            return 70.0; /* carbon in gaseous compounds */
+            return 70.0;  /* C */
         case 7u:
-            return 82.0; /* nitrogen in gaseous compounds */
+            return 82.0;  /* N: unchanged from pure element */
         case 8u:
-            return 97.0; /* oxygen in gaseous compounds */
+            return 97.0;  /* O */
         default:
             return pure_element_mee;
         }
     }
 
     if (state == OSH_MATERIAL_STATE_CONDENSED) {
+        /* Source: ICRU 49 (1993), Table 2.11, liquid/solid compounds column. */
         switch (z) {
         case 1u:
-            return 19.2; /* hydrogen in condensed compounds */
+            return 19.2;   /* H: unchanged from pure element */
         case 6u:
-            return 85.9; /* carbon in condensed compounds */
+            return 81.0;   /* C */
         case 7u:
-            return 81.0; /* nitrogen in condensed compounds */
+            return 82.0;   /* N: unchanged from pure element */
         case 8u:
-            return 106.0; /* oxygen in condensed compounds */
+            return 106.0;  /* O */
         case 9u:
-            return 112.0; /* fluorine in condensed compounds */
+            return 112.0;  /* F */
         case 17u:
-            return 180.0; /* chlorine in condensed compounds */
+            return 180.0;  /* Cl */
         default:
             return pure_element_mee;
         }
     }
 
+    /* OSH_MATERIAL_STATE_UNSET or any unrecognised state: return the pure-element value. */
     return pure_element_mee;
 }
 

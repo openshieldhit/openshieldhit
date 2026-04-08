@@ -122,11 +122,6 @@ enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspa
         }
 
         if (strcmp(OSH_MATERIAL_KEY_END, key) == 0) {
-            if (!material_active) {
-                osh_error("in %s line %d: END outside MATERIAL block", oshf->filename, lineno);
-                free(line);
-                return OSH_EPARSE;
-            }
             rc = parse_end(wm, oshf, args);
             free(line);
             line = NULL;
@@ -164,12 +159,6 @@ enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspa
             free(line);
             return OSH_EPARSE;
         }
-    }
-
-    if (material_active) {
-        osh_error("in %s: MATERIAL block missing END", oshf->filename);
-        free(line);
-        return OSH_EPARSE;
     }
 
     return OSH_OK;
@@ -317,6 +306,11 @@ static enum osh_status parse_element_by_number(struct material_workspace *wm, st
 
 /**
  * @brief Handle the END card closing a MATERIAL block.
+ *
+ * @details
+ * END is optional. A new MATERIAL card or EOF also terminates the previous
+ * material block. END remains accepted as an explicit delimiter for backward
+ * compatibility and readability. Outside a material block it acts as a no-op.
  *
  * @param[in,out] wm    Material workspace (unused; present for dispatch signature).
  * @param[in]     oshf  Open input file.

@@ -1,0 +1,19 @@
+Material Water
+    ICRU 276
+    LOADDEDX Water.txt
+
+Material PMMA
+    ICRU 223
+    LOADDEDX Lucite.txt
+
+Material Air
+    ICRU 104
+    LOADDEDX Air.txt
+
+# Alanine material is not defined in ASTAR or PSTAR, but in ESTAR only
+Material Alanine
+    ICRU 105
+    LoaddEdx Alanine.txt
+
+
+
