@@ -2,6 +2,8 @@
 
 #include <math.h>
 
+#include "common/osh_const.h"
+
 /* ---- Constants ----------------------------------------------------------- */
 
 /*
@@ -24,14 +26,32 @@
 #define BETHE_2MEC2_EV 1.022e6
 
 /*
- * Nucleon rest mass used throughout: 940 MeV/c^2.
+ * *** ENERGY UNIT AND MASS CONVENTION — READ CAREFULLY ***
  *
- * A rounded value rather than the more precise proton (938.272) or neutron
- * (939.565) mass.  The approximation is standard in ion transport codes and
- * introduces an error of < 0.2% in the kinematic terms.  Cross-checked for
- * consistency with published implementations of this formula.
+ * The public interface (osh_physics_bethe_eval, the sewing-point search, and
+ * the LOADDEDX table axis) all use:
+ *
+ *   T/A  [MeV/nucleon]   where A is the INTEGER mass number of the ion.
+ *
+ * This is a counting convention: total kinetic energy T divided by the number
+ * of nucleons A.  It is NOT the same as T/u (MeV per atomic mass unit),
+ * although the two differ by less than 1% because nuclear binding energies
+ * (~8 MeV/nucleon) are small compared to the nucleon rest mass (~931 MeV/c²).
+ *
+ * Internally, bethe_raw() receives total kinetic energy T = (T/A) * A [MeV]
+ * and uses proj->mass_mev directly for the projectile rest mass.  Callers
+ * must set proj->mass_mev to the NUCLEAR (fully-stripped) rest mass:
+ *
+ *   M_nuclear = amass [amu] * OSH_AMU  -  Z * m_electron
+ *
+ * This is provided by osh_particle_nuclear_mass_mev_from_za() in particle/.
+ * Do NOT use A * 940 (free-nucleon approximation) or A * OSH_AMU (ignores
+ * electron masses): both introduce ~1% error in the kinematic terms.
+ *
+ * For CSDA range: R [g/cm²] = ∫ dT / SP(T) = ∫ A · d(T/A) / SP(T/A).
+ * The factor A must be included when integrating over the T/A axis; this
+ * is handled by the a_proj argument to integrate_range() in prepare.c.
  */
-#define BETHE_NUCLEON_MASS_MEV 940.0
 
 /*
  * ln(10) = 4.60517... ~ 4.606.
@@ -255,7 +275,7 @@ double osh_physics_bethe_eval(double t_per_nucleon,
 static double bethe_raw(double t_total_mev,
                         struct osh_physics_bethe_projectile const *proj,
                         struct osh_physics_bethe_target const *target) {
-    double mass;      /* projectile rest mass [MeV/c^2] = 940 * A */
+    double mass;      /* projectile rest mass [MeV/c^2], taken from proj->mass_mev */
     double momentum;  /* projectile momentum [MeV/c] */
     double e0;        /* total energy [MeV] = T + m */
     double gamma2;    /* Lorentz factor squared: gamma^2 = (E/m)^2 */
@@ -279,7 +299,7 @@ static double bethe_raw(double t_total_mev,
     double z_eff2;    /* Z_eff^2 = Z_proj^2 * GAMMA^2 */
     double dedx;      /* result: mass stopping power [MeV cm^2/g] */
 
-    mass = BETHE_NUCLEON_MASS_MEV * proj->a;
+    mass = proj->mass_mev;
 
     /* ---- Relativistic kinematics ---------------------------------------- */
 

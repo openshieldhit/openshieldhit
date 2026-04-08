@@ -3,11 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/osh_const.h"
 #include "common/osh_rc.h"
 #include "material/osh_material.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
 #include "particle/osh_isotope_db.h"
+#include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
 #include "transport/prepare/osh_transport_prepare.h"
 
@@ -73,7 +75,9 @@ eval_element_sum_bethe(struct material const *mat, unsigned int proj_z, unsigned
 
     proj.z = (double) proj_z;
     proj.a = (double) proj_a;
-    proj.mass_mev = 940.0 * proj.a;
+    if (!osh_particle_nuclear_mass_mev_from_za(proj_z, proj_a, &proj.mass_mev)) {
+        proj.mass_mev = (double) proj_a * OSH_AMU; /* fallback */
+    }
     sp_sum = 0.0;
 
     for (i = 0; i < mat->nelements; ++i) {

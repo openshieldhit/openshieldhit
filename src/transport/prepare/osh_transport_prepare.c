@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/osh_const.h"
 #include "common/osh_interpolate.h"
 #include "common/osh_logger.h"
 #include "material/osh_material.h"
@@ -41,6 +42,7 @@
 #include "material/osh_material_loaddedx.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_isotope_db_generated.h"
+#include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
 
 /* ---- Helpers -------------------------------------------------------------- */
@@ -149,6 +151,29 @@ static double material_element_mass_da(struct material_element const *el) {
     }
 
     return 2.0 * (double) el->z;
+}
+
+/**
+ * @brief Return the nuclear rest mass [MeV/c²] for a projectile (Z, A).
+ *
+ * @details
+ * Looks up the atomic mass from the isotope database and subtracts Z electron
+ * masses to obtain the fully-stripped nuclear mass:
+ *
+ *   M_nuclear = amass [amu] * OSH_AMU  -  Z * m_electron
+ *
+ * Falls back to A * OSH_AMU (no electron correction) if the isotope is not in
+ * the database.  The fallback is accurate to ~0.03% and is only reached for
+ * very heavy or exotic nuclei not in the table.
+ */
+static double projectile_nuclear_mass_mev(unsigned int z, unsigned int a) {
+    double mass;
+
+    if (osh_particle_nuclear_mass_mev_from_za(z, a, &mass)) {
+        return mass;
+    }
+    /* Fallback: bare A * u, no electron correction. */
+    return (double) a * OSH_AMU;
 }
 
 /**
@@ -290,7 +315,7 @@ static void fill_bethe_projectile_column(struct osh_transport_runtime_tables con
 
     proj.z = (double) t->projectile_z[proj_idx];
     proj.a = (double) t->projectile_a[proj_idx];
-    proj.mass_mev = 940.0 * proj.a;
+    proj.mass_mev = projectile_nuclear_mass_mev(t->projectile_z[proj_idx], t->projectile_a[proj_idx]);
 
     osh_physics_bethe_sewn_compute(&proj, tgt, &sewn);
 
@@ -336,7 +361,7 @@ static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_t
 
     proj.z = (double) t->projectile_z[proj_idx];
     proj.a = (double) t->projectile_a[proj_idx];
-    proj.mass_mev = 940.0 * proj.a;
+    proj.mass_mev = projectile_nuclear_mass_mev(t->projectile_z[proj_idx], t->projectile_a[proj_idx]);
 
     base = rt_index(t, mat_idx, proj_idx, 0);
     sp_col = t->mass_stopping_power + base;
