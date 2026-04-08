@@ -61,6 +61,7 @@ foreach(test_src ${UNIT_SOURCES})
         osh_beam
         osh_material
         osh_particle
+        osh_transport
     )
 
     # Pass the fixtures directory so tests can locate input files without

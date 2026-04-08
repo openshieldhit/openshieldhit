@@ -33,6 +33,7 @@ static enum osh_status material_fill_element_mee_defaults(struct material *mat);
 static enum osh_status material_derive_compound_mee(struct material *mat);
 static void material_free_fields(struct material *mat);
 static char const *material_state_name(int state);
+static int material_has_any_element_mee(struct material const *mat);
 
 enum osh_status
 osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct material_workspace **wm_out) {
@@ -391,6 +392,11 @@ static enum osh_status material_workspace_validate_raw(struct material_workspace
             osh_error("material: material '%s' requires RHO for elemental composition", mat->name);
             return OSH_EPARSE;
         }
+        if (mat->nelements > 1u && mat->mean_excitation_energy >= 0.0 && material_has_any_element_mee(mat)) {
+            osh_error("material: compound material '%s' cannot define both material and element mean excitation energy",
+                      mat->name);
+            return OSH_EPARSE;
+        }
         if (mat->rho == 0.0) {
             osh_error("material: material '%s' has invalid RHO %.8g", mat->name, mat->rho);
             return OSH_EPARSE;
@@ -637,8 +643,10 @@ static enum osh_status material_set_elements_from_icru(struct material *mat,
  * @details
  * Material-level MEE is authoritative for compounds. If it is already known
  * from ICRU or a user MATERIALI/MIVALUE/MIAV card, compound element MEE values
- * are left unset because the inverse Bragg problem is underdetermined. For a
- * single-element material, the element can safely inherit the material value.
+ * are left unset because the inverse Bragg problem is underdetermined. Raw
+ * validation rejects compound input that tries to define both material- and
+ * element-level MEE explicitly. For a single-element material, the element can
+ * safely inherit the material value.
  *
  * If material-level MEE is unset, missing element MEE values are filled from
  * ICRU defaults with ICRU-49 in-compound corrections where available, then the
@@ -937,4 +945,23 @@ static char const *material_state_name(int state) {
     default:
         return "invalid";
     }
+}
+
+/**
+ * @brief Return 1 when any element has an explicit/raw mean excitation value.
+ */
+static int material_has_any_element_mee(struct material const *mat) {
+    size_t i;
+
+    if (!mat) {
+        return 0;
+    }
+
+    for (i = 0; i < mat->nelements; ++i) {
+        if (mat->elements[i].mean_excitation_energy >= 0.0) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
