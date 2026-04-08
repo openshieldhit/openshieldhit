@@ -1,6 +1,6 @@
 add_library(osh_transport
     osh_transport.c
-    prepare/osh_transport_prepare.c
+    prepare/osh_transport_material_prepare.c
 )
 
 # Make sure consumers of the library see the headers

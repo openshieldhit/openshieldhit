@@ -1,5 +1,5 @@
-#ifndef OSH_TRANSPORT_RUNTIME_H
-#define OSH_TRANSPORT_RUNTIME_H
+#ifndef OSH_TRANSPORT_MATERIAL_RUNTIME_H
+#define OSH_TRANSPORT_MATERIAL_RUNTIME_H
 
 #include <math.h>
 #include <stddef.h>
@@ -30,7 +30,7 @@ extern "C" {
  * Tables are mass-normalized so voxel/CT geometries can apply a local density
  * per step without rebuilding material tables for every density.
  */
-struct osh_transport_runtime_tables {
+struct osh_transport_material_runtime {
     double log_emin;            /* log(energy_grid[0]) for O(1) index. */
     double inv_dlog;            /* 1 / (log(emax/emin) / (nenergy-1)). */
     double emin;                /* Minimum energy [MeV/nucleon]. */
@@ -50,13 +50,13 @@ struct osh_transport_runtime_tables {
  * 500 log-uniform points over [0.025, 1000] MeV/nucleon give ~1.4% relative
  * spacing, well within the ~4 significant digits of the source data.
  */
-enum { OSH_TRANSPORT_NENERGY = 500 };
+enum { OSH_TRANSPORT_MATERIAL_NENERGY = 500 };
 
 /** Default lower energy bound [MeV/nucleon], matching LOADDEDX file range. */
-#define OSH_TRANSPORT_EMIN 0.025
+#define OSH_TRANSPORT_MATERIAL_EMIN 0.025
 
 /** Default upper energy bound [MeV/nucleon], matching LOADDEDX file range. */
-#define OSH_TRANSPORT_EMAX 1000.0
+#define OSH_TRANSPORT_MATERIAL_EMAX 1000.0
 
 /**
  * @brief Look up mass stopping power at an arbitrary energy.
@@ -73,10 +73,10 @@ enum { OSH_TRANSPORT_NENERGY = 500 };
  *
  * @returns Mass stopping power [MeV cm^2/g].
  */
-static inline double osh_transport_sp_lookup(struct osh_transport_runtime_tables const *tables,
-                                             size_t mat_idx,
-                                             size_t proj_idx,
-                                             double e_per_nuc) {
+static inline double osh_transport_material_sp_lookup(struct osh_transport_material_runtime const *tables,
+                                                      size_t mat_idx,
+                                                      size_t proj_idx,
+                                                      double e_per_nuc) {
     double x;
     size_t idx;
     double frac;
@@ -105,7 +105,7 @@ static inline double osh_transport_sp_lookup(struct osh_transport_runtime_tables
  *
  * @details
  * Uses the same log-grid indexing and linear interpolation strategy as
- * osh_transport_sp_lookup(). Energy is clamped to [emin, emax].
+ * osh_transport_material_sp_lookup(). Energy is clamped to [emin, emax].
  *
  * @param[in] tables       Runtime tables built by the prepare layer.
  * @param[in] mat_idx      Dense material index.
@@ -114,10 +114,10 @@ static inline double osh_transport_sp_lookup(struct osh_transport_runtime_tables
  *
  * @returns CSDA range [g/cm^2].
  */
-static inline double osh_transport_range_lookup(struct osh_transport_runtime_tables const *tables,
-                                                size_t mat_idx,
-                                                size_t proj_idx,
-                                                double e_per_nuc) {
+static inline double osh_transport_material_range_lookup(struct osh_transport_material_runtime const *tables,
+                                                         size_t mat_idx,
+                                                         size_t proj_idx,
+                                                         double e_per_nuc) {
     double x;
     size_t idx;
     double frac;
@@ -144,4 +144,4 @@ static inline double osh_transport_range_lookup(struct osh_transport_runtime_tab
 }
 #endif
 
-#endif /* OSH_TRANSPORT_RUNTIME_H */
+#endif /* OSH_TRANSPORT_MATERIAL_RUNTIME_H */

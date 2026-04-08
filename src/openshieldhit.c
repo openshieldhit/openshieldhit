@@ -10,7 +10,7 @@
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 #include "material/osh_material.h"
-#include "transport/prepare/osh_transport_prepare.h"
+#include "transport/prepare/osh_transport_material_prepare.h"
 
 /* ---- Internal constants -------------------------------------------------- */
 
@@ -227,7 +227,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     struct beam_workspace *beam = NULL;
     struct gemca_workspace *geom = NULL;
     struct material_workspace *mat = NULL;
-    struct osh_transport_runtime_tables transport_tables;
+    struct osh_transport_material_runtime transport_tables;
     enum openshieldhit_status rc = OPENSHIELDHIT_STATUS_OK;
 
     if (!ctx) {
@@ -378,7 +378,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         unsigned int z_max;
 
         z_max = (beam->primary.z > 0u) ? (unsigned int) beam->primary.z : 1u;
-        if (osh_transport_prepare(mat, z_max, &transport_tables) != OSH_OK) {
+        if (osh_transport_material_prepare(mat, z_max, &transport_tables) != OSH_OK) {
             ctx_set_error(ctx, err, "%s", "failed to prepare runtime transport tables");
             rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
             goto cleanup;
@@ -405,7 +405,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
 cleanup:
-    osh_transport_runtime_tables_free(&transport_tables);
+    osh_transport_material_runtime_free(&transport_tables);
     if (mat) {
         osh_material_workspace_free(mat);
     }
