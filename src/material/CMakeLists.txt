@@ -2,6 +2,7 @@ add_library(osh_material
     osh_material.c
     osh_material_atomic_data.c
     osh_material_icru_db.c
+    osh_material_loaddedx.c
     osh_material_parse.c
 )
 

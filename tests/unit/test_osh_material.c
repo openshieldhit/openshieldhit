@@ -154,8 +154,7 @@ static void test_material_keys_and_state_are_case_insensitive(void) {
                     "StAtE GaS\n"
                     "CoLoUr 0.1 0.2 0.3 0.4\n"
                     "rHo 0.001\n"
-                    "nUcLiD 1 1\n"
-                    "eNd\n");
+                    "nUcLiD 1 1\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
@@ -186,8 +185,7 @@ static void test_material_level_mean_excitation_and_dedx_table(void) {
                     "MIVALUE 80.0\n"
                     "STATE gas\n"
                     "LOADDEDX tables/water_dedx.dat\n"
-                    "ICRU 276\n"
-                    "END\n");
+                    "ICRU 276\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
@@ -219,8 +217,7 @@ static void test_material_level_mean_excitation_clears_compound_element_values(v
                     "MATERIALI 75.0\n"
                     "ELEMENT 1 2\n"
                     "IVALUE 22.9\n"
-                    "ELEMENT 8 1\n"
-                    "END\n");
+                    "ELEMENT 8 1\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
@@ -247,8 +244,7 @@ static void test_material_mass_fraction_input_completes_atom_counts(void) {
                     "MATERIAL WaterByMass\n"
                     "RHO 1.0\n"
                     "ELEMENTBYMASS 1 0.1118983441\n"
-                    "ELEMENTBYMASS 8 0.8881016559\n"
-                    "END\n");
+                    "ELEMENTBYMASS 8 0.8881016559\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
@@ -276,8 +272,7 @@ static void test_material_explicit_isotope_uses_mass_number(void) {
                     sizeof(path),
                     "MATERIAL Li6\n"
                     "RHO 0.534\n"
-                    "NUCLID 3 6 1.0\n"
-                    "END\n");
+                    "NUCLID 3 6 1.0\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
@@ -305,8 +300,7 @@ static void test_material_defaults_state_to_condensed(void) {
                     sizeof(path),
                     "MATERIAL DefaultState\n"
                     "RHO 1.0\n"
-                    "NUCLID 1 1.0\n"
-                    "END\n");
+                    "NUCLID 1 1.0\n");
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
@@ -370,7 +364,7 @@ static void test_material_rejects_key_outside_material(void) {
     ASSERT_TRUE(remove(path) == 0);
 }
 
-static void test_material_rejects_end_outside_material(void) {
+static void test_material_accepts_end_outside_material(void) {
     char path[512];
     struct material_workspace *wm = NULL;
     enum osh_status rc;
@@ -379,8 +373,10 @@ static void test_material_rejects_end_outside_material(void) {
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
-    ASSERT_TRUE(rc == OSH_EPARSE);
-    ASSERT_TRUE(wm == NULL);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+    ASSERT_TRUE(wm->nmaterials == 2u);
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(path) == 0);
 }
 
@@ -402,9 +398,10 @@ static void test_material_rejects_end_arguments(void) {
     ASSERT_TRUE(remove(path) == 0);
 }
 
-static void test_material_rejects_missing_end(void) {
+static void test_material_accepts_missing_end(void) {
     char path[512];
     struct material_workspace *wm = NULL;
+    struct material const *mat;
     enum osh_status rc;
 
     write_temp_file(path,
@@ -414,8 +411,45 @@ static void test_material_rejects_missing_end(void) {
 
     rc = osh_material_setup_from_path(path, NULL, &wm);
 
-    ASSERT_TRUE(rc == OSH_EPARSE);
-    ASSERT_TRUE(wm == NULL);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+    mat = osh_material_by_name(wm, "Water");
+    ASSERT_TRUE(mat != NULL);
+    ASSERT_TRUE(mat->icru_id == 276);
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
+static void test_material_new_block_implicitly_closes_previous_one(void) {
+    char path[512];
+    struct material_workspace *wm = NULL;
+    struct material const *mat_a;
+    struct material const *mat_b;
+    enum osh_status rc;
+
+    write_temp_file(path,
+                    sizeof(path),
+                    "MATERIAL First\n"
+                    "RHO 1.0\n"
+                    "NUCLID 1 1.0\n"
+                    "MATERIAL Second\n"
+                    "RHO 2.0\n"
+                    "NUCLID 8 1.0\n");
+
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+    mat_a = osh_material_by_name(wm, "First");
+    mat_b = osh_material_by_name(wm, "Second");
+    ASSERT_TRUE(mat_a != NULL);
+    ASSERT_TRUE(mat_b != NULL);
+    ASSERT_TRUE(fabs(mat_a->rho - 1.0) < 1e-12);
+    ASSERT_TRUE(fabs(mat_b->rho - 2.0) < 1e-12);
+    ASSERT_TRUE(mat_a->nelements == 1u);
+    ASSERT_TRUE(mat_b->nelements == 1u);
+
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(path) == 0);
 }
 
@@ -494,11 +528,12 @@ int main(void) {
     test_material_defaults_state_to_condensed();
     test_material_icru_element_expands_to_natural_element();
     test_material_rejects_key_outside_material();
-    test_material_rejects_end_outside_material();
+    test_material_accepts_end_outside_material();
     test_material_rejects_end_arguments();
-    test_material_rejects_missing_end();
+    test_material_accepts_missing_end();
     test_material_rejects_element_i_before_element();
     test_material_rejects_mixed_icru_and_elements();
     test_material_numeric_name_is_still_a_name();
+    test_material_new_block_implicitly_closes_previous_one();
     return 0;
 }
