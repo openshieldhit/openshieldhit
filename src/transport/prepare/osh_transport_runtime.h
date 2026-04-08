@@ -82,13 +82,17 @@ static inline double osh_transport_sp_lookup(struct osh_transport_runtime_tables
     double frac;
     size_t base;
 
-    x = (log(e_per_nuc) - tables->log_emin) * tables->inv_dlog;
-    if (x < 0.0) {
-        x = 0.0;
+    if (e_per_nuc <= tables->emin) {
+        e_per_nuc = tables->emin;
+    } else if (e_per_nuc >= tables->emax) {
+        e_per_nuc = tables->emax;
     }
+
+    x = (log(e_per_nuc) - tables->log_emin) * tables->inv_dlog;
     idx = (size_t) x;
     if (idx >= tables->nenergy - 1u) {
         idx = tables->nenergy - 2u;
+        x = (double) idx + 1.0;
     }
     frac = x - (double) idx;
     base = (mat_idx * tables->nprojectiles + proj_idx) * tables->nenergy;
@@ -119,13 +123,17 @@ static inline double osh_transport_range_lookup(struct osh_transport_runtime_tab
     double frac;
     size_t base;
 
-    x = (log(e_per_nuc) - tables->log_emin) * tables->inv_dlog;
-    if (x < 0.0) {
-        x = 0.0;
+    if (e_per_nuc <= tables->emin) {
+        e_per_nuc = tables->emin;
+    } else if (e_per_nuc >= tables->emax) {
+        e_per_nuc = tables->emax;
     }
+
+    x = (log(e_per_nuc) - tables->log_emin) * tables->inv_dlog;
     idx = (size_t) x;
     if (idx >= tables->nenergy - 1u) {
         idx = tables->nenergy - 2u;
+        x = (double) idx + 1.0;
     }
     frac = x - (double) idx;
     base = (mat_idx * tables->nprojectiles + proj_idx) * tables->nenergy;

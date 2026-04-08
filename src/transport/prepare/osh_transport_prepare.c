@@ -20,9 +20,9 @@
  * array offsets throughout transport.
  *
  * Range integration:
- *   R(E_n) = integral_{E_0}^{E_n} dE / SP(E)
+ *   R(E_n/A) = integral_{E_0/A}^{E_n/A} A * d(E/A) / SP(E/A)
  *   Approximated with the trapezoidal rule on the resampled runtime grid:
- *     dR = 0.5 * (1/SP_i + 1/SP_{i+1}) * (E_{i+1} - E_i)
+ *     dR = 0.5 * (1/SP_i + 1/SP_{i+1}) * A * ((E/A)_{i+1} - (E/A)_i)
  *   Accumulated from the minimum energy upward so that range_csda[k] is the
  *   CSDA range from emin to energy[k].  Runtime transport takes the difference
  *   R(E_in) - R(E_out) for each step.
@@ -66,9 +66,10 @@ static inline size_t rt_index(struct osh_transport_runtime_tables const *t, size
  *
  * @param[in]  sp       Stopping power array [nenergy] [MeV cm²/g].
  * @param[out] range    Range array [nenergy] [g/cm²], range[0] = 0.
+ * @param[in]  a_proj   Projectile mass number A.
  * @param[in]  t        Runtime tables (grid parameters, nenergy).
  */
-static void integrate_range(float const *sp, float *range, struct osh_transport_runtime_tables const *t) {
+static void integrate_range(float const *sp, float *range, double a_proj, struct osh_transport_runtime_tables const *t) {
     size_t k;
     double dlog = 1.0 / t->inv_dlog;
     double log_e_prev, log_e_curr, e_prev, e_curr, inv_sp_prev, inv_sp_curr, r;
@@ -84,7 +85,7 @@ static void integrate_range(float const *sp, float *range, struct osh_transport_
         e_curr = exp(log_e_curr);
         inv_sp_curr = (sp[k] > 0.0f) ? (1.0 / (double) sp[k]) : 0.0;
 
-        r += 0.5 * (inv_sp_prev + inv_sp_curr) * (e_curr - e_prev);
+        r += 0.5 * (inv_sp_prev + inv_sp_curr) * a_proj * (e_curr - e_prev);
         range[k] = (float) r;
 
         log_e_prev = log_e_curr;
@@ -304,7 +305,7 @@ static void fill_bethe_projectile_column(struct osh_transport_runtime_tables con
     }
 
     rng_col = t->range_csda + base;
-    integrate_range(sp_col, rng_col, t);
+    integrate_range(sp_col, rng_col, proj.a, t);
 }
 
 /**
@@ -325,6 +326,8 @@ static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_t
                                                   double dlog,
                                                   struct material const *mat) {
     struct osh_physics_bethe_projectile proj;
+    struct osh_physics_bethe_target *elt_tgts;
+    struct osh_physics_bethe_sewn *elt_sewns;
     float *sp_col;
     float *rng_col;
     size_t base;
@@ -338,6 +341,16 @@ static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_t
     base = rt_index(t, mat_idx, proj_idx, 0);
     sp_col = t->mass_stopping_power + base;
 
+    elt_tgts = (struct osh_physics_bethe_target *) malloc(mat->nelements * sizeof(*elt_tgts));
+    elt_sewns = (struct osh_physics_bethe_sewn *) malloc(mat->nelements * sizeof(*elt_sewns));
+
+    if (elt_tgts && elt_sewns) {
+        for (i = 0; i < mat->nelements; ++i) {
+            build_element_bethe_target(&mat->elements[i], &elt_tgts[i]);
+            osh_physics_bethe_sewn_compute(&proj, &elt_tgts[i], &elt_sewns[i]);
+        }
+    }
+
     for (e_idx = 0; e_idx < t->nenergy; ++e_idx) {
         double log_e;
         double e_val;
@@ -348,13 +361,21 @@ static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_t
         sp_sum = 0.0;
 
         for (i = 0; i < mat->nelements; ++i) {
-            struct osh_physics_bethe_target elt_tgt;
-            struct osh_physics_bethe_sewn elt_sewn;
             double sp_i;
 
-            build_element_bethe_target(&mat->elements[i], &elt_tgt);
-            osh_physics_bethe_sewn_compute(&proj, &elt_tgt, &elt_sewn);
-            sp_i = osh_physics_bethe_eval(e_val, &proj, &elt_tgt, &elt_sewn);
+            if (elt_tgts && elt_sewns) {
+                sp_i = osh_physics_bethe_eval(e_val, &proj, &elt_tgts[i], &elt_sewns[i]);
+            } else {
+                struct osh_physics_bethe_target elt_tgt;
+                struct osh_physics_bethe_sewn elt_sewn;
+
+                /* Fallback keeps correctness if temporary precompute buffers
+                 * cannot be allocated during setup.
+                 */
+                build_element_bethe_target(&mat->elements[i], &elt_tgt);
+                osh_physics_bethe_sewn_compute(&proj, &elt_tgt, &elt_sewn);
+                sp_i = osh_physics_bethe_eval(e_val, &proj, &elt_tgt, &elt_sewn);
+            }
             if (sp_i > 0.0) {
                 sp_sum += mat->elements[i].mass_fraction * sp_i;
             }
@@ -363,8 +384,11 @@ static void fill_bethe_compound_projectile_column(struct osh_transport_runtime_t
         sp_col[e_idx] = (float) sp_sum;
     }
 
+    free(elt_tgts);
+    free(elt_sewns);
+
     rng_col = t->range_csda + base;
-    integrate_range(sp_col, rng_col, t);
+    integrate_range(sp_col, rng_col, proj.a, t);
 }
 
 /**
@@ -434,9 +458,6 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
     struct osh_physics_bethe_target tgt;
     float *sp_col, *rng_col;
     enum osh_status rc;
-    int have_loaddedx;
-    size_t max_loaddedx_nproj;
-
     if (!wm || !tables)
         return OSH_EINVAL;
 
@@ -454,15 +475,11 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
 
     /* ---- Projectile list -------------------------------------------------- */
     /*
-     * Check if any user material has a LOADDEDX table.  If so, its nprojectiles
-     * determines z_max (the file is authoritative).  Otherwise z_max is taken
-     * from the caller's argument.
-     *
-     * We peek at the first LOADDEDX file only to get nprojectiles; we re-load
-     * per-material below in the main loop.
+     * Expand the caller-requested projectile range to include the widest
+     * contiguous LOADDEDX coverage seen in any material. The runtime set is
+     * the union of both, so later code can fill higher-Z columns with Bethe
+     * fallback when an external table covers fewer projectiles.
      */
-    max_loaddedx_nproj = 0;
-    have_loaddedx = 0;
     for (i = OSH_MATERIAL_INDEX_FIRST_USER; i < wm->nmaterials; ++i) {
         mat = osh_material_by_index(wm, i);
         if (mat && mat->dedx_table_path) {
@@ -470,18 +487,14 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
             if (rc != OSH_OK) {
                 goto fail;
             }
-            if (src.nprojectiles > max_loaddedx_nproj) {
-                max_loaddedx_nproj = src.nprojectiles;
-            }
             if (src.nprojectiles > z_max) {
                 z_max = (unsigned int) src.nprojectiles;
             }
-            have_loaddedx = 1;
             osh_material_loaddedx_table_free(&src);
         }
     }
 
-    nproj = (have_loaddedx && max_loaddedx_nproj > 0) ? max_loaddedx_nproj : (size_t) z_max;
+    nproj = (size_t) z_max;
     if (nproj == 0)
         nproj = 1; /* always at least protons */
 
@@ -499,8 +512,19 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
     }
 
     for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
-        t.projectile_z[proj_idx] = (unsigned int) (proj_idx + 1u);
-        t.projectile_a[proj_idx] = default_isotope_a((unsigned int) (proj_idx + 1u));
+        unsigned int z;
+        unsigned int a;
+
+        z = (unsigned int) (proj_idx + 1u);
+        a = default_isotope_a(z);
+        if (a == 0u) {
+            osh_error("Unsupported projectile Z=%u: no default isotope in the isotope database", z);
+            rc = OSH_EINVAL;
+            goto fail;
+        }
+
+        t.projectile_z[proj_idx] = z;
+        t.projectile_a[proj_idx] = a;
         osh_info("    projectile[%zu]: Z=%u A=%u", proj_idx, t.projectile_z[proj_idx], t.projectile_a[proj_idx]);
     }
 
@@ -558,7 +582,7 @@ enum osh_status osh_transport_prepare(struct material_workspace const *wm,
                 }
 
                 rng_col = t.range_csda + base;
-                integrate_range(sp_col, rng_col, &t);
+                integrate_range(sp_col, rng_col, (double) t.projectile_a[proj_idx], &t);
                 log_runtime_column_summary(mat->name, "LOADDEDX-resampled", &t, mat_idx, proj_idx);
             }
 

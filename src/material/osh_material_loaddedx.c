@@ -52,9 +52,15 @@ parse_numeric_row(char const *line, double *energy_out, double **values_out, siz
         if (errno != 0 || endptr == cursor) {
             break;
         }
-        values = realloc(values, (nvalues + 1u) * sizeof(double));
-        if (!values) {
-            return OSH_ENOMEM;
+        {
+            double *new_values;
+
+            new_values = realloc(values, (nvalues + 1u) * sizeof(double));
+            if (!new_values) {
+                free(values);
+                return OSH_ENOMEM;
+            }
+            values = new_values;
         }
         values[nvalues] = value;
         nvalues += 1u;
