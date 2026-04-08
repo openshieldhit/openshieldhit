@@ -57,7 +57,8 @@ void osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
     free(ws);
 }
 
-struct osh_scoring_filter_def const *osh_scoring_filter_by_name(struct osh_scoring_workspace const *ws, char const *name) {
+struct osh_scoring_filter_def const *osh_scoring_filter_by_name(struct osh_scoring_workspace const *ws,
+                                                                char const *name) {
     size_t i;
 
     if (!ws || !name) {
