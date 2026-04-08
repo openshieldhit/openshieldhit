@@ -19,6 +19,16 @@
         }                                                                                                              \
     } while (0)
 
+static void write_temp_file(char *path, size_t path_cap, char const *content) {
+    FILE *fp;
+
+    snprintf(path, path_cap, "osh_transport_reference_test.tmp");
+    fp = fopen(path, "w");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fputs(content, fp) >= 0);
+    ASSERT_TRUE(fclose(fp) == 0);
+}
+
 static double test_material_element_mass_da(struct material_element const *el) {
     struct isotope iso;
     double mass_da;
@@ -120,6 +130,7 @@ static void print_projectile_slice_with_diff(struct osh_transport_runtime_tables
         double ref_sp;
         double ref_range;
         double d_sp;
+        double d_sp_pct;
         double d_range_pct;
 
         e = energies[i];
@@ -128,13 +139,15 @@ static void print_projectile_slice_with_diff(struct osh_transport_runtime_tables
         ref_sp = osh_transport_sp_lookup(tables, ref_mat_idx, proj_idx, e);
         ref_range = osh_transport_range_lookup(tables, ref_mat_idx, proj_idx, e);
         d_sp = sp - ref_sp;
+        d_sp_pct = (ref_sp != 0.0) ? 100.0 * d_sp / ref_sp : 0.0;
         d_range_pct = (ref_range != 0.0) ? 100.0 * (range - ref_range) / ref_range : 0.0;
 
-        printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  range=%12.6f g/cm^2  dSP=%+10.6f  dR=%+8.3f %%\n",
+        printf("  E=%9.4f MeV/u  dEdx=%12.6f MeV cm^2/g  range=%12.6f g/cm^2  dSP=%+10.6f  dSP%%=%+8.3f %%  dR=%+8.3f %%\n",
                e,
                sp,
                range,
                d_sp,
+               d_sp_pct,
                d_range_pct);
     }
 }
@@ -186,8 +199,6 @@ int main(void) {
     memset(&tables, 0, sizeof(tables));
 
     snprintf(water_path, sizeof(water_path), "%s/tests/cases/04_simple_loaddedx/Water.txt", OSH_PROJECT_SOURCE_DIR);
-    snprintf(
-        mat_path, sizeof(mat_path), "%s/tests/fixtures/test_transport_reference_water.tmp", OSH_PROJECT_SOURCE_DIR);
     snprintf(mat_text,
              sizeof(mat_text),
              "MATERIAL WaterLoaded\n"
@@ -198,14 +209,7 @@ int main(void) {
              sizeof(mat_text) - strlen(mat_text),
              "MATERIAL WaterBethe\n"
              "ICRU 276\n");
-
-    {
-        FILE *fp;
-        fp = fopen(mat_path, "w");
-        ASSERT_TRUE(fp != NULL);
-        ASSERT_TRUE(fputs(mat_text, fp) >= 0);
-        ASSERT_TRUE(fclose(fp) == 0);
-    }
+    write_temp_file(mat_path, sizeof(mat_path), mat_text);
 
     rc = osh_material_setup_from_path(mat_path, NULL, &wm);
     ASSERT_TRUE(rc == OSH_OK);

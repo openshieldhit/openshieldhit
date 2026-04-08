@@ -61,6 +61,7 @@ foreach(test_src ${UNIT_SOURCES})
         osh_beam
         osh_material
         osh_particle
+        osh_physics
         osh_transport
     )
 

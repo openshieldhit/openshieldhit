@@ -200,10 +200,10 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_transport_prepare(wm, 6u, &tables);
+    rc = osh_transport_prepare(wm, 25u, &tables);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(tables.nmaterials == 5u);
-    ASSERT_TRUE(tables.nprojectiles == 20u);
+    ASSERT_TRUE(tables.nprojectiles == 25u);
     ASSERT_TRUE(tables.nenergy == (size_t) OSH_TRANSPORT_NENERGY);
     ASSERT_NEAR(tables.emin, OSH_TRANSPORT_EMIN, 1e-12);
     ASSERT_NEAR(tables.emax, OSH_TRANSPORT_EMAX, 1e-12);
@@ -216,6 +216,15 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     ASSERT_NEAR(osh_transport_sp_lookup(&tables, OSH_MATERIAL_INDEX_VACUUM, 0u, OSH_TRANSPORT_EMIN), 0.0, 1e-12);
 
     ASSERT_NEAR(osh_transport_sp_lookup(&tables, idx_table18, 0u, 0.025), 619.82, 1e-2);
+    ASSERT_NEAR(osh_transport_sp_lookup(&tables, idx_table18, 0u, 0.0),
+                osh_transport_sp_lookup(&tables, idx_table18, 0u, tables.emin),
+                1e-12);
+    ASSERT_NEAR(osh_transport_sp_lookup(&tables, idx_table18, 0u, -1.0),
+                osh_transport_sp_lookup(&tables, idx_table18, 0u, tables.emin),
+                1e-12);
+    ASSERT_NEAR(osh_transport_sp_lookup(&tables, idx_table18, 0u, 2000.0),
+                osh_transport_sp_lookup(&tables, idx_table18, 0u, tables.emax),
+                1e-12);
     ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_table18, 19u, 0.025) > 0.0);
     ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_table18, 19u, 10.0) > 0.0);
 
@@ -223,6 +232,12 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_table20, 19u, 0.03) > 1.0);
     ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_table20, 19u, 0.03) < 2.0);
     ASSERT_NEAR(osh_transport_sp_lookup(&tables, idx_table20, 19u, 1.0), 2.0, 1e-6);
+    ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_table18, 24u, 10.0) > 0.0);
+    ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_table20, 24u, 10.0) > 0.0);
+    ASSERT_NEAR(osh_transport_range_lookup(&tables, idx_table20, 19u, 0.05)
+                    / osh_transport_range_lookup(&tables, idx_table20, 0u, 0.05),
+                (double) tables.projectile_a[19u] / (double) tables.projectile_a[0u],
+                1e-4);
 
     ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_bethe, 0u, 1.0) > 0.0);
     ASSERT_TRUE(osh_transport_sp_lookup(&tables, idx_bethe, 5u, 10.0) > 0.0);
@@ -230,6 +245,12 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     ASSERT_TRUE(tables.range_csda != NULL);
     ASSERT_TRUE(tables.range_csda[(idx_bethe * tables.nprojectiles + 0u) * tables.nenergy + 0u] == 0.0f);
     ASSERT_TRUE(tables.range_csda[(idx_bethe * tables.nprojectiles + 0u) * tables.nenergy + 1u] >= 0.0f);
+    ASSERT_NEAR(osh_transport_range_lookup(&tables, idx_table18, 0u, 0.0),
+                osh_transport_range_lookup(&tables, idx_table18, 0u, tables.emin),
+                1e-12);
+    ASSERT_NEAR(osh_transport_range_lookup(&tables, idx_table18, 0u, 2000.0),
+                osh_transport_range_lookup(&tables, idx_table18, 0u, tables.emax),
+                1e-12);
 
     osh_transport_runtime_tables_free(&tables);
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
@@ -297,8 +318,37 @@ static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(
     ASSERT_TRUE(remove(mat_path) == 0);
 }
 
+static void test_prepare_rejects_projectiles_beyond_isotope_db(void) {
+    char mat_path[512];
+    char mat_text[1024];
+    struct material_workspace *wm;
+    struct osh_transport_runtime_tables tables;
+    enum osh_status rc;
+
+    wm = NULL;
+    memset(&tables, 0, sizeof(tables));
+
+    snprintf(mat_text,
+             sizeof(mat_text),
+             "MATERIAL Water\n"
+             "ICRU 276\n");
+    write_temp_file(mat_path, sizeof(mat_path), mat_text);
+
+    rc = osh_material_setup_from_path(mat_path, NULL, &wm);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+
+    rc = osh_transport_prepare(wm, (unsigned int) OSH_ISOTOPE_DB_NELEM, &tables);
+    ASSERT_TRUE(rc == OSH_EINVAL);
+
+    osh_transport_runtime_tables_free(&tables);
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+    ASSERT_TRUE(remove(mat_path) == 0);
+}
+
 int main(void) {
     test_prepare_mixed_loaddedx_and_bethe_paths();
     test_prepare_bethe_infers_element_mee_from_material_mean_excitation();
+    test_prepare_rejects_projectiles_beyond_isotope_db();
     return 0;
 }
