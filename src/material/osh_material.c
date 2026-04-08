@@ -31,6 +31,7 @@ static enum osh_status material_set_elements_from_icru(struct material *mat,
 static enum osh_status material_complete_mean_excitation_energy(struct material *mat);
 static enum osh_status material_fill_element_mee_defaults(struct material *mat);
 static enum osh_status material_derive_compound_mee(struct material *mat);
+static enum osh_status material_match_element_mee_to_material(struct material *mat);
 static void material_free_fields(struct material *mat);
 static char const *material_state_name(int state);
 static int material_has_any_element_mee(struct material const *mat);
@@ -641,12 +642,18 @@ static enum osh_status material_set_elements_from_icru(struct material *mat,
  * @brief Complete material and element mean excitation energies.
  *
  * @details
- * Material-level MEE is authoritative for compounds. If it is already known
- * from ICRU or a user MATERIALI/MIVALUE/MIAV card, compound element MEE values
- * are left unset because the inverse Bragg problem is underdetermined. Raw
- * validation rejects compound input that tries to define both material- and
- * element-level MEE explicitly. For a single-element material, the element can
- * safely inherit the material value.
+ * Material-level MEE is authoritative for compounds. Raw validation rejects
+ * compound input that tries to define both material- and element-level MEE
+ * explicitly. For a single-element material, the element safely inherits the
+ * material value directly.
+ *
+ * For compounds with a known material-level MEE but no explicit element-level
+ * MEE, we still need per-element values for the SH-compatible element-by-
+ * element Bethe fallback. The closure rule used here mirrors libdedx:
+ * element defaults are filled from ICRU data, then all defaulted element
+ * values are scaled by one common factor so Bragg additivity recombines to the
+ * known material MEE. This keeps the material MEE authoritative while giving a
+ * reproducible element-by-element decomposition for transport.
  *
  * If material-level MEE is unset, missing element MEE values are filled from
  * ICRU defaults with ICRU-49 in-compound corrections where available, then the
@@ -669,13 +676,12 @@ static enum osh_status material_complete_mean_excitation_energy(struct material 
             mat->elements[0].mean_excitation_energy = mat->mean_excitation_energy;
             return OSH_OK;
         }
-
-        i = 0;
-        while (i < mat->nelements) {
-            mat->elements[i].mean_excitation_energy = -1.0;
-            i++;
+        (void) i;
+        rc = material_fill_element_mee_defaults(mat);
+        if (rc != OSH_OK) {
+            return rc;
         }
-        return OSH_OK;
+        return material_match_element_mee_to_material(mat);
     }
 
     rc = material_fill_element_mee_defaults(mat);
@@ -781,6 +787,74 @@ static enum osh_status material_derive_compound_mee(struct material *mat) {
 
     if (denominator > 0.0) {
         mat->mean_excitation_energy = exp(numerator / denominator);
+    }
+
+    return OSH_OK;
+}
+
+/**
+ * @brief Scale compound element MEE defaults to match a fixed material MEE.
+ *
+ * @details
+ * The inverse Bragg problem is underdetermined: infinitely many element-level
+ * MEE sets can reproduce one known material-level MEE. For transport we choose
+ * the same pragmatic closure rule as libdedx: keep the relative pattern of the
+ * default element values, then apply one common multiplicative factor so that
+ *
+ *   I_material = exp(sum_i w_i (Z_i/A_i) ln(I_i) / sum_i w_i Z_i/A_i)
+ *
+ * is exactly satisfied.
+ *
+ * Because the scale factor is common to all elements, the Bragg-average
+ * material MEE is scaled by the same factor. This gives a reproducible
+ * element-by-element decomposition while preserving the authoritative material
+ * MEE supplied by the user or ICRU.
+ *
+ * @param[in,out] mat  Material with known material MEE and filled element MEE.
+ *
+ * @returns OSH_OK on success, or an error code from the atomic-mass lookup.
+ */
+static enum osh_status material_match_element_mee_to_material(struct material *mat) {
+    enum osh_status rc;
+    double numerator;
+    double denominator;
+    double mass;
+    double zi_over_ai;
+    double inferred_material_mee;
+    double scale;
+    size_t i;
+
+    if (!mat || mat->mean_excitation_energy <= 0.0 || mat->nelements == 0u) {
+        return OSH_OK;
+    }
+
+    numerator = 0.0;
+    denominator = 0.0;
+    for (i = 0; i < mat->nelements; ++i) {
+        if (mat->elements[i].mean_excitation_energy <= 0.0 || mat->elements[i].mass_fraction < 0.0) {
+            return OSH_OK;
+        }
+        rc = material_element_mass(mat->elements[i].z, mat->elements[i].a, &mass);
+        if (rc != OSH_OK) {
+            return rc;
+        }
+        zi_over_ai = (double) mat->elements[i].z / mass;
+        numerator += mat->elements[i].mass_fraction * zi_over_ai * log(mat->elements[i].mean_excitation_energy);
+        denominator += mat->elements[i].mass_fraction * zi_over_ai;
+    }
+
+    if (denominator <= 0.0) {
+        return OSH_OK;
+    }
+
+    inferred_material_mee = exp(numerator / denominator);
+    if (inferred_material_mee <= 0.0) {
+        return OSH_OK;
+    }
+
+    scale = mat->mean_excitation_energy / inferred_material_mee;
+    for (i = 0; i < mat->nelements; ++i) {
+        mat->elements[i].mean_excitation_energy *= scale;
     }
 
     return OSH_OK;
