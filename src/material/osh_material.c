@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "common/osh_file.h"
 #include "common/osh_logger.h"
@@ -150,7 +151,7 @@ struct material const *osh_material_by_name(struct material_workspace const *wm,
 
     i = 0;
     while (i < wm->nmaterials) {
-        if (wm->materials[i].name && strcmp(wm->materials[i].name, name) == 0) {
+        if (wm->materials[i].name && strcasecmp(wm->materials[i].name, name) == 0) {
             return &wm->materials[i];
         }
         i++;

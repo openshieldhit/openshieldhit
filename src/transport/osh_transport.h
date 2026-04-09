@@ -1,6 +1,7 @@
 #ifndef OSH_TRANSPORT_H
 #define OSH_TRANSPORT_H
 
+#include "common/osh_rc.h"
 #include "common/osh_coord.h"
 #include "common/osh_step.h"
 
@@ -8,11 +9,43 @@
 extern "C" {
 #endif
 
+struct beam_workspace;
+struct gemca_workspace;
+struct material_workspace;
+struct osh_material_runtime;
+struct osh_scoring_runtime;
+
 /*
  * struct step and struct position are defined in common/osh_step.h so that
  * domain modules (scoring, gemca) can receive them without depending on
  * transport/.  This header re-exports them via the include above.
  */
+
+/**
+ * @brief Run the minimal straight-line CSDA transport loop.
+ *
+ * @details
+ * This is the first end-to-end transport slice for OpenShieldHIT:
+ *   - primaries are sampled from beam/
+ *   - zones and boundary distances come from gemca/
+ *   - energy loss is computed from material CSDA range tables
+ *   - scoring is applied step-by-step through scoring/runtime
+ *
+ * The current implementation is intentionally narrow:
+ *   - no multiple scattering
+ *   - no energy straggling
+ *   - no nuclear interactions
+ *   - no secondaries
+ *
+ * DELTAE is treated as a maximum fractional energy-loss step criterion in
+ * material. Boundary-limited steps are truncated and the exit energy is
+ * recovered from the residual CSDA range.
+ */
+enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
+                                          struct gemca_workspace *geom,
+                                          struct material_workspace const *materials,
+                                          struct osh_material_runtime const *tables,
+                                          struct osh_scoring_runtime *scoring);
 
 void osh_transport_move_ray(struct ray *r, double d);
 void osh_transport_print_ray(struct ray const *r);

@@ -12,5 +12,10 @@ target_include_directories(osh_transport
 target_link_libraries(osh_transport
     PRIVATE
         osh_common
+        osh_random
+        osh_beam
+        osh_material
+        osh_gemca2
+        osh_scoring
         $<$<BOOL:${UNIX}>:m>
 )

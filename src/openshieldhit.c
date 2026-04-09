@@ -12,7 +12,10 @@
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_prepare.h"
 #include "scoring/osh_scoring.h"
+#include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_prepare.h"
+#include "scoring/save/osh_scoring_save.h"
+#include "transport/osh_transport.h"
 
 /* ---- Internal constants -------------------------------------------------- */
 
@@ -268,16 +271,8 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         goto cleanup;
     }
 
-    if (ctx->run_mode != OPENSHIELDHIT_RUN_VALIDATE) {
-        /* Full transport is not yet implemented. Return NOT_SUPPORTED so
-         * callers can distinguish this from a successful run. */
-        ctx_set_error(ctx, err, "%s", "run mode NORMAL is not yet implemented");
-        rc = OPENSHIELDHIT_STATUS_NOT_SUPPORTED;
-        goto cleanup;
-    }
-
     if (out) {
-        fprintf(out, "Validate configuration\n");
+        fprintf(out, "%s\n", (ctx->run_mode == OPENSHIELDHIT_RUN_VALIDATE) ? "Validate configuration" : "Run simulation");
         fprintf(out, "  Log level        : %d\n", ctx->log_level);
         if (ctx->has_nstat) {
             fprintf(out, "  Requested nstat  : %llu\n", ctx->nstat);
@@ -425,8 +420,50 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
                 (unsigned long long) scoring_runtime.npages);
     }
 
+    if (ctx->run_mode == OPENSHIELDHIT_RUN_VALIDATE) {
+        if (out) {
+            fprintf(out, "Validation completed.\n");
+        }
+        goto cleanup;
+    }
+
+    if (osh_transport_run_minimal(beam, geom, mat, &transport_tables, &scoring_runtime) != OSH_OK) {
+        ctx_set_error(ctx, err, "%s", "minimal transport failed");
+        rc = OPENSHIELDHIT_STATUS_STATE_ERROR;
+        goto cleanup;
+    }
     if (out) {
-        fprintf(out, "Validation completed.\n");
+        fprintf(out, "Transport completed: %llu primaries.\n", (unsigned long long) beam->nstat);
+    }
+
+    if (osh_scoring_postprocess(&scoring_runtime) != OSH_OK) {
+        ctx_set_error(ctx, err, "%s", "scoring postprocess failed");
+        rc = OPENSHIELDHIT_STATUS_STATE_ERROR;
+        goto cleanup;
+    }
+    if (out) {
+        fprintf(out, "Scoring postprocess completed.\n");
+    }
+
+    {
+        struct osh_scoring_save_request save_req;
+
+        memset(&save_req, 0, sizeof(save_req));
+        save_req.out_dir = outdir;
+        save_req.ws = scoring;
+        save_req.rt = &scoring_runtime;
+        save_req.nstat = beam->nstat;
+        save_req.has_nstat = 1;
+
+        if (osh_scoring_save(&save_req) != OSH_OK) {
+            ctx_set_error(ctx, err, "%s", "scoring save failed");
+            rc = OPENSHIELDHIT_STATUS_STATE_ERROR;
+            goto cleanup;
+        }
+    }
+    if (out) {
+        fprintf(out, "Scoring outputs saved to %s\n", outdir);
+        fprintf(out, "Run completed.\n");
     }
 
 cleanup:
