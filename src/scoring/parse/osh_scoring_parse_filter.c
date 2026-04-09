@@ -8,6 +8,50 @@
 
 typedef enum osh_status (*filter_handler_fn)(struct osh_scoring_filter_def *, char **, int, char const *, unsigned int);
 
+struct filter_entry {
+    char const *key;
+    filter_handler_fn handler;
+};
+
+static enum osh_status append_filter_rule(struct osh_scoring_filter_def *fil,
+                                          char const *field,
+                                          char const *op,
+                                          double value);
+static enum osh_status
+filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+filter_rule(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno);
+
+static struct filter_entry filter_table[7];
+
+enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil,
+                                              char **words,
+                                              int nwords,
+                                              char const *path,
+                                              unsigned int lineno,
+                                              int *found_out) {
+    size_t i;
+
+    if (found_out)
+        *found_out = 0;
+    for (i = 0; filter_table[i].key != NULL; ++i) {
+        if (strcmp(filter_table[i].key, words[0]) == 0) {
+            if (found_out)
+                *found_out = 1;
+            return filter_table[i].handler(fil, words, nwords, path, lineno);
+        }
+    }
+    return OSH_OK;
+}
+
+static struct filter_entry filter_table[] = {{OSH_SCORING_KEY_NAME, filter_name},
+                                             {OSH_SCORING_KEY_FILTER_Z, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_A, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_E, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_GEN, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_ID, filter_rule},
+                                             {NULL, NULL}};
+
 static enum osh_status
 append_filter_rule(struct osh_scoring_filter_def *fil, char const *field, char const *op, double value) {
     struct osh_scoring_filter_rule *tmp =
@@ -54,37 +98,4 @@ filter_rule(struct osh_scoring_filter_def *fil, char **words, int nwords, char c
         field[i] = (char) toupper((unsigned char) words[0][i]);
     field[i] = '\0';
     return append_filter_rule(fil, field, words[1], value);
-}
-
-struct filter_entry {
-    char const *key;
-    filter_handler_fn handler;
-};
-
-static struct filter_entry filter_table[] = {{OSH_SCORING_KEY_NAME, filter_name},
-                                             {OSH_SCORING_KEY_FILTER_Z, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_A, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_E, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_GEN, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_ID, filter_rule},
-                                             {NULL, NULL}};
-
-enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil,
-                                              char **words,
-                                              int nwords,
-                                              char const *path,
-                                              unsigned int lineno,
-                                              int *found_out) {
-    size_t i;
-
-    if (found_out)
-        *found_out = 0;
-    for (i = 0; filter_table[i].key != NULL; ++i) {
-        if (strcmp(filter_table[i].key, words[0]) == 0) {
-            if (found_out)
-                *found_out = 1;
-            return filter_table[i].handler(fil, words, nwords, path, lineno);
-        }
-    }
-    return OSH_OK;
 }

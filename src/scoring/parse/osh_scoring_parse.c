@@ -48,112 +48,15 @@
 
 enum scoring_section { SECTION_NONE = 0, SECTION_FILTER, SECTION_SETTINGS, SECTION_GEOMETRY, SECTION_OUTPUT };
 
-/* ---- Append helpers ------------------------------------------------------- */
+/* ---- Internal helper declarations ---------------------------------------- */
 
-static enum osh_status append_filter(struct osh_scoring_workspace *ws) {
-    struct osh_scoring_filter_def *tmp =
-        (struct osh_scoring_filter_def *) realloc(ws->filters, (ws->nfilters + 1u) * sizeof(*tmp));
-    if (!tmp)
-        return OSH_ENOMEM;
-    ws->filters = tmp;
-    memset(&ws->filters[ws->nfilters], 0, sizeof(*tmp));
-    ws->nfilters++;
-    return OSH_OK;
-}
+static enum osh_status append_filter(struct osh_scoring_workspace *ws);
+static enum osh_status append_settings(struct osh_scoring_workspace *ws);
+static enum osh_status append_geometry(struct osh_scoring_workspace *ws);
+static enum osh_status append_output(struct osh_scoring_workspace *ws);
+static enum osh_status validate(struct osh_scoring_workspace const *ws);
 
-static enum osh_status append_settings(struct osh_scoring_workspace *ws) {
-    struct osh_scoring_settings_def *tmp =
-        (struct osh_scoring_settings_def *) realloc(ws->settings, (ws->nsettings + 1u) * sizeof(*tmp));
-    if (!tmp)
-        return OSH_ENOMEM;
-    ws->settings = tmp;
-    memset(&ws->settings[ws->nsettings], 0, sizeof(*tmp));
-    ws->settings[ws->nsettings].medium = -1;
-    ws->settings[ws->nsettings].nkmedium = -1;
-    ws->nsettings++;
-    return OSH_OK;
-}
-
-static enum osh_status append_geometry(struct osh_scoring_workspace *ws) {
-    struct osh_scoring_geometry_def *tmp =
-        (struct osh_scoring_geometry_def *) realloc(ws->geometries, (ws->ngeometries + 1u) * sizeof(*tmp));
-    if (!tmp)
-        return OSH_ENOMEM;
-    ws->geometries = tmp;
-    memset(&ws->geometries[ws->ngeometries], 0, sizeof(*tmp));
-    ws->ngeometries++;
-    return OSH_OK;
-}
-
-static enum osh_status append_output(struct osh_scoring_workspace *ws) {
-    struct osh_scoring_output_def *tmp =
-        (struct osh_scoring_output_def *) realloc(ws->outputs, (ws->noutputs + 1u) * sizeof(*tmp));
-    if (!tmp)
-        return OSH_ENOMEM;
-    ws->outputs = tmp;
-    memset(&ws->outputs[ws->noutputs], 0, sizeof(*tmp));
-    ws->noutputs++;
-    return OSH_OK;
-}
-
-/* ---- Post-parse validation ------------------------------------------------ */
-
-static enum osh_status validate(struct osh_scoring_workspace const *ws) {
-    size_t i, j;
-
-    for (i = 0; i < ws->nfilters; ++i) {
-        if (!ws->filters[i].name || ws->filters[i].name[0] == '\0') {
-            osh_error("scoring: filter %zu is missing a Name", i);
-            return OSH_EPARSE;
-        }
-    }
-
-    for (i = 0; i < ws->nsettings; ++i) {
-        if (!ws->settings[i].name || ws->settings[i].name[0] == '\0') {
-            osh_error("scoring: settings %zu is missing a Name", i);
-            return OSH_EPARSE;
-        }
-    }
-
-    for (i = 0; i < ws->ngeometries; ++i) {
-        if (!ws->geometries[i].kind || ws->geometries[i].kind[0] == '\0') {
-            osh_error("scoring: geometry %zu is missing a type keyword", i);
-            return OSH_EPARSE;
-        }
-        if (!ws->geometries[i].name || ws->geometries[i].name[0] == '\0') {
-            osh_error("scoring: geometry %zu (%s) is missing a Name", i, ws->geometries[i].kind);
-            return OSH_EPARSE;
-        }
-        if (ws->geometries[i].naxes == 0u && strcasecmp(ws->geometries[i].kind, "Zone") != 0) {
-            osh_warn("scoring: geometry '%s' has no axis definitions", ws->geometries[i].name);
-        }
-    }
-
-    for (i = 0; i < ws->noutputs; ++i) {
-        if (!ws->outputs[i].filename || ws->outputs[i].filename[0] == '\0') {
-            osh_error("scoring: output %zu is missing a Filename", i);
-            return OSH_EPARSE;
-        }
-        if (!ws->outputs[i].geometry_name || ws->outputs[i].geometry_name[0] == '\0') {
-            osh_error("scoring: output '%s' is missing a Geo reference", ws->outputs[i].filename);
-            return OSH_EPARSE;
-        }
-        if (ws->outputs[i].npages == 0u) {
-            osh_error("scoring: output '%s' has no Quantity lines", ws->outputs[i].filename);
-            return OSH_EPARSE;
-        }
-        for (j = 0; j < ws->outputs[i].npages; ++j) {
-            if (!ws->outputs[i].pages[j].quantity || ws->outputs[i].pages[j].quantity[0] == '\0') {
-                osh_error("scoring: output '%s' page %zu has an empty Quantity", ws->outputs[i].filename, j);
-                return OSH_EPARSE;
-            }
-        }
-    }
-
-    return OSH_OK;
-}
-
-/* ---- Public entry point --------------------------------------------------- */
+/* ---- Public entry point -------------------------------------------------- */
 
 enum osh_status osh_scoring_parse_file(char const *path, struct osh_scoring_workspace **ws_out) {
     struct oshfile *oshf;
@@ -293,4 +196,109 @@ fail:
     osh_fclose(oshf);
     osh_scoring_workspace_free(ws);
     return rc;
+}
+
+/* ---- Append helpers ------------------------------------------------------ */
+
+static enum osh_status append_filter(struct osh_scoring_workspace *ws) {
+    struct osh_scoring_filter_def *tmp =
+        (struct osh_scoring_filter_def *) realloc(ws->filters, (ws->nfilters + 1u) * sizeof(*tmp));
+    if (!tmp)
+        return OSH_ENOMEM;
+    ws->filters = tmp;
+    memset(&ws->filters[ws->nfilters], 0, sizeof(*tmp));
+    ws->nfilters++;
+    return OSH_OK;
+}
+
+static enum osh_status append_settings(struct osh_scoring_workspace *ws) {
+    struct osh_scoring_settings_def *tmp =
+        (struct osh_scoring_settings_def *) realloc(ws->settings, (ws->nsettings + 1u) * sizeof(*tmp));
+    if (!tmp)
+        return OSH_ENOMEM;
+    ws->settings = tmp;
+    memset(&ws->settings[ws->nsettings], 0, sizeof(*tmp));
+    ws->settings[ws->nsettings].medium = -1;
+    ws->settings[ws->nsettings].nkmedium = -1;
+    ws->nsettings++;
+    return OSH_OK;
+}
+
+static enum osh_status append_geometry(struct osh_scoring_workspace *ws) {
+    struct osh_scoring_geometry_def *tmp =
+        (struct osh_scoring_geometry_def *) realloc(ws->geometries, (ws->ngeometries + 1u) * sizeof(*tmp));
+    if (!tmp)
+        return OSH_ENOMEM;
+    ws->geometries = tmp;
+    memset(&ws->geometries[ws->ngeometries], 0, sizeof(*tmp));
+    ws->ngeometries++;
+    return OSH_OK;
+}
+
+static enum osh_status append_output(struct osh_scoring_workspace *ws) {
+    struct osh_scoring_output_def *tmp =
+        (struct osh_scoring_output_def *) realloc(ws->outputs, (ws->noutputs + 1u) * sizeof(*tmp));
+    if (!tmp)
+        return OSH_ENOMEM;
+    ws->outputs = tmp;
+    memset(&ws->outputs[ws->noutputs], 0, sizeof(*tmp));
+    ws->noutputs++;
+    return OSH_OK;
+}
+
+/* ---- Post-parse validation ----------------------------------------------- */
+
+static enum osh_status validate(struct osh_scoring_workspace const *ws) {
+    size_t i, j;
+
+    for (i = 0; i < ws->nfilters; ++i) {
+        if (!ws->filters[i].name || ws->filters[i].name[0] == '\0') {
+            osh_error("scoring: filter %zu is missing a Name", i);
+            return OSH_EPARSE;
+        }
+    }
+
+    for (i = 0; i < ws->nsettings; ++i) {
+        if (!ws->settings[i].name || ws->settings[i].name[0] == '\0') {
+            osh_error("scoring: settings %zu is missing a Name", i);
+            return OSH_EPARSE;
+        }
+    }
+
+    for (i = 0; i < ws->ngeometries; ++i) {
+        if (!ws->geometries[i].kind || ws->geometries[i].kind[0] == '\0') {
+            osh_error("scoring: geometry %zu is missing a type keyword", i);
+            return OSH_EPARSE;
+        }
+        if (!ws->geometries[i].name || ws->geometries[i].name[0] == '\0') {
+            osh_error("scoring: geometry %zu (%s) is missing a Name", i, ws->geometries[i].kind);
+            return OSH_EPARSE;
+        }
+        if (ws->geometries[i].naxes == 0u && strcasecmp(ws->geometries[i].kind, "Zone") != 0) {
+            osh_warn("scoring: geometry '%s' has no axis definitions", ws->geometries[i].name);
+        }
+    }
+
+    for (i = 0; i < ws->noutputs; ++i) {
+        if (!ws->outputs[i].filename || ws->outputs[i].filename[0] == '\0') {
+            osh_error("scoring: output %zu is missing a Filename", i);
+            return OSH_EPARSE;
+        }
+        if (!ws->outputs[i].geometry_name || ws->outputs[i].geometry_name[0] == '\0') {
+            osh_error("scoring: output '%s' is missing a Geo reference", ws->outputs[i].filename);
+            return OSH_EPARSE;
+        }
+        if (ws->outputs[i].npages == 0u) {
+            osh_error("scoring: output '%s' has no Quantity lines", ws->outputs[i].filename);
+            return OSH_EPARSE;
+        }
+        for (j = 0; j < ws->outputs[i].npages; ++j) {
+            if (!ws->outputs[i].pages[j].quantity || ws->outputs[i].pages[j].quantity[0] == '\0') {
+                osh_error("scoring: output '%s' page %zu has an empty Quantity", ws->outputs[i].filename, j);
+                return OSH_EPARSE;
+            }
+        }
+    }
+
+    return OSH_OK;
 }

@@ -9,6 +9,54 @@
 typedef enum osh_status (*geometry_handler_fn)(
     struct osh_scoring_geometry_def *, char **, int, char const *, unsigned int);
 
+struct geometry_entry {
+    char const *key;
+    geometry_handler_fn handler;
+};
+
+static enum osh_status
+append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, double hi, int nbins);
+static enum osh_status
+geo_name(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+geo_axis(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+geo_rotation(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+geo_zones(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
+
+static struct geometry_entry geometry_table[9];
+
+enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def *geo,
+                                                char **words,
+                                                int nwords,
+                                                char const *path,
+                                                unsigned int lineno,
+                                                int *found_out) {
+    size_t i;
+
+    if (found_out)
+        *found_out = 0;
+    for (i = 0; geometry_table[i].key != NULL; ++i) {
+        if (strcmp(geometry_table[i].key, words[0]) == 0) {
+            if (found_out)
+                *found_out = 1;
+            return geometry_table[i].handler(geo, words, nwords, path, lineno);
+        }
+    }
+    return OSH_OK;
+}
+
+static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name},
+                                                 {OSH_SCORING_KEY_GEO_X, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_Y, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_Z, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_R, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_ROT, geo_rotation},
+                                                 {"rot", geo_rotation},
+                                                 {OSH_SCORING_KEY_GEO_ZONES, geo_zones},
+                                                 {NULL, NULL}};
+
 static enum osh_status
 append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, double hi, int nbins) {
     struct osh_scoring_axis_def *tmp =
@@ -69,40 +117,5 @@ geo_zones(struct osh_scoring_geometry_def *geo, char **words, int nwords, char c
     }
     geo->zone_start = atoi(words[1]);
     geo->zone_stop = atoi(words[2]);
-    return OSH_OK;
-}
-
-struct geometry_entry {
-    char const *key;
-    geometry_handler_fn handler;
-};
-
-static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name},
-                                                 {OSH_SCORING_KEY_GEO_X, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_Y, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_Z, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_R, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_ROT, geo_rotation},
-                                                 {"rot", geo_rotation},
-                                                 {OSH_SCORING_KEY_GEO_ZONES, geo_zones},
-                                                 {NULL, NULL}};
-
-enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def *geo,
-                                                char **words,
-                                                int nwords,
-                                                char const *path,
-                                                unsigned int lineno,
-                                                int *found_out) {
-    size_t i;
-
-    if (found_out)
-        *found_out = 0;
-    for (i = 0; geometry_table[i].key != NULL; ++i) {
-        if (strcmp(geometry_table[i].key, words[0]) == 0) {
-            if (found_out)
-                *found_out = 1;
-            return geometry_table[i].handler(geo, words, nwords, path, lineno);
-        }
-    }
     return OSH_OK;
 }

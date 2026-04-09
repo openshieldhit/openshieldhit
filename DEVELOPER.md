@@ -6,6 +6,7 @@ Not intended for end-users.
 ## Style
 
 - Use `struct foo` explicitly; **do not use `typedef struct`** to hide the fact that it is a struct.
+- In general, discourage `typedef` for project-defined types. Prefer the explicit type kind in declarations (`struct foo`, `enum bar`) because it makes ownership, layout, and API boundaries easier to read when scanning code.
 - For structs:
   - Largest / most-aligned fields first
   - Keep fields that are commonly read together near each other
@@ -110,6 +111,10 @@ If a function is trivially infallible (e.g. a pure memcpy wrapper), prefer `void
 - Public functions have `osh` prefix : `osh_foobar()`
 - Private/internal functions use `static` and no `_osh` prefix : `foobar()`
 - Private/inline functions use `static inline` and `_` prefix: `_foobar()`. This naming may be subject to change later when we settle on a better convention.
+- Prefer a top-down file layout:
+  - In public headers, place forward declarations and the public API near the top so opening the file gives an immediate module overview.
+  - In `.c` files, place exported/top-level functions before lower-level helpers. Use `static` prototypes, handler typedefs, and dispatch-table declarations near the top when needed to support this layout.
+  - Order public data structures from high-level concepts to supporting detail where the type dependencies allow it.
 - Do not add helper functions merely to shorten one call site. First look for an
   existing function in the module that owns the concept. Add a new helper only
   when it has a clear owner, captures reusable non-obvious logic, or prevents a
