@@ -272,7 +272,8 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
     if (out) {
-        fprintf(out, "%s\n", (ctx->run_mode == OPENSHIELDHIT_RUN_VALIDATE) ? "Validate configuration" : "Run simulation");
+        fprintf(
+            out, "%s\n", (ctx->run_mode == OPENSHIELDHIT_RUN_VALIDATE) ? "Validate configuration" : "Run simulation");
         fprintf(out, "  Log level        : %d\n", ctx->log_level);
         if (ctx->has_nstat) {
             fprintf(out, "  Requested nstat  : %llu\n", ctx->nstat);
