@@ -23,9 +23,8 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            struct step const *st,
                                            double voxel_volume);
 
-enum osh_status osh_scoring_score_step(struct osh_scoring_runtime *rt,
-                                       struct particle const *part,
-                                       struct step const *st) {
+enum osh_status
+osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *part, struct step const *st) {
     size_t i;
     size_t cap;
     size_t ncross;
@@ -93,9 +92,8 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime *rt,
     return OSH_OK;
 }
 
-enum osh_status osh_scoring_score_point(struct osh_scoring_runtime *rt,
-                                        struct particle const *part,
-                                        struct position const *pos) {
+enum osh_status
+osh_scoring_score_point(struct osh_scoring_runtime *rt, struct particle const *part, struct position const *pos) {
     (void) rt;
     (void) part;
     (void) pos;

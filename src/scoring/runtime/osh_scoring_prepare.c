@@ -1,8 +1,8 @@
 #include "scoring/runtime/osh_scoring_prepare.h"
 
 #include <stdlib.h>
-#include <strings.h>
 #include <string.h>
+#include <strings.h>
 
 #include "common/osh_logger.h"
 

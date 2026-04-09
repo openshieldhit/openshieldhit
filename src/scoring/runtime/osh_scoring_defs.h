@@ -33,11 +33,11 @@ extern "C" {
  */
 enum osh_scoring_geo_kind {
     OSH_SCORING_GEO_UNKNOWN = 0, /* not yet resolved — should not reach score_step */
-    OSH_SCORING_GEO_MESH    = 1, /* Cartesian (X,Y,Z) mesh */
-    OSH_SCORING_GEO_CYL     = 2, /* cylindrical (R,Z) mesh */
-    OSH_SCORING_GEO_ZONE    = 3, /* GEMCA zone scoring */
-    OSH_SCORING_GEO_VOXEL   = 4, /* CT voxel grid (uses raytrace) */
-    OSH_SCORING_GEO_ALL     = 5  /* whole simulation universe */
+    OSH_SCORING_GEO_MESH = 1,    /* Cartesian (X,Y,Z) mesh */
+    OSH_SCORING_GEO_CYL = 2,     /* cylindrical (R,Z) mesh */
+    OSH_SCORING_GEO_ZONE = 3,    /* GEMCA zone scoring */
+    OSH_SCORING_GEO_VOXEL = 4,   /* CT voxel grid (uses raytrace) */
+    OSH_SCORING_GEO_ALL = 5      /* whole simulation universe */
 };
 
 /* ---- Postprocessing mode ------------------------------------------------ */
@@ -69,10 +69,10 @@ enum osh_scoring_geo_kind {
  *              where each particle record is appended rather than binned.
  */
 enum osh_scoring_postproc {
-    OSH_SCORING_POSTPROC_NONE   = 0,
-    OSH_SCORING_POSTPROC_SUM    = 1,
-    OSH_SCORING_POSTPROC_NORM   = 2,
-    OSH_SCORING_POSTPROC_AVER   = 3,
+    OSH_SCORING_POSTPROC_NONE = 0,
+    OSH_SCORING_POSTPROC_SUM = 1,
+    OSH_SCORING_POSTPROC_NORM = 2,
+    OSH_SCORING_POSTPROC_AVER = 3,
     OSH_SCORING_POSTPROC_APPEND = 4
 };
 
@@ -88,16 +88,16 @@ enum osh_scoring_postproc {
  */
 enum osh_scoring_filter_field {
     OSH_SCORING_FILTER_FIELD_UNKNOWN = 0,
-    OSH_SCORING_FILTER_FIELD_ID      = 1,
-    OSH_SCORING_FILTER_FIELD_Z       = 2,
-    OSH_SCORING_FILTER_FIELD_A       = 3,
-    OSH_SCORING_FILTER_FIELD_AMASS   = 4,
-    OSH_SCORING_FILTER_FIELD_AMU     = 5,
-    OSH_SCORING_FILTER_FIELD_E       = 6,
-    OSH_SCORING_FILTER_FIELD_ENUC    = 7,
-    OSH_SCORING_FILTER_FIELD_EAMU    = 8,
-    OSH_SCORING_FILTER_FIELD_GEN     = 9,
-    OSH_SCORING_FILTER_FIELD_NPRIM   = 10
+    OSH_SCORING_FILTER_FIELD_ID = 1,
+    OSH_SCORING_FILTER_FIELD_Z = 2,
+    OSH_SCORING_FILTER_FIELD_A = 3,
+    OSH_SCORING_FILTER_FIELD_AMASS = 4,
+    OSH_SCORING_FILTER_FIELD_AMU = 5,
+    OSH_SCORING_FILTER_FIELD_E = 6,
+    OSH_SCORING_FILTER_FIELD_ENUC = 7,
+    OSH_SCORING_FILTER_FIELD_EAMU = 8,
+    OSH_SCORING_FILTER_FIELD_GEN = 9,
+    OSH_SCORING_FILTER_FIELD_NPRIM = 10
 };
 
 /**
@@ -105,12 +105,12 @@ enum osh_scoring_filter_field {
  */
 enum osh_scoring_filter_op {
     OSH_SCORING_FILTER_OP_INVALID = 0,
-    OSH_SCORING_FILTER_OP_LT      = 1,
-    OSH_SCORING_FILTER_OP_LE      = 2,
-    OSH_SCORING_FILTER_OP_GT      = 3,
-    OSH_SCORING_FILTER_OP_GE      = 4,
-    OSH_SCORING_FILTER_OP_EQ      = 5,
-    OSH_SCORING_FILTER_OP_NE      = 6
+    OSH_SCORING_FILTER_OP_LT = 1,
+    OSH_SCORING_FILTER_OP_LE = 2,
+    OSH_SCORING_FILTER_OP_GT = 3,
+    OSH_SCORING_FILTER_OP_GE = 4,
+    OSH_SCORING_FILTER_OP_EQ = 5,
+    OSH_SCORING_FILTER_OP_NE = 6
 };
 
 /* ---- Scored quantity (detector type) ------------------------------------ */
@@ -142,36 +142,36 @@ enum osh_scoring_filter_op {
  */
 enum osh_scoring_score_kind {
 
-    OSH_SCORING_SCORE_UNKNOWN  =  0, /* not yet resolved */
+    OSH_SCORING_SCORE_UNKNOWN = 0, /* not yet resolved */
 
     /* --- Basic transport quantities ------------------------------------- */
 
-    OSH_SCORING_SCORE_ENERGY   =  1, /* mean energy deposited in voxel [MeV] */
-    OSH_SCORING_SCORE_FLUENCE  =  2, /* particle fluence (Chilton / ICRU definition) [1/cm^2] */
-    OSH_SCORING_SCORE_DOSE     =  3, /* absorbed dose [MeV/g]; use rescale for [Gy] */
-    OSH_SCORING_SCORE_LETFLU   =  4, /* LET * fluence [MeV/cm * 1/cm^2] — numerator for TLET */
+    OSH_SCORING_SCORE_ENERGY = 1,  /* mean energy deposited in voxel [MeV] */
+    OSH_SCORING_SCORE_FLUENCE = 2, /* particle fluence (Chilton / ICRU definition) [1/cm^2] */
+    OSH_SCORING_SCORE_DOSE = 3,    /* absorbed dose [MeV/g]; use rescale for [Gy] */
+    OSH_SCORING_SCORE_LETFLU = 4,  /* LET * fluence [MeV/cm * 1/cm^2] — numerator for TLET */
 
     /* --- LET-averaged quantities ---------------------------------------- */
 
-    OSH_SCORING_SCORE_DLET     =  5, /* dose-averaged LET  (Cortez algorithm C) [MeV/cm] */
-    OSH_SCORING_SCORE_TLET     =  6, /* track-averaged LET (Cortez algorithm C) [MeV/cm] */
+    OSH_SCORING_SCORE_DLET = 5, /* dose-averaged LET  (Cortez algorithm C) [MeV/cm] */
+    OSH_SCORING_SCORE_TLET = 6, /* track-averaged LET (Cortez algorithm C) [MeV/cm] */
 
     /* --- Counters ------------------------------------------------------- */
 
-    OSH_SCORING_SCORE_NORMCOUNT =  7, /* event counter, normalised per primary [1] */
-    OSH_SCORING_SCORE_COUNT     =  8, /* event counter, not normalised [1] */
+    OSH_SCORING_SCORE_NORMCOUNT = 7, /* event counter, normalised per primary [1] */
+    OSH_SCORING_SCORE_COUNT = 8,     /* event counter, not normalised [1] */
 
     /* --- Neutron quantities --------------------------------------------- */
 
-    OSH_SCORING_SCORE_NKERMA   =  9, /* neutron kerma [MeV/g] */
+    OSH_SCORING_SCORE_NKERMA = 9, /* neutron kerma [MeV/g] */
 
     /* --- Detector models ------------------------------------------------ */
 
-    OSH_SCORING_SCORE_ALANINE  = 10, /* alanine detector response (Bassler 2008) [1] */
+    OSH_SCORING_SCORE_ALANINE = 10, /* alanine detector response (Bassler 2008) [1] */
 
     /* --- Phase-space output --------------------------------------------- */
 
-    OSH_SCORING_SCORE_MCPL     = 11  /* MC particle list (phase-space append mode) */
+    OSH_SCORING_SCORE_MCPL = 11 /* MC particle list (phase-space append mode) */
 };
 
 #ifdef __cplusplus
