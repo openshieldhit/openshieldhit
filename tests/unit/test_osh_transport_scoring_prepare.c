@@ -42,6 +42,13 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.geometries[0].nbins == 10u);
     ASSERT_TRUE(rt.geometries[0].first_page == 0u);
     ASSERT_TRUE(rt.geometries[0].npages == 4u);
+    ASSERT_TRUE(rt.geometries[0].ngroups == 2u);
+    ASSERT_TRUE(rt.geometries[0].groups[0].score_kind == OSH_SCORING_SCORE_ENERGY);
+    ASSERT_TRUE(rt.geometries[0].groups[0].first_page == 0u);
+    ASSERT_TRUE(rt.geometries[0].groups[0].npages == 2u);
+    ASSERT_TRUE(rt.geometries[0].groups[1].score_kind == OSH_SCORING_SCORE_FLUENCE);
+    ASSERT_TRUE(rt.geometries[0].groups[1].first_page == 2u);
+    ASSERT_TRUE(rt.geometries[0].groups[1].npages == 2u);
 
     ASSERT_TRUE(strcmp(rt.outputs[0].filename, "NB_msh_energy.bdo") == 0);
     ASSERT_TRUE(strcmp(rt.outputs[0].fileformat, "BDO") == 0);
@@ -51,6 +58,7 @@ static void test_compile_fixture_test01_detect(void) {
     page_idx = rt.outputs[0].page_indices[0];
     ASSERT_TRUE(page_idx < rt.npages);
     ASSERT_TRUE(strcmp(rt.pages[page_idx].quantity, "ENERGY") == 0);
+    ASSERT_TRUE(rt.pages[page_idx].score_kind == OSH_SCORING_SCORE_ENERGY);
     ASSERT_TRUE(rt.pages[page_idx].geometry_idx == 0u);
     ASSERT_TRUE(rt.pages[page_idx].output_idx == 0u);
     ASSERT_TRUE(rt.pages[page_idx].len == 10u);
@@ -61,10 +69,14 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(strcmp(rt.outputs[1].fileformat, "BDO") == 0);
     ASSERT_TRUE(rt.outputs[1].geometry_idx == 0u);
     ASSERT_TRUE(rt.outputs[1].npages == 3u);
+    ASSERT_TRUE(rt.outputs[1].page_indices[0] == 1u);
+    ASSERT_TRUE(rt.outputs[1].page_indices[1] == 2u);
+    ASSERT_TRUE(rt.outputs[1].page_indices[2] == 3u);
 
     page_idx = rt.outputs[1].page_indices[2];
     ASSERT_TRUE(page_idx < rt.npages);
     ASSERT_TRUE(strcmp(rt.pages[page_idx].quantity, "FLUENCE") == 0);
+    ASSERT_TRUE(rt.pages[page_idx].score_kind == OSH_SCORING_SCORE_FLUENCE);
     ASSERT_TRUE(rt.pages[page_idx].output_idx == 1u);
     ASSERT_TRUE(rt.pages[page_idx].geometry_idx == 0u);
     ASSERT_TRUE(rt.pages[page_idx].len == 10u);
