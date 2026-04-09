@@ -31,8 +31,8 @@ struct osh_raytrace_grid {
  * @brief One voxel entered by a ray, with the path length spent inside it.
  */
 struct osh_voxel_crossing {
-    size_t idx;       /* linear voxel index: ix + n[0]*(iy + n[1]*iz) */
-    double path_len;  /* track length through this voxel [cm] */
+    size_t idx;      /* linear voxel index: ix + n[0]*(iy + n[1]*iz) */
+    double path_len; /* track length through this voxel [cm] */
 };
 
 /**
