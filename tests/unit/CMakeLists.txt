@@ -57,6 +57,7 @@ foreach(test_src ${UNIT_SOURCES})
 
     target_link_libraries(${test_name} PRIVATE
         osh_common
+        osh_raytrace
         osh_random
         osh_beam
         osh_material

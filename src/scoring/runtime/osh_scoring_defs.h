@@ -76,6 +76,43 @@ enum osh_scoring_postproc {
     OSH_SCORING_POSTPROC_APPEND = 4
 };
 
+/* ---- Filter rule compilation -------------------------------------------- */
+
+/**
+ * @brief Left-hand-side field used by a compiled filter rule.
+ *
+ * @details
+ * The parser stores filter rules as strings such as `Z = 6` or `E > 10`.
+ * The prepare step resolves the string key to one of these integer codes so
+ * the hot path can evaluate filters without repeated string comparisons.
+ */
+enum osh_scoring_filter_field {
+    OSH_SCORING_FILTER_FIELD_UNKNOWN = 0,
+    OSH_SCORING_FILTER_FIELD_ID      = 1,
+    OSH_SCORING_FILTER_FIELD_Z       = 2,
+    OSH_SCORING_FILTER_FIELD_A       = 3,
+    OSH_SCORING_FILTER_FIELD_AMASS   = 4,
+    OSH_SCORING_FILTER_FIELD_AMU     = 5,
+    OSH_SCORING_FILTER_FIELD_E       = 6,
+    OSH_SCORING_FILTER_FIELD_ENUC    = 7,
+    OSH_SCORING_FILTER_FIELD_EAMU    = 8,
+    OSH_SCORING_FILTER_FIELD_GEN     = 9,
+    OSH_SCORING_FILTER_FIELD_NPRIM   = 10
+};
+
+/**
+ * @brief Comparison operator used by a compiled filter rule.
+ */
+enum osh_scoring_filter_op {
+    OSH_SCORING_FILTER_OP_INVALID = 0,
+    OSH_SCORING_FILTER_OP_LT      = 1,
+    OSH_SCORING_FILTER_OP_LE      = 2,
+    OSH_SCORING_FILTER_OP_GT      = 3,
+    OSH_SCORING_FILTER_OP_GE      = 4,
+    OSH_SCORING_FILTER_OP_EQ      = 5,
+    OSH_SCORING_FILTER_OP_NE      = 6
+};
+
 /* ---- Scored quantity (detector type) ------------------------------------ */
 
 /**
