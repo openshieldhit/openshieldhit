@@ -1,3 +1,5 @@
+add_subdirectory(raytrace)
+
 # Create a library from local source files
 # Cmake cannot track changes *.c glob files, so we list them explicitly
 add_library(osh_common
@@ -8,6 +10,7 @@ add_library(osh_common
     osh_file.c
     osh_readline.c
     osh_coord.c
+    osh_step.c
 )
 
 # Make sure consumers of the library see the headers
