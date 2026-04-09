@@ -7,6 +7,51 @@
 
 typedef enum osh_status (*output_handler_fn)(struct osh_scoring_output_def *, char **, int, char const *, unsigned int);
 
+struct output_entry {
+    char const *key;
+    output_handler_fn handler;
+};
+
+static enum osh_status append_page(struct osh_scoring_output_def *out);
+static enum osh_status append_page_filter(struct osh_scoring_page_def *page, char const *name);
+static enum osh_status
+output_filename(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+output_geo(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+output_quantity(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
+
+static struct output_entry output_table[6];
+
+enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out,
+                                              char **words,
+                                              int nwords,
+                                              char const *path,
+                                              unsigned int lineno,
+                                              int *found_out) {
+    size_t i;
+
+    if (found_out)
+        *found_out = 0;
+    for (i = 0; output_table[i].key != NULL; ++i) {
+        if (strcmp(output_table[i].key, words[0]) == 0) {
+            if (found_out)
+                *found_out = 1;
+            return output_table[i].handler(out, words, nwords, path, lineno);
+        }
+    }
+    return OSH_OK;
+}
+
+static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_filename},
+                                             {OSH_SCORING_KEY_GEO_REF, output_geo},
+                                             {OSH_SCORING_KEY_FILEFORMAT, output_fileformat},
+                                             {"format", output_fileformat},
+                                             {OSH_SCORING_KEY_QUANTITY, output_quantity},
+                                             {NULL, NULL}};
+
 static enum osh_status append_page(struct osh_scoring_output_def *out) {
     struct osh_scoring_page_def *tmp =
         (struct osh_scoring_page_def *) realloc(out->pages, (out->npages + 1u) * sizeof(*tmp));
@@ -86,38 +131,6 @@ output_quantity(struct osh_scoring_output_def *out, char **words, int nwords, ch
         rc = append_page_filter(&out->pages[page_idx], words[i]);
         if (rc != OSH_OK)
             return rc;
-    }
-    return OSH_OK;
-}
-
-struct output_entry {
-    char const *key;
-    output_handler_fn handler;
-};
-
-static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_filename},
-                                             {OSH_SCORING_KEY_GEO_REF, output_geo},
-                                             {OSH_SCORING_KEY_FILEFORMAT, output_fileformat},
-                                             {"format", output_fileformat},
-                                             {OSH_SCORING_KEY_QUANTITY, output_quantity},
-                                             {NULL, NULL}};
-
-enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out,
-                                              char **words,
-                                              int nwords,
-                                              char const *path,
-                                              unsigned int lineno,
-                                              int *found_out) {
-    size_t i;
-
-    if (found_out)
-        *found_out = 0;
-    for (i = 0; output_table[i].key != NULL; ++i) {
-        if (strcmp(output_table[i].key, words[0]) == 0) {
-            if (found_out)
-                *found_out = 1;
-            return output_table[i].handler(out, words, nwords, path, lineno);
-        }
     }
     return OSH_OK;
 }
