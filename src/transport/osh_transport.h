@@ -47,12 +47,6 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring);
 
-void osh_transport_move_ray(struct ray *r, double d);
-void osh_transport_print_ray(struct ray const *r);
-
-void print_ray_c(struct ray_c r);
-void osh_clear_ray_c(struct ray_c *r);
-
 #ifdef __cplusplus
 }
 #endif

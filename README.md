@@ -4,7 +4,7 @@
 [![clang-format](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-format.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-format.yml)
 [![clang-tidy](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-tidy.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-tidy.yml)
 
-Lean Monte Carlo Particle Transport in C
+Lean Monte Carlo Particle Transport
 
 OpenShieldHIT is a modern Monte Carlo particle transport framework written entirely from scratch in C.
 
@@ -55,6 +55,12 @@ or for debugging:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
 ```
 
+# Run a Minimal Example
+```bash
+build/bin/openshieldhit tests/cases/00_minimal/
+```
+Which should produce a `.bdo` and `.txt` output file with scored dose vs. depth, showing a Bragg peak for a proton beam in water.
+
 ## Command-line and public API
 
 OpenShieldHIT has a small public C API in `include/openshieldhit/openshieldhit.h`.
@@ -71,6 +77,12 @@ not part of the public API.
 build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 ```
 
+## Status
+
+The first end-to-end transport loop is working: proton beams transport through
+geometry, accumulate dose in scoring detectors, and produce Bragg-peak depth-dose
+distributions.
+
 ## TODO
 - [x] logger
 - [x] vector library
@@ -79,13 +91,14 @@ build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 - [x] geometry parser
 - [x] beam parser
 - [x] material parser
-- [ ] detector parser
+- [x] detector parser
 - [x] raytracer
-- [ ] transport
-- [x] particle data
-- [ ] stopping power / range / optical depths / restricted stopping power
-- [ ] ion scattering
-- [ ] vavilov straggling
+- [x] straight-line CSDA transport (no scattering)
+- [x] stopping power / CSDA range tables
+- [x] dose, fluence, LET scoring
+- [ ] multiple Coulomb scattering
+- [ ] energy straggling (Vavilov/Gaussian)
+- [ ] nuclear interactions / secondaries
 - [ ] ...
 
 

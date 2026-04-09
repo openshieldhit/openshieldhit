@@ -8,9 +8,7 @@
 #include "common/osh_version.h"
 #include "scoring/save/osh_scoring_save_bdo2019_raw.h"
 
-static enum osh_status build_output_path(char **path_out,
-                                         char const *out_dir,
-                                         char const *filename);
+static enum osh_status build_output_path(char **path_out, char const *out_dir, char const *filename);
 static char const *geometry_type_name(struct osh_scoring_geometry_runtime const *geo);
 static char const *page_data_unit(struct osh_scoring_page_runtime const *page);
 static enum osh_status validate_request(struct osh_scoring_save_request const *req,

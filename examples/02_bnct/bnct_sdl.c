@@ -13,7 +13,6 @@
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 #include "random/osh_rng.h"
-#include "transport/osh_transport.h"
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 800
@@ -612,7 +611,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
             r = &ra->rays[i];
             dist_rest = ra->dist[i];
             // printf("NEW-PARTILCE ----------------------------\n");
-            // osh_transport_print_ray(r);
+            // osh_coord_print_ray(r);
 
             while (dist_rest > 0) {
                 /* get what zone and medium we are in */
@@ -634,7 +633,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
                 /* get distance to next zone boundary */
                 // printf("get distance\n");
                 // printf("Zone: %li, medium: %li\n", zi, medium);
-                // osh_transport_print_ray(r);
+                // osh_coord_print_ray(r);
                 dist = osh_gemca_get_distance(g->zones[zi], r);
                 // printf("dist: %f\n", dist);
 
@@ -644,7 +643,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
                     dist_rest = 0;
                 } else {
                     // printf("move particle with distance %.6e and dist_rest %.6e\n", dist, dist_rest);
-                    osh_transport_move_ray(r, dist);
+                    osh_coord_move_ray(r, dist);
                     dist_rest -= dist;
                 }
                 hist[medium] += dist;
@@ -707,7 +706,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
         double x0 = r.p[0];
         double z0 = r.p[2];
         struct ray r2 = r;
-        osh_transport_move_ray(&r2, step);
+        osh_coord_move_ray(&r2, step);
         double x1 = r2.p[0];
         double z1 = r2.p[2];
 
@@ -730,7 +729,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
            (prevents being stuck on the boundary due to fp noise) */
         if (step == d_to_bnd && remaining > 0.0) {
             double const eps = 1e-12; /* cm; tune if needed */
-            osh_transport_move_ray(&r, eps);
+            osh_coord_move_ray(&r, eps);
             remaining -= eps;
         }
     }

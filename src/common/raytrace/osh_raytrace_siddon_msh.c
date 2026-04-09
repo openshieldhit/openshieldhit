@@ -23,10 +23,10 @@
  * avoids cancellation errors when t_entry is large.
  */
 
-#include "common/raytrace/osh_raytrace.h"
-
 #include <float.h>
 #include <math.h>
+
+#include "common/raytrace/osh_raytrace.h"
 
 static int same_crossing(double a, double b) {
     double tol = 64.0 * DBL_EPSILON * (1.0 + fmax(fabs(a), fabs(b)));
@@ -38,23 +38,22 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
                           double const v[3],
                           double ds,
                           struct osh_voxel_crossing *crossings,
-                          size_t *n_out)
-{
-    double t_entry;     /* parametric entry into the grid bounding box */
-    double t_exit;      /* parametric exit from the grid bounding box */
-    double t_lo;        /* near slab crossing for the current axis */
-    double t_hi;        /* far slab crossing for the current axis */
-    double grid_hi;     /* upper bound of the grid along the current axis [cm] */
-    double entry_p;     /* ray position at t_entry along the current axis [cm] */
-    int    vox[3];      /* starting voxel index along each axis */
-    int    step[3];     /* +1 or -1 per axis; 0 when v[i]==0 */
-    double tmax[3];     /* parametric t to next boundary crossing per axis */
-    double tdelta[3];   /* parametric t between consecutive crossings per axis */
+                          size_t *n_out) {
+    double t_entry;   /* parametric entry into the grid bounding box */
+    double t_exit;    /* parametric exit from the grid bounding box */
+    double t_lo;      /* near slab crossing for the current axis */
+    double t_hi;      /* far slab crossing for the current axis */
+    double grid_hi;   /* upper bound of the grid along the current axis [cm] */
+    double entry_p;   /* ray position at t_entry along the current axis [cm] */
+    int vox[3];       /* starting voxel index along each axis */
+    int step[3];      /* +1 or -1 per axis; 0 when v[i]==0 */
+    double tmax[3];   /* parametric t to next boundary crossing per axis */
+    double tdelta[3]; /* parametric t between consecutive crossings per axis */
     double t;
     double t_next;
-    int    axis;
+    int axis;
     size_t n;
-    int    i;
+    int i;
 
     /* --- Parametric bounding-box clip ---------------------------------- *
      *                                                                     *
@@ -62,16 +61,16 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
      * which the ray is inside the grid slab.  The overall entry and exit   *
      * are the intersection of all three slab intervals with [0, ds].       */
     t_entry = 0.0;
-    t_exit  = ds;
+    t_exit = ds;
 
     for (i = 0; i < 3; ++i) {
-        grid_hi = grid->origin[i] + (double)grid->n[i] * grid->spacing[i];
+        grid_hi = grid->origin[i] + (double) grid->n[i] * grid->spacing[i];
 
         if (v[i] > 0.0) {
             t_lo = (grid->origin[i] - p[i]) / v[i];
-            t_hi = (grid_hi         - p[i]) / v[i];
+            t_hi = (grid_hi - p[i]) / v[i];
         } else if (v[i] < 0.0) {
-            t_lo = (grid_hi         - p[i]) / v[i];
+            t_lo = (grid_hi - p[i]) / v[i];
             t_hi = (grid->origin[i] - p[i]) / v[i];
         } else {
             /* Ray is parallel to this axis: check if p lies within the slab. */
@@ -82,8 +81,10 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
             continue;
         }
 
-        if (t_lo > t_entry) t_entry = t_lo;
-        if (t_hi < t_exit)  t_exit  = t_hi;
+        if (t_lo > t_entry)
+            t_entry = t_lo;
+        if (t_hi < t_exit)
+            t_exit = t_hi;
 
         if (t_entry >= t_exit) {
             *n_out = 0;
@@ -94,10 +95,12 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
     /* --- Starting voxel at the entry point ----------------------------- */
     for (i = 0; i < 3; ++i) {
         entry_p = p[i] + t_entry * v[i];
-        vox[i]  = (int)((entry_p - grid->origin[i]) / grid->spacing[i]);
+        vox[i] = (int) ((entry_p - grid->origin[i]) / grid->spacing[i]);
         /* Clamp: floating-point imprecision may place entry_p just outside. */
-        if (vox[i] < 0)                vox[i] = 0;
-        if (vox[i] >= (int)grid->n[i]) vox[i] = (int)grid->n[i] - 1;
+        if (vox[i] < 0)
+            vox[i] = 0;
+        if (vox[i] >= (int) grid->n[i])
+            vox[i] = (int) grid->n[i] - 1;
     }
 
     /* --- Per-axis DDA parameters, initialised from the entry point ----- *
@@ -110,19 +113,17 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         entry_p = p[i] + t_entry * v[i];
 
         if (v[i] > 0.0) {
-            step[i]   = 1;
+            step[i] = 1;
             tdelta[i] = grid->spacing[i] / v[i];
-            tmax[i]   = t_entry
-                      + (grid->origin[i] + (vox[i] + 1) * grid->spacing[i] - entry_p) / v[i];
+            tmax[i] = t_entry + (grid->origin[i] + (vox[i] + 1) * grid->spacing[i] - entry_p) / v[i];
         } else if (v[i] < 0.0) {
-            step[i]   = -1;
+            step[i] = -1;
             tdelta[i] = -grid->spacing[i] / v[i];
-            tmax[i]   = t_entry
-                      + (grid->origin[i] + vox[i] * grid->spacing[i] - entry_p) / v[i];
+            tmax[i] = t_entry + (grid->origin[i] + vox[i] * grid->spacing[i] - entry_p) / v[i];
         } else {
-            step[i]   = 0;
+            step[i] = 0;
             tdelta[i] = HUGE_VAL;
-            tmax[i]   = HUGE_VAL;
+            tmax[i] = HUGE_VAL;
         }
     }
 
@@ -142,9 +143,7 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
          * grid before the full step is exhausted. */
         t_next = (tmax[axis] < t_exit) ? tmax[axis] : t_exit;
 
-        crossings[n].idx = (size_t)vox[0]
-                         + grid->n[0] * ((size_t)vox[1]
-                         + grid->n[1] *  (size_t)vox[2]);
+        crossings[n].idx = (size_t) vox[0] + grid->n[0] * ((size_t) vox[1] + grid->n[1] * (size_t) vox[2]);
         crossings[n].path_len = t_next - t;
         ++n;
 
@@ -159,7 +158,7 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
 
             vox[axis] += step[axis];
             tmax[axis] += tdelta[axis];
-            if (vox[axis] < 0 || vox[axis] >= (int)grid->n[axis]) {
+            if (vox[axis] < 0 || vox[axis] >= (int) grid->n[axis]) {
                 *n_out = n;
                 return (n > 0) ? 1 : 0;
             }

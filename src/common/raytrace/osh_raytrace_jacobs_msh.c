@@ -26,8 +26,8 @@
  * entry voxel when alpha_entry lands exactly on a plane crossing.
  */
 
-#include <math.h>
 #include <float.h>
+#include <math.h>
 
 #include "common/raytrace/osh_raytrace.h"
 
