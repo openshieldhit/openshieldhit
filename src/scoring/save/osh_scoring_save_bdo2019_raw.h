@@ -149,17 +149,29 @@ struct osh_scoring_bdo2019_tag {
 
 /* ---- Raw writer API ----------------------------------------------------- */
 
+/*
+ * Each write_token_* function emits one BDO 2019 tag: a 24-byte header
+ * (osh_scoring_bdo2019_tag) followed immediately by the payload bytes.
+ * Callers should use these primitives rather than writing headers manually.
+ */
+
+/** @brief Write the fixed BDO 2019 file preamble (magic number + version tag). */
 enum osh_status osh_scoring_bdo2019_write_preamble(FILE *fp, char const *version_string);
 
+/** @brief Write a string-payload token (payload type "S"). */
 enum osh_status osh_scoring_bdo2019_write_token_str(FILE *fp, uint64_t tag_id, char const *str);
 
+/** @brief Write a 64-bit signed integer array token (payload type "i8"). */
 enum osh_status
 osh_scoring_bdo2019_write_token_llint(FILE *fp, uint64_t tag_id, long long int const *values, size_t nvalues);
 
+/** @brief Write a 32-bit signed integer array token (payload type "i4"). */
 enum osh_status osh_scoring_bdo2019_write_token_int(FILE *fp, uint64_t tag_id, int const *values, size_t nvalues);
 
+/** @brief Write a double-precision float array token (payload type "f8"). */
 enum osh_status osh_scoring_bdo2019_write_token_double(FILE *fp, uint64_t tag_id, double const *values, size_t nvalues);
 
+/** @brief Write a single-precision float array token (payload type "f4"). */
 enum osh_status osh_scoring_bdo2019_write_token_float(FILE *fp, uint64_t tag_id, float const *values, size_t nvalues);
 
 #ifdef __cplusplus

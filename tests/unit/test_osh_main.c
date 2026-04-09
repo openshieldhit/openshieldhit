@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "openshieldhit/openshieldhit.h"
 
@@ -30,10 +27,6 @@ static FILE *osh_test_tmpfile(void) {
 #else
     return tmpfile();
 #endif
-}
-
-static void osh_test_build_temp_dir(char *path) {
-    ASSERT_TRUE(mkdtemp(path) != NULL);
 }
 
 static int osh_test_file_exists(char const *path) {
@@ -92,8 +85,8 @@ static void test_configure_returns_ok(void) {
 
     ASSERT_TRUE(ctx != NULL);
 
-    cfg.workdir = "/tmp";
-    cfg.out_dir = "/tmp/out";
+    cfg.workdir = ".";
+    cfg.out_dir = ".";
     cfg.geo_path = "geo.dat";
     cfg.beam_path = "beam.dat";
     cfg.mat_path = "mat.dat";
@@ -198,17 +191,15 @@ static void test_normal_minimal_case_runs_and_saves(void) {
     enum openshieldhit_status rc;
     FILE *out;
     char workdir[512];
-    char out_dir[] = "/tmp/osh_main_minimalXXXXXX";
     char ascii_path[512];
     char bdo_path[512];
 
     ASSERT_TRUE(ctx != NULL);
 
     snprintf(workdir, sizeof(workdir), "%s/tests/cases/00_minimal", OSH_PROJECT_SOURCE_DIR);
-    osh_test_build_temp_dir(out_dir);
 
     cfg.workdir = workdir;
-    cfg.out_dir = out_dir;
+    cfg.out_dir = ".";
     cfg.run_mode = OPENSHIELDHIT_RUN_NORMAL;
     cfg.nstat = 8ULL;
     cfg.has_nstat = 1;
@@ -222,14 +213,13 @@ static void test_normal_minimal_case_runs_and_saves(void) {
     rc = openshieldhit_run(ctx, out, NULL);
     ASSERT_TRUE(rc == OPENSHIELDHIT_STATUS_OK);
 
-    snprintf(ascii_path, sizeof(ascii_path), "%s/NB_msh.dat", out_dir);
-    snprintf(bdo_path, sizeof(bdo_path), "%s/NB_msh.bdo", out_dir);
+    snprintf(ascii_path, sizeof(ascii_path), "%s", "NB_msh.dat");
+    snprintf(bdo_path, sizeof(bdo_path), "%s", "NB_msh.bdo");
     ASSERT_TRUE(osh_test_file_exists(ascii_path));
     ASSERT_TRUE(osh_test_file_exists(bdo_path));
 
     ASSERT_TRUE(remove(ascii_path) == 0);
     ASSERT_TRUE(remove(bdo_path) == 0);
-    ASSERT_TRUE(rmdir(out_dir) == 0);
     ASSERT_TRUE(fclose(out) == 0);
     openshieldhit_context_destroy(ctx);
 }
