@@ -168,13 +168,13 @@ struct osh_scoring_settings_def {
     size_t npart;            /* Optional particle-count cap. */
     int medium;              /* Optional medium override. */
     int nkmedium;            /* Optional neutron-kerma medium override. */
-    unsigned char has_rescale;
-    unsigned char has_offset;
-    unsigned char has_site_diameter_um;
-    unsigned char has_density_g_cm3;
-    unsigned char has_npart;
-    unsigned char has_medium;
-    unsigned char has_nkmedium;
+    char has_rescale;
+    char has_offset;
+    char has_site_diameter_um;
+    char has_density_g_cm3;
+    char has_npart;
+    char has_medium;
+    char has_nkmedium;
 };
 
 /* ---- Filter -------------------------------------------------------------- */

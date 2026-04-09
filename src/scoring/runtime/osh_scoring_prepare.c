@@ -1,4 +1,4 @@
-#include "transport/prepare/osh_transport_scoring_prepare.h"
+#include "scoring/runtime/osh_scoring_prepare.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +26,7 @@ static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
     return 0u;
 }
 
-static enum osh_status copy_filter_runtime(struct osh_transport_scoring_filter_runtime *dst,
+static enum osh_status copy_filter_runtime(struct osh_scoring_filter_runtime *dst,
                                            struct osh_scoring_filter_def const *src) {
     size_t i;
 
@@ -39,7 +39,7 @@ static enum osh_status copy_filter_runtime(struct osh_transport_scoring_filter_r
         return OSH_OK;
     }
 
-    dst->rules = (struct osh_transport_scoring_filter_rule *) calloc(src->nrules, sizeof(*dst->rules));
+    dst->rules = (struct osh_scoring_filter_runtime_rule *) calloc(src->nrules, sizeof(*dst->rules));
     if (!dst->rules) {
         return OSH_ENOMEM;
     }
@@ -52,7 +52,7 @@ static enum osh_status copy_filter_runtime(struct osh_transport_scoring_filter_r
     return OSH_OK;
 }
 
-static enum osh_status copy_settings_runtime(struct osh_transport_scoring_settings_runtime *dst,
+static enum osh_status copy_settings_runtime(struct osh_scoring_settings_runtime *dst,
                                              struct osh_scoring_settings_def const *src) {
     memset(dst, 0, sizeof(*dst));
     dst->name = strdup(src->name);
@@ -76,7 +76,7 @@ static enum osh_status copy_settings_runtime(struct osh_transport_scoring_settin
     return OSH_OK;
 }
 
-static enum osh_status copy_geometry_runtime(struct osh_transport_scoring_geometry_runtime *dst,
+static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime *dst,
                                              struct osh_scoring_geometry_def const *src) {
     size_t i;
 
@@ -90,7 +90,7 @@ static enum osh_status copy_geometry_runtime(struct osh_transport_scoring_geomet
         return OSH_ENOMEM;
     }
     if (src->naxes > 0u) {
-        dst->axes = (struct osh_transport_scoring_axis_runtime *) calloc(src->naxes, sizeof(*dst->axes));
+        dst->axes = (struct osh_scoring_axis_runtime *) calloc(src->naxes, sizeof(*dst->axes));
         if (!dst->axes) {
             return OSH_ENOMEM;
         }
@@ -125,7 +125,7 @@ static long find_geometry_index(struct osh_scoring_workspace const *ws, char con
     return -1;
 }
 
-static long find_filter_index(struct osh_transport_scoring_runtime const *rt, char const *name) {
+static long find_filter_index(struct osh_scoring_runtime const *rt, char const *name) {
     size_t i;
 
     for (i = 0; i < rt->nfilters; ++i) {
@@ -136,7 +136,7 @@ static long find_filter_index(struct osh_transport_scoring_runtime const *rt, ch
     return -1;
 }
 
-void osh_transport_scoring_runtime_free(struct osh_transport_scoring_runtime *rt) {
+void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     size_t i;
 
     if (!rt) {
@@ -182,12 +182,19 @@ void osh_transport_scoring_runtime_free(struct osh_transport_scoring_runtime *rt
     memset(rt, 0, sizeof(*rt));
 }
 
-enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const *ws,
-                                              struct osh_transport_scoring_runtime *rt) {
+enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, struct osh_scoring_runtime *rt) {
     enum osh_status rc;
     size_t i;
     size_t j;
+    size_t k;
     size_t total_pages;
+    size_t page_idx;
+    long gidx;
+    long fidx;
+    struct osh_scoring_output_runtime *out;
+    struct osh_scoring_page_def const *src_page;
+    struct osh_scoring_page_runtime *dst_page;
+    long *output_geom_idx = NULL;
     size_t *geom_page_counts = NULL;
     size_t *geom_next_page = NULL;
 
@@ -202,7 +209,7 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
     rt->noutputs = ws->noutputs;
 
     if (rt->nfilters > 0u) {
-        rt->filters = (struct osh_transport_scoring_filter_runtime *) calloc(rt->nfilters, sizeof(*rt->filters));
+        rt->filters = (struct osh_scoring_filter_runtime *) calloc(rt->nfilters, sizeof(*rt->filters));
         if (!rt->filters) {
             rc = OSH_ENOMEM;
             goto fail;
@@ -216,8 +223,7 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
     }
 
     if (rt->nsettings > 0u) {
-        rt->settings =
-            (struct osh_transport_scoring_settings_runtime *) calloc(rt->nsettings, sizeof(*rt->settings));
+        rt->settings = (struct osh_scoring_settings_runtime *) calloc(rt->nsettings, sizeof(*rt->settings));
         if (!rt->settings) {
             rc = OSH_ENOMEM;
             goto fail;
@@ -231,8 +237,7 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
     }
 
     if (rt->ngeometries > 0u) {
-        rt->geometries =
-            (struct osh_transport_scoring_geometry_runtime *) calloc(rt->ngeometries, sizeof(*rt->geometries));
+        rt->geometries = (struct osh_scoring_geometry_runtime *) calloc(rt->ngeometries, sizeof(*rt->geometries));
         if (!rt->geometries) {
             rc = OSH_ENOMEM;
             goto fail;
@@ -248,16 +253,17 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
         }
     }
 
+    output_geom_idx = (long *) calloc(ws->noutputs ? ws->noutputs : 1u, sizeof(*output_geom_idx));
     geom_page_counts = (size_t *) calloc(rt->ngeometries ? rt->ngeometries : 1u, sizeof(*geom_page_counts));
     geom_next_page = (size_t *) calloc(rt->ngeometries ? rt->ngeometries : 1u, sizeof(*geom_next_page));
-    if (!geom_page_counts || !geom_next_page) {
+    if (!output_geom_idx || !geom_page_counts || !geom_next_page) {
         rc = OSH_ENOMEM;
         goto fail;
     }
 
     total_pages = 0u;
     for (i = 0; i < ws->noutputs; ++i) {
-        long gidx = find_geometry_index(ws, ws->outputs[i].geometry_name);
+        gidx = find_geometry_index(ws, ws->outputs[i].geometry_name);
 
         if (gidx < 0) {
             osh_error("Scoring output '%s' references unknown geometry '%s'",
@@ -266,20 +272,21 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
             rc = OSH_EINVAL;
             goto fail;
         }
+        output_geom_idx[i] = gidx;
         geom_page_counts[gidx] += ws->outputs[i].npages;
         total_pages += ws->outputs[i].npages;
     }
 
     rt->npages = total_pages;
     if (rt->npages > 0u) {
-        rt->pages = (struct osh_transport_scoring_page_runtime *) calloc(rt->npages, sizeof(*rt->pages));
+        rt->pages = (struct osh_scoring_page_runtime *) calloc(rt->npages, sizeof(*rt->pages));
         if (!rt->pages) {
             rc = OSH_ENOMEM;
             goto fail;
         }
     }
     if (rt->noutputs > 0u) {
-        rt->outputs = (struct osh_transport_scoring_output_runtime *) calloc(rt->noutputs, sizeof(*rt->outputs));
+        rt->outputs = (struct osh_scoring_output_runtime *) calloc(rt->noutputs, sizeof(*rt->outputs));
         if (!rt->outputs) {
             rc = OSH_ENOMEM;
             goto fail;
@@ -295,8 +302,8 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
     }
 
     for (i = 0; i < ws->noutputs; ++i) {
-        long gidx = find_geometry_index(ws, ws->outputs[i].geometry_name);
-        struct osh_transport_scoring_output_runtime *out = &rt->outputs[i];
+        gidx = output_geom_idx[i];
+        out = &rt->outputs[i];
 
         out->filename = strdup(ws->outputs[i].filename);
         if (!out->filename) {
@@ -319,9 +326,8 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
         }
 
         for (j = 0; j < ws->outputs[i].npages; ++j) {
-            struct osh_scoring_page_def const *src_page = &ws->outputs[i].pages[j];
-            struct osh_transport_scoring_page_runtime *dst_page;
-            size_t page_idx = geom_next_page[gidx]++;
+            src_page = &ws->outputs[i].pages[j];
+            page_idx = geom_next_page[gidx]++;
 
             out->page_indices[j] = page_idx;
             dst_page = &rt->pages[page_idx];
@@ -340,15 +346,15 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
             }
 
             if (src_page->nfilter_names > 0u) {
-                dst_page->filters = (struct osh_transport_scoring_page_filter_ref *) calloc(
-                    src_page->nfilter_names, sizeof(*dst_page->filters));
+                dst_page->filters =
+                    (struct osh_scoring_page_filter_ref *) calloc(src_page->nfilter_names, sizeof(*dst_page->filters));
                 if (!dst_page->filters) {
                     rc = OSH_ENOMEM;
                     goto fail;
                 }
                 dst_page->nfilters = src_page->nfilter_names;
-                for (size_t k = 0; k < src_page->nfilter_names; ++k) {
-                    long fidx = find_filter_index(rt, src_page->filter_names[k]);
+                for (k = 0; k < src_page->nfilter_names; ++k) {
+                    fidx = find_filter_index(rt, src_page->filter_names[k]);
 
                     if (fidx < 0) {
                         osh_error("Scoring page '%s' references unknown filter '%s'",
@@ -363,13 +369,15 @@ enum osh_status osh_transport_scoring_prepare(struct osh_scoring_workspace const
         }
     }
 
+    free(output_geom_idx);
     free(geom_page_counts);
     free(geom_next_page);
     return OSH_OK;
 
 fail:
+    free(output_geom_idx);
     free(geom_page_counts);
     free(geom_next_page);
-    osh_transport_scoring_runtime_free(rt);
+    osh_scoring_runtime_free(rt);
     return rc;
 }

@@ -153,6 +153,29 @@ and the matching closing brace:
 - All internal headers are located alongside `.c` files in `src/*`.
 - `include/` is reserved for public headers only, can be added later.
 - No use of `include/internal/` or similar.
+- Prefer a consistent per-module layout where it fits the module's lifecycle:
+
+```text
+src/<module>/
+src/<module>/parse/
+src/<module>/runtime/
+src/<module>/README.md
+```
+
+- Intended meaning of these layers:
+  - `src/<module>/` holds the module's main API, shared domain types, and setup-facing entry points.
+  - `src/<module>/parse/` holds raw input parsing and parse-only helpers.
+  - `src/<module>/runtime/` holds the compiled simulation-ready representation of parsed/setup data.
+  - `src/<module>/README.md` should briefly describe what the module owns, what `parse/` means there, and what `runtime/` means there.
+
+- Dependency direction rules:
+  - `parse/` may depend on `common/` and its own module headers, but should avoid transport/runtime-specific coupling.
+  - `runtime/` may depend on `common/` and other modules' public headers when needed for simulation-time integration.
+  - `transport/` should depend on module `runtime/` layers rather than owning other modules' preparation code.
+  - `runtime/` layers must not depend on `transport/`.
+  - One module's `runtime/` layer should not reach into another module's `runtime/` internals unless that relationship is explicitly intended and documented.
+
+- Do not create `parse/` or `runtime/` mechanically for every module. Use the structure when the module actually has those phases.
 
 ## Porting Notes
 

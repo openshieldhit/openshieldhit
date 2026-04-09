@@ -1,9 +1,9 @@
-#ifndef OSH_TRANSPORT_MATERIAL_PREPARE_H
-#define OSH_TRANSPORT_MATERIAL_PREPARE_H
+#ifndef OSH_MATERIAL_PREPARE_H
+#define OSH_MATERIAL_PREPARE_H
 
 #include "common/osh_rc.h"
 #include "material/osh_material.h"
-#include "transport/prepare/osh_transport_material_runtime.h"
+#include "material/runtime/osh_material_runtime.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,19 +38,18 @@ extern "C" {
  *
  * @returns OSH_OK on success, or an error code on failure.
  */
-enum osh_status osh_transport_material_prepare(struct material_workspace const *wm,
-                                               unsigned int z_max,
-                                               struct osh_transport_material_runtime *tables);
+enum osh_status
+osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables);
 
 /**
  * @brief Release a runtime tables struct and all owned memory.
  *
  * @param[in] tables  Tables to release.  Safe to call on a zero-initialised struct.
  */
-void osh_transport_material_runtime_free(struct osh_transport_material_runtime *tables);
+void osh_material_runtime_free(struct osh_material_runtime *tables);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* OSH_TRANSPORT_MATERIAL_PREPARE_H */
+#endif /* OSH_MATERIAL_PREPARE_H */
