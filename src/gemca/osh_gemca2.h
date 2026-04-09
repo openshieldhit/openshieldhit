@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 #include "common/osh_rc.h"
-#include "transport/osh_transport.h" /* needed for struct ray */
+#include "common/osh_coord.h" /* struct ray, struct ray_v, struct ray_c */
 
 /** @defgroup gemca Geometry Engine (GEMCA)
  *
