@@ -4,7 +4,7 @@
 
 #include "common/osh_rc.h"
 #include "scoring/osh_scoring.h"
-#include "transport/prepare/osh_transport_scoring_prepare.h"
+#include "scoring/runtime/osh_scoring_prepare.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -17,7 +17,7 @@
 static void test_compile_fixture_test01_detect(void) {
     char path[512];
     struct osh_scoring_workspace *ws = NULL;
-    struct osh_transport_scoring_runtime rt;
+    struct osh_scoring_runtime rt;
     enum osh_status rc;
     size_t page_idx;
 
@@ -28,7 +28,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_transport_scoring_prepare(ws, &rt);
+    rc = osh_scoring_prepare(ws, &rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     ASSERT_TRUE(rt.nfilters == 2u);
@@ -76,7 +76,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].data2 == NULL);
     ASSERT_TRUE(rt.pages[page_idx].data2_var == NULL);
 
-    osh_transport_scoring_runtime_free(&rt);
+    osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
 }
 

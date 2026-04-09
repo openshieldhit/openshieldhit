@@ -7,10 +7,10 @@
 #include "material/osh_material.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
+#include "material/runtime/osh_material_prepare.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
-#include "transport/prepare/osh_transport_material_prepare.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -175,7 +175,7 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     char ext20_path[512];
     char mat_text[4096];
     struct material_workspace *wm;
-    struct osh_transport_material_runtime tables;
+    struct osh_material_runtime tables;
     size_t idx_table18;
     size_t idx_table20;
     size_t idx_bethe;
@@ -207,64 +207,62 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_transport_material_prepare(wm, 25u, &tables);
+    rc = osh_material_prepare(wm, 25u, &tables);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(tables.nmaterials == 5u);
     ASSERT_TRUE(tables.nprojectiles == 25u);
-    ASSERT_TRUE(tables.nenergy == (size_t) OSH_TRANSPORT_MATERIAL_NENERGY);
-    ASSERT_NEAR(tables.emin, OSH_TRANSPORT_MATERIAL_EMIN, 1e-12);
-    ASSERT_NEAR(tables.emax, OSH_TRANSPORT_MATERIAL_EMAX, 1e-12);
+    ASSERT_TRUE(tables.nenergy == (size_t) OSH_MATERIAL_RUNTIME_NENERGY);
+    ASSERT_NEAR(tables.emin, OSH_MATERIAL_RUNTIME_EMIN, 1e-12);
+    ASSERT_NEAR(tables.emax, OSH_MATERIAL_RUNTIME_EMAX, 1e-12);
 
     idx_table18 = osh_material_by_name(wm, "Table18")->index;
     idx_table20 = osh_material_by_name(wm, "Table20")->index;
     idx_bethe = osh_material_by_name(wm, "BetheWater")->index;
 
-    ASSERT_NEAR(
-        osh_transport_material_sp_lookup(&tables, OSH_MATERIAL_INDEX_BLACKHOLE, 0u, OSH_TRANSPORT_MATERIAL_EMIN),
-        0.0,
-        1e-12);
-    ASSERT_NEAR(osh_transport_material_sp_lookup(&tables, OSH_MATERIAL_INDEX_VACUUM, 0u, OSH_TRANSPORT_MATERIAL_EMIN),
+    ASSERT_NEAR(osh_material_runtime_sp_lookup(&tables, OSH_MATERIAL_INDEX_BLACKHOLE, 0u, OSH_MATERIAL_RUNTIME_EMIN),
                 0.0,
                 1e-12);
+    ASSERT_NEAR(
+        osh_material_runtime_sp_lookup(&tables, OSH_MATERIAL_INDEX_VACUUM, 0u, OSH_MATERIAL_RUNTIME_EMIN), 0.0, 1e-12);
 
-    ASSERT_NEAR(osh_transport_material_sp_lookup(&tables, idx_table18, 0u, 0.025), 619.82, 1e-2);
-    ASSERT_NEAR(osh_transport_material_sp_lookup(&tables, idx_table18, 0u, 0.0),
-                osh_transport_material_sp_lookup(&tables, idx_table18, 0u, tables.emin),
+    ASSERT_NEAR(osh_material_runtime_sp_lookup(&tables, idx_table18, 0u, 0.025), 619.82, 1e-2);
+    ASSERT_NEAR(osh_material_runtime_sp_lookup(&tables, idx_table18, 0u, 0.0),
+                osh_material_runtime_sp_lookup(&tables, idx_table18, 0u, tables.emin),
                 1e-12);
-    ASSERT_NEAR(osh_transport_material_sp_lookup(&tables, idx_table18, 0u, -1.0),
-                osh_transport_material_sp_lookup(&tables, idx_table18, 0u, tables.emin),
+    ASSERT_NEAR(osh_material_runtime_sp_lookup(&tables, idx_table18, 0u, -1.0),
+                osh_material_runtime_sp_lookup(&tables, idx_table18, 0u, tables.emin),
                 1e-12);
-    ASSERT_NEAR(osh_transport_material_sp_lookup(&tables, idx_table18, 0u, 2000.0),
-                osh_transport_material_sp_lookup(&tables, idx_table18, 0u, tables.emax),
+    ASSERT_NEAR(osh_material_runtime_sp_lookup(&tables, idx_table18, 0u, 2000.0),
+                osh_material_runtime_sp_lookup(&tables, idx_table18, 0u, tables.emax),
                 1e-12);
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_table18, 19u, 0.025) > 0.0);
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_table18, 19u, 10.0) > 0.0);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_table18, 19u, 0.025) > 0.0);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_table18, 19u, 10.0) > 0.0);
 
-    ASSERT_NEAR(osh_transport_material_sp_lookup(&tables, idx_table20, 19u, 0.025), 1.0, 1e-6);
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_table20, 19u, 0.03) > 1.0);
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_table20, 19u, 0.03) < 2.0);
-    ASSERT_NEAR(osh_transport_material_sp_lookup(&tables, idx_table20, 19u, 1.0), 2.0, 1e-6);
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_table18, 24u, 10.0) > 0.0);
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_table20, 24u, 10.0) > 0.0);
-    ASSERT_NEAR(osh_transport_material_range_lookup(&tables, idx_table20, 19u, 0.05)
-                    / osh_transport_material_range_lookup(&tables, idx_table20, 0u, 0.05),
+    ASSERT_NEAR(osh_material_runtime_sp_lookup(&tables, idx_table20, 19u, 0.025), 1.0, 1e-6);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_table20, 19u, 0.03) > 1.0);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_table20, 19u, 0.03) < 2.0);
+    ASSERT_NEAR(osh_material_runtime_sp_lookup(&tables, idx_table20, 19u, 1.0), 2.0, 1e-6);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_table18, 24u, 10.0) > 0.0);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_table20, 24u, 10.0) > 0.0);
+    ASSERT_NEAR(osh_material_runtime_range_lookup(&tables, idx_table20, 19u, 0.05)
+                    / osh_material_runtime_range_lookup(&tables, idx_table20, 0u, 0.05),
                 (double) tables.projectile_a[19u] / (double) tables.projectile_a[0u],
                 1e-4);
 
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_bethe, 0u, 1.0) > 0.0);
-    ASSERT_TRUE(osh_transport_material_sp_lookup(&tables, idx_bethe, 5u, 10.0) > 0.0);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_bethe, 0u, 1.0) > 0.0);
+    ASSERT_TRUE(osh_material_runtime_sp_lookup(&tables, idx_bethe, 5u, 10.0) > 0.0);
 
     ASSERT_TRUE(tables.range_csda != NULL);
     ASSERT_TRUE(tables.range_csda[(idx_bethe * tables.nprojectiles + 0u) * tables.nenergy + 0u] == 0.0f);
     ASSERT_TRUE(tables.range_csda[(idx_bethe * tables.nprojectiles + 0u) * tables.nenergy + 1u] >= 0.0f);
-    ASSERT_NEAR(osh_transport_material_range_lookup(&tables, idx_table18, 0u, 0.0),
-                osh_transport_material_range_lookup(&tables, idx_table18, 0u, tables.emin),
+    ASSERT_NEAR(osh_material_runtime_range_lookup(&tables, idx_table18, 0u, 0.0),
+                osh_material_runtime_range_lookup(&tables, idx_table18, 0u, tables.emin),
                 1e-12);
-    ASSERT_NEAR(osh_transport_material_range_lookup(&tables, idx_table18, 0u, 2000.0),
-                osh_transport_material_range_lookup(&tables, idx_table18, 0u, tables.emax),
+    ASSERT_NEAR(osh_material_runtime_range_lookup(&tables, idx_table18, 0u, 2000.0),
+                osh_material_runtime_range_lookup(&tables, idx_table18, 0u, tables.emax),
                 1e-12);
 
-    osh_transport_material_runtime_free(&tables);
+    osh_material_runtime_free(&tables);
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(mat_path) == 0);
 }
@@ -273,7 +271,7 @@ static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(
     char mat_path[512];
     char mat_text[4096];
     struct material_workspace *wm;
-    struct osh_transport_material_runtime tables;
+    struct osh_material_runtime tables;
     struct material const *mat_elements;
     struct material const *mat_effective;
     double expected_elements;
@@ -312,20 +310,20 @@ static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(
     ASSERT_TRUE(mat_effective->elements[0].mean_excitation_energy > 0.0);
     ASSERT_TRUE(mat_effective->elements[1].mean_excitation_energy > 0.0);
 
-    rc = osh_transport_material_prepare(wm, 1u, &tables);
+    rc = osh_material_prepare(wm, 1u, &tables);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(tables.nprojectiles == 1u);
 
     expected_elements = eval_element_sum_bethe(mat_elements, 1u, 1u, tables.emin);
     expected_effective = eval_element_sum_bethe(mat_effective, 1u, 1u, tables.emin);
-    got_elements = osh_transport_material_sp_lookup(&tables, mat_elements->index, 0u, tables.emin);
-    got_effective = osh_transport_material_sp_lookup(&tables, mat_effective->index, 0u, tables.emin);
+    got_elements = osh_material_runtime_sp_lookup(&tables, mat_elements->index, 0u, tables.emin);
+    got_effective = osh_material_runtime_sp_lookup(&tables, mat_effective->index, 0u, tables.emin);
 
     ASSERT_NEAR(got_elements, expected_elements, 5e-2);
     ASSERT_NEAR(got_effective, expected_effective, 5e-2);
     ASSERT_TRUE(fabs(got_effective - eval_effective_bethe(mat_effective, 1u, 1u, tables.emin)) > 1e-2);
 
-    osh_transport_material_runtime_free(&tables);
+    osh_material_runtime_free(&tables);
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(mat_path) == 0);
 }
@@ -334,7 +332,7 @@ static void test_prepare_rejects_projectiles_beyond_isotope_db(void) {
     char mat_path[512];
     char mat_text[1024];
     struct material_workspace *wm;
-    struct osh_transport_material_runtime tables;
+    struct osh_material_runtime tables;
     enum osh_status rc;
 
     wm = NULL;
@@ -350,10 +348,10 @@ static void test_prepare_rejects_projectiles_beyond_isotope_db(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_transport_material_prepare(wm, (unsigned int) OSH_ISOTOPE_DB_NELEM, &tables);
+    rc = osh_material_prepare(wm, (unsigned int) OSH_ISOTOPE_DB_NELEM, &tables);
     ASSERT_TRUE(rc == OSH_EINVAL);
 
-    osh_transport_material_runtime_free(&tables);
+    osh_material_runtime_free(&tables);
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
     ASSERT_TRUE(remove(mat_path) == 0);
 }

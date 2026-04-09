@@ -5,6 +5,7 @@ add_library(osh_scoring
     parse/osh_scoring_parse_settings.c
     parse/osh_scoring_parse_geometry.c
     parse/osh_scoring_parse_output.c
+    runtime/osh_scoring_prepare.c
 )
 
 target_include_directories(osh_scoring
