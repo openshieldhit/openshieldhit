@@ -7,15 +7,24 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Compiled settings block, mirroring the parsed form.
+ *
+ * @details
+ * Optional fields are guarded by `has_*` flags; a field should only be applied
+ * when its flag is non-zero.  This mirrors the parsed @ref osh_scoring_settings_def
+ * but lives in the runtime layer so the hot path does not need to touch the
+ * parse workspace.
+ */
 struct osh_scoring_settings_runtime {
-    char *name;
-    double rescale;
-    double offset;
-    double site_diameter_um;
-    double density_g_cm3;
-    size_t npart;
-    int medium;
-    int nkmedium;
+    char *name;              /* Settings name (owned). */
+    double rescale;          /* Multiplicative output rescale factor. */
+    double offset;           /* Additive output offset. */
+    double site_diameter_um; /* Site diameter for microdosimetry [um]. */
+    double density_g_cm3;    /* Local density override [g/cm^3]. */
+    size_t npart;            /* Maximum particle count cap. */
+    int medium;              /* Transport medium override index. */
+    int nkmedium;            /* Neutron-kerma medium override index. */
     char has_rescale;
     char has_offset;
     char has_site_diameter_um;

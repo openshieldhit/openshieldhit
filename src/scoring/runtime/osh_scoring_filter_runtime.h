@@ -13,16 +13,27 @@ extern "C" {
 struct osh_scoring_page_runtime;
 struct osh_scoring_runtime;
 
+/**
+ * @brief One compiled filter rule, ready for hot-path evaluation.
+ *
+ * @details
+ * Resolved from the raw @ref osh_scoring_filter_rule string form during
+ * @ref osh_scoring_prepare.  Integer codes replace string comparisons so
+ * the hot path can evaluate rules with a simple switch/if chain.
+ */
 struct osh_scoring_filter_runtime_rule {
-    enum osh_scoring_filter_field field;
-    enum osh_scoring_filter_op op;
-    double value;
+    enum osh_scoring_filter_field field; /* Which particle property to test. */
+    enum osh_scoring_filter_op op;       /* Comparison operator. */
+    double value;                        /* Right-hand side of the comparison. */
 };
 
+/**
+ * @brief Compiled filter: a named set of rules evaluated in AND combination.
+ */
 struct osh_scoring_filter_runtime {
-    char *name;
-    struct osh_scoring_filter_runtime_rule *rules;
-    size_t nrules;
+    char *name;                                    /* Filter name (owned). */
+    struct osh_scoring_filter_runtime_rule *rules; /* Rule array (owned). */
+    size_t nrules;                                 /* Number of rules. */
 };
 
 /**

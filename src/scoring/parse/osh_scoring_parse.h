@@ -29,6 +29,6 @@ enum osh_status osh_scoring_parse_file(char const *path, struct osh_scoring_work
 
 #ifdef __cplusplus
 }
-#endif
+#endif /* OSH_SCORING_PARSE_H */
 
 #endif
