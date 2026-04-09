@@ -7,10 +7,9 @@
 
 #include "common/osh_version.h"
 
-static enum osh_status build_output_path(char **path_out,
-                                         char const *out_dir,
-                                         char const *filename);
-static enum osh_status mesh_axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label, size_t *idx_out);
+static enum osh_status build_output_path(char **path_out, char const *out_dir, char const *filename);
+static enum osh_status
+mesh_axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label, size_t *idx_out);
 static enum osh_status validate_output(struct osh_scoring_save_request const *req,
                                        size_t output_idx,
                                        struct osh_scoring_output_runtime const **out_out,
@@ -96,7 +95,10 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_save_request co
             for (ix = 0; ix < nx; ++ix) {
                 size_t idx = ix + nx * (iy + ny * iz);
 
-                fprintf(fp, " %.12e %.12e %.12e", x0 + dx * ((double) ix + 0.5), y0 + dy * ((double) iy + 0.5),
+                fprintf(fp,
+                        " %.12e %.12e %.12e",
+                        x0 + dx * ((double) ix + 0.5),
+                        y0 + dy * ((double) iy + 0.5),
                         z0 + dz * ((double) iz + 0.5));
                 for (ip = 0; ip < out->npages; ++ip) {
                     size_t page_idx = out->page_indices[ip];
@@ -138,7 +140,8 @@ static enum osh_status build_output_path(char **path_out, char const *out_dir, c
     return OSH_OK;
 }
 
-static enum osh_status mesh_axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label, size_t *idx_out) {
+static enum osh_status
+mesh_axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label, size_t *idx_out) {
     size_t i;
 
     if (!geo || !label || !idx_out) {

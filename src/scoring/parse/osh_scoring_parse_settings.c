@@ -15,8 +15,8 @@ struct settings_entry {
 
 static enum osh_status
 settings_name(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status settings_rescale(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+settings_rescale(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
 static enum osh_status
 settings_offset(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
 static enum osh_status
@@ -25,8 +25,8 @@ static enum osh_status settings_nkmedium(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
 static enum osh_status settings_sitediam(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status settings_density(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status
+settings_density(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
 static enum osh_status settings_maxcount(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
 

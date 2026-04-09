@@ -13,10 +13,8 @@ struct filter_entry {
     filter_handler_fn handler;
 };
 
-static enum osh_status append_filter_rule(struct osh_scoring_filter_def *fil,
-                                          char const *field,
-                                          char const *op,
-                                          double value);
+static enum osh_status
+append_filter_rule(struct osh_scoring_filter_def *fil, char const *field, char const *op, double value);
 static enum osh_status
 filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno);
 static enum osh_status

@@ -1,12 +1,8 @@
 #include "transport/osh_transport.h"
 
-#include <math.h>
-#include <stdio.h>
-
 #include "beam/osh_beam.h"
 #include "beam/osh_beam_model.h"
 #include "beam/osh_beamdef.h"
-#include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "gemca/osh_gemca2.h"
 #include "material/osh_material.h"
@@ -39,13 +35,8 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
 static int is_blackhole_material(size_t material_idx);
 static int is_vacuum_material(size_t material_idx);
 static void ray_from_state(struct ray *ray, struct ray_v const *state);
-static void step_from_state(struct step *st,
-                            struct ray_v const *state,
-                            double step_len,
-                            double exit_energy,
-                            double rho,
-                            int medium,
-                            int zone);
+static void step_from_state(
+    struct step *st, struct ray_v const *state, double step_len, double exit_energy, double rho, int medium, int zone);
 static void advance_state(struct ray_v *state, double step_len, double exit_energy);
 static void nudge_state(struct ray_v *state, double eps);
 
@@ -88,43 +79,6 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
     }
 
     return OSH_OK;
-}
-
-void osh_transport_move_ray(struct ray *r, double d) {
-    int i;
-
-    for (i = 0; i < 3; i++) {
-        r->p[i] += r->cp[i] * d;
-    }
-}
-
-void osh_transport_print_ray(struct ray const *r) {
-    printf(" x: %.9f [cm]\n", r->p[0]);
-    printf(" y: %.9f [cm]\n", r->p[1]);
-    printf(" z: %.9f [cm]\n", r->p[2]);
-    printf(" cx: %.9f\n", r->cp[0]);
-    printf(" cy: %.9f\n", r->cp[1]);
-    printf(" cz: %.9f\n", r->cp[2]);
-    printf(" c.system: %i\n", r->system);
-}
-
-void print_ray_c(struct ray_c r) {
-    printf(" x,y,z      : % .4f % .4f % .4f [cm]\n", r.p[0], r.p[1], r.p[2]);
-    printf(" ct,sf,cf   : % .4f % .4f % .4f\n", r.c[0], r.c[1], r.c[2]);
-    printf(
-        " theta, phi : %.4f %.4f deg\n", acos(r.c[0]) * OSH_M_1_PI * 180.0, atan2(r.c[1], r.c[2]) * OSH_M_1_PI * 180.0);
-    printf(" c.system   : %i \n", r.system);
-}
-
-void osh_clear_ray_c(struct ray_c *r) {
-    int i;
-
-    for (i = 0; i < 3; i++) {
-        r->p[i] = 0;
-        r->c[i] = 1;
-    }
-    r->c[1] = 0; /* initialized travel along z: ray->c = (1,0,1) */
-    r->system = OSH_COORD_PZALIGN;
 }
 
 static enum osh_status transport_one_primary(struct gemca_workspace *geom,
@@ -220,7 +174,8 @@ static enum osh_status transport_one_primary(struct gemca_workspace *geom,
             }
 
             r0 = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e0_per_nuc);
-            r1_target = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e1_target / a_proj);
+            r1_target =
+                osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e1_target / a_proj);
             ds_csda = (r0 - r1_target) / rho;
             if (ds_csda <= 0.0) {
                 return OSH_OK;
@@ -235,7 +190,8 @@ static enum osh_status transport_one_primary(struct gemca_workspace *geom,
                 if (residual_range < 0.0) {
                     residual_range = 0.0;
                 }
-                exit_energy = energy_from_residual_range(tables, zone->material_idx, projectile_idx, residual_range) * a_proj;
+                exit_energy =
+                    energy_from_residual_range(tables, zone->material_idx, projectile_idx, residual_range) * a_proj;
                 if (exit_energy < cutoff_total) {
                     exit_energy = cutoff_total;
                 }
@@ -387,13 +343,8 @@ static void ray_from_state(struct ray *ray, struct ray_v const *state) {
     ray->system = state->system;
 }
 
-static void step_from_state(struct step *st,
-                            struct ray_v const *state,
-                            double step_len,
-                            double exit_energy,
-                            double rho,
-                            int medium,
-                            int zone) {
+static void step_from_state(
+    struct step *st, struct ray_v const *state, double step_len, double exit_energy, double rho, int medium, int zone) {
     int i;
 
     for (i = 0; i < 3; ++i) {

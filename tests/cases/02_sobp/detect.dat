@@ -28,7 +28,7 @@ Output
     Geo MyMesh
     Quantity ENERGY
     Quantity FLUENCE
-    Quantity FLUENCE MyFilter Gen2  ! add a second page, but with a filter applied
+    Quantity FLUENCE MyFilter Gen2
 
 
 Output

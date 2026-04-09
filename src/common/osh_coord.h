@@ -39,6 +39,11 @@ struct ray_c {
         system; /* optional marker for saying what coordinate system we are in. 0 = unknown, 1 = universe ... */
 };
 
+void osh_coord_move_ray(struct ray *r, double d);
+void osh_coord_print_ray(struct ray const *r);
+void osh_coord_print_ray_c(struct ray_c r);
+void osh_coord_clear_ray_c(struct ray_c *r);
+
 int osh_coord_c2v(double const *c, double *v);
 int osh_coord_v2c(double const *v, double *c);
 int osh_coord_point2sph(double const *v, double *theta, double *phi);

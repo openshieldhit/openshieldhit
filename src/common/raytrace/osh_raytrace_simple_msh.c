@@ -29,10 +29,10 @@
  * then advance one voxel along that axis.
  */
 
-#include "common/raytrace/osh_raytrace.h"
-
 #include <float.h>
 #include <math.h>
+
+#include "common/raytrace/osh_raytrace.h"
 
 static int same_crossing(double a, double b) {
     double tol = 64.0 * DBL_EPSILON * (1.0 + fmax(fabs(a), fabs(b)));
@@ -44,22 +44,21 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
                           double const v[3],
                           double ds,
                           struct osh_voxel_crossing *crossings,
-                          size_t *n_out)
-{
-    int    vox[3];      /* current voxel index along each axis */
-    int    step[3];     /* +1 or -1 per axis; 0 when v[i]==0 */
-    double tmax[3];     /* parametric t to next boundary crossing per axis */
-    double tdelta[3];   /* parametric t between consecutive crossings per axis */
-    double t;           /* parametric position along the ray */
-    double t_next;      /* parametric position of the next recorded crossing */
-    int    axis;        /* axis chosen for the current step */
-    size_t n;           /* number of crossings written so far */
-    int    i;
+                          size_t *n_out) {
+    int vox[3];       /* current voxel index along each axis */
+    int step[3];      /* +1 or -1 per axis; 0 when v[i]==0 */
+    double tmax[3];   /* parametric t to next boundary crossing per axis */
+    double tdelta[3]; /* parametric t between consecutive crossings per axis */
+    double t;         /* parametric position along the ray */
+    double t_next;    /* parametric position of the next recorded crossing */
+    int axis;         /* axis chosen for the current step */
+    size_t n;         /* number of crossings written so far */
+    int i;
 
     /* Determine the starting voxel.  Return immediately if p is outside. */
     for (i = 0; i < 3; ++i) {
-        vox[i] = (int)((p[i] - grid->origin[i]) / grid->spacing[i]);
-        if (vox[i] < 0 || vox[i] >= (int)grid->n[i]) {
+        vox[i] = (int) ((p[i] - grid->origin[i]) / grid->spacing[i]);
+        if (vox[i] < 0 || vox[i] >= (int) grid->n[i]) {
             *n_out = 0;
             return 0;
         }
@@ -76,17 +75,17 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
      */
     for (i = 0; i < 3; ++i) {
         if (v[i] > 0.0) {
-            step[i]   = 1;
+            step[i] = 1;
             tdelta[i] = grid->spacing[i] / v[i];
-            tmax[i]   = (grid->origin[i] + (vox[i] + 1) * grid->spacing[i] - p[i]) / v[i];
+            tmax[i] = (grid->origin[i] + (vox[i] + 1) * grid->spacing[i] - p[i]) / v[i];
         } else if (v[i] < 0.0) {
-            step[i]   = -1;
+            step[i] = -1;
             tdelta[i] = -grid->spacing[i] / v[i];
-            tmax[i]   = (grid->origin[i] + vox[i] * grid->spacing[i] - p[i]) / v[i];
+            tmax[i] = (grid->origin[i] + vox[i] * grid->spacing[i] - p[i]) / v[i];
         } else {
-            step[i]   = 0;
+            step[i] = 0;
             tdelta[i] = HUGE_VAL;
-            tmax[i]   = HUGE_VAL;
+            tmax[i] = HUGE_VAL;
         }
     }
 
@@ -105,9 +104,7 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         /* Clip the crossing to the end of the requested step length. */
         t_next = (tmax[axis] < ds) ? tmax[axis] : ds;
 
-        crossings[n].idx = (size_t)vox[0]
-                         + grid->n[0] * ((size_t)vox[1]
-                         + grid->n[1] *  (size_t)vox[2]);
+        crossings[n].idx = (size_t) vox[0] + grid->n[0] * ((size_t) vox[1] + grid->n[1] * (size_t) vox[2]);
         crossings[n].path_len = t_next - t;
         ++n;
 
@@ -123,16 +120,15 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
 
             vox[axis] += step[axis];
             tmax[axis] += tdelta[axis];
-            if (vox[axis] < 0 || vox[axis] >= (int)grid->n[axis]) {
+            if (vox[axis] < 0 || vox[axis] >= (int) grid->n[axis]) {
                 *n_out = n;
                 return (n > 0) ? 1 : 0;
             }
         }
 
         /* Stop if the ray exits the grid on any advanced axis. */
-        if (vox[0] < 0 || vox[0] >= (int)grid->n[0] ||
-            vox[1] < 0 || vox[1] >= (int)grid->n[1] ||
-            vox[2] < 0 || vox[2] >= (int)grid->n[2])
+        if (vox[0] < 0 || vox[0] >= (int) grid->n[0] || vox[1] < 0 || vox[1] >= (int) grid->n[1] || vox[2] < 0
+            || vox[2] >= (int) grid->n[2])
             break;
     }
 

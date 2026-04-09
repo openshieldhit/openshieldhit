@@ -1,8 +1,10 @@
 #include "common/osh_coord.h"
-#include "common/osh_step.h"
 
 #include <math.h>
 #include <stdio.h>
+
+#include "common/osh_const.h"
+#include "common/osh_step.h"
 
 /* sphetical coordinate angles are always ISO 80000-2:2019 convention */
 
@@ -228,6 +230,43 @@ int osh_coord_trans_ray_r(struct ray const *r, struct ray *rt, double const t[16
         rt->cp[i] = r->cp[0] * t[j] + r->cp[1] * t[j + 1] + r->cp[2] * t[j + 2];        /* vector, often not needed */
     }
     return 1;
+}
+
+void osh_coord_move_ray(struct ray *r, double d) {
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        r->p[i] += r->cp[i] * d;
+    }
+}
+
+void osh_coord_print_ray(struct ray const *r) {
+    printf(" x: %.9f [cm]\n", r->p[0]);
+    printf(" y: %.9f [cm]\n", r->p[1]);
+    printf(" z: %.9f [cm]\n", r->p[2]);
+    printf(" cx: %.9f\n", r->cp[0]);
+    printf(" cy: %.9f\n", r->cp[1]);
+    printf(" cz: %.9f\n", r->cp[2]);
+    printf(" c.system: %i\n", r->system);
+}
+
+void osh_coord_print_ray_c(struct ray_c r) {
+    printf(" x,y,z      : % .4f % .4f % .4f [cm]\n", r.p[0], r.p[1], r.p[2]);
+    printf(" ct,sf,cf   : % .4f % .4f % .4f\n", r.c[0], r.c[1], r.c[2]);
+    printf(
+        " theta, phi : %.4f %.4f deg\n", acos(r.c[0]) * OSH_M_1_PI * 180.0, atan2(r.c[1], r.c[2]) * OSH_M_1_PI * 180.0);
+    printf(" c.system   : %i \n", r.system);
+}
+
+void osh_coord_clear_ray_c(struct ray_c *r) {
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        r->p[i] = 0;
+        r->c[i] = 1;
+    }
+    r->c[1] = 0; /* initialized travel along z: ray->c = (1,0,1) */
+    r->system = OSH_COORD_PZALIGN;
 }
 
 /* TODO: implement osh_coord_transinv_step once struct step is defined */
