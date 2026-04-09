@@ -177,6 +177,30 @@ src/<module>/README.md
 
 - Do not create `parse/` or `runtime/` mechanically for every module. Use the structure when the module actually has those phases.
 
+## Portability — banned POSIX-only APIs
+
+Windows is a target platform. The following POSIX-only APIs must **not** appear
+in any source or test file:
+
+| Banned | Reason | Replacement |
+|---|---|---|
+| `<strings.h>` / `strcasecmp` | Not available on MSVC | Lowercase strings at storage time with `osh_lower_inplace()`, then use `strcmp` |
+| `mkdtemp`, `mkstemp` | POSIX temp-file helpers | Write output to the current working directory with a fixed filename |
+| `getpid()` | POSIX process ID | Not needed; use fixed filenames in tests |
+| `<unistd.h>` | POSIX umbrella header | Use C standard library equivalents (`<stdio.h>`, `<stdlib.h>`, `<string.h>`) |
+| `<sys/stat.h>`, `<sys/types.h>` | POSIX filesystem headers | Avoid; write to the current directory instead |
+| `<threads.h>` | C11 threads (not implemented in MSVC) | Use pthreads or OpenMP on non-Windows; guard with `#if !defined(_WIN32)` if needed |
+
+**Pattern for case-insensitive keyword matching:**
+Lowercase the string once at parse/storage time using `osh_lower_inplace()` (from
+`common/osh_readline.h`), then compare with lowercase string literals using plain
+`strcmp`. Do not use `strcasecmp` at comparison time.
+
+**Pattern for test output files:**
+Write generated files to `.` (the CTest working directory) with descriptive
+fixed names. Clean them up with `remove()` at the end of the test.
+Do not use `/tmp`, `mkdtemp`, or `getpid`-based naming.
+
 ## Porting Notes
 
 - This is a full reimplementation. No direct code copied from SHIELD-HIT12A.

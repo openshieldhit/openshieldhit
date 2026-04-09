@@ -20,7 +20,13 @@ filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char c
 static enum osh_status
 filter_rule(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno);
 
-static struct filter_entry filter_table[7];
+static struct filter_entry filter_table[] = {{OSH_SCORING_KEY_NAME, filter_name},
+                                             {OSH_SCORING_KEY_FILTER_Z, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_A, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_E, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_GEN, filter_rule},
+                                             {OSH_SCORING_KEY_FILTER_ID, filter_rule},
+                                             {NULL, NULL}};
 
 enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil,
                                               char **words,
@@ -41,14 +47,6 @@ enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil
     }
     return OSH_OK;
 }
-
-static struct filter_entry filter_table[] = {{OSH_SCORING_KEY_NAME, filter_name},
-                                             {OSH_SCORING_KEY_FILTER_Z, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_A, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_E, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_GEN, filter_rule},
-                                             {OSH_SCORING_KEY_FILTER_ID, filter_rule},
-                                             {NULL, NULL}};
 
 static enum osh_status
 append_filter_rule(struct osh_scoring_filter_def *fil, char const *field, char const *op, double value) {

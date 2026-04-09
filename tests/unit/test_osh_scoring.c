@@ -50,22 +50,22 @@ static void test_parse_fixture_test01_detect(void) {
 
     geo = osh_scoring_geometry_by_name(ws, "MyMesh");
     ASSERT_TRUE(geo != NULL);
-    ASSERT_TRUE(strcmp(geo->kind, "Mesh") == 0);
+    ASSERT_TRUE(strcmp(geo->kind, "mesh") == 0);
 
     out0 = osh_scoring_output_by_filename(ws, "NB_msh_energy.bdo");
     ASSERT_TRUE(out0 != NULL);
     ASSERT_TRUE(strcmp(out0->geometry_name, "MyMesh") == 0);
     ASSERT_TRUE(out0->npages == 1u);
-    ASSERT_TRUE(strcmp(out0->pages[0].quantity, "ENERGY") == 0);
+    ASSERT_TRUE(strcmp(out0->pages[0].quantity, "energy") == 0);
     ASSERT_TRUE(out0->pages[0].nfilter_names == 0u);
 
     out1 = osh_scoring_output_by_filename(ws, "NB_msh_fluence.bdo");
     ASSERT_TRUE(out1 != NULL);
     ASSERT_TRUE(strcmp(out1->geometry_name, "MyMesh") == 0);
     ASSERT_TRUE(out1->npages == 3u);
-    ASSERT_TRUE(strcmp(out1->pages[0].quantity, "ENERGY") == 0);
-    ASSERT_TRUE(strcmp(out1->pages[1].quantity, "FLUENCE") == 0);
-    ASSERT_TRUE(strcmp(out1->pages[2].quantity, "FLUENCE") == 0);
+    ASSERT_TRUE(strcmp(out1->pages[0].quantity, "energy") == 0);
+    ASSERT_TRUE(strcmp(out1->pages[1].quantity, "fluence") == 0);
+    ASSERT_TRUE(strcmp(out1->pages[2].quantity, "fluence") == 0);
     ASSERT_TRUE(out1->pages[2].nfilter_names == 2u);
     ASSERT_TRUE(strcmp(out1->pages[2].filter_names[0], "MyFilter") == 0);
     ASSERT_TRUE(strcmp(out1->pages[2].filter_names[1], "Gen2") == 0);
@@ -222,7 +222,7 @@ static void test_parse_geometry_axes(void) {
 
     mesh = osh_scoring_geometry_by_name(ws, "MyMesh");
     ASSERT_TRUE(mesh != NULL);
-    ASSERT_TRUE(strcmp(mesh->kind, "Mesh") == 0);
+    ASSERT_TRUE(strcmp(mesh->kind, "mesh") == 0);
     ASSERT_TRUE(mesh->naxes == 3u);
     ASSERT_TRUE(strcmp(mesh->axes[0].label, "X") == 0);
     ASSERT_TRUE(mesh->axes[0].lo == -5.0);
@@ -233,7 +233,7 @@ static void test_parse_geometry_axes(void) {
 
     cyl = osh_scoring_geometry_by_name(ws, "MyCyl");
     ASSERT_TRUE(cyl != NULL);
-    ASSERT_TRUE(strcmp(cyl->kind, "Cyl") == 0);
+    ASSERT_TRUE(strcmp(cyl->kind, "cyl") == 0);
     ASSERT_TRUE(cyl->naxes == 2u);
     ASSERT_TRUE(strcmp(cyl->axes[0].label, "R") == 0);
     ASSERT_TRUE(cyl->axes[0].hi == 3.0);

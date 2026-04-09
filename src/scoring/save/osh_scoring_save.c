@@ -1,6 +1,6 @@
 #include "scoring/save/osh_scoring_save.h"
 
-#include <strings.h>
+#include <string.h>
 
 #include "scoring/save/osh_scoring_save_ascii.h"
 #include "scoring/save/osh_scoring_save_bdo2019.h"
@@ -55,14 +55,14 @@ static int fileformat_is_ascii(char const *fileformat) {
     if (!fileformat) {
         return 0;
     }
-    return (strcasecmp(fileformat, "TEXT") == 0) || (strcasecmp(fileformat, "TXT") == 0)
-           || (strcasecmp(fileformat, "ASCII") == 0) || (strcasecmp(fileformat, "DAT") == 0);
+    return (strcmp(fileformat, "text") == 0) || (strcmp(fileformat, "txt") == 0) || (strcmp(fileformat, "ascii") == 0)
+           || (strcmp(fileformat, "dat") == 0);
 }
 
 static int fileformat_is_bdo2019(char const *fileformat) {
     if (!fileformat) {
         return 1;
     }
-    return (strcasecmp(fileformat, "BDO") == 0) || (strcasecmp(fileformat, "BDO2019") == 0)
-           || (strcasecmp(fileformat, "BINARY") == 0) || (strcasecmp(fileformat, "BIN") == 0);
+    return (strcmp(fileformat, "bdo") == 0) || (strcmp(fileformat, "bdo2019") == 0)
+           || (strcmp(fileformat, "binary") == 0) || (strcmp(fileformat, "bin") == 0);
 }

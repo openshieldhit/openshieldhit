@@ -30,7 +30,18 @@ settings_density(struct osh_scoring_settings_def *set, char **words, int nwords,
 static enum osh_status settings_maxcount(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
 
-static struct settings_entry settings_table[12];
+static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings_name},
+                                                 {OSH_SCORING_KEY_RESCALE, settings_rescale},
+                                                 {OSH_SCORING_KEY_OFFSET, settings_offset},
+                                                 {OSH_SCORING_KEY_MEDIUM, settings_medium},
+                                                 {OSH_SCORING_KEY_NKMEDIUM, settings_nkmedium},
+                                                 {OSH_SCORING_KEY_SITEDIAM, settings_sitediam},
+                                                 {"sitediam", settings_sitediam},
+                                                 {"rho", settings_density},
+                                                 {OSH_SCORING_KEY_DENSITY, settings_density},
+                                                 {OSH_SCORING_KEY_MAXCOUNT, settings_maxcount},
+                                                 {"npart", settings_maxcount},
+                                                 {NULL, NULL}};
 
 enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def *set,
                                                 char **words,
@@ -51,19 +62,6 @@ enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def 
     }
     return OSH_OK;
 }
-
-static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings_name},
-                                                 {OSH_SCORING_KEY_RESCALE, settings_rescale},
-                                                 {OSH_SCORING_KEY_OFFSET, settings_offset},
-                                                 {OSH_SCORING_KEY_MEDIUM, settings_medium},
-                                                 {OSH_SCORING_KEY_NKMEDIUM, settings_nkmedium},
-                                                 {OSH_SCORING_KEY_SITEDIAM, settings_sitediam},
-                                                 {"sitediam", settings_sitediam},
-                                                 {"rho", settings_density},
-                                                 {OSH_SCORING_KEY_DENSITY, settings_density},
-                                                 {OSH_SCORING_KEY_MAXCOUNT, settings_maxcount},
-                                                 {"npart", settings_maxcount},
-                                                 {NULL, NULL}};
 
 static enum osh_status
 settings_name(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {

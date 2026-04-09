@@ -129,6 +129,7 @@ enum osh_status osh_scoring_parse_file(char const *path, struct osh_scoring_work
                     rc = OSH_ENOMEM;
                     goto fail;
                 }
+                osh_lower_inplace(ws->geometries[ws->ngeometries - 1u].kind);
             }
             continue;
         }
@@ -274,7 +275,7 @@ static enum osh_status validate(struct osh_scoring_workspace const *ws) {
             osh_error("scoring: geometry %zu (%s) is missing a Name", i, ws->geometries[i].kind);
             return OSH_EPARSE;
         }
-        if (ws->geometries[i].naxes == 0u && strcasecmp(ws->geometries[i].kind, "Zone") != 0) {
+        if (ws->geometries[i].naxes == 0u && strcmp(ws->geometries[i].kind, "zone") != 0) {
             osh_warn("scoring: geometry '%s' has no axis definitions", ws->geometries[i].name);
         }
     }
