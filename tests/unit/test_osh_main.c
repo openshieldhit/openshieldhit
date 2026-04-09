@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "openshieldhit/openshieldhit.h"
 
@@ -27,6 +30,21 @@ static FILE *osh_test_tmpfile(void) {
 #else
     return tmpfile();
 #endif
+}
+
+static void osh_test_build_temp_dir(char *path) {
+    ASSERT_TRUE(mkdtemp(path) != NULL);
+}
+
+static int osh_test_file_exists(char const *path) {
+    FILE *fp;
+
+    fp = fopen(path, "rb");
+    if (!fp) {
+        return 0;
+    }
+    ASSERT_TRUE(fclose(fp) == 0);
+    return 1;
 }
 
 static void test_version_string_defined(void) {
@@ -117,18 +135,18 @@ static void test_last_error_empty_on_null_context(void) {
     ASSERT_TRUE(err[0] == '\0');
 }
 
-static void test_last_error_set_on_unsupported_run_mode(void) {
+static void test_last_error_set_on_missing_input(void) {
     openshieldhit_context_t *ctx = openshieldhit_context_create();
     openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
     enum openshieldhit_status rc;
 
     ASSERT_TRUE(ctx != NULL);
-    /* NORMAL mode is not yet implemented — run() should fail and set last_error. */
-    cfg.run_mode = OPENSHIELDHIT_RUN_NORMAL;
+    cfg.run_mode = OPENSHIELDHIT_RUN_VALIDATE;
+    cfg.workdir = "/definitely/not/a/real/openshieldhit/case";
     ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_OK);
 
     rc = openshieldhit_run(ctx, NULL, NULL);
-    ASSERT_TRUE(rc == OPENSHIELDHIT_STATUS_NOT_SUPPORTED);
+    ASSERT_TRUE(rc == OPENSHIELDHIT_STATUS_IO_ERROR);
     ASSERT_TRUE(openshieldhit_last_error(ctx)[0] != '\0');
 
     openshieldhit_context_destroy(ctx);
@@ -145,7 +163,7 @@ static void test_validate_applies_nstat_override(void) {
 
     ASSERT_TRUE(ctx != NULL);
 
-    snprintf(workdir, sizeof(workdir), "%s/tests/cases/02_sobp", OSH_PROJECT_SOURCE_DIR);
+    snprintf(workdir, sizeof(workdir), "%s/tests/cases/00_minimal", OSH_PROJECT_SOURCE_DIR);
     cfg.workdir = workdir;
     cfg.run_mode = OPENSHIELDHIT_RUN_VALIDATE;
     cfg.nstat = 1234ULL;
@@ -158,7 +176,10 @@ static void test_validate_applies_nstat_override(void) {
     ASSERT_TRUE(out != NULL);
 
     rc = openshieldhit_run(ctx, out, NULL);
-    ASSERT_TRUE(rc == OPENSHIELDHIT_STATUS_OK);
+    if (rc != OPENSHIELDHIT_STATUS_OK) {
+        fprintf(stderr, "openshieldhit_run failed: %s\n", openshieldhit_last_error(ctx));
+        exit(1);
+    }
 
     ASSERT_TRUE(fseek(out, 0, SEEK_SET) == 0);
     nread = fread(buf, 1, sizeof(buf) - 1u, out);
@@ -167,6 +188,48 @@ static void test_validate_applies_nstat_override(void) {
     ASSERT_TRUE(strstr(buf, "Requested nstat  : 1234") != NULL);
     ASSERT_TRUE(strstr(buf, "Applied nstat override: 1234") != NULL);
 
+    ASSERT_TRUE(fclose(out) == 0);
+    openshieldhit_context_destroy(ctx);
+}
+
+static void test_normal_minimal_case_runs_and_saves(void) {
+    openshieldhit_context_t *ctx = openshieldhit_context_create();
+    openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
+    enum openshieldhit_status rc;
+    FILE *out;
+    char workdir[512];
+    char out_dir[] = "/tmp/osh_main_minimalXXXXXX";
+    char ascii_path[512];
+    char bdo_path[512];
+
+    ASSERT_TRUE(ctx != NULL);
+
+    snprintf(workdir, sizeof(workdir), "%s/tests/cases/00_minimal", OSH_PROJECT_SOURCE_DIR);
+    osh_test_build_temp_dir(out_dir);
+
+    cfg.workdir = workdir;
+    cfg.out_dir = out_dir;
+    cfg.run_mode = OPENSHIELDHIT_RUN_NORMAL;
+    cfg.nstat = 8ULL;
+    cfg.has_nstat = 1;
+    cfg.log_level = g_verbosity;
+
+    ASSERT_TRUE(openshieldhit_context_configure(ctx, &cfg) == OPENSHIELDHIT_STATUS_OK);
+
+    out = osh_test_tmpfile();
+    ASSERT_TRUE(out != NULL);
+
+    rc = openshieldhit_run(ctx, out, NULL);
+    ASSERT_TRUE(rc == OPENSHIELDHIT_STATUS_OK);
+
+    snprintf(ascii_path, sizeof(ascii_path), "%s/NB_msh.dat", out_dir);
+    snprintf(bdo_path, sizeof(bdo_path), "%s/NB_msh.bdo", out_dir);
+    ASSERT_TRUE(osh_test_file_exists(ascii_path));
+    ASSERT_TRUE(osh_test_file_exists(bdo_path));
+
+    ASSERT_TRUE(remove(ascii_path) == 0);
+    ASSERT_TRUE(remove(bdo_path) == 0);
+    ASSERT_TRUE(rmdir(out_dir) == 0);
     ASSERT_TRUE(fclose(out) == 0);
     openshieldhit_context_destroy(ctx);
 }
@@ -208,12 +271,16 @@ static int run_named_test(char const *name) {
         test_last_error_empty_on_null_context();
         return 0;
     }
-    if (strcmp(name, "last_error_set_on_unsupported_run_mode") == 0) {
-        test_last_error_set_on_unsupported_run_mode();
+    if (strcmp(name, "last_error_set_on_missing_input") == 0) {
+        test_last_error_set_on_missing_input();
         return 0;
     }
     if (strcmp(name, "validate_applies_nstat_override") == 0) {
         test_validate_applies_nstat_override();
+        return 0;
+    }
+    if (strcmp(name, "normal_minimal_case_runs_and_saves") == 0) {
+        test_normal_minimal_case_runs_and_saves();
         return 0;
     }
     return 1;
@@ -237,7 +304,8 @@ int main(int argc, char *argv[]) {
     test_configure_rejects_invalid_arguments();
     test_last_error_empty_on_fresh_context();
     test_last_error_empty_on_null_context();
-    test_last_error_set_on_unsupported_run_mode();
+    test_last_error_set_on_missing_input();
     test_validate_applies_nstat_override();
+    test_normal_minimal_case_runs_and_saves();
     return 0;
 }
