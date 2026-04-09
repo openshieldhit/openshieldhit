@@ -2,7 +2,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 #include "common/osh_logger.h"
 
@@ -18,19 +17,19 @@ static enum osh_scoring_geo_kind geometry_kind_to_enum(char const *kind) {
     if (!kind) {
         return OSH_SCORING_GEO_UNKNOWN;
     }
-    if (strcasecmp(kind, "MESH") == 0) {
+    if (strcmp(kind, "mesh") == 0) {
         return OSH_SCORING_GEO_MESH;
     }
-    if (strcasecmp(kind, "CYL") == 0) {
+    if (strcmp(kind, "cyl") == 0) {
         return OSH_SCORING_GEO_CYL;
     }
-    if (strcasecmp(kind, "ZONE") == 0) {
+    if (strcmp(kind, "zone") == 0) {
         return OSH_SCORING_GEO_ZONE;
     }
-    if (strcasecmp(kind, "VOXEL") == 0) {
+    if (strcmp(kind, "voxel") == 0) {
         return OSH_SCORING_GEO_VOXEL;
     }
-    if (strcasecmp(kind, "ALL") == 0) {
+    if (strcmp(kind, "all") == 0) {
         return OSH_SCORING_GEO_ALL;
     }
     return OSH_SCORING_GEO_UNKNOWN;
@@ -61,13 +60,13 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     if (!quantity) {
         return OSH_SCORING_SCORE_UNKNOWN;
     }
-    if (strcasecmp(quantity, "ENERGY") == 0) {
+    if (strcmp(quantity, "energy") == 0) {
         return OSH_SCORING_SCORE_ENERGY;
     }
-    if (strcasecmp(quantity, "FLUENCE") == 0) {
+    if (strcmp(quantity, "fluence") == 0) {
         return OSH_SCORING_SCORE_FLUENCE;
     }
-    if (strcasecmp(quantity, "DOSE") == 0) {
+    if (strcmp(quantity, "dose") == 0) {
         return OSH_SCORING_SCORE_DOSE;
     }
     return OSH_SCORING_SCORE_UNKNOWN;
@@ -77,34 +76,34 @@ static enum osh_scoring_filter_field filter_field_to_enum(char const *field) {
     if (!field) {
         return OSH_SCORING_FILTER_FIELD_UNKNOWN;
     }
-    if (strcasecmp(field, "ID") == 0) {
+    if (strcmp(field, "ID") == 0) {
         return OSH_SCORING_FILTER_FIELD_ID;
     }
-    if (strcasecmp(field, "Z") == 0) {
+    if (strcmp(field, "Z") == 0) {
         return OSH_SCORING_FILTER_FIELD_Z;
     }
-    if (strcasecmp(field, "A") == 0) {
+    if (strcmp(field, "A") == 0) {
         return OSH_SCORING_FILTER_FIELD_A;
     }
-    if (strcasecmp(field, "AMASS") == 0) {
+    if (strcmp(field, "AMASS") == 0) {
         return OSH_SCORING_FILTER_FIELD_AMASS;
     }
-    if (strcasecmp(field, "AMU") == 0) {
+    if (strcmp(field, "AMU") == 0) {
         return OSH_SCORING_FILTER_FIELD_AMU;
     }
-    if (strcasecmp(field, "E") == 0) {
+    if (strcmp(field, "E") == 0) {
         return OSH_SCORING_FILTER_FIELD_E;
     }
-    if (strcasecmp(field, "ENUC") == 0) {
+    if (strcmp(field, "ENUC") == 0) {
         return OSH_SCORING_FILTER_FIELD_ENUC;
     }
-    if (strcasecmp(field, "EAMU") == 0) {
+    if (strcmp(field, "EAMU") == 0) {
         return OSH_SCORING_FILTER_FIELD_EAMU;
     }
-    if (strcasecmp(field, "GEN") == 0) {
+    if (strcmp(field, "GEN") == 0) {
         return OSH_SCORING_FILTER_FIELD_GEN;
     }
-    if (strcasecmp(field, "NPRIM") == 0) {
+    if (strcmp(field, "NPRIM") == 0) {
         return OSH_SCORING_FILTER_FIELD_NPRIM;
     }
     return OSH_SCORING_FILTER_FIELD_UNKNOWN;

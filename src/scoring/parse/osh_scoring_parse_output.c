@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "common/osh_logger.h"
+#include "common/osh_readline.h"
 #include "scoring/parse/osh_scoring_parse_internal.h"
 #include "scoring/parse/osh_scoring_parse_keys.h"
 
@@ -23,7 +24,12 @@ output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, 
 static enum osh_status
 output_quantity(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
 
-static struct output_entry output_table[6];
+static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_filename},
+                                             {OSH_SCORING_KEY_GEO_REF, output_geo},
+                                             {OSH_SCORING_KEY_FILEFORMAT, output_fileformat},
+                                             {"format", output_fileformat},
+                                             {OSH_SCORING_KEY_QUANTITY, output_quantity},
+                                             {NULL, NULL}};
 
 enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out,
                                               char **words,
@@ -44,13 +50,6 @@ enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out
     }
     return OSH_OK;
 }
-
-static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_filename},
-                                             {OSH_SCORING_KEY_GEO_REF, output_geo},
-                                             {OSH_SCORING_KEY_FILEFORMAT, output_fileformat},
-                                             {"format", output_fileformat},
-                                             {OSH_SCORING_KEY_QUANTITY, output_quantity},
-                                             {NULL, NULL}};
 
 static enum osh_status append_page(struct osh_scoring_output_def *out) {
     struct osh_scoring_page_def *tmp =
@@ -105,6 +104,7 @@ output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, 
     }
     free(out->fileformat);
     out->fileformat = strdup(words[1]);
+    osh_lower_inplace(out->fileformat);
     return out->fileformat ? OSH_OK : OSH_ENOMEM;
 }
 
@@ -126,6 +126,7 @@ output_quantity(struct osh_scoring_output_def *out, char **words, int nwords, ch
     out->pages[page_idx].quantity = strdup(words[1]);
     if (!out->pages[page_idx].quantity)
         return OSH_ENOMEM;
+    osh_lower_inplace(out->pages[page_idx].quantity);
 
     for (i = 2; i < nwords; ++i) {
         rc = append_page_filter(&out->pages[page_idx], words[i]);

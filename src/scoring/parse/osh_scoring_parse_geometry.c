@@ -25,7 +25,15 @@ geo_rotation(struct osh_scoring_geometry_def *geo, char **words, int nwords, cha
 static enum osh_status
 geo_zones(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
 
-static struct geometry_entry geometry_table[9];
+static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name},
+                                                 {OSH_SCORING_KEY_GEO_X, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_Y, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_Z, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_R, geo_axis},
+                                                 {OSH_SCORING_KEY_GEO_ROT, geo_rotation},
+                                                 {"rot", geo_rotation},
+                                                 {OSH_SCORING_KEY_GEO_ZONES, geo_zones},
+                                                 {NULL, NULL}};
 
 enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def *geo,
                                                 char **words,
@@ -46,16 +54,6 @@ enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def 
     }
     return OSH_OK;
 }
-
-static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name},
-                                                 {OSH_SCORING_KEY_GEO_X, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_Y, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_Z, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_R, geo_axis},
-                                                 {OSH_SCORING_KEY_GEO_ROT, geo_rotation},
-                                                 {"rot", geo_rotation},
-                                                 {OSH_SCORING_KEY_GEO_ZONES, geo_zones},
-                                                 {NULL, NULL}};
 
 static enum osh_status
 append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, double hi, int nbins) {

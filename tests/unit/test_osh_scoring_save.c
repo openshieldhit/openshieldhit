@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "common/osh_rc.h"
 #include "scoring/osh_scoring.h"
@@ -18,15 +15,14 @@
         }                                                                                                              \
     } while (0)
 
-static void build_temp_dir(char *path);
+#define DETECT_PATH "osh_scoring_save_detect.tmp"
+#define ASCII_PATH "out_ascii.txt"
+#define BDO_PATH "out_binary.bdo"
+
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes);
-static void write_temp_file(char *path, size_t cap, char const *content);
+static void write_detect_file(char const *content);
 
 int main(void) {
-    char detect_path[512];
-    char out_dir[] = "/tmp/osh_scoring_save_testXXXXXX";
-    char ascii_path[512];
-    char bdo_path[512];
     char const *detect_text = "Geometry Mesh\n"
                               "    Name G\n"
                               "    X 0 2 2\n"
@@ -52,12 +48,11 @@ int main(void) {
     char line[512];
     enum osh_status rc;
 
-    build_temp_dir(out_dir);
-    write_temp_file(detect_path, sizeof(detect_path), detect_text);
+    write_detect_file(detect_text);
 
     ws = NULL;
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_setup_from_path(detect_path, &ws);
+    rc = osh_scoring_setup_from_path(DETECT_PATH, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
     rc = osh_scoring_prepare(ws, &rt);
@@ -75,7 +70,7 @@ int main(void) {
     rt.pages[1].data[3] = 40.0;
 
     memset(&req, 0, sizeof(req));
-    req.out_dir = out_dir;
+    req.out_dir = ".";
     req.ws = ws;
     req.rt = &rt;
     req.nstat = 5u;
@@ -84,10 +79,7 @@ int main(void) {
     rc = osh_scoring_save(&req);
     ASSERT_TRUE(rc == OSH_OK);
 
-    snprintf(ascii_path, sizeof(ascii_path), "%s/out_ascii.txt", out_dir);
-    snprintf(bdo_path, sizeof(bdo_path), "%s/out_binary.bdo", out_dir);
-
-    fp = fopen(ascii_path, "r");
+    fp = fopen(ASCII_PATH, "r");
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fgets(line, sizeof(line), fp) != NULL);
     ASSERT_TRUE(strstr(line, "OpenShieldHIT version") != NULL);
@@ -99,20 +91,15 @@ int main(void) {
     ASSERT_TRUE(!feof(fp));
     ASSERT_TRUE(fclose(fp) == 0);
 
-    read_file_bytes(bdo_path, bdo_head, sizeof(bdo_head));
+    read_file_bytes(BDO_PATH, bdo_head, sizeof(bdo_head));
     ASSERT_TRUE(memcmp(bdo_head, "xSH12A", 6u) == 0);
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
-    remove(detect_path);
-    remove(ascii_path);
-    remove(bdo_path);
-    rmdir(out_dir);
+    remove(DETECT_PATH);
+    remove(ASCII_PATH);
+    remove(BDO_PATH);
     return 0;
-}
-
-static void build_temp_dir(char *path) {
-    ASSERT_TRUE(mkdtemp(path) != NULL);
 }
 
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes) {
@@ -124,11 +111,10 @@ static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes)
     ASSERT_TRUE(fclose(fp) == 0);
 }
 
-static void write_temp_file(char *path, size_t cap, char const *content) {
+static void write_detect_file(char const *content) {
     FILE *fp;
 
-    snprintf(path, cap, "/tmp/osh_scoring_save_detect_%ld.tmp", (long) getpid());
-    fp = fopen(path, "w");
+    fp = fopen(DETECT_PATH, "w");
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fputs(content, fp) >= 0);
     ASSERT_TRUE(fclose(fp) == 0);
