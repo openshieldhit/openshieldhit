@@ -7,9 +7,8 @@
 
 static int filter_compare_int(unsigned int lhs, enum osh_scoring_filter_op op, unsigned int rhs);
 static int filter_compare_double(double lhs, enum osh_scoring_filter_op op, double rhs);
-static int filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule,
-                              struct particle const *part,
-                              double energy_mev);
+static int
+filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule, struct particle const *part, double energy_mev);
 
 int osh_scoring_page_passes_filters(struct osh_scoring_runtime const *rt,
                                     struct osh_scoring_page_runtime const *page,
@@ -73,9 +72,8 @@ static int filter_compare_double(double lhs, enum osh_scoring_filter_op op, doub
     }
 }
 
-static int filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule,
-                              struct particle const *part,
-                              double energy_mev) {
+static int
+filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule, struct particle const *part, double energy_mev) {
     double mass_amu;
 
     switch (rule->field) {
