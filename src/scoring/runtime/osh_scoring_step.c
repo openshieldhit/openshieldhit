@@ -68,6 +68,10 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
             continue;
         }
 
+        /* TODO: hoist more geometry/crossing-derived work out of the per-group
+         * loops: store inv_voxel_volume in geometry runtime, precompute
+         * crossing fractions once per step, and later reuse scratch buffers
+         * instead of allocating crossings[] on every call. */
         for (g = 0; g < geo->ngroups; ++g) {
             switch (geo->groups[g].score_kind) {
             case OSH_SCORING_SCORE_ENERGY:

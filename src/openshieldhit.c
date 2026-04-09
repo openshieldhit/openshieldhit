@@ -11,6 +11,8 @@
 #include "gemca/osh_gemca2.h"
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_prepare.h"
+#include "scoring/osh_scoring.h"
+#include "scoring/runtime/osh_scoring_prepare.h"
 
 /* ---- Internal constants -------------------------------------------------- */
 
@@ -227,7 +229,9 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     struct beam_workspace *beam = NULL;
     struct gemca_workspace *geom = NULL;
     struct material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
     struct osh_material_runtime transport_tables;
+    struct osh_scoring_runtime scoring_runtime;
     enum openshieldhit_status rc = OPENSHIELDHIT_STATUS_OK;
 
     if (!ctx) {
@@ -236,6 +240,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
 
     ctx->last_error[0] = '\0';
     memset(&transport_tables, 0, sizeof(transport_tables));
+    memset(&scoring_runtime, 0, sizeof(scoring_runtime));
 
     /* Initialise the default logger from ctx->log_level.
      *   0  → WARN  (silent — only warnings and errors)
@@ -392,12 +397,32 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
                 (unsigned long long) transport_tables.nenergy);
     }
 
-    /* TODO: wire scoring/detect loader */
+    if (!file_exists(detect_path)) {
+        ctx_set_error(ctx, err, "detect file not found: %s", detect_path);
+        rc = OPENSHIELDHIT_STATUS_IO_ERROR;
+        goto cleanup;
+    }
+
+    if (osh_scoring_setup_from_path(detect_path, &scoring) != OSH_OK) {
+        ctx_set_error(ctx, err, "failed to load scoring/detect input: %s", detect_path);
+        rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+        goto cleanup;
+    }
+    if (out) {
+        fprintf(out, "Loaded scoring: %s\n", detect_path);
+    }
+
+    if (osh_scoring_prepare(scoring, &scoring_runtime) != OSH_OK) {
+        ctx_set_error(ctx, err, "failed to prepare scoring runtime: %s", detect_path);
+        rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
+        goto cleanup;
+    }
     if (out) {
         fprintf(out,
-                "Detect file %s (loader wiring pending): %s\n",
-                file_exists(detect_path) ? "found" : "missing",
-                detect_path);
+                "Scoring runtime prepared: %llu geometries, %llu outputs, %llu pages.\n",
+                (unsigned long long) scoring_runtime.ngeometries,
+                (unsigned long long) scoring_runtime.noutputs,
+                (unsigned long long) scoring_runtime.npages);
     }
 
     if (out) {
@@ -405,6 +430,10 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     }
 
 cleanup:
+    osh_scoring_runtime_free(&scoring_runtime);
+    if (scoring) {
+        osh_scoring_workspace_free(scoring);
+    }
     osh_material_runtime_free(&transport_tables);
     if (mat) {
         osh_material_workspace_free(mat);

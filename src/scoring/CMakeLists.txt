@@ -7,7 +7,12 @@ add_library(osh_scoring
     parse/osh_scoring_parse_output.c
     runtime/osh_scoring_prepare.c
     runtime/osh_scoring_filter_runtime.c
+    runtime/osh_scoring_postprocess.c
     runtime/osh_scoring_step.c
+    save/osh_scoring_save.c
+    save/osh_scoring_save_ascii.c
+    save/osh_scoring_save_bdo2019_raw.c
+    save/osh_scoring_save_bdo2019.c
 )
 
 target_include_directories(osh_scoring
