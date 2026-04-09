@@ -7,6 +7,7 @@
 #include "common/osh_step.h"
 #include "particle/osh_particle.h"
 #include "scoring/osh_scoring.h"
+#include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_prepare.h"
 #include "scoring/runtime/osh_scoring_step.h"
 
@@ -103,6 +104,9 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
 
     part.gen = 1u;
     rc = osh_scoring_score_step(&rt, &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_postprocess(&rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     assert_close(rt.pages[energy0_idx].data[0], 1.75);
