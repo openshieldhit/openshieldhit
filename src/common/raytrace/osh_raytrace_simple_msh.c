@@ -13,7 +13,7 @@
  *
  * Limitation: the ray start point p must lie inside the grid.  Rays that
  * begin outside are not clipped to the grid entry; the function returns 0
- * crossings in that case.  The Siddon implementation (osh_raytrace_siddon.c)
+ * crossings in that case.  The Siddon implementation (osh_raytrace_siddon_msh.c)
  * handles outside starts correctly by computing parametric entry/exit bounds
  * before the walk.
  *
@@ -31,7 +31,13 @@
 
 #include "common/raytrace/osh_raytrace.h"
 
+#include <float.h>
 #include <math.h>
+
+static int same_crossing(double a, double b) {
+    double tol = 64.0 * DBL_EPSILON * (1.0 + fmax(fabs(a), fabs(b)));
+    return fabs(a - b) <= tol;
+}
 
 int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
                           double const p[3],
@@ -109,12 +115,24 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         if (t >= ds)
             break;
 
-        /* Move to the next voxel along the chosen axis. */
-        vox[axis] += step[axis];
-        tmax[axis] += tdelta[axis];
+        /* Advance every axis that hits the same plane crossing. This avoids
+         * zero-length fake voxels when the ray crosses an edge or corner. */
+        for (axis = 0; axis < 3; ++axis) {
+            if (!same_crossing(tmax[axis], t_next))
+                continue;
 
-        /* Stop if the ray exits the grid on this axis. */
-        if (vox[axis] < 0 || vox[axis] >= (int)grid->n[axis])
+            vox[axis] += step[axis];
+            tmax[axis] += tdelta[axis];
+            if (vox[axis] < 0 || vox[axis] >= (int)grid->n[axis]) {
+                *n_out = n;
+                return (n > 0) ? 1 : 0;
+            }
+        }
+
+        /* Stop if the ray exits the grid on any advanced axis. */
+        if (vox[0] < 0 || vox[0] >= (int)grid->n[0] ||
+            vox[1] < 0 || vox[1] >= (int)grid->n[1] ||
+            vox[2] < 0 || vox[2] >= (int)grid->n[2])
             break;
     }
 

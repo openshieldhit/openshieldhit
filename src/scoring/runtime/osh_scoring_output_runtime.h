@@ -31,10 +31,10 @@ struct osh_scoring_page_runtime {
     size_t nsettings;
     size_t len;
     enum osh_scoring_score_kind score_kind;
+    enum osh_scoring_postproc postproc;
     char has_data2;
     char variance;
     char divide;
-    char postproc;
 };
 
 struct osh_scoring_output_runtime {

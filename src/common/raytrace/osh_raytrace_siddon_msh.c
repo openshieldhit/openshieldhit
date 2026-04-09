@@ -5,7 +5,7 @@
  * Reference: R.L. Siddon, "Fast calculation of the exact radiological path
  * length for a three-dimensional CT array", Med. Phys. 12(2), 252-255, 1985.
  *
- * Difference from the DDA reference (osh_raytrace_simple.c)
+ * Difference from the DDA reference (osh_raytrace_simple_msh.c)
  * ----------------------------------------------------------
  * The DDA assumes the ray start lies inside the grid.  Siddon's contribution
  * is the parametric bounding-box clip that correctly locates the true entry
@@ -25,7 +25,13 @@
 
 #include "common/raytrace/osh_raytrace.h"
 
+#include <float.h>
 #include <math.h>
+
+static int same_crossing(double a, double b) {
+    double tol = 64.0 * DBL_EPSILON * (1.0 + fmax(fabs(a), fabs(b)));
+    return fabs(a - b) <= tol;
+}
 
 int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
                           double const p[3],
@@ -146,11 +152,18 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         if (t >= t_exit)
             break;
 
-        vox[axis] += step[axis];
-        tmax[axis] += tdelta[axis];
+        /* Advance every axis that reaches the same boundary plane. */
+        for (axis = 0; axis < 3; ++axis) {
+            if (!same_crossing(tmax[axis], t_next))
+                continue;
 
-        if (vox[axis] < 0 || vox[axis] >= (int)grid->n[axis])
-            break;
+            vox[axis] += step[axis];
+            tmax[axis] += tdelta[axis];
+            if (vox[axis] < 0 || vox[axis] >= (int)grid->n[axis]) {
+                *n_out = n;
+                return (n > 0) ? 1 : 0;
+            }
+        }
     }
 
     *n_out = n;

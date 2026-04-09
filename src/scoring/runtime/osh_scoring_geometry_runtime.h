@@ -34,6 +34,7 @@ struct osh_scoring_geometry_runtime {
     size_t first_page;
     size_t npages;
     size_t ngroups;
+    enum osh_scoring_geo_kind geo_kind;
     int zone_start;
     int zone_stop;
     char has_rotation;

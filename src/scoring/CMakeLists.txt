@@ -6,6 +6,8 @@ add_library(osh_scoring
     parse/osh_scoring_parse_geometry.c
     parse/osh_scoring_parse_output.c
     runtime/osh_scoring_prepare.c
+    runtime/osh_scoring_filter_runtime.c
+    runtime/osh_scoring_step.c
 )
 
 target_include_directories(osh_scoring
@@ -14,6 +16,7 @@ target_include_directories(osh_scoring
 )
 
 target_link_libraries(osh_scoring
-    PRIVATE
+    PUBLIC
         osh_common
+        osh_raytrace
 )

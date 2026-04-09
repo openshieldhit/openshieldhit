@@ -39,6 +39,7 @@ static void test_compile_fixture_test01_detect(void) {
 
     ASSERT_TRUE(strcmp(rt.geometries[0].name, "MyMesh") == 0);
     ASSERT_TRUE(strcmp(rt.geometries[0].kind, "Mesh") == 0);
+    ASSERT_TRUE(rt.geometries[0].geo_kind == OSH_SCORING_GEO_MESH);
     ASSERT_TRUE(rt.geometries[0].nbins == 10u);
     ASSERT_TRUE(rt.geometries[0].first_page == 0u);
     ASSERT_TRUE(rt.geometries[0].npages == 4u);
@@ -62,6 +63,9 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].geometry_idx == 0u);
     ASSERT_TRUE(rt.pages[page_idx].output_idx == 0u);
     ASSERT_TRUE(rt.pages[page_idx].len == 10u);
+    ASSERT_TRUE(rt.pages[page_idx].postproc == OSH_SCORING_POSTPROC_NORM);
+    ASSERT_TRUE(rt.pages[page_idx].has_data2 == 0);
+    ASSERT_TRUE(rt.pages[page_idx].divide == 0);
     ASSERT_TRUE(rt.pages[page_idx].data != NULL);
     ASSERT_TRUE(rt.pages[page_idx].nfilters == 0u);
 
@@ -83,10 +87,25 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].nfilters == 2u);
     ASSERT_TRUE(rt.pages[page_idx].filters[0].filter_idx == 0u);
     ASSERT_TRUE(rt.pages[page_idx].filters[1].filter_idx == 1u);
+    ASSERT_TRUE(rt.pages[page_idx].postproc == OSH_SCORING_POSTPROC_NORM);
+    ASSERT_TRUE(rt.pages[page_idx].has_data2 == 0);
+    ASSERT_TRUE(rt.pages[page_idx].divide == 0);
     ASSERT_TRUE(rt.pages[page_idx].data != NULL);
     ASSERT_TRUE(rt.pages[page_idx].data_var == NULL);
     ASSERT_TRUE(rt.pages[page_idx].data2 == NULL);
     ASSERT_TRUE(rt.pages[page_idx].data2_var == NULL);
+
+    ASSERT_TRUE(rt.filters[0].nrules == 3u);
+    ASSERT_TRUE(rt.filters[0].rules[0].field == OSH_SCORING_FILTER_FIELD_Z);
+    ASSERT_TRUE(rt.filters[0].rules[0].op == OSH_SCORING_FILTER_OP_EQ);
+    ASSERT_TRUE(rt.filters[0].rules[1].field == OSH_SCORING_FILTER_FIELD_A);
+    ASSERT_TRUE(rt.filters[0].rules[1].op == OSH_SCORING_FILTER_OP_EQ);
+    ASSERT_TRUE(rt.filters[0].rules[2].field == OSH_SCORING_FILTER_FIELD_E);
+    ASSERT_TRUE(rt.filters[0].rules[2].op == OSH_SCORING_FILTER_OP_GT);
+
+    ASSERT_TRUE(rt.filters[1].nrules == 1u);
+    ASSERT_TRUE(rt.filters[1].rules[0].field == OSH_SCORING_FILTER_FIELD_GEN);
+    ASSERT_TRUE(rt.filters[1].rules[0].op == OSH_SCORING_FILTER_OP_EQ);
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);

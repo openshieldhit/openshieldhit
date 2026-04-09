@@ -14,6 +14,28 @@ struct prepared_page_ref {
     enum osh_scoring_score_kind score_kind;
 };
 
+static enum osh_scoring_geo_kind geometry_kind_to_enum(char const *kind) {
+    if (!kind) {
+        return OSH_SCORING_GEO_UNKNOWN;
+    }
+    if (strcasecmp(kind, "MESH") == 0) {
+        return OSH_SCORING_GEO_MESH;
+    }
+    if (strcasecmp(kind, "CYL") == 0) {
+        return OSH_SCORING_GEO_CYL;
+    }
+    if (strcasecmp(kind, "ZONE") == 0) {
+        return OSH_SCORING_GEO_ZONE;
+    }
+    if (strcasecmp(kind, "VOXEL") == 0) {
+        return OSH_SCORING_GEO_VOXEL;
+    }
+    if (strcasecmp(kind, "ALL") == 0) {
+        return OSH_SCORING_GEO_ALL;
+    }
+    return OSH_SCORING_GEO_UNKNOWN;
+}
+
 static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
     size_t i;
     size_t nbins = 1u;
@@ -51,6 +73,93 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     return OSH_SCORING_SCORE_UNKNOWN;
 }
 
+static enum osh_scoring_filter_field filter_field_to_enum(char const *field) {
+    if (!field) {
+        return OSH_SCORING_FILTER_FIELD_UNKNOWN;
+    }
+    if (strcasecmp(field, "ID") == 0) {
+        return OSH_SCORING_FILTER_FIELD_ID;
+    }
+    if (strcasecmp(field, "Z") == 0) {
+        return OSH_SCORING_FILTER_FIELD_Z;
+    }
+    if (strcasecmp(field, "A") == 0) {
+        return OSH_SCORING_FILTER_FIELD_A;
+    }
+    if (strcasecmp(field, "AMASS") == 0) {
+        return OSH_SCORING_FILTER_FIELD_AMASS;
+    }
+    if (strcasecmp(field, "AMU") == 0) {
+        return OSH_SCORING_FILTER_FIELD_AMU;
+    }
+    if (strcasecmp(field, "E") == 0) {
+        return OSH_SCORING_FILTER_FIELD_E;
+    }
+    if (strcasecmp(field, "ENUC") == 0) {
+        return OSH_SCORING_FILTER_FIELD_ENUC;
+    }
+    if (strcasecmp(field, "EAMU") == 0) {
+        return OSH_SCORING_FILTER_FIELD_EAMU;
+    }
+    if (strcasecmp(field, "GEN") == 0) {
+        return OSH_SCORING_FILTER_FIELD_GEN;
+    }
+    if (strcasecmp(field, "NPRIM") == 0) {
+        return OSH_SCORING_FILTER_FIELD_NPRIM;
+    }
+    return OSH_SCORING_FILTER_FIELD_UNKNOWN;
+}
+
+static enum osh_scoring_filter_op filter_op_to_enum(char const *op) {
+    if (!op) {
+        return OSH_SCORING_FILTER_OP_INVALID;
+    }
+    if (strcmp(op, "<") == 0) {
+        return OSH_SCORING_FILTER_OP_LT;
+    }
+    if (strcmp(op, "<=") == 0) {
+        return OSH_SCORING_FILTER_OP_LE;
+    }
+    if (strcmp(op, ">") == 0) {
+        return OSH_SCORING_FILTER_OP_GT;
+    }
+    if (strcmp(op, ">=") == 0) {
+        return OSH_SCORING_FILTER_OP_GE;
+    }
+    if ((strcmp(op, "=") == 0) || (strcmp(op, "==") == 0)) {
+        return OSH_SCORING_FILTER_OP_EQ;
+    }
+    if (strcmp(op, "!=") == 0) {
+        return OSH_SCORING_FILTER_OP_NE;
+    }
+    return OSH_SCORING_FILTER_OP_INVALID;
+}
+
+static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
+    switch (score_kind) {
+    case OSH_SCORING_SCORE_DLET:
+    case OSH_SCORING_SCORE_TLET:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind score_kind, char divide) {
+    if (divide) {
+        return OSH_SCORING_POSTPROC_AVER;
+    }
+
+    switch (score_kind) {
+    case OSH_SCORING_SCORE_COUNT:
+        return OSH_SCORING_POSTPROC_SUM;
+    case OSH_SCORING_SCORE_MCPL:
+        return OSH_SCORING_POSTPROC_APPEND;
+    default:
+        return OSH_SCORING_POSTPROC_NORM;
+    }
+}
+
 static int compare_prepared_pages(void const *a, void const *b) {
     struct prepared_page_ref const *pa;
     struct prepared_page_ref const *pb;
@@ -82,6 +191,8 @@ static int compare_prepared_pages(void const *a, void const *b) {
 static enum osh_status copy_filter_runtime(struct osh_scoring_filter_runtime *dst,
                                            struct osh_scoring_filter_def const *src) {
     size_t i;
+    enum osh_scoring_filter_field field;
+    enum osh_scoring_filter_op op;
 
     memset(dst, 0, sizeof(*dst));
     dst->name = strdup(src->name);
@@ -98,8 +209,22 @@ static enum osh_status copy_filter_runtime(struct osh_scoring_filter_runtime *ds
     }
     dst->nrules = src->nrules;
     for (i = 0; i < src->nrules; ++i) {
-        memcpy(dst->rules[i].field, src->rules[i].field, sizeof(dst->rules[i].field));
-        memcpy(dst->rules[i].op, src->rules[i].op, sizeof(dst->rules[i].op));
+        field = filter_field_to_enum(src->rules[i].field);
+        op = filter_op_to_enum(src->rules[i].op);
+        if (field == OSH_SCORING_FILTER_FIELD_UNKNOWN) {
+            osh_error("Scoring filter '%s' uses unknown field '%s'",
+                      src->name ? src->name : "(unnamed)",
+                      src->rules[i].field);
+            return OSH_EINVAL;
+        }
+        if (op == OSH_SCORING_FILTER_OP_INVALID) {
+            osh_error("Scoring filter '%s' uses unknown operator '%s'",
+                      src->name ? src->name : "(unnamed)",
+                      src->rules[i].op);
+            return OSH_EINVAL;
+        }
+        dst->rules[i].field = field;
+        dst->rules[i].op = op;
         dst->rules[i].value = src->rules[i].value;
     }
     return OSH_OK;
@@ -160,6 +285,7 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
     dst->zone_start = src->zone_start;
     dst->zone_stop = src->zone_stop;
     dst->has_rotation = src->has_rotation;
+    dst->geo_kind = geometry_kind_to_enum(src->kind);
     dst->nbins = geometry_nbins(src);
     if (dst->nbins == 0u) {
         return OSH_EINVAL;
@@ -409,10 +535,20 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
         dst_page->geometry_idx = prepared_pages[page_idx].geometry_idx;
         dst_page->len = rt->geometries[dst_page->geometry_idx].nbins;
         dst_page->score_kind = prepared_pages[page_idx].score_kind;
+        dst_page->has_data2 = score_kind_uses_data2(dst_page->score_kind);
+        dst_page->divide = dst_page->has_data2;
+        dst_page->postproc = score_kind_postproc(dst_page->score_kind, dst_page->divide);
         dst_page->data = (double *) calloc(dst_page->len ? dst_page->len : 1u, sizeof(*dst_page->data));
         if (!dst_page->data) {
             rc = OSH_ENOMEM;
             goto fail;
+        }
+        if (dst_page->has_data2) {
+            dst_page->data2 = (double *) calloc(dst_page->len ? dst_page->len : 1u, sizeof(*dst_page->data2));
+            if (!dst_page->data2) {
+                rc = OSH_ENOMEM;
+                goto fail;
+            }
         }
 
         if (src_page->nfilter_names > 0u) {
