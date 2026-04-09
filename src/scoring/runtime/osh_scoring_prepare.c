@@ -1,9 +1,18 @@
 #include "scoring/runtime/osh_scoring_prepare.h"
 
 #include <stdlib.h>
+#include <strings.h>
 #include <string.h>
 
 #include "common/osh_logger.h"
+
+struct prepared_page_ref {
+    size_t output_idx;
+    size_t src_page_idx;
+    size_t ordinal;
+    size_t geometry_idx;
+    enum osh_scoring_score_kind score_kind;
+};
 
 static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
     size_t i;
@@ -24,6 +33,50 @@ static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
     }
 
     return 0u;
+}
+
+static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) {
+    if (!quantity) {
+        return OSH_SCORING_SCORE_UNKNOWN;
+    }
+    if (strcasecmp(quantity, "ENERGY") == 0) {
+        return OSH_SCORING_SCORE_ENERGY;
+    }
+    if (strcasecmp(quantity, "FLUENCE") == 0) {
+        return OSH_SCORING_SCORE_FLUENCE;
+    }
+    if (strcasecmp(quantity, "DOSE") == 0) {
+        return OSH_SCORING_SCORE_DOSE;
+    }
+    return OSH_SCORING_SCORE_UNKNOWN;
+}
+
+static int compare_prepared_pages(void const *a, void const *b) {
+    struct prepared_page_ref const *pa;
+    struct prepared_page_ref const *pb;
+
+    pa = (struct prepared_page_ref const *) a;
+    pb = (struct prepared_page_ref const *) b;
+
+    if (pa->geometry_idx < pb->geometry_idx) {
+        return -1;
+    }
+    if (pa->geometry_idx > pb->geometry_idx) {
+        return 1;
+    }
+    if ((int) pa->score_kind < (int) pb->score_kind) {
+        return -1;
+    }
+    if ((int) pa->score_kind > (int) pb->score_kind) {
+        return 1;
+    }
+    if (pa->ordinal < pb->ordinal) {
+        return -1;
+    }
+    if (pa->ordinal > pb->ordinal) {
+        return 1;
+    }
+    return 0;
 }
 
 static enum osh_status copy_filter_runtime(struct osh_scoring_filter_runtime *dst,
@@ -158,6 +211,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
         free(rt->geometries[i].kind);
         free(rt->geometries[i].name);
         free(rt->geometries[i].axes);
+        free(rt->geometries[i].groups);
     }
     free(rt->geometries);
 
@@ -188,15 +242,17 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
     size_t j;
     size_t k;
     size_t total_pages;
+    size_t ordinal;
     size_t page_idx;
+    size_t current_group;
     long gidx;
     long fidx;
+    long *output_geom_idx = NULL;
+    size_t *geom_page_counts = NULL;
+    struct prepared_page_ref *prepared_pages = NULL;
     struct osh_scoring_output_runtime *out;
     struct osh_scoring_page_def const *src_page;
     struct osh_scoring_page_runtime *dst_page;
-    long *output_geom_idx = NULL;
-    size_t *geom_page_counts = NULL;
-    size_t *geom_next_page = NULL;
 
     if (!ws || !rt) {
         return OSH_EINVAL;
@@ -255,8 +311,7 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
 
     output_geom_idx = (long *) calloc(ws->noutputs ? ws->noutputs : 1u, sizeof(*output_geom_idx));
     geom_page_counts = (size_t *) calloc(rt->ngeometries ? rt->ngeometries : 1u, sizeof(*geom_page_counts));
-    geom_next_page = (size_t *) calloc(rt->ngeometries ? rt->ngeometries : 1u, sizeof(*geom_next_page));
-    if (!output_geom_idx || !geom_page_counts || !geom_next_page) {
+    if (!output_geom_idx || !geom_page_counts) {
         rc = OSH_ENOMEM;
         goto fail;
     }
@@ -264,7 +319,6 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
     total_pages = 0u;
     for (i = 0; i < ws->noutputs; ++i) {
         gidx = find_geometry_index(ws, ws->outputs[i].geometry_name);
-
         if (gidx < 0) {
             osh_error("Scoring output '%s' references unknown geometry '%s'",
                       ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
@@ -280,7 +334,8 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
     rt->npages = total_pages;
     if (rt->npages > 0u) {
         rt->pages = (struct osh_scoring_page_runtime *) calloc(rt->npages, sizeof(*rt->pages));
-        if (!rt->pages) {
+        prepared_pages = (struct prepared_page_ref *) calloc(rt->npages, sizeof(*prepared_pages));
+        if (!rt->pages || !prepared_pages) {
             rc = OSH_ENOMEM;
             goto fail;
         }
@@ -297,12 +352,11 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
     for (i = 0; i < rt->ngeometries; ++i) {
         rt->geometries[i].first_page = total_pages;
         rt->geometries[i].npages = geom_page_counts[i];
-        geom_next_page[i] = total_pages;
         total_pages += geom_page_counts[i];
     }
 
+    ordinal = 0u;
     for (i = 0; i < ws->noutputs; ++i) {
-        gidx = output_geom_idx[i];
         out = &rt->outputs[i];
 
         out->filename = strdup(ws->outputs[i].filename);
@@ -315,7 +369,7 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
             rc = OSH_ENOMEM;
             goto fail;
         }
-        out->geometry_idx = (size_t) gidx;
+        out->geometry_idx = (size_t) output_geom_idx[i];
         out->npages = ws->outputs[i].npages;
         if (out->npages > 0u) {
             out->page_indices = (size_t *) calloc(out->npages, sizeof(*out->page_indices));
@@ -327,57 +381,109 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
 
         for (j = 0; j < ws->outputs[i].npages; ++j) {
             src_page = &ws->outputs[i].pages[j];
-            page_idx = geom_next_page[gidx]++;
+            prepared_pages[ordinal].output_idx = i;
+            prepared_pages[ordinal].src_page_idx = j;
+            prepared_pages[ordinal].ordinal = ordinal;
+            prepared_pages[ordinal].geometry_idx = out->geometry_idx;
+            prepared_pages[ordinal].score_kind = quantity_to_score_kind(src_page->quantity);
+            ordinal++;
+        }
+    }
 
-            out->page_indices[j] = page_idx;
-            dst_page = &rt->pages[page_idx];
-            dst_page->quantity = strdup(src_page->quantity);
-            if (!dst_page->quantity) {
+    if (rt->npages > 1u) {
+        qsort(prepared_pages, rt->npages, sizeof(*prepared_pages), compare_prepared_pages);
+    }
+
+    for (page_idx = 0; page_idx < rt->npages; ++page_idx) {
+        out = &rt->outputs[prepared_pages[page_idx].output_idx];
+        src_page = &ws->outputs[prepared_pages[page_idx].output_idx].pages[prepared_pages[page_idx].src_page_idx];
+        dst_page = &rt->pages[page_idx];
+
+        out->page_indices[prepared_pages[page_idx].src_page_idx] = page_idx;
+        dst_page->quantity = strdup(src_page->quantity);
+        if (!dst_page->quantity) {
+            rc = OSH_ENOMEM;
+            goto fail;
+        }
+        dst_page->output_idx = prepared_pages[page_idx].output_idx;
+        dst_page->geometry_idx = prepared_pages[page_idx].geometry_idx;
+        dst_page->len = rt->geometries[dst_page->geometry_idx].nbins;
+        dst_page->score_kind = prepared_pages[page_idx].score_kind;
+        dst_page->data = (double *) calloc(dst_page->len ? dst_page->len : 1u, sizeof(*dst_page->data));
+        if (!dst_page->data) {
+            rc = OSH_ENOMEM;
+            goto fail;
+        }
+
+        if (src_page->nfilter_names > 0u) {
+            dst_page->filters =
+                (struct osh_scoring_page_filter_ref *) calloc(src_page->nfilter_names, sizeof(*dst_page->filters));
+            if (!dst_page->filters) {
                 rc = OSH_ENOMEM;
                 goto fail;
             }
-            dst_page->output_idx = i;
-            dst_page->geometry_idx = (size_t) gidx;
-            dst_page->len = rt->geometries[gidx].nbins;
-            dst_page->data = (double *) calloc(dst_page->len ? dst_page->len : 1u, sizeof(*dst_page->data));
-            if (!dst_page->data) {
-                rc = OSH_ENOMEM;
-                goto fail;
-            }
-
-            if (src_page->nfilter_names > 0u) {
-                dst_page->filters =
-                    (struct osh_scoring_page_filter_ref *) calloc(src_page->nfilter_names, sizeof(*dst_page->filters));
-                if (!dst_page->filters) {
-                    rc = OSH_ENOMEM;
+            dst_page->nfilters = src_page->nfilter_names;
+            for (k = 0; k < src_page->nfilter_names; ++k) {
+                fidx = find_filter_index(rt, src_page->filter_names[k]);
+                if (fidx < 0) {
+                    osh_error("Scoring page '%s' references unknown filter '%s'",
+                              src_page->quantity ? src_page->quantity : "(unnamed)",
+                              src_page->filter_names[k]);
+                    rc = OSH_EINVAL;
                     goto fail;
                 }
-                dst_page->nfilters = src_page->nfilter_names;
-                for (k = 0; k < src_page->nfilter_names; ++k) {
-                    fidx = find_filter_index(rt, src_page->filter_names[k]);
+                dst_page->filters[k].filter_idx = (size_t) fidx;
+            }
+        }
+    }
 
-                    if (fidx < 0) {
-                        osh_error("Scoring page '%s' references unknown filter '%s'",
-                                  src_page->quantity ? src_page->quantity : "(unnamed)",
-                                  src_page->filter_names[k]);
-                        rc = OSH_EINVAL;
-                        goto fail;
-                    }
-                    dst_page->filters[k].filter_idx = (size_t) fidx;
-                }
+    for (i = 0; i < rt->ngeometries; ++i) {
+        if (rt->geometries[i].npages == 0u) {
+            continue;
+        }
+
+        rt->geometries[i].ngroups = 1u;
+        for (j = 1; j < rt->geometries[i].npages; ++j) {
+            page_idx = rt->geometries[i].first_page + j;
+            if (rt->pages[page_idx - 1u].score_kind != rt->pages[page_idx].score_kind) {
+                rt->geometries[i].ngroups++;
+            }
+        }
+
+        rt->geometries[i].groups = (struct osh_scoring_geometry_score_group *) calloc(
+            rt->geometries[i].ngroups, sizeof(*rt->geometries[i].groups));
+        if (!rt->geometries[i].groups) {
+            rc = OSH_ENOMEM;
+            goto fail;
+        }
+
+        current_group = 0u;
+        rt->geometries[i].groups[0].first_page = rt->geometries[i].first_page;
+        rt->geometries[i].groups[0].npages = 1u;
+        rt->geometries[i].groups[0].score_kind = rt->pages[rt->geometries[i].first_page].score_kind;
+
+        for (j = 1; j < rt->geometries[i].npages; ++j) {
+            page_idx = rt->geometries[i].first_page + j;
+            if (rt->pages[page_idx].score_kind == rt->geometries[i].groups[current_group].score_kind) {
+                rt->geometries[i].groups[current_group].npages++;
+            } else {
+                current_group++;
+                rt->geometries[i].groups[current_group].first_page = page_idx;
+                rt->geometries[i].groups[current_group].npages = 1u;
+                rt->geometries[i].groups[current_group].score_kind = rt->pages[page_idx].score_kind;
             }
         }
     }
 
     free(output_geom_idx);
     free(geom_page_counts);
-    free(geom_next_page);
+    free(prepared_pages);
     return OSH_OK;
 
 fail:
     free(output_geom_idx);
     free(geom_page_counts);
-    free(geom_next_page);
+    free(prepared_pages);
     osh_scoring_runtime_free(rt);
     return rc;
 }
