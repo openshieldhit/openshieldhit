@@ -34,11 +34,13 @@ void osh_ray_c_print(struct ray_c r) {
 void osh_ray_c_clear(struct ray_c *r) {
     int i;
 
-    for (i = 0; i < 3; i++) {
-        r->p[i] = 0;
-        r->c[i] = 1;
+    for (i = 0; i < 4; i++) {
+        r->p[i] = 0.0; /* p[3] = energy [MeV]; zero-initialise to avoid leaking garbage */
     }
-    r->c[1] = 0; /* travel along +Z: c = (cos θ=1, sin φ=0, cos φ=1) */
+    for (i = 0; i < 3; i++) {
+        r->c[i] = 1.0;
+    }
+    r->c[1] = 0.0; /* travel along +Z: c = (cos θ=1, sin φ=0, cos φ=1) */
     r->system = OSH_COORD_PZALIGN;
 }
 
@@ -52,6 +54,8 @@ int osh_ray_v_transform(struct ray_v const *r, struct ray_v *rt, double const t[
         rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] - t[j + 3];
         rt->v[i] = r->v[0] * t[j] + r->v[1] * t[j + 1] + r->v[2] * t[j + 2];
     }
+    rt->p[3] = r->p[3];     /* energy is invariant under coordinate transform */
+    rt->system = r->system; /* caller should update to the target system after the call */
     return 1;
 }
 
@@ -65,5 +69,6 @@ int osh_ray_transform(struct ray const *r, struct ray *rt, double const t[16]) {
         rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] - t[j + 3];
         rt->cp[i] = r->cp[0] * t[j] + r->cp[1] * t[j + 1] + r->cp[2] * t[j + 2];
     }
+    rt->system = r->system; /* caller should update to the target system after the call */
     return 1;
 }

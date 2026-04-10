@@ -4,6 +4,7 @@ _temp*/
 NB*.dat
 *.bdo
 plot*.py
+build-*/
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,cmake,linux

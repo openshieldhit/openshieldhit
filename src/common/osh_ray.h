@@ -119,7 +119,8 @@ void osh_ray_c_print(struct ray_c r);
 void osh_ray_c_clear(struct ray_c *r);
 
 /**
- * @brief Apply a 4×4 affine transform to a ray_v in place.
+ * @brief Apply a 4×4 affine transform to a ray_v, writing the result to a
+ *        separate output ray.
  *
  * @details
  * Transforms both the position and direction of @p r using the row-major
@@ -128,8 +129,12 @@ void osh_ray_c_clear(struct ray_c *r);
  * GEMCA/SHIELD-HIT sign convention; callers must store the translation
  * negated if the standard convention is required.
  *
- * @param[in]  r   Input ray in PZALIGN (or any source system).
- * @param[out] rt  Output ray; may not alias r.
+ * Energy (p[3]) is copied unchanged; it is invariant under a coordinate
+ * transform.  The system field is copied from @p r; the caller should
+ * update rt->system to the target coordinate system after the call.
+ *
+ * @param[in]  r   Input ray (source coordinate system).
+ * @param[out] rt  Output ray; must not alias @p r.
  * @param[in]  t   Row-major 4×4 affine matrix.
  *
  * @returns 1 always.

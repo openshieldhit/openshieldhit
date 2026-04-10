@@ -83,8 +83,8 @@ struct position {
  * prim_idx (primary ancestor index): 0-based index into the beam batch
  * identifying which original primary particle spawned this history.
  * Enables per-primary dose tallies and correlated variance estimation.
- * Set to 0 by the scalar transport loop; will be filled from the pool once
- * batched transport is implemented.
+ * Filled by the transport engine from the particle pool, which in turn
+ * receives it from osh_beam_runtime_fill_pool().
  *
  * TODO: consider refactoring to hold two struct ray_v (entry and exit rays)
  * instead of p/q/v/w scalars to preserve both directions at zone boundaries.

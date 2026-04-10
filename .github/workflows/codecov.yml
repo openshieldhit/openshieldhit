@@ -1,0 +1,64 @@
+name: Codecov
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Set up CMake
+      uses: jwlawson/actions-setup-cmake@v2.2.0
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y lcov
+
+    - name: Configure project
+      run: >
+        cmake -S . -B build-coverage
+        -DCMAKE_BUILD_TYPE=Debug
+        -DOSH_BUILD_EXAMPLES=OFF
+        -DOSH_ENABLE_COVERAGE=ON
+
+    - name: Build project
+      run: cmake --build build-coverage --parallel
+
+    - name: Run tests
+      run: ctest --test-dir build-coverage --output-on-failure
+
+    - name: Capture coverage
+      run: |
+        lcov --capture \
+          --directory build-coverage \
+          --output-file coverage.info
+        lcov --ignore-errors unused --remove coverage.info \
+          '/usr/*' \
+          '*/tests/*' \
+          '*/examples/*' \
+          '*/generated/*' \
+          --output-file coverage.info
+        lcov --list coverage.info
+
+    - name: Upload coverage to Codecov
+      if: ${{ github.actor != 'dependabot[bot]' }}
+      uses: codecov/codecov-action@v5
+      with:
+        use_oidc: true
+        files: coverage.info
+        flags: unit
+        fail_ci_if_error: true
+        disable_search: true
+        verbose: true
