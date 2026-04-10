@@ -156,8 +156,8 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
         break;
 
     case OSH_COORD_BZALIGN:
-        /* simple translation and rotation, so we have to use osh_coord_trans_ray */
-        osh_coord_trans_ray_r(r, tr, b->t);
+        /* simple translation and rotation, so we have to use osh_ray_transform */
+        osh_ray_transform(r, tr, b->t);
         break;
 
     default:

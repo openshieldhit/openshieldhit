@@ -376,7 +376,7 @@ static int _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct be
  *   p_universe = R * p_local + t
  *   v_universe = R * v_local
  *
- * This intentionally does NOT use osh_coord_trans_ray(), which follows the
+ * This intentionally does NOT use osh_ray_v_transform(), which follows the
  * legacy SHIELD-HIT/GEMCA sign convention for the translation component.
  * The matrix spot->_tm is built by the post-parse step and already folds in
  * the beam direction (theta, phi) and the BEAMPOS offset.

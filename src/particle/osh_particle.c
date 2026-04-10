@@ -13,9 +13,6 @@
 
 static void reset_particle(struct particle *p) {
     p->mass = 0.0;
-    p->weight = 1.0;
-    p->gen = 0;
-    p->nprim = 0;
     p->pdg = OSH_PART_PDG_NONE;
     p->charge = 0;
     p->z = 0;
@@ -47,10 +44,6 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
 
     size_t i;
     struct isotope iso;
-
-    p->gen = 0;
-    p->nprim = 0;
-    p->weight = 1.0;
 
     if (pdg == OSH_PART_PDG_PROTON_ION) { /* hypothetical hydrogen nucleus */
         pdg = OSH_PART_PDG_PROTON;
@@ -287,6 +280,4 @@ void osh_print_particle(struct particle const *p) {
     osh_info("%-18s : %-12.5f MeV/c^2  (nuclear, CODATA 2018)", "Mass", p->mass);
     osh_info("%-18s : %-12.5f Da        (nuclear, CODATA 2018)", "Mass", p->mass / OSH_AMU);
     osh_info("%-18s : %i e", "Charge", (int) p->charge);
-    osh_info("%-18s : %u", "Generation", p->gen);
-    osh_info("%-18s : %f", "Stat.weight", p->weight);
 }

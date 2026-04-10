@@ -1,6 +1,8 @@
 #ifndef OSH_STEP_H
 #define OSH_STEP_H
 
+#include <stdint.h>
+
 #include "common/osh_coord.h"
 
 #ifdef __cplusplus
@@ -11,20 +13,21 @@ extern "C" {
  * Simulation interface types: position and step.
  *
  * These structs are the handshake between the transport engine and domain
- * modules (scoring, gemca, beam). They live in common/ so any module can
- * receive them without depending on transport/.
+ * modules (scoring, gemca, beam).  They live in common/ so any module can
+ * include them without depending on transport/.
  *
  * Field ordering follows the project convention: largest/most-aligned fields
- * first, reducing struct padding.
+ * first, minimising struct padding.
  */
 
 /**
  * @brief A point in space with direction, energy, and transport context.
  *
  * @details
- * Represents a particle's state at a single location: where it is, where it
- * is going, how much kinetic energy it has, and the transport-engine context
- * (medium, zone, density) at that point.
+ * Represents a particle's instantaneous state: where it is, where it is
+ * going, its kinetic energy, and the local transport context (material,
+ * zone, density).  Used as an intermediate result inside the transport loop
+ * and as input to geometry queries.
  *
  * The coordinate system is identified by the @ref system field using the
  * OSH_COORD_* constants from osh_coord.h.
@@ -36,38 +39,70 @@ extern "C" {
 struct position {
     double p[4]; /* x,y,z,E — E is total kinetic energy [MeV] */
     double v[3]; /* unit direction vector */
-    double rho;  /* CT-corrected density at this point [g/cm3] */
-    int medium;  /* medium ID at this point, -1 if unknown */
-    int zone;    /* zone number at this point, -1 if unknown */
-    int system;  /* coordinate system identifier (OSH_COORD_*) */
+    double rho;  /* CT-corrected density at this point [g/cm³] */
+    int medium;  /* material index at this point; -1 if unknown */
+    int zone;    /* geometry zone index at this point; -1 if unknown */
+    int system;  /* coordinate system (OSH_COORD_*) */
 };
 
 /**
- * @brief One transport step: start, stop, energy loss, and transport context.
+ * @brief One completed transport step, carrying geometry, physics, and
+ *        history context for scoring.
  *
  * @details
- * Records a single particle step from p to q along direction v, with scalar
- * track length ds and energy deposit de.  The transport context (rho, medium,
- * zone) describes the medium the step was taken in; the step must lie entirely
- * within one zone.
+ * Produced by the transport engine for every step taken by a particle.
+ * Passed to osh_scoring_score_step() and any other consumer that needs
+ * per-step information.
  *
- * Sign convention: de is positive for energy loss, negative for energy gain.
+ * The struct is intentionally self-contained: a consumer needs no other
+ * argument to answer "where did this step happen, how much energy was
+ * deposited, and which history does it belong to?".
+ *
+ * Geometry: the step runs from point p to point q along direction v inside
+ * a single zone.  For straight-line (CSDA) transport v == w; once multiple
+ * Coulomb scattering is added, w will diverge from v at zone boundaries.
+ *
+ * Physics: de is the energy deposited in the medium over track length ds.
+ * Sign convention: de > 0 for energy loss (the normal case), de < 0 for
+ * energy gain (e.g. delta-electron backscatter, currently not implemented).
+ *
+ * History context: wt, gen, and prim_idx are per-history metadata supplied
+ * by the transport engine from the particle pool.  They are NOT species
+ * properties — two protons in the same beam can have different gen or wt.
+ * Scoring filters (GEN, NPRIM) read these fields rather than struct particle
+ * so that struct particle can remain a cold, shared, const species descriptor.
+ *
+ * wt (statistical weight): 1.0 for unweighted transport.  Set by beam spot
+ * selection (SOBP weights) and modified by variance-reduction techniques.
+ *
+ * gen (generation): 0 for beam primaries, 1 for their direct secondaries
+ * (e.g. nuclear-reaction products), 2 for the next generation, and so on.
+ * Replaces the TREE branch-depth concept from the legacy SHIELD-HIT code
+ * without requiring an explicit cascade tree structure.
+ *
+ * prim_idx (primary ancestor index): 0-based index into the beam batch
+ * identifying which original primary particle spawned this history.
+ * Enables per-primary dose tallies and correlated variance estimation.
+ * Set to 0 by the scalar transport loop; will be filled from the pool once
+ * batched transport is implemented.
  *
  * TODO: consider refactoring to hold two struct ray_v (entry and exit rays)
- * instead of p/q/v scalars, which would preserve both incoming and outgoing
- * directions at zone boundaries while keeping all transport metadata together.
+ * instead of p/q/v/w scalars to preserve both directions at zone boundaries.
  */
 struct step {
-    double p[4]; /* start: x,y,z,E — E is total kinetic energy [MeV] */
-    double q[4]; /* stop:  x,y,z,E */
-    double v[3]; /* entry direction (unit vector at p) */
-    double w[3]; /* exit direction  (unit vector at q); equals v for straight steps */
-    double ds;   /* track length of this step [cm] */
-    double de;   /* energy loss (positive) or gain (negative) [MeV] */
-    double rho;  /* CT-corrected density [g/cm3] */
-    int medium;  /* medium ID, -1 if unknown */
-    int zone;    /* zone number, -1 if unknown */
-    int system;  /* coordinate system identifier (OSH_COORD_*) */
+    double p[4];       /* start point: x,y,z [cm] and total KE [MeV] */
+    double q[4];       /* stop  point: x,y,z [cm] and total KE [MeV] */
+    double v[3];       /* entry direction unit vector at p */
+    double w[3];       /* exit  direction unit vector at q; equals v for straight steps */
+    double ds;         /* track length [cm] */
+    double de;         /* energy deposit [MeV]; positive = loss, negative = gain */
+    double rho;        /* local material density [g/cm³] */
+    double wt;         /* statistical weight of this history; 1.0 = unweighted */
+    int medium;        /* material index; -1 if unknown */
+    int zone;          /* geometry zone index; -1 if unknown */
+    int system;        /* coordinate system (OSH_COORD_*) */
+    uint32_t prim_idx; /* 0-based index of the beam-primary ancestor in the batch */
+    uint8_t gen;       /* generation: 0 = beam primary, 1 = first secondary, … */
 };
 
 void osh_step_print(struct step const *st);

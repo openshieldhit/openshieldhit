@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "common/osh_step.h"
 #include "particle/osh_particle.h"
 #include "scoring/runtime/osh_scoring_defs.h"
 
@@ -42,11 +43,15 @@ struct osh_scoring_filter_runtime {
  * @details
  * All attached filters and all rules within each filter are combined with
  * logical AND. The page passes only if every rule evaluates true.
+ *
+ * Species properties (Z, A, mass, PDG) are read from @p part.
+ * Per-history properties (energy, generation, primary index, weight) are read
+ * from @p st, which carries them as set by the transport engine.
  */
 int osh_scoring_page_passes_filters(struct osh_scoring_runtime const *rt,
                                     struct osh_scoring_page_runtime const *page,
                                     struct particle const *part,
-                                    double energy_mev);
+                                    struct step const *st);
 
 #ifdef __cplusplus
 }

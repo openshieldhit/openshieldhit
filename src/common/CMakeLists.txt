@@ -10,6 +10,7 @@ add_library(osh_common
     osh_file.c
     osh_readline.c
     osh_coord.c
+    osh_ray.c
     osh_step.c
 )
 

@@ -2,6 +2,7 @@
 #define OSH_TRANSPORT_H
 
 #include "common/osh_coord.h"
+#include "common/osh_ray.h"
 #include "common/osh_rc.h"
 #include "common/osh_step.h"
 

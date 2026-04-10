@@ -181,7 +181,7 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st->p[3])) {
+        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
             continue;
         }
         for (j = 0; j < ncross; ++j) {
@@ -210,7 +210,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st->p[3])) {
+        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
             continue;
         }
         for (j = 0; j < ncross; ++j) {

@@ -4,20 +4,44 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* minimal runtime particle struct for fast cache lookups */
+/**
+ * @brief Species descriptor for a particle type.
+ *
+ * @details
+ * Cold, immutable after setup.  One entry per species in the particle
+ * registry; all histories of the same species share a pointer to the same
+ * struct particle.  The struct therefore encodes only what is constant for
+ * every instance of that species: rest mass, identity codes, and nuclear
+ * charge.
+ *
+ * Per-history runtime state — statistical weight, generation number, primary
+ * ancestor index — is NOT stored here.  It belongs in the particle pool (SoA
+ * arrays, one entry per live history) or, at scoring time, in struct step.
+ * Keeping these concerns separate means:
+ *   - struct particle can be held const and shared across threads without
+ *     synchronisation.
+ *   - The pool's SoA layout can store per-history scalars contiguously,
+ *     enabling SIMD access without interleaving cold species metadata.
+ *
+ * mass is the bare nuclear rest mass (fully stripped ion, no electrons):
+ *   M_nuclear = amass [amu] * OSH_AMU  -  Z * m_electron
+ * This is the correct relativistic mass for transport kinematics.  Do NOT
+ * use A * 940 MeV (free-nucleon approximation) as it introduces ~1% error.
+ * Use osh_particle_nuclear_mass_from_pdg() or
+ * osh_particle_nuclear_mass_mev_from_za() to populate this field.
+ *
+ * is_nucleus is 1 for fully stripped nuclei heavier than the proton and
+ * neutron (i.e. Z >= 2 or A > 1 excluding neutrons).  The transport engine
+ * uses this flag to select the Hubert effective-charge correction in the
+ * Bethe-Bloch formula.
+ */
 struct particle {
-    double mass;   /* MeV */
-    double weight; /* statistical weight */
-
-    uint32_t gen;   /* current generation, 0 = primary */
-    uint32_t nprim; /* particle root */
-
-    int pdg;            /* PDG number */
-    int16_t charge;     /* charge in units of e */
-    uint16_t z;         /* atomic number for ions, 0 for non-ions */
-    uint16_t a;         /* mass number for ions, 0 for non-ions */
-    uint8_t is_nucleus; /* 1 if particle is nucleus, 0 otherwise. All ions except protons and neutrons
-                            are considered nuclei. */
+    double mass;        /* nuclear rest mass [MeV/c²]; see note above */
+    int pdg;            /* PDG Monte Carlo particle numbering scheme code */
+    int16_t charge;     /* electric charge in units of e (signed) */
+    uint16_t z;         /* atomic number; 0 for non-ion particles */
+    uint16_t a;         /* mass number; 0 for non-ion particles */
+    uint8_t is_nucleus; /* 1 if heavy nucleus (Z>=2 or A>1, not neutron); 0 otherwise */
 };
 
 /* helper functions */
