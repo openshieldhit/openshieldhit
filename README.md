@@ -3,6 +3,7 @@
 [![CMake CI](https://github.com/openshieldhit/openshieldhit/actions/workflows/test.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/test.yml)
 [![clang-format](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-format.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-format.yml)
 [![clang-tidy](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-tidy.yml/badge.svg)](https://github.com/openshieldhit/openshieldhit/actions/workflows/clang-tidy.yml)
+[![codecov](https://codecov.io/gh/openshieldhit/openshieldhit/branch/main/graph/badge.svg)](https://codecov.io/gh/openshieldhit/openshieldhit)
 
 **Supported platforms:** Linux · macOS · Windows — all three are tested on every commit via CI.
 
