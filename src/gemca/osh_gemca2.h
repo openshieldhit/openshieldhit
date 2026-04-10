@@ -4,7 +4,8 @@
 #include <float.h>
 #include <stdio.h>
 
-#include "common/osh_coord.h" /* struct ray, struct ray_v, struct ray_c */
+#include "common/osh_coord.h"
+#include "common/osh_ray.h" /* struct ray, struct ray_v, struct ray_c */
 #include "common/osh_rc.h"
 
 /** @defgroup gemca Geometry Engine (GEMCA)

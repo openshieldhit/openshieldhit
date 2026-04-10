@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "common/osh_coord.h"
+#include "common/osh_ray.h"
 #include "common/osh_logger.h"
 #include "common/osh_vect.h"
 #include "common/osh_version.h"
@@ -643,7 +644,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
                     dist_rest = 0;
                 } else {
                     // printf("move particle with distance %.6e and dist_rest %.6e\n", dist, dist_rest);
-                    osh_coord_move_ray(r, dist);
+                    osh_ray_move(r, dist);
                     dist_rest -= dist;
                 }
                 hist[medium] += dist;
@@ -706,7 +707,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
         double x0 = r.p[0];
         double z0 = r.p[2];
         struct ray r2 = r;
-        osh_coord_move_ray(&r2, step);
+        osh_ray_move(&r2, step);
         double x1 = r2.p[0];
         double z1 = r2.p[2];
 
@@ -729,7 +730,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
            (prevents being stuck on the boundary due to fp noise) */
         if (step == d_to_bnd && remaining > 0.0) {
             double const eps = 1e-12; /* cm; tune if needed */
-            osh_coord_move_ray(&r, eps);
+            osh_ray_move(&r, eps);
             remaining -= eps;
         }
     }

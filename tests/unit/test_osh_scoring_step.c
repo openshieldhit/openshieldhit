@@ -48,9 +48,6 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
 
     memset(&part, 0, sizeof(part));
     part.mass = 12.0 * 931.49410242;
-    part.weight = 1.0;
-    part.gen = 0u;
-    part.nprim = 7u;
     part.pdg = 1000060120;
     part.charge = 6;
     part.z = 6u;
@@ -75,8 +72,11 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     st.ds = 8.0;
     st.de = 2.0;
     st.rho = 1.0;
+    st.wt = 1.0;
     st.medium = 1;
     st.zone = 1;
+    st.prim_idx = 7u;
+    st.gen = 0u;
 
     rc = osh_scoring_score_step(&rt, &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
@@ -102,7 +102,7 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     assert_close(rt.pages[filtered_idx].data[1], 1.0);
     assert_close(rt.pages[filtered_idx].data[2], 0.125);
 
-    part.gen = 1u;
+    st.gen = 1u;
     rc = osh_scoring_score_step(&rt, &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 

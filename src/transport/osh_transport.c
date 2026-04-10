@@ -361,9 +361,12 @@ static void step_from_state(
         st->de = 0.0;
     }
     st->rho = rho;
+    st->wt = 1.0; /* pool will supply per-history weight once batched transport is in place */
     st->medium = medium;
     st->zone = zone;
     st->system = state->system;
+    st->prim_idx = 0u; /* pool will supply primary-ancestor index once batched transport is in place */
+    st->gen = 0u;      /* pool will supply generation once batched transport is in place */
 }
 
 static void advance_state(struct ray_v *state, double step_len, double exit_energy) {

@@ -7,13 +7,14 @@
 
 static int filter_compare_int(unsigned int lhs, enum osh_scoring_filter_op op, unsigned int rhs);
 static int filter_compare_double(double lhs, enum osh_scoring_filter_op op, double rhs);
-static int
-filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule, struct particle const *part, double energy_mev);
+static int filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule,
+                              struct particle const *part,
+                              struct step const *st);
 
 int osh_scoring_page_passes_filters(struct osh_scoring_runtime const *rt,
                                     struct osh_scoring_page_runtime const *page,
                                     struct particle const *part,
-                                    double energy_mev) {
+                                    struct step const *st) {
     size_t i;
     size_t j;
     struct osh_scoring_filter_runtime const *filter;
@@ -24,7 +25,7 @@ int osh_scoring_page_passes_filters(struct osh_scoring_runtime const *rt,
         }
         filter = &rt->filters[page->filters[i].filter_idx];
         for (j = 0; j < filter->nrules; ++j) {
-            if (!filter_rule_passes(&filter->rules[j], part, energy_mev)) {
+            if (!filter_rule_passes(&filter->rules[j], part, st)) {
                 return 0;
             }
         }
@@ -72,9 +73,27 @@ static int filter_compare_double(double lhs, enum osh_scoring_filter_op op, doub
     }
 }
 
-static int
-filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule, struct particle const *part, double energy_mev) {
+/**
+ * @brief Evaluate one compiled filter rule against the current particle step.
+ *
+ * @details
+ * Species properties (Z, A, mass, PDG code) are read from @p part.
+ * Per-history properties (energy, generation, primary index) are read from
+ * @p st, which is filled by the transport engine for each scored step.
+ *
+ * @param[in] rule  Compiled filter rule.
+ * @param[in] part  Species descriptor for the particle taking the step.
+ * @param[in] st    Transport step carrying per-history context.
+ *
+ * @returns 1 if the rule passes, 0 otherwise.
+ */
+static int filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule,
+                              struct particle const *part,
+                              struct step const *st) {
+    double energy_mev;
     double mass_amu;
+
+    energy_mev = st->p[3];
 
     switch (rule->field) {
     case OSH_SCORING_FILTER_FIELD_ID:
@@ -102,9 +121,9 @@ filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule, struct pa
         }
         return filter_compare_double(energy_mev, rule->op, rule->value);
     case OSH_SCORING_FILTER_FIELD_GEN:
-        return filter_compare_int(part->gen, rule->op, (unsigned int) rule->value);
+        return filter_compare_int((unsigned int) st->gen, rule->op, (unsigned int) rule->value);
     case OSH_SCORING_FILTER_FIELD_NPRIM:
-        return filter_compare_int(part->nprim, rule->op, (unsigned int) rule->value);
+        return filter_compare_int(st->prim_idx, rule->op, (unsigned int) rule->value);
     default:
         return 0;
     }

@@ -2,6 +2,7 @@
 #define OSH_BEAM_MODEL_H
 
 #include "beam/osh_beam.h"
+#include "common/osh_ray.h"
 #include "particle/osh_particle.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
