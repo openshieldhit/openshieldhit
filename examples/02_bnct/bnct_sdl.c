@@ -8,8 +8,8 @@
 #include <unistd.h>
 
 #include "common/osh_coord.h"
-#include "common/osh_ray.h"
 #include "common/osh_logger.h"
+#include "common/osh_ray.h"
 #include "common/osh_vect.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
