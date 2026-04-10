@@ -1,26 +1,43 @@
 #include "transport/osh_transport.h"
 
+#include <stdlib.h>
+
 #include "beam/osh_beam.h"
-#include "beam/osh_beam_model.h"
 #include "beam/osh_beamdef.h"
+#include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_coord.h"
+#include "common/osh_particle_pool.h"
+#include "common/osh_ray.h"
 #include "gemca/osh_gemca2.h"
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
 #include "random/osh_rng.h"
 #include "scoring/runtime/osh_scoring_step.h"
 
+/*
+ * Transport pool capacity — number of particle histories alive simultaneously.
+ *
+ * This is the primary tuning knob between cache efficiency and parallelism:
+ *   - Small (e.g. 256): pool fits in L1/L2 cache; minimal working-set pressure.
+ *   - Medium (e.g. 4096–65536): pool fits in L2/L3; good CPU SIMD throughput.
+ *   - capacity == NSTAT: all primaries live at once; natural for GPU offload.
+ *   - capacity == 1: scalar reference — each primary fully transported alone.
+ *
+ * Changing this constant does not affect physics results, only performance.
+ */
 #define OSH_TRANSPORT_BOUNDARY_EPS 1e-8
-#define OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY 1000000u
+#define OSH_TRANSPORT_POOL_CAPACITY 4096u
 
-static enum osh_status transport_one_primary(struct gemca_workspace *geom,
-                                             struct beam_workspace const *beam,
-                                             struct material_workspace const *materials,
-                                             struct osh_material_runtime const *tables,
-                                             struct osh_scoring_runtime *scoring,
-                                             struct particle const *part,
-                                             struct ray_v *state,
-                                             double deltae);
+/* ---- Forward declarations ------------------------------------------------ */
+
+static enum osh_status transport_step_one(struct osh_particle_pool *pool,
+                                          size_t slot,
+                                          struct gemca_workspace *geom,
+                                          struct beam_workspace const *beam,
+                                          struct material_workspace const *materials,
+                                          struct osh_material_runtime const *tables,
+                                          struct osh_scoring_runtime *scoring,
+                                          double deltae);
 static double cutoff_total_energy(struct beam_workspace const *beam,
                                   struct osh_material_runtime const *tables,
                                   struct particle const *part);
@@ -34,28 +51,57 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
                                              size_t *projectile_idx_out);
 static int is_blackhole_material(size_t material_idx);
 static int is_vacuum_material(size_t material_idx);
-static void ray_from_state(struct ray *ray, struct ray_v const *state);
-static void step_from_state(
-    struct step *st, struct ray_v const *state, double step_len, double exit_energy, double rho, int medium, int zone);
-static void advance_state(struct ray_v *state, double step_len, double exit_energy);
-static void nudge_state(struct ray_v *state, double eps);
+static void ray_from_pool(struct ray *ray, struct osh_particle_pool const *pool, size_t slot);
+static void step_from_pool(struct step *st,
+                           struct osh_particle_pool const *pool,
+                           size_t slot,
+                           double step_len,
+                           double exit_energy,
+                           double rho,
+                           int medium,
+                           int zone);
 
+/* ---- Public API ---------------------------------------------------------- */
+
+/**
+ * @brief Run the minimal straight-line CSDA transport loop.
+ *
+ * @details
+ * Wavefront (BFS) transport loop: all live primaries advance one step per
+ * round.  The outer loop runs until all beam->nstat primaries have been
+ * generated and transported to death:
+ *
+ *   1. When the pool is empty and primaries remain, fill it from beam_runtime
+ *      (up to OSH_TRANSPORT_POOL_CAPACITY primaries).
+ *   2. Call transport_step_one() for every live pool slot.  Particles that die
+ *      (energy cutoff, geometry exit, blackhole) are marked by zeroing e[slot].
+ *   3. Compact the pool, removing dead entries.
+ *   4. Repeat until primaries_done == beam->nstat and pool is empty.
+ *
+ * The pool capacity controls the trade-off between cache pressure (small pool)
+ * and parallelism (large pool).  Physics results are independent of capacity.
+ *
+ * Current limitations (straight-line CSDA only, no secondaries):
+ *   - no multiple scattering, no energy straggling
+ *   - no nuclear interactions, no secondaries
+ *   - SOBP and single-spot beam modes only (PHSP returns OSH_ENOTSUP)
+ */
 enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
                                           struct gemca_workspace *geom,
                                           struct material_workspace const *materials,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring) {
     struct osh_rng rng;
-    struct particle *part;
-    struct ray_v state;
-    size_t iprim;
-    enum osh_status rc;
+    struct osh_beam_runtime *beam_rt = NULL;
+    struct osh_particle_pool *pool = NULL;
+    size_t capacity;
+    size_t primaries_done;
+    size_t n_fill;
+    size_t i;
+    enum osh_status rc = OSH_OK;
 
     if (!beam || !geom || !materials || !tables || !scoring) {
         return OSH_EINVAL;
-    }
-    if (beam->beam_mode != OSH_BEAM_MODE_SPOTS) {
-        return OSH_ENOTSUP;
     }
     if (beam->nstat == 0u) {
         return OSH_EINVAL;
@@ -64,163 +110,235 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
         return OSH_EINVAL;
     }
 
+    rc = osh_beam_runtime_setup(beam, &beam_rt);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    capacity =
+        (beam->nstat < (size_t) OSH_TRANSPORT_POOL_CAPACITY) ? beam->nstat : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
+    rc = osh_particle_pool_alloc(capacity, &pool);
+    if (rc != OSH_OK) {
+        osh_beam_runtime_free(beam_rt);
+        return rc;
+    }
+
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, (uint64_t) beam->rndseed, (uint64_t) beam->rndoffset);
 
-    for (iprim = 0; iprim < beam->nstat; ++iprim) {
-        part = NULL;
-        rc = osh_beam_new_primary(beam, &rng, &part, &state);
-        if (rc != OSH_OK) {
-            return rc;
+    primaries_done = 0u;
+
+    while (primaries_done < beam->nstat || pool->n > 0u) {
+        /* Fill the pool when it is empty and primaries remain */
+        if (pool->n == 0u && primaries_done < beam->nstat) {
+            n_fill = beam->nstat - primaries_done;
+            if (n_fill > pool->capacity) {
+                n_fill = pool->capacity;
+            }
+            rc = osh_beam_runtime_fill_pool(beam_rt, &rng, pool, n_fill);
+            if (rc != OSH_OK) {
+                goto cleanup;
+            }
+            primaries_done += n_fill;
         }
-        rc = transport_one_primary(geom, beam, materials, tables, scoring, part, &state, (double) beam->deltae);
-        if (rc != OSH_OK) {
-            return rc;
+
+        /* Advance every live particle by one step */
+        for (i = 0u; i < pool->n; ++i) {
+            rc = transport_step_one(pool, i, geom, beam, materials, tables, scoring, (double) beam->deltae);
+            if (rc != OSH_OK) {
+                goto cleanup;
+            }
         }
+
+        /* Compact dead entries (e[i] <= 0) so the next fill appends cleanly */
+        osh_particle_pool_compact(pool);
+    }
+
+cleanup:
+    osh_particle_pool_free(pool);
+    osh_beam_runtime_free(beam_rt);
+    return rc;
+}
+
+/* ---- Per-slot transport step --------------------------------------------- */
+
+/**
+ * @brief Advance particle at @p slot by one straight-line CSDA step.
+ *
+ * @details
+ * Reads the particle's phase-space state from the pool SoA arrays, computes
+ * one CSDA step bounded by either a DELTAE energy-loss criterion or the next
+ * geometry boundary, scores the step, and writes the updated position and
+ * energy back into the pool.
+ *
+ * Termination: when the particle reaches the energy cutoff, exits the geometry,
+ * or enters a blackhole material, its energy slot is zeroed so that the next
+ * osh_particle_pool_compact() call removes it.  These physics-termination
+ * conditions are handled silently (OSH_OK return) so that one bad particle
+ * does not abort the entire run.  Only allocation or I/O failures from scoring
+ * propagate as non-OK status.
+ *
+ * Coordinate system: beam primaries are always placed in OSH_COORD_UNIVERSE by
+ * osh_beam_runtime_fill_pool().  Secondaries (future) inherit their parent's
+ * system at birth.  The pool does not store the system field; this function
+ * always reconstructs the geometry ray with system == OSH_COORD_UNIVERSE,
+ * which is correct for beam-primary histories in the current single-species
+ * implementation.
+ *
+ * Boundary nudge: when a particle sits exactly on a boundary
+ * (distance <= OSH_TRANSPORT_BOUNDARY_EPS), it is nudged one epsilon along its
+ * direction and the function returns without scoring a zero-length step.  The
+ * particle remains alive; transport_step_one() is called again for it in the
+ * next wavefront round.
+ */
+static enum osh_status transport_step_one(struct osh_particle_pool *pool,
+                                          size_t slot,
+                                          struct gemca_workspace *geom,
+                                          struct beam_workspace const *beam,
+                                          struct material_workspace const *materials,
+                                          struct osh_material_runtime const *tables,
+                                          struct osh_scoring_runtime *scoring,
+                                          double deltae) {
+    struct particle const *part;
+    struct ray ray;
+    size_t projectile_idx;
+    double cutoff_total;
+    size_t zone_idx;
+    struct zone *zone;
+    struct material const *material;
+    double boundary_ds;
+    double rho;
+    double step_len;
+    double exit_energy;
+    double a_proj;
+    double e0_total;
+    double e1_target;
+    double r0;
+    double r1_target;
+    double ds_csda;
+    double residual_range;
+    struct step st;
+    int hit_boundary;
+    enum osh_status rc;
+
+    part = pool->species[slot];
+
+    rc = find_projectile_index(tables, part, &projectile_idx);
+    if (rc != OSH_OK) {
+        pool->e[slot] = 0.0; /* unknown species — kill silently */
+        return OSH_OK;
+    }
+
+    cutoff_total = cutoff_total_energy(beam, tables, part);
+    if (pool->e[slot] <= cutoff_total) {
+        pool->e[slot] = 0.0;
+        return OSH_OK;
+    }
+
+    ray_from_pool(&ray, pool, slot);
+    zone_idx = osh_gemca_get_zone_index(geom, &ray);
+    if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
+        pool->e[slot] = 0.0; /* escaped geometry */
+        return OSH_OK;
+    }
+
+    zone = geom->zones[zone_idx];
+    if (!zone) {
+        return OSH_ESTATE;
+    }
+    if (is_blackhole_material(zone->material_idx)) {
+        pool->e[slot] = 0.0;
+        return OSH_OK;
+    }
+
+    material = osh_material_by_index(materials, zone->material_idx);
+    if (!material) {
+        return OSH_ESTATE;
+    }
+
+    boundary_ds = osh_gemca_get_distance(zone, &ray);
+    if (boundary_ds < 0.0) {
+        return OSH_ESTATE;
+    }
+    if (boundary_ds <= OSH_TRANSPORT_BOUNDARY_EPS) {
+        /* Nudge past the boundary; step again in the next wavefront round */
+        pool->x[slot] += pool->ux[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->y[slot] += pool->uy[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->z[slot] += pool->uz[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        return OSH_OK;
+    }
+
+    rho = (material->rho > 0.0) ? material->rho : 0.0;
+    if (is_vacuum_material(zone->material_idx) || rho <= 0.0) {
+        step_len = boundary_ds;
+        exit_energy = pool->e[slot];
+    } else {
+        a_proj = (part->a > 0u) ? (double) part->a : 1.0;
+        e0_total = pool->e[slot];
+        e1_target = e0_total * (1.0 - deltae);
+        if (e1_target < cutoff_total) {
+            e1_target = cutoff_total;
+        }
+        if (e1_target >= e0_total) {
+            pool->e[slot] = 0.0;
+            return OSH_OK;
+        }
+
+        r0 = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e0_total / a_proj);
+        r1_target = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e1_target / a_proj);
+        ds_csda = (r0 - r1_target) / rho;
+        if (ds_csda <= 0.0) {
+            pool->e[slot] = 0.0;
+            return OSH_OK;
+        }
+
+        if (ds_csda <= boundary_ds) {
+            step_len = ds_csda;
+            exit_energy = e1_target;
+        } else {
+            step_len = boundary_ds;
+            residual_range = r0 - rho * step_len;
+            if (residual_range < 0.0) {
+                residual_range = 0.0;
+            }
+            exit_energy =
+                energy_from_residual_range(tables, zone->material_idx, projectile_idx, residual_range) * a_proj;
+            if (exit_energy < cutoff_total) {
+                exit_energy = cutoff_total;
+            }
+        }
+    }
+
+    if (step_len <= 0.0) {
+        pool->e[slot] = 0.0;
+        return OSH_OK;
+    }
+    if (exit_energy > pool->e[slot]) {
+        exit_energy = pool->e[slot];
+    }
+
+    step_from_pool(&st, pool, slot, step_len, exit_energy, rho, (int) zone->material_idx, (int) zone_idx);
+    rc = osh_scoring_score_step(scoring, part, &st);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    /* Advance position and update energy in the pool SoA arrays */
+    hit_boundary = (step_len >= boundary_ds - OSH_TRANSPORT_BOUNDARY_EPS);
+    pool->x[slot] += pool->ux[slot] * step_len;
+    pool->y[slot] += pool->uy[slot] * step_len;
+    pool->z[slot] += pool->uz[slot] * step_len;
+    pool->e[slot] = exit_energy;
+
+    if (hit_boundary) {
+        pool->x[slot] += pool->ux[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->y[slot] += pool->uy[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->z[slot] += pool->uz[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
     }
 
     return OSH_OK;
 }
 
-static enum osh_status transport_one_primary(struct gemca_workspace *geom,
-                                             struct beam_workspace const *beam,
-                                             struct material_workspace const *materials,
-                                             struct osh_material_runtime const *tables,
-                                             struct osh_scoring_runtime *scoring,
-                                             struct particle const *part,
-                                             struct ray_v *state,
-                                             double deltae) {
-    struct ray ray;
-    size_t projectile_idx;
-    double cutoff_total;
-    unsigned int istep;
-    enum osh_status rc;
-
-    if (!geom || !materials || !tables || !scoring || !part || !state) {
-        return OSH_EINVAL;
-    }
-
-    rc = find_projectile_index(tables, part, &projectile_idx);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-    cutoff_total = cutoff_total_energy(beam, tables, part);
-
-    for (istep = 0; istep < OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY; ++istep) {
-        size_t zone_idx;
-        struct zone *zone;
-        struct material const *material;
-        double boundary_ds;
-        double rho;
-        double step_len;
-        double exit_energy;
-        struct step st;
-        int hit_boundary;
-
-        if (state->p[3] <= cutoff_total) {
-            return OSH_OK;
-        }
-
-        ray_from_state(&ray, state);
-        zone_idx = osh_gemca_get_zone_index(geom, &ray);
-        if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
-            return OSH_OK;
-        }
-
-        zone = geom->zones[zone_idx];
-        if (!zone) {
-            return OSH_ESTATE;
-        }
-        if (is_blackhole_material(zone->material_idx)) {
-            return OSH_OK;
-        }
-
-        material = osh_material_by_index(materials, zone->material_idx);
-        if (!material) {
-            return OSH_ESTATE;
-        }
-
-        boundary_ds = osh_gemca_get_distance(zone, &ray);
-        if (boundary_ds < 0.0) {
-            return OSH_ESTATE;
-        }
-        if (boundary_ds <= OSH_TRANSPORT_BOUNDARY_EPS) {
-            nudge_state(state, OSH_TRANSPORT_BOUNDARY_EPS);
-            continue;
-        }
-
-        rho = (material->rho > 0.0) ? material->rho : 0.0;
-        if (is_vacuum_material(zone->material_idx) || rho <= 0.0) {
-            step_len = boundary_ds;
-            exit_energy = state->p[3];
-        } else {
-            double a_proj;
-            double e0_total;
-            double e0_per_nuc;
-            double e1_target;
-            double r0;
-            double r1_target;
-            double ds_csda;
-            double residual_range;
-
-            a_proj = (part->a > 0u) ? (double) part->a : 1.0;
-            e0_total = state->p[3];
-            e0_per_nuc = e0_total / a_proj;
-            e1_target = e0_total * (1.0 - deltae);
-            if (e1_target < cutoff_total) {
-                e1_target = cutoff_total;
-            }
-            if (e1_target >= e0_total) {
-                return OSH_OK;
-            }
-
-            r0 = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e0_per_nuc);
-            r1_target =
-                osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e1_target / a_proj);
-            ds_csda = (r0 - r1_target) / rho;
-            if (ds_csda <= 0.0) {
-                return OSH_OK;
-            }
-
-            if (ds_csda <= boundary_ds) {
-                step_len = ds_csda;
-                exit_energy = e1_target;
-            } else {
-                step_len = boundary_ds;
-                residual_range = r0 - rho * step_len;
-                if (residual_range < 0.0) {
-                    residual_range = 0.0;
-                }
-                exit_energy =
-                    energy_from_residual_range(tables, zone->material_idx, projectile_idx, residual_range) * a_proj;
-                if (exit_energy < cutoff_total) {
-                    exit_energy = cutoff_total;
-                }
-            }
-        }
-
-        if (step_len <= 0.0) {
-            return OSH_OK;
-        }
-
-        if (exit_energy > state->p[3]) {
-            exit_energy = state->p[3];
-        }
-
-        step_from_state(&st, state, step_len, exit_energy, rho, (int) zone->material_idx, (int) zone_idx);
-        rc = osh_scoring_score_step(scoring, part, &st);
-        if (rc != OSH_OK) {
-            return rc;
-        }
-
-        hit_boundary = (step_len >= boundary_ds - OSH_TRANSPORT_BOUNDARY_EPS);
-        advance_state(state, step_len, exit_energy);
-        if (hit_boundary) {
-            nudge_state(state, OSH_TRANSPORT_BOUNDARY_EPS);
-        }
-    }
-
-    return OSH_ESTATE;
-}
+/* ---- Physics helpers ----------------------------------------------------- */
 
 static double cutoff_total_energy(struct beam_workspace const *beam,
                                   struct osh_material_runtime const *tables,
@@ -333,55 +451,70 @@ static int is_vacuum_material(size_t material_idx) {
     return material_idx == OSH_MATERIAL_INDEX_VACUUM;
 }
 
-static void ray_from_state(struct ray *ray, struct ray_v const *state) {
-    ray->p[0] = state->p[0];
-    ray->p[1] = state->p[1];
-    ray->p[2] = state->p[2];
-    ray->cp[0] = state->v[0];
-    ray->cp[1] = state->v[1];
-    ray->cp[2] = state->v[2];
-    ray->system = state->system;
+/* ---- Pool ↔ geometry/scoring adapters ------------------------------------ */
+
+/**
+ * @brief Build a geometry ray from pool slot @p slot.
+ *
+ * @details
+ * All beam primaries are generated in OSH_COORD_UNIVERSE by
+ * osh_beam_runtime_fill_pool().  The pool does not store the coordinate system
+ * field; it is hardcoded here as OSH_COORD_UNIVERSE.  When secondary particle
+ * support is added, secondaries born in other coordinate systems will require
+ * either an explicit system field in the pool or a per-entry flag.
+ */
+static void ray_from_pool(struct ray *ray, struct osh_particle_pool const *pool, size_t slot) {
+    ray->p[0] = pool->x[slot];
+    ray->p[1] = pool->y[slot];
+    ray->p[2] = pool->z[slot];
+    ray->cp[0] = pool->ux[slot];
+    ray->cp[1] = pool->uy[slot];
+    ray->cp[2] = pool->uz[slot];
+    ray->system = OSH_COORD_UNIVERSE;
 }
 
-static void step_from_state(
-    struct step *st, struct ray_v const *state, double step_len, double exit_energy, double rho, int medium, int zone) {
-    int i;
-
-    for (i = 0; i < 3; ++i) {
-        st->p[i] = state->p[i];
-        st->q[i] = state->p[i] + state->v[i] * step_len;
-        st->v[i] = state->v[i];
-        st->w[i] = state->v[i];
-    }
-    st->p[3] = state->p[3];
+/**
+ * @brief Build a scoring step from pool slot @p slot and step kinematics.
+ *
+ * @details
+ * Reads per-history metadata (wt, prim_idx, gen) directly from the pool SoA
+ * arrays.  This properly wires up the statistical weight and history context
+ * that scoring filters and tallies need.  With the old DFS design these fields
+ * were placeholder constants (wt=1.0, prim_idx=0, gen=0); they are now
+ * populated from the pool that was filled by osh_beam_runtime_fill_pool().
+ */
+static void step_from_pool(struct step *st,
+                           struct osh_particle_pool const *pool,
+                           size_t slot,
+                           double step_len,
+                           double exit_energy,
+                           double rho,
+                           int medium,
+                           int zone) {
+    st->p[0] = pool->x[slot];
+    st->p[1] = pool->y[slot];
+    st->p[2] = pool->z[slot];
+    st->p[3] = pool->e[slot];
+    st->q[0] = pool->x[slot] + pool->ux[slot] * step_len;
+    st->q[1] = pool->y[slot] + pool->uy[slot] * step_len;
+    st->q[2] = pool->z[slot] + pool->uz[slot] * step_len;
     st->q[3] = exit_energy;
+    st->v[0] = pool->ux[slot];
+    st->v[1] = pool->uy[slot];
+    st->v[2] = pool->uz[slot];
+    st->w[0] = pool->ux[slot];
+    st->w[1] = pool->uy[slot];
+    st->w[2] = pool->uz[slot];
     st->ds = step_len;
-    st->de = state->p[3] - exit_energy;
+    st->de = pool->e[slot] - exit_energy;
     if (st->de < 0.0) {
         st->de = 0.0;
     }
     st->rho = rho;
-    st->wt = 1.0; /* pool will supply per-history weight once batched transport is in place */
+    st->wt = pool->wt[slot];
     st->medium = medium;
     st->zone = zone;
-    st->system = state->system;
-    st->prim_idx = 0u; /* pool will supply primary-ancestor index once batched transport is in place */
-    st->gen = 0u;      /* pool will supply generation once batched transport is in place */
-}
-
-static void advance_state(struct ray_v *state, double step_len, double exit_energy) {
-    int i;
-
-    for (i = 0; i < 3; ++i) {
-        state->p[i] += state->v[i] * step_len;
-    }
-    state->p[3] = exit_energy;
-}
-
-static void nudge_state(struct ray_v *state, double eps) {
-    int i;
-
-    for (i = 0; i < 3; ++i) {
-        state->p[i] += state->v[i] * eps;
-    }
+    st->system = OSH_COORD_UNIVERSE;
+    st->prim_idx = pool->prim_idx[slot];
+    st->gen = pool->gen[slot];
 }
