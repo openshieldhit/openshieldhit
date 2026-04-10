@@ -14,6 +14,7 @@ target_link_libraries(osh_transport
         osh_common
         osh_random
         osh_beam
+        osh_beam_runtime
         osh_material
         osh_gemca2
         osh_scoring
