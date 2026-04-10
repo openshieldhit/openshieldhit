@@ -12,6 +12,7 @@ add_library(osh_common
     osh_coord.c
     osh_ray.c
     osh_step.c
+    osh_particle_pool.c
 )
 
 # Make sure consumers of the library see the headers
