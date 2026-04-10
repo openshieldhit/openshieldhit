@@ -23,3 +23,5 @@ target_link_libraries(osh_beam
 if(UNIX)
     target_link_libraries(osh_beam PRIVATE m)
 endif()
+
+add_subdirectory(runtime)
