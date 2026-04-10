@@ -45,9 +45,9 @@ extern "C" {
  * use struct ray_v.  Will be removed once GEMCA is refactored.
  */
 struct ray {
-    double p[3];   /* position [cm] */
-    double cp[3];  /* unit direction vector (field name is historical) */
-    int system;    /* coordinate system (OSH_COORD_*) */
+    double p[3];  /* position [cm] */
+    double cp[3]; /* unit direction vector (field name is historical) */
+    int system;   /* coordinate system (OSH_COORD_*) */
 };
 
 /**
@@ -62,8 +62,8 @@ struct ray {
  * normalising before storing.
  */
 struct ray_v {
-    double p[4]; /* x,y,z [cm] and total kinetic energy [MeV] in p[3] */
-    double v[3]; /* unit direction vector */
+    double p[4];          /* x,y,z [cm] and total kinetic energy [MeV] in p[3] */
+    double v[3];          /* unit direction vector */
     unsigned char system; /* coordinate system (OSH_COORD_*) */
 };
 
@@ -77,8 +77,8 @@ struct ray_v {
  * vector.
  */
 struct ray_c {
-    double p[4]; /* x,y,z [cm] and total kinetic energy [MeV] in p[3] */
-    double c[3]; /* direction cosines: (cos θ, sin φ, cos φ) */
+    double p[4];          /* x,y,z [cm] and total kinetic energy [MeV] in p[3] */
+    double c[3];          /* direction cosines: (cos θ, sin φ, cos φ) */
     unsigned char system; /* coordinate system (OSH_COORD_*) */
 };
 

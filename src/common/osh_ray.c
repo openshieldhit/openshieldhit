@@ -26,9 +26,8 @@ void osh_ray_print(struct ray const *r) {
 void osh_ray_c_print(struct ray_c r) {
     printf(" x,y,z      : % .4f % .4f % .4f [cm]\n", r.p[0], r.p[1], r.p[2]);
     printf(" ct,sf,cf   : % .4f % .4f % .4f\n", r.c[0], r.c[1], r.c[2]);
-    printf(" theta, phi : %.4f %.4f deg\n",
-           acos(r.c[0]) * OSH_M_1_PI * 180.0,
-           atan2(r.c[1], r.c[2]) * OSH_M_1_PI * 180.0);
+    printf(
+        " theta, phi : %.4f %.4f deg\n", acos(r.c[0]) * OSH_M_1_PI * 180.0, atan2(r.c[1], r.c[2]) * OSH_M_1_PI * 180.0);
     printf(" c.system   : %i \n", r.system);
 }
 
@@ -63,7 +62,7 @@ int osh_ray_transform(struct ray const *r, struct ray *rt, double const t[16]) {
 
     for (i = 0; i < 3; i++) {
         j = i * 4;
-        rt->p[i]  = r->p[0]  * t[j] + r->p[1]  * t[j + 1] + r->p[2]  * t[j + 2] - t[j + 3];
+        rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] - t[j + 3];
         rt->cp[i] = r->cp[0] * t[j] + r->cp[1] * t[j + 1] + r->cp[2] * t[j + 2];
     }
     return 1;
