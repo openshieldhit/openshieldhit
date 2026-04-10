@@ -74,6 +74,16 @@ endif()
 
 add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
 
+option(OSH_ENABLE_COVERAGE "Enable GCC/Clang coverage instrumentation" OFF)
+if(OSH_ENABLE_COVERAGE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(--coverage -O0 -g)
+        add_link_options(--coverage)
+    else()
+        message(FATAL_ERROR "OSH_ENABLE_COVERAGE requires GCC or Clang")
+    endif()
+endif()
+
 # ---- Libraries / modules (these create osh_common, osh_random, etc.) ----
 add_subdirectory(src/common)
 add_subdirectory(src/random)

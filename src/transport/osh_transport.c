@@ -24,9 +24,18 @@
  *   - capacity == 1: scalar reference — each primary fully transported alone.
  *
  * Changing this constant does not affect physics results, only performance.
+ *
+ * OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY is a safety guard against particles
+ * stuck in degenerate geometry (near-zero steps, persistent boundary nudges,
+ * or pathological material configurations).  The wavefront loop multiplies
+ * this by nstat to get a total step budget for the run; if exceeded,
+ * OSH_ESTATE is returned.  1 000 000 steps is generous for CSDA transport
+ * through realistic geometry; a proton Bragg peak typically takes O(1 000)
+ * steps with DELTAE = 0.02.
  */
 #define OSH_TRANSPORT_BOUNDARY_EPS 1e-8
 #define OSH_TRANSPORT_POOL_CAPACITY 4096u
+#define OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY 1000000u
 
 /* ---- Forward declarations ------------------------------------------------ */
 
@@ -98,6 +107,8 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
     size_t primaries_done;
     size_t n_fill;
     size_t i;
+    size_t step_budget;
+    size_t steps_taken;
     enum osh_status rc = OSH_OK;
 
     if (!beam || !geom || !materials || !tables || !scoring) {
@@ -125,6 +136,13 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, (uint64_t) beam->rndseed, (uint64_t) beam->rndoffset);
 
+    /* Total step budget: nstat × max_steps, capped at SIZE_MAX to avoid overflow. */
+    if (beam->nstat > (size_t) -1 / OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY) {
+        step_budget = (size_t) -1;
+    } else {
+        step_budget = beam->nstat * (size_t) OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY;
+    }
+    steps_taken = 0u;
     primaries_done = 0u;
 
     while (primaries_done < beam->nstat || pool->n > 0u) {
@@ -143,10 +161,15 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
 
         /* Advance every live particle by one step */
         for (i = 0u; i < pool->n; ++i) {
+            if (steps_taken >= step_budget) {
+                rc = OSH_ESTATE; /* step budget exceeded — likely stuck particle */
+                goto cleanup;
+            }
             rc = transport_step_one(pool, i, geom, beam, materials, tables, scoring, (double) beam->deltae);
             if (rc != OSH_OK) {
                 goto cleanup;
             }
+            ++steps_taken;
         }
 
         /* Compact dead entries (e[i] <= 0) so the next fill appends cleanly */

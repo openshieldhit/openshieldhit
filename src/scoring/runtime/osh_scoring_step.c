@@ -206,8 +206,6 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
     size_t j;
     struct osh_scoring_page_runtime *page;
 
-    (void) st;
-
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
         if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
