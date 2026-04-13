@@ -8,7 +8,7 @@
 #include "common/osh_coord.h"
 #include "common/osh_particle_pool.h"
 #include "common/osh_ray.h"
-#include "gemca/osh_gemca2.h"
+#include "gemca/runtime/osh_gemca_runtime.h" /* replaces gemca/osh_gemca2.h — all gemca access goes through the runtime */
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
 #include "random/osh_rng.h"
@@ -41,7 +41,7 @@
 
 static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           size_t slot,
-                                          struct gemca_workspace *geom,
+                                          struct gemca_runtime *geom_rt,
                                           struct beam_workspace const *beam,
                                           struct material_workspace const *materials,
                                           struct osh_material_runtime const *tables,
@@ -96,7 +96,7 @@ static void step_from_pool(struct step *st,
  *   - SOBP and single-spot beam modes only (PHSP returns OSH_ENOTSUP)
  */
 enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
-                                          struct gemca_workspace *geom,
+                                          struct gemca_runtime *geom_rt,
                                           struct material_workspace const *materials,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring) {
@@ -111,7 +111,7 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
     size_t steps_taken;
     enum osh_status rc = OSH_OK;
 
-    if (!beam || !geom || !materials || !tables || !scoring) {
+    if (!beam || !geom_rt || !materials || !tables || !scoring) {
         return OSH_EINVAL;
     }
     if (beam->nstat == 0u) {
@@ -165,7 +165,7 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
                 rc = OSH_ESTATE; /* step budget exceeded — likely stuck particle */
                 goto cleanup;
             }
-            rc = transport_step_one(pool, i, geom, beam, materials, tables, scoring, (double) beam->deltae);
+            rc = transport_step_one(pool, i, geom_rt, beam, materials, tables, scoring, (double) beam->deltae);
             if (rc != OSH_OK) {
                 goto cleanup;
             }
@@ -215,7 +215,7 @@ cleanup:
  */
 static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           size_t slot,
-                                          struct gemca_workspace *geom,
+                                          struct gemca_runtime *geom_rt,
                                           struct beam_workspace const *beam,
                                           struct material_workspace const *materials,
                                           struct osh_material_runtime const *tables,
@@ -226,7 +226,7 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
     size_t projectile_idx;
     double cutoff_total;
     size_t zone_idx;
-    struct zone *zone;
+    struct gemca_rt_zone const *zone;
     struct material const *material;
     double boundary_ds;
     double rho;
@@ -258,16 +258,13 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
     }
 
     ray_from_pool(&ray, pool, slot);
-    zone_idx = osh_gemca_get_zone_index(geom, &ray);
+    zone_idx = osh_gemca_runtime_get_zone(geom_rt, &ray);
     if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
         pool->e[slot] = 0.0; /* escaped geometry */
         return OSH_OK;
     }
 
-    zone = geom->zones[zone_idx];
-    if (!zone) {
-        return OSH_ESTATE;
-    }
+    zone = &geom_rt->zones[zone_idx];
     if (is_blackhole_material(zone->material_idx)) {
         pool->e[slot] = 0.0;
         return OSH_OK;
@@ -278,7 +275,7 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
         return OSH_ESTATE;
     }
 
-    boundary_ds = osh_gemca_get_distance(zone, &ray);
+    boundary_ds = osh_gemca_runtime_get_distance(geom_rt, zone_idx, &ray);
     if (boundary_ds < 0.0) {
         return OSH_ESTATE;
     }

@@ -9,6 +9,7 @@
 #include "common/osh_rc.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_prepare.h"
 #include "scoring/osh_scoring.h"
@@ -231,6 +232,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     char *detect_path = NULL;
     struct beam_workspace *beam = NULL;
     struct gemca_workspace *geom = NULL;
+    struct gemca_runtime geom_rt;
     struct material_workspace *mat = NULL;
     struct osh_scoring_workspace *scoring = NULL;
     struct osh_material_runtime transport_tables;
@@ -244,6 +246,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     ctx->last_error[0] = '\0';
     memset(&transport_tables, 0, sizeof(transport_tables));
     memset(&scoring_runtime, 0, sizeof(scoring_runtime));
+    memset(&geom_rt, 0, sizeof(geom_rt));
 
     /* Initialise the default logger from ctx->log_level.
      *   0  → WARN  (silent — only warnings and errors)
@@ -375,6 +378,18 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         fprintf(out, "Material assembly complete: %llu zones resolved.\n", (unsigned long long) geom->nzones);
     }
 
+    if (osh_gemca_runtime_setup(geom, &geom_rt) != OSH_OK) {
+        ctx_set_error(ctx, err, "%s", "failed to compile geometry runtime");
+        rc = OPENSHIELDHIT_STATUS_NO_MEMORY;
+        goto cleanup;
+    }
+    if (out) {
+        fprintf(out,
+                "Geometry runtime compiled: %llu bodies, %llu zones.\n",
+                (unsigned long long) geom_rt.nbodies,
+                (unsigned long long) geom_rt.nzones);
+    }
+
     {
         unsigned int z_max;
 
@@ -428,7 +443,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         goto cleanup;
     }
 
-    if (osh_transport_run_minimal(beam, geom, mat, &transport_tables, &scoring_runtime) != OSH_OK) {
+    if (osh_transport_run_minimal(beam, &geom_rt, mat, &transport_tables, &scoring_runtime) != OSH_OK) {
         ctx_set_error(ctx, err, "%s", "minimal transport failed");
         rc = OPENSHIELDHIT_STATUS_STATE_ERROR;
         goto cleanup;
@@ -472,6 +487,7 @@ cleanup:
     if (scoring) {
         osh_scoring_workspace_free(scoring);
     }
+    osh_gemca_runtime_free(&geom_rt);
     osh_material_runtime_free(&transport_tables);
     if (mat) {
         osh_material_workspace_free(mat);
