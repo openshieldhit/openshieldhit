@@ -1,3 +1,5 @@
+add_subdirectory(runtime)
+
 # Gemca2 library
 add_library(osh_gemca2
     osh_gemca2.c

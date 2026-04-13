@@ -164,17 +164,34 @@ enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g);
 /**
  * @brief Return the dense zone index for the zone containing a ray.
  *
+ * @details
+ * Reference implementation: walks the pointer-linked cgnode AST directly.
+ * Retained for use by standalone tools (SDL viewer, bench) that operate on a
+ * cold @ref gemca_workspace without the transport pool machinery.
+ *
+ * @deprecated For transport, use osh_gemca_runtime_get_zone() from
+ *             gemca/runtime/osh_gemca_runtime.h, which evaluates the compiled
+ *             flat RPN representation and benefits from GUARD_BODY early
+ *             rejection.  This function will be removed once all callers have
+ *             migrated to the runtime layer.
+ *
  * @param[in] g  Gemca workspace.
  * @param[in] r  Ray whose position is tested.
  *
  * @returns 0-based index into g->zones[], or OSH_GEMCA_ZONE_INDEX_INVALID if the
- *          ray is outside all defined zones. Callers must check for
- *          OSH_GEMCA_ZONE_INDEX_INVALID before indexing g->zones[].
+ *          ray is outside all defined zones.
  */
 size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r);
 
 /**
  * @brief Return the distance a ray travels inside zone `z` before leaving it.
+ *
+ * @details
+ * Reference implementation: evaluates the cgnode AST recursively at each step.
+ *
+ * @deprecated For transport, use osh_gemca_runtime_get_distance() from
+ *             gemca/runtime/osh_gemca_runtime.h.  This function will be removed
+ *             once all callers have migrated to the runtime layer.
  *
  * @param[in] z  Zone the ray is currently inside.
  * @param[in] r  Ray (position and direction).

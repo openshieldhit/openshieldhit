@@ -17,6 +17,7 @@ target_link_libraries(osh_transport
         osh_beam_runtime
         osh_material
         osh_gemca2
+        osh_gemca_runtime
         osh_scoring
         $<$<BOOL:${UNIX}>:m>
 )
