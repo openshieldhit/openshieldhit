@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520" font-family="sans-serif">
+  <title>FFT: 8-point Radix-2 Butterfly</title>
+  <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#555"/></marker></defs>
+  <rect x="0.00" y="0.00" width="800.00" height="520.00" fill="#ffffff" stroke="none" stroke-width="1" rx="0"/>
+  <text x="400.00" y="28.00" style="font-size:17px;text-anchor:middle;fill:#111;font-weight:bold;">8-point Radix-2 Cooley–Tukey FFT — Butterfly Graph</text>
+  <line x1="80.00" y1="60.00" x2="293.33" y2="60.00" stroke="#b06020" stroke-width="1.4"/>
+  <line x1="80.00" y1="60.00" x2="293.33" y2="114.29" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="114.29" x2="293.33" y2="60.00" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="114.29" x2="293.33" y2="114.29" stroke="#b06020" stroke-width="1.4"/>
+  <text x="190.67" y="85.14" style="font-size:9px;text-anchor:start;fill:#b06020;">W^0</text>
+  <line x1="80.00" y1="168.57" x2="293.33" y2="168.57" stroke="#b06020" stroke-width="1.4"/>
+  <line x1="80.00" y1="168.57" x2="293.33" y2="222.86" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="222.86" x2="293.33" y2="168.57" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="222.86" x2="293.33" y2="222.86" stroke="#b06020" stroke-width="1.4"/>
+  <text x="190.67" y="193.71" style="font-size:9px;text-anchor:start;fill:#b06020;">W^0</text>
+  <line x1="80.00" y1="277.14" x2="293.33" y2="277.14" stroke="#b06020" stroke-width="1.4"/>
+  <line x1="80.00" y1="277.14" x2="293.33" y2="331.43" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="331.43" x2="293.33" y2="277.14" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="331.43" x2="293.33" y2="331.43" stroke="#b06020" stroke-width="1.4"/>
+  <text x="190.67" y="302.29" style="font-size:9px;text-anchor:start;fill:#b06020;">W^0</text>
+  <line x1="80.00" y1="385.71" x2="293.33" y2="385.71" stroke="#b06020" stroke-width="1.4"/>
+  <line x1="80.00" y1="385.71" x2="293.33" y2="440.00" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="440.00" x2="293.33" y2="385.71" stroke="#b06020" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="80.00" y1="440.00" x2="293.33" y2="440.00" stroke="#b06020" stroke-width="1.4"/>
+  <text x="190.67" y="410.86" style="font-size:9px;text-anchor:start;fill:#b06020;">W^0</text>
+  <line x1="293.33" y1="60.00" x2="506.67" y2="60.00" stroke="#1a6eb5" stroke-width="1.4"/>
+  <line x1="293.33" y1="60.00" x2="506.67" y2="168.57" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="168.57" x2="506.67" y2="60.00" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="168.57" x2="506.67" y2="168.57" stroke="#1a6eb5" stroke-width="1.4"/>
+  <text x="404.00" y="112.29" style="font-size:9px;text-anchor:start;fill:#1a6eb5;">W^0</text>
+  <line x1="293.33" y1="114.29" x2="506.67" y2="114.29" stroke="#1a6eb5" stroke-width="1.4"/>
+  <line x1="293.33" y1="114.29" x2="506.67" y2="222.86" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="222.86" x2="506.67" y2="114.29" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="222.86" x2="506.67" y2="222.86" stroke="#1a6eb5" stroke-width="1.4"/>
+  <text x="404.00" y="166.57" style="font-size:9px;text-anchor:start;fill:#1a6eb5;">W^1</text>
+  <line x1="293.33" y1="277.14" x2="506.67" y2="277.14" stroke="#1a6eb5" stroke-width="1.4"/>
+  <line x1="293.33" y1="277.14" x2="506.67" y2="385.71" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="385.71" x2="506.67" y2="277.14" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="385.71" x2="506.67" y2="385.71" stroke="#1a6eb5" stroke-width="1.4"/>
+  <text x="404.00" y="329.43" style="font-size:9px;text-anchor:start;fill:#1a6eb5;">W^0</text>
+  <line x1="293.33" y1="331.43" x2="506.67" y2="331.43" stroke="#1a6eb5" stroke-width="1.4"/>
+  <line x1="293.33" y1="331.43" x2="506.67" y2="440.00" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="440.00" x2="506.67" y2="331.43" stroke="#1a6eb5" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="293.33" y1="440.00" x2="506.67" y2="440.00" stroke="#1a6eb5" stroke-width="1.4"/>
+  <text x="404.00" y="383.71" style="font-size:9px;text-anchor:start;fill:#1a6eb5;">W^1</text>
+  <line x1="506.67" y1="60.00" x2="720.00" y2="60.00" stroke="#1a8040" stroke-width="1.4"/>
+  <line x1="506.67" y1="60.00" x2="720.00" y2="277.14" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="277.14" x2="720.00" y2="60.00" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="277.14" x2="720.00" y2="277.14" stroke="#1a8040" stroke-width="1.4"/>
+  <text x="617.33" y="166.57" style="font-size:9px;text-anchor:start;fill:#1a8040;">W^0</text>
+  <line x1="506.67" y1="114.29" x2="720.00" y2="114.29" stroke="#1a8040" stroke-width="1.4"/>
+  <line x1="506.67" y1="114.29" x2="720.00" y2="331.43" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="331.43" x2="720.00" y2="114.29" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="331.43" x2="720.00" y2="331.43" stroke="#1a8040" stroke-width="1.4"/>
+  <text x="617.33" y="220.86" style="font-size:9px;text-anchor:start;fill:#1a8040;">W^1</text>
+  <line x1="506.67" y1="168.57" x2="720.00" y2="168.57" stroke="#1a8040" stroke-width="1.4"/>
+  <line x1="506.67" y1="168.57" x2="720.00" y2="385.71" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="385.71" x2="720.00" y2="168.57" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="385.71" x2="720.00" y2="385.71" stroke="#1a8040" stroke-width="1.4"/>
+  <text x="617.33" y="275.14" style="font-size:9px;text-anchor:start;fill:#1a8040;">W^2</text>
+  <line x1="506.67" y1="222.86" x2="720.00" y2="222.86" stroke="#1a8040" stroke-width="1.4"/>
+  <line x1="506.67" y1="222.86" x2="720.00" y2="440.00" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="440.00" x2="720.00" y2="222.86" stroke="#1a8040" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <line x1="506.67" y1="440.00" x2="720.00" y2="440.00" stroke="#1a8040" stroke-width="1.4"/>
+  <text x="617.33" y="329.43" style="font-size:9px;text-anchor:start;fill:#1a8040;">W^3</text>
+  <circle cx="80.00" cy="60.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="80.00" cy="114.29" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="80.00" cy="168.57" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="80.00" cy="222.86" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="80.00" cy="277.14" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="80.00" cy="331.43" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="80.00" cy="385.71" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="80.00" cy="440.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="60.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="114.29" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="168.57" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="222.86" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="277.14" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="331.43" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="385.71" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="293.33" cy="440.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="60.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="114.29" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="168.57" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="222.86" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="277.14" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="331.43" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="385.71" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="506.67" cy="440.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="60.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="114.29" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="168.57" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="222.86" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="277.14" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="331.43" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="385.71" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <circle cx="720.00" cy="440.00" r="7.00" fill="#fff" stroke="#334" stroke-width="1.5"/>
+  <text x="66.00" y="64.00" style="font-size:11px;text-anchor:end;fill:#333;">x[0]</text>
+  <text x="66.00" y="118.29" style="font-size:11px;text-anchor:end;fill:#333;">x[4]</text>
+  <text x="66.00" y="172.57" style="font-size:11px;text-anchor:end;fill:#333;">x[2]</text>
+  <text x="66.00" y="226.86" style="font-size:11px;text-anchor:end;fill:#333;">x[6]</text>
+  <text x="66.00" y="281.14" style="font-size:11px;text-anchor:end;fill:#333;">x[1]</text>
+  <text x="66.00" y="335.43" style="font-size:11px;text-anchor:end;fill:#333;">x[5]</text>
+  <text x="66.00" y="389.71" style="font-size:11px;text-anchor:end;fill:#333;">x[3]</text>
+  <text x="66.00" y="444.00" style="font-size:11px;text-anchor:end;fill:#333;">x[7]</text>
+  <text x="734.00" y="64.00" style="font-size:11px;text-anchor:start;fill:#333;">X[0]</text>
+  <text x="734.00" y="118.29" style="font-size:11px;text-anchor:start;fill:#333;">X[1]</text>
+  <text x="734.00" y="172.57" style="font-size:11px;text-anchor:start;fill:#333;">X[2]</text>
+  <text x="734.00" y="226.86" style="font-size:11px;text-anchor:start;fill:#333;">X[3]</text>
+  <text x="734.00" y="281.14" style="font-size:11px;text-anchor:start;fill:#333;">X[4]</text>
+  <text x="734.00" y="335.43" style="font-size:11px;text-anchor:start;fill:#333;">X[5]</text>
+  <text x="734.00" y="389.71" style="font-size:11px;text-anchor:start;fill:#333;">X[6]</text>
+  <text x="734.00" y="444.00" style="font-size:11px;text-anchor:start;fill:#333;">X[7]</text>
+  <text x="80.00" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;font-weight:bold;">Input</text>
+  <text x="293.33" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;">Stage 1</text>
+  <text x="506.67" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;">Stage 2</text>
+  <text x="720.00" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;">Stage 3</text>
+  <text x="933.33" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;font-weight:bold;">Output</text>
+  <text x="90.00" y="465.00" style="font-size:11px;text-anchor:start;fill:#444;">butterfly unit:</text>
+  <line x1="200.00" y1="461.00" x2="250.00" y2="461.00" stroke="#555" stroke-width="1.4"/>
+  <text x="255.00" y="465.00" style="font-size:10px;text-anchor:start;fill:#555;">a + W^k·b</text>
+  <line x1="200.00" y1="475.00" x2="250.00" y2="475.00" stroke="#555" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <text x="255.00" y="479.00" style="font-size:10px;text-anchor:start;fill:#555;">a − W^k·b</text>
+  <text x="400.00" y="508.00" style="font-size:11px;text-anchor:middle;fill:#666;">W^k = e^(−2πik/N)  (twiddle factor).  Dashed lines carry a sign flip; solid lines do not.</text>
+</svg>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" font-family="sans-serif">
+  <title>FFT: Frequency-Domain Spectrum</title>
+  <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#555"/></marker></defs>
+  <rect x="0.00" y="0.00" width="760.00" height="420.00" fill="#ffffff" stroke="none" stroke-width="1" rx="0"/>
+  <text x="380.00" y="32.00" style="font-size:17px;text-anchor:middle;fill:#111;font-weight:bold;">Frequency-Domain Magnitude Spectrum  |X(f)|</text>
+  <rect x="70.00" y="60.00" width="660.00" height="300.00" fill="#f7f8fa" stroke="#dde" stroke-width="1" rx="4"/>
+  <line x1="70.00" y1="285.00" x2="730.00" y2="285.00" stroke="#dde" stroke-width="1"/>
+  <text x="64.00" y="289.00" style="font-size:10px;text-anchor:end;fill:#888;">0.25</text>
+  <line x1="70.00" y1="210.00" x2="730.00" y2="210.00" stroke="#dde" stroke-width="1"/>
+  <text x="64.00" y="214.00" style="font-size:10px;text-anchor:end;fill:#888;">0.50</text>
+  <line x1="70.00" y1="135.00" x2="730.00" y2="135.00" stroke="#dde" stroke-width="1"/>
+  <text x="64.00" y="139.00" style="font-size:10px;text-anchor:end;fill:#888;">0.75</text>
+  <line x1="70.00" y1="60.00" x2="730.00" y2="60.00" stroke="#dde" stroke-width="1"/>
+  <text x="64.00" y="64.00" style="font-size:10px;text-anchor:end;fill:#888;">1.00</text>
+  <line x1="70.00" y1="360.00" x2="746.00" y2="360.00" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="70.00" y1="360.00" x2="70.00" y2="50.00" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="754.00" y="364.00" style="font-size:12px;text-anchor:start;fill:#555;font-style:italic;">f (Hz)</text>
+  <text x="62.00" y="46.00" style="font-size:12px;text-anchor:end;fill:#555;">|X(f)|</text>
+  <rect x="66.39" y="318.04" width="7.22" height="41.96" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="76.70" y="96.00" width="7.22" height="264.00" fill="#e05" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="87.02" y="243.36" width="7.22" height="116.64" fill="#2a7" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="97.33" y="264.47" width="7.22" height="95.53" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="107.64" y="333.02" width="7.22" height="26.98" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="117.95" y="241.33" width="7.22" height="118.67" fill="#07b" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="128.27" y="351.12" width="7.22" height="8.88" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="138.58" y="353.81" width="7.22" height="6.19" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="148.89" y="355.40" width="7.22" height="4.60" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="159.20" y="356.43" width="7.22" height="3.57" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="169.52" y="357.15" width="7.22" height="2.85" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="179.83" y="357.66" width="7.22" height="2.34" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="190.14" y="358.04" width="7.22" height="1.96" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="200.45" y="358.33" width="7.22" height="1.67" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="210.77" y="358.56" width="7.22" height="1.44" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="221.08" y="358.75" width="7.22" height="1.25" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <rect x="231.39" y="358.89" width="7.22" height="1.11" fill="#4c8e9f" stroke="none" stroke-width="1" rx="1"/>
+  <line x1="70.00" y1="360.00" x2="70.00" y2="364.00" stroke="#999" stroke-width="1"/>
+  <text x="70.00" y="375.00" style="font-size:10px;text-anchor:middle;fill:#666;">0</text>
+  <line x1="152.50" y1="360.00" x2="152.50" y2="364.00" stroke="#999" stroke-width="1"/>
+  <text x="152.50" y="375.00" style="font-size:10px;text-anchor:middle;fill:#666;">8</text>
+  <line x1="235.00" y1="360.00" x2="235.00" y2="364.00" stroke="#999" stroke-width="1"/>
+  <text x="235.00" y="375.00" style="font-size:10px;text-anchor:middle;fill:#666;">16</text>
+  <line x1="317.50" y1="360.00" x2="317.50" y2="364.00" stroke="#999" stroke-width="1"/>
+  <text x="317.50" y="375.00" style="font-size:10px;text-anchor:middle;fill:#666;">24</text>
+  <line x1="400.00" y1="360.00" x2="400.00" y2="364.00" stroke="#999" stroke-width="1"/>
+  <text x="400.00" y="375.00" style="font-size:10px;text-anchor:middle;fill:#666;">32</text>
+  <text x="80.31" y="88.00" style="font-size:12px;text-anchor:middle;fill:#e05;font-weight:bold;"> f₁</text>
+  <text x="121.56" y="233.33" style="font-size:12px;text-anchor:middle;fill:#07b;font-weight:bold;"> f₂</text>
+  <text x="90.62" y="235.36" style="font-size:12px;text-anchor:middle;fill:#2a7;font-weight:bold;"> f₃</text>
+  <text x="380.00" y="408.00" style="font-size:11px;text-anchor:middle;fill:#666;">The three spectral peaks reveal the three hidden frequency components in x(t).</text>
+</svg>
