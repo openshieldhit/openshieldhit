@@ -325,7 +325,7 @@ def make_butterfly(path: str):
     order = [bit_rev(i, bits) for i in range(N)]  # [0,4,2,6,1,5,3,7]
 
     # layout
-    n_stages = bits + 1   # input + 3 butterfly stages + output = 5 columns
+    n_stages = bits + 1   # input + 3 butterfly stages = 4 columns total
     PAD_L, PAD_R = 80, 80
     PAD_T, PAD_B = 60, 80
     col_w = (W - PAD_L - PAD_R) / (n_stages - 1)
@@ -397,8 +397,8 @@ def make_butterfly(path: str):
 
     # ---- stage column headers ----
     header_y = PAD_T - 28
-    # n_stages columns: input + bits butterfly stages (last column = output)
-    stage_short = ["Input", "Stage 1", "Stage 2", "Output"]
+    # 4 columns: Input, Stage 1, Stage 2, Stage 3 (= output after all 3 butterfly stages)
+    stage_short = ["Input", "Stage 1", "Stage 2", "Stage 3"]
     for s, label in enumerate(stage_short):
         x, _ = node_xy(s, 0)
         svg.text(x, header_y, label, font_size=11,
