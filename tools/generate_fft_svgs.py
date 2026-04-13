@@ -343,11 +343,6 @@ def make_butterfly(path: str):
         "Output\nX[k]",
     ]
 
-    for s, label in enumerate(stage_labels):
-        x, _ = node_xy(s, 0)
-        for part in label.split("\n"):
-            pass  # printed below
-
     # ---- draw butterfly connections ----
     # Radix-2 DIT: at stage s (0-indexed), group size = 2^(s+1),
     # butterfly span = 2^s.
@@ -379,7 +374,6 @@ def make_butterfly(path: str):
                 # twiddle W^k label on the cross arm (top → bottom)
                 mx = (x1 + xo2) / 2 + 4
                 my = (y1 + yo2) / 2
-                exp_label = f"W{k}" if k < 4 else f"W{k}"
                 svg.text(mx, my - 2, f"W^{k}", font_size=9,
                          anchor="start", fill=col)
 
@@ -403,10 +397,12 @@ def make_butterfly(path: str):
 
     # ---- stage column headers ----
     header_y = PAD_T - 28
-    stage_short = ["Input", "Stage 1", "Stage 2", "Stage 3", "Output"]
+    # n_stages columns: input + bits butterfly stages (last column = output)
+    stage_short = ["Input", "Stage 1", "Stage 2", "Output"]
     for s, label in enumerate(stage_short):
         x, _ = node_xy(s, 0)
-        svg.text(x, header_y, label, font_size=11, fill="#555", bold=(s in (0, 4)))
+        svg.text(x, header_y, label, font_size=11,
+                 fill="#555", bold=(s in (0, n_stages - 1)))
 
     # ---- butterfly legend ----
     lx, ly = PAD_L + 10, H - 55

@@ -115,8 +115,7 @@
   <text x="80.00" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;font-weight:bold;">Input</text>
   <text x="293.33" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;">Stage 1</text>
   <text x="506.67" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;">Stage 2</text>
-  <text x="720.00" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;">Stage 3</text>
-  <text x="933.33" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;font-weight:bold;">Output</text>
+  <text x="720.00" y="32.00" style="font-size:11px;text-anchor:middle;fill:#555;font-weight:bold;">Output</text>
   <text x="90.00" y="465.00" style="font-size:11px;text-anchor:start;fill:#444;">butterfly unit:</text>
   <line x1="200.00" y1="461.00" x2="250.00" y2="461.00" stroke="#555" stroke-width="1.4"/>
   <text x="255.00" y="465.00" style="font-size:10px;text-anchor:start;fill:#555;">a + W^k·b</text>
