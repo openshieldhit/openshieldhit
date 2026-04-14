@@ -222,10 +222,16 @@ static __m256i _in_body_avx2(struct gemca_runtime const *rt,
                              __m256d vux,
                              __m256d vuy,
                              __m256d vuz) {
-    struct gemca_rt_body const *b = &rt->bodies[body_idx];
+    struct gemca_rt_body const *b;
     __m256d tx, ty, tz, tux, tuy, tuz;
     __m256i inside;
     int is;
+
+    if (body_idx < 0 || (size_t) body_idx >= rt->nbodies) {
+        return _mm256_setzero_si256(); /* sentinel / unresolved body → always outside */
+    }
+
+    b = &rt->bodies[body_idx];
 
     switch (b->coord) {
     case OSH_COORD_UNIVERSE:
@@ -359,20 +365,32 @@ static __m256i _eval_membership_avx2(struct gemca_runtime const *rt,
 
         case GEMCA_RT_PUSH_BODY:
         case GEMCA_RT_PUSH_VOXEL_BODY:
+            if (sp >= OSH_GEMCA_RT_MAX_STACK) {
+                return _mm256_setzero_si256(); /* stack overflow → outside */
+            }
             vstack[sp++] = _in_body_avx2(rt, insn->operand, vx, vy, vz, vux, vuy, vuz);
             break;
 
         case GEMCA_RT_UNION:
+            if (sp < 2) {
+                return _mm256_setzero_si256();
+            }
             vstack[sp - 2] = _mm256_or_si256(vstack[sp - 2], vstack[sp - 1]);
             sp--;
             break;
 
         case GEMCA_RT_INTERSECT:
+            if (sp < 2) {
+                return _mm256_setzero_si256();
+            }
             vstack[sp - 2] = _mm256_and_si256(vstack[sp - 2], vstack[sp - 1]);
             sp--;
             break;
 
         case GEMCA_RT_DIFF:
+            if (sp < 2) {
+                return _mm256_setzero_si256();
+            }
             /* left AND NOT right */
             vstack[sp - 2] = _mm256_andnot_si256(vstack[sp - 1], vstack[sp - 2]);
             sp--;

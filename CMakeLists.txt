@@ -104,9 +104,11 @@ target_link_libraries(osh_all INTERFACE
     osh_common
     osh_random
     osh_beam
+    osh_beam_runtime
     osh_material
     osh_particle
     osh_gemca2
+    osh_gemca_runtime
     osh_scoring
     osh_transport
 )
