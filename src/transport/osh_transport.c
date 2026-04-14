@@ -7,7 +7,6 @@
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_coord.h"
 #include "common/osh_particle_pool.h"
-#include "common/osh_ray.h"
 #include "gemca/runtime/osh_gemca_runtime.h" /* replaces gemca/osh_gemca2.h — all gemca access goes through the runtime */
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
@@ -41,6 +40,8 @@
 
 static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           size_t slot,
+                                          size_t zone_idx,
+                                          double boundary_ds,
                                           struct gemca_runtime *geom_rt,
                                           struct beam_workspace const *beam,
                                           struct material_workspace const *materials,
@@ -60,7 +61,7 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
                                              size_t *projectile_idx_out);
 static int is_blackhole_material(size_t material_idx);
 static int is_vacuum_material(size_t material_idx);
-static void ray_from_pool(struct ray *ray, struct osh_particle_pool const *pool, size_t slot);
+
 static void step_from_pool(struct step *st,
                            struct osh_particle_pool const *pool,
                            size_t slot,
@@ -103,6 +104,8 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
     struct osh_rng rng;
     struct osh_beam_runtime *beam_rt = NULL;
     struct osh_particle_pool *pool = NULL;
+    size_t zone_batch[OSH_TRANSPORT_POOL_CAPACITY];   /* stack-safe: capacity is compile-time constant */
+    double dist_batch[OSH_TRANSPORT_POOL_CAPACITY];   /* stack-safe: ~32 KiB at 4096 doubles */
     size_t capacity;
     size_t primaries_done;
     size_t n_fill;
@@ -159,13 +162,26 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
             primaries_done += n_fill;
         }
 
-        /* Advance every live particle by one step */
+        /* Batch geometry: zone lookup and boundary distance for all live particles.
+         * The scratch arrays are stack-allocated — safe because pool->n is always
+         * <= pool->capacity <= OSH_TRANSPORT_POOL_CAPACITY at this point. */
+        osh_gemca_runtime_get_zone_batch(geom_rt,
+                                         pool->x, pool->y, pool->z,
+                                         pool->ux, pool->uy, pool->uz,
+                                         pool->n, zone_batch);
+        osh_gemca_runtime_get_distance_batch(geom_rt,
+                                              pool->x, pool->y, pool->z,
+                                              pool->ux, pool->uy, pool->uz,
+                                              zone_batch, pool->n, dist_batch);
+
+        /* Advance every live particle by one step using the precomputed geometry */
         for (i = 0u; i < pool->n; ++i) {
             if (steps_taken >= step_budget) {
                 rc = OSH_ESTATE; /* step budget exceeded — likely stuck particle */
                 goto cleanup;
             }
-            rc = transport_step_one(pool, i, geom_rt, beam, materials, tables, scoring, (double) beam->deltae);
+            rc = transport_step_one(pool, i, zone_batch[i], dist_batch[i],
+                                    geom_rt, beam, materials, tables, scoring, (double) beam->deltae);
             if (rc != OSH_OK) {
                 goto cleanup;
             }
@@ -215,6 +231,8 @@ cleanup:
  */
 static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           size_t slot,
+                                          size_t zone_idx,
+                                          double boundary_ds,
                                           struct gemca_runtime *geom_rt,
                                           struct beam_workspace const *beam,
                                           struct material_workspace const *materials,
@@ -222,13 +240,10 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           struct osh_scoring_runtime *scoring,
                                           double deltae) {
     struct particle const *part;
-    struct ray ray;
     size_t projectile_idx;
     double cutoff_total;
-    size_t zone_idx;
     struct gemca_rt_zone const *zone;
     struct material const *material;
-    double boundary_ds;
     double rho;
     double step_len;
     double exit_energy;
@@ -257,8 +272,6 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
         return OSH_OK;
     }
 
-    ray_from_pool(&ray, pool, slot);
-    zone_idx = osh_gemca_runtime_get_zone(geom_rt, &ray);
     if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
         pool->e[slot] = 0.0; /* escaped geometry */
         return OSH_OK;
@@ -275,7 +288,6 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
         return OSH_ESTATE;
     }
 
-    boundary_ds = osh_gemca_runtime_get_distance(geom_rt, zone_idx, &ray);
     if (boundary_ds < 0.0) {
         return OSH_ESTATE;
     }
@@ -472,26 +484,6 @@ static int is_vacuum_material(size_t material_idx) {
 }
 
 /* ---- Pool ↔ geometry/scoring adapters ------------------------------------ */
-
-/**
- * @brief Build a geometry ray from pool slot @p slot.
- *
- * @details
- * All beam primaries are generated in OSH_COORD_UNIVERSE by
- * osh_beam_runtime_fill_pool().  The pool does not store the coordinate system
- * field; it is hardcoded here as OSH_COORD_UNIVERSE.  When secondary particle
- * support is added, secondaries born in other coordinate systems will require
- * either an explicit system field in the pool or a per-entry flag.
- */
-static void ray_from_pool(struct ray *ray, struct osh_particle_pool const *pool, size_t slot) {
-    ray->p[0] = pool->x[slot];
-    ray->p[1] = pool->y[slot];
-    ray->p[2] = pool->z[slot];
-    ray->cp[0] = pool->ux[slot];
-    ray->cp[1] = pool->uy[slot];
-    ray->cp[2] = pool->uz[slot];
-    ray->system = OSH_COORD_UNIVERSE;
-}
 
 /**
  * @brief Build a scoring step from pool slot @p slot and step kinematics.
