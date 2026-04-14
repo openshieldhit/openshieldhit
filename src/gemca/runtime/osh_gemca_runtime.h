@@ -3,8 +3,12 @@
 
 #include <stddef.h>
 
-#include "common/osh_ray.h"
 #include "common/osh_rc.h"
+
+/* Forward declaration: full definition is in common/osh_ray.h, included by
+ * consumers that need struct ray fields.  The header only uses struct ray as a
+ * pointer parameter, so a forward declaration suffices here. */
+struct ray;
 #include "gemca/osh_gemca2.h"
 
 #ifdef __cplusplus
