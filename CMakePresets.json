@@ -1,0 +1,62 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "description": "Unoptimised build with full debug info",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Release",
+            "description": "Optimised release build with debug symbols (-O2 -g)",
+            "binaryDir": "${sourceDir}/build_rel",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_C_FLAGS": "-O2 -g"
+            }
+        },
+        {
+            "name": "relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "description": "CMake stock release-with-debug-info (-O2 -g -DNDEBUG)",
+            "binaryDir": "${sourceDir}/build-rel",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "prof",
+            "displayName": "Profiling",
+            "description": "Optimised build tuned for perf profiling (-O2 -g -fno-omit-frame-pointer)",
+            "binaryDir": "${sourceDir}/build_prof",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_FLAGS": "-O2 -g -fno-omit-frame-pointer"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug",
+            "configurePreset": "debug"
+        },
+        {
+            "name": "release",
+            "configurePreset": "release"
+        },
+        {
+            "name": "relwithdebinfo",
+            "configurePreset": "relwithdebinfo"
+        },
+        {
+            "name": "prof",
+            "configurePreset": "prof"
+        }
+    ]
+}
