@@ -315,6 +315,69 @@ size_t osh_gemca_runtime_get_zone(struct gemca_runtime const *rt, struct ray con
  */
 double osh_gemca_runtime_get_distance(struct gemca_runtime const *rt, size_t zone_idx, struct ray const *r);
 
+/* ---- Batch query API ----------------------------------------------------- */
+
+/**
+ * @brief Zone lookup for a batch of @p n particles.
+ *
+ * @details
+ * Equivalent to calling osh_gemca_runtime_get_zone() once per particle, but
+ * expressed over SoA position/direction arrays so the compiler and CPU
+ * prefetcher can better pipeline the zone iterations.
+ *
+ * Each output element is written unconditionally; particles outside all
+ * defined zones receive @ref OSH_GEMCA_ZONE_INDEX_INVALID.
+ *
+ * @param[in]  rt       Compiled gemca runtime.
+ * @param[in]  x        Particle x-positions, length @p n.
+ * @param[in]  y        Particle y-positions, length @p n.
+ * @param[in]  z        Particle z-positions, length @p n.
+ * @param[in]  ux       Particle x-directions, length @p n.
+ * @param[in]  uy       Particle y-directions, length @p n.
+ * @param[in]  uz       Particle z-directions, length @p n.
+ * @param[in]  n        Number of particles.
+ * @param[out] zone_out Receives the zone index for each particle, length @p n.
+ */
+void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
+                                      double const *x,
+                                      double const *y,
+                                      double const *z,
+                                      double const *ux,
+                                      double const *uy,
+                                      double const *uz,
+                                      size_t n,
+                                      size_t *zone_out);
+
+/**
+ * @brief Boundary-distance query for a batch of @p n particles.
+ *
+ * @details
+ * Equivalent to calling osh_gemca_runtime_get_distance() once per particle.
+ * Particles whose zone index is @ref OSH_GEMCA_ZONE_INDEX_INVALID receive
+ * a distance of 0.0 and are skipped without touching the geometry.
+ *
+ * @param[in]  rt           Compiled gemca runtime.
+ * @param[in]  x            Particle x-positions, length @p n.
+ * @param[in]  y            Particle y-positions, length @p n.
+ * @param[in]  z            Particle z-positions, length @p n.
+ * @param[in]  ux           Particle x-directions, length @p n.
+ * @param[in]  uy           Particle y-directions, length @p n.
+ * @param[in]  uz           Particle z-directions, length @p n.
+ * @param[in]  zone_indices Zone index per particle (from get_zone_batch), length @p n.
+ * @param[in]  n            Number of particles.
+ * @param[out] dist_out     Receives the boundary distance for each particle, length @p n.
+ */
+void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
+                                          double const *x,
+                                          double const *y,
+                                          double const *z,
+                                          double const *ux,
+                                          double const *uy,
+                                          double const *uz,
+                                          size_t const *zone_indices,
+                                          size_t n,
+                                          double *dist_out);
+
 /** @} */ /* end defgroup gemca_runtime */
 
 #ifdef __cplusplus

@@ -50,23 +50,24 @@ static int count_leaves(struct cgnode const *node);
 static struct body const *find_guard_body(struct cgnode const *node);
 static int find_body_index(struct gemca_workspace const *wg, struct body const *b);
 
-/* RPN evaluators */
-static int eval_membership(struct gemca_runtime const *rt,
-                           struct gemca_rt_zone const *z,
-                           struct ray const *r);
-static double eval_distance(struct gemca_runtime const *rt,
-                            struct gemca_rt_zone const *z,
-                            struct ray const *r,
-                            int *is_inside);
+/* RPN evaluators — inline so the compiler can fold body evaluations across the
+ * guard/push boundary and into the zone-iteration outer loop. */
+static inline int eval_membership(struct gemca_runtime const *rt,
+                                   struct gemca_rt_zone const *z,
+                                   struct ray const *r);
+static inline double eval_distance(struct gemca_runtime const *rt,
+                                    struct gemca_rt_zone const *z,
+                                    struct ray const *r,
+                                    int *is_inside);
 
-/* Body evaluators */
-static int in_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r);
-static double dist_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r);
+/* Body evaluators — inline for the same reason. */
+static inline int in_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r);
+static inline double dist_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r);
 
-/* Ray transform */
-static enum osh_status transform_to_local_rt(struct gemca_rt_body const *b,
-                                             struct ray const *r,
-                                             struct ray *tr);
+/* Ray transform — inline: called once per body check; the switch is cheap when inlined. */
+static inline enum osh_status transform_to_local_rt(struct gemca_rt_body const *b,
+                                                     struct ray const *r,
+                                                     struct ray *tr);
 
 /* Surface evaluators */
 static inline int _check_surface_rt(struct gemca_rt_surface const *sf, struct ray const *r);
@@ -256,6 +257,114 @@ double osh_gemca_runtime_get_distance(struct gemca_runtime const *rt, size_t zon
     return total;
 }
 
+/* ---- Batch query API ----------------------------------------------------- */
+
+/**
+ * @brief Zone lookup for a batch of @p n particles (SoA inputs).
+ *
+ * @details
+ * Thin wrapper: reconstructs a struct ray per slot and delegates to
+ * eval_membership().  The SoA layout lets the compiler generate prefetch
+ * sequences naturally across the zone iteration inner loop.
+ */
+void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
+                                      double const *x,
+                                      double const *y,
+                                      double const *z,
+                                      double const *ux,
+                                      double const *uy,
+                                      double const *uz,
+                                      size_t n,
+                                      size_t *zone_out) {
+    struct ray r;
+    size_t i;
+    size_t j;
+
+    r.system = OSH_COORD_UNIVERSE;
+
+    for (i = 0; i < n; ++i) {
+        r.p[0] = x[i];
+        r.p[1] = y[i];
+        r.p[2] = z[i];
+        r.cp[0] = ux[i];
+        r.cp[1] = uy[i];
+        r.cp[2] = uz[i];
+
+        zone_out[i] = OSH_GEMCA_ZONE_INDEX_INVALID;
+        for (j = 0; j < rt->nzones; ++j) {
+            if (eval_membership(rt, &rt->zones[j], &r)) {
+                zone_out[i] = j;
+                break;
+            }
+        }
+    }
+}
+
+/**
+ * @brief Boundary-distance query for a batch of @p n particles (SoA inputs).
+ *
+ * @details
+ * Skips particles whose zone_indices entry is OSH_GEMCA_ZONE_INDEX_INVALID
+ * (outside all geometry) and writes 0.0 for those slots.  All other slots
+ * call eval_distance() via the same step-loop used in get_distance().
+ */
+void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
+                                          double const *x,
+                                          double const *y,
+                                          double const *z,
+                                          double const *ux,
+                                          double const *uy,
+                                          double const *uz,
+                                          size_t const *zone_indices,
+                                          size_t n,
+                                          double *dist_out) {
+    struct ray rr;
+    size_t i;
+    int k;
+    size_t zone_idx;
+    double d;
+    double total;
+    int is_inside;
+
+    for (i = 0; i < n; ++i) {
+        zone_idx = zone_indices[i];
+        if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID || zone_idx >= rt->nzones) {
+            dist_out[i] = 0.0;
+            continue;
+        }
+
+        /* Work on a local ray copy — same normalisation as scalar variant. */
+        rr.p[0] = x[i];
+        rr.p[1] = y[i];
+        rr.p[2] = z[i];
+        rr.cp[0] = ux[i];
+        rr.cp[1] = uy[i];
+        rr.cp[2] = uz[i];
+        rr.system = OSH_COORD_UNIVERSE;
+        osh_vect_norm(rr.cp);
+
+        total = 0.0;
+        while (1) {
+            d = eval_distance(rt, &rt->zones[zone_idx], &rr, &is_inside);
+            if (!is_inside) {
+                break;
+            }
+            if (d < 0.0) {
+                osh_error("osh_gemca_runtime_get_distance_batch(): negative step distance");
+                break;
+            }
+            if (d < OSH_GEMCA_STEPLIM) {
+                d = OSH_GEMCA_STEPLIM;
+            }
+            total += d;
+            for (k = 0; k < 3; ++k) {
+                rr.p[k] += rr.cp[k] * d;
+            }
+        }
+        dist_out[i] = total;
+    }
+}
+
 /* ---- Setup helpers ------------------------------------------------------- */
 
 /**
@@ -434,14 +543,23 @@ static enum osh_status compile_zone(struct zone const *z,
 
     ninsns = 0;
 
-    /* Prepend guard if a suitable body can be identified. */
-    guard = find_guard_body(&z->node);
-    if (guard) {
-        guard_idx = find_body_index(wg, guard);
-        if (guard_idx >= 0) {
-            zrt->insns[ninsns].op = GEMCA_RT_GUARD_BODY;
-            zrt->insns[ninsns].operand = guard_idx;
-            ninsns++;
+    /*
+     * Prepend a GUARD_BODY only for multi-leaf zones.
+     *
+     * For a single-leaf zone the only instruction is PUSH_BODY(A), which
+     * already performs exactly the same test a GUARD would do.  Emitting
+     * GUARD_BODY(A) PUSH_BODY(A) would evaluate body A twice per ray —
+     * doubling the per-zone cost with no benefit.
+     */
+    if (nleaves > 1) {
+        guard = find_guard_body(&z->node);
+        if (guard) {
+            guard_idx = find_body_index(wg, guard);
+            if (guard_idx >= 0) {
+                zrt->insns[ninsns].op = GEMCA_RT_GUARD_BODY;
+                zrt->insns[ninsns].operand = guard_idx;
+                ninsns++;
+            }
         }
     }
 
@@ -596,13 +714,22 @@ static int find_body_index(struct gemca_workspace const *wg, struct body const *
  *
  * @returns 1 if the ray is inside the zone, 0 otherwise.
  */
-static int eval_membership(struct gemca_runtime const *rt,
-                           struct gemca_rt_zone const *z,
-                           struct ray const *r) {
+static inline int eval_membership(struct gemca_runtime const *rt,
+                                   struct gemca_rt_zone const *z,
+                                   struct ray const *r) {
     int stack[OSH_GEMCA_RT_MAX_STACK];
     int sp;
     int i;
     struct gemca_rt_insn const *insn;
+
+    /*
+     * Fast path: single-instruction zones (one PUSH_BODY after the guard
+     * optimisation removed guards for leaf zones) need no stack machinery.
+     * This is the common case for simple body-per-zone geometry.
+     */
+    if (z->ninsns == 1) {
+        return in_body_rt(rt, z->insns[0].operand, r);
+    }
 
     sp = 0;
 
@@ -669,10 +796,10 @@ static int eval_membership(struct gemca_runtime const *rt,
  *
  * @returns Minimum positive distance to the nearest zone boundary.
  */
-static double eval_distance(struct gemca_runtime const *rt,
-                            struct gemca_rt_zone const *z,
-                            struct ray const *r,
-                            int *is_inside) {
+static inline double eval_distance(struct gemca_runtime const *rt,
+                                    struct gemca_rt_zone const *z,
+                                    struct ray const *r,
+                                    int *is_inside) {
     struct dist_frame stack[OSH_GEMCA_RT_MAX_STACK];
     struct dist_frame a;
     struct dist_frame b;
@@ -756,7 +883,7 @@ static double eval_distance(struct gemca_runtime const *rt,
  *
  * @returns 1 if inside all surfaces, 0 otherwise.
  */
-static int in_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r) {
+static inline int in_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r) {
     struct gemca_rt_body const *b;
     struct ray tr;
     int i;
@@ -789,7 +916,7 @@ static int in_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray c
  *
  * @returns Minimum positive distance to a body surface, or OSH_GEMCA_INFINITY.
  */
-static double dist_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r) {
+static inline double dist_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r) {
     struct gemca_rt_body const *b;
     struct ray tr;
     double d;
@@ -832,9 +959,9 @@ static double dist_body_rt(struct gemca_runtime const *rt, int body_idx, struct 
  *
  * @returns OSH_OK on success, OSH_ENOTSUP for an unknown coordinate system.
  */
-static enum osh_status transform_to_local_rt(struct gemca_rt_body const *b,
-                                             struct ray const *r,
-                                             struct ray *tr) {
+static inline enum osh_status transform_to_local_rt(struct gemca_rt_body const *b,
+                                                     struct ray const *r,
+                                                     struct ray *tr) {
     int i;
     int j;
 
