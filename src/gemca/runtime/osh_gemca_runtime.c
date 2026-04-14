@@ -19,6 +19,7 @@
  * this translation unit.
  */
 #define _RT_MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define OSH_GEMCA_RT_BODY_BATCH_CHUNK 256
 
 /* ---- Local types --------------------------------------------------------- */
 
@@ -68,8 +69,29 @@ static inline double dist_body_rt(struct gemca_runtime const *rt, int body_idx, 
 static inline enum osh_status transform_to_local_rt(struct gemca_rt_body const *b,
                                                      struct ray const *r,
                                                      struct ray *tr);
+static inline enum osh_status transform_to_local_batch_rt(struct gemca_rt_body const *b,
+                                                          double const *x,
+                                                          double const *y,
+                                                          double const *z,
+                                                          double const *ux,
+                                                          double const *uy,
+                                                          double const *uz,
+                                                          size_t n,
+                                                          double *tx,
+                                                          double *ty,
+                                                          double *tz,
+                                                          double *tux,
+                                                          double *tuy,
+                                                          double *tuz);
 
 /* Surface evaluators */
+static inline int _check_surface_components_rt(struct gemca_rt_surface const *sf,
+                                               double px,
+                                               double py,
+                                               double pz,
+                                               double ux,
+                                               double uy,
+                                               double uz);
 static inline int _check_surface_rt(struct gemca_rt_surface const *sf, struct ray const *r);
 static inline double _dist_surface_rt(struct gemca_rt_surface const *sf, struct ray const *r);
 
@@ -258,6 +280,121 @@ double osh_gemca_runtime_get_distance(struct gemca_runtime const *rt, size_t zon
 }
 
 /* ---- Batch query API ----------------------------------------------------- */
+
+/**
+ * @brief Surface-membership query for a batch of @p n rays (SoA inputs).
+ *
+ * @details
+ * Thin batched wrapper over the scalar per-primitive formulas shared with
+ * _check_surface_rt().  Inputs must already be expressed in the surface's
+ * local body coordinates.
+ */
+void osh_gemca_runtime_check_surface_batch(struct gemca_rt_surface const *sf,
+                                           double const *x,
+                                           double const *y,
+                                           double const *z,
+                                           double const *ux,
+                                           double const *uy,
+                                           double const *uz,
+                                           size_t n,
+                                           int *inside_out) {
+    size_t i;
+
+    if (!sf || !x || !y || !z || !ux || !uy || !uz || !inside_out) {
+        return;
+    }
+
+    for (i = 0; i < n; ++i) {
+        inside_out[i] = _check_surface_components_rt(sf, x[i], y[i], z[i], ux[i], uy[i], uz[i]);
+    }
+}
+
+/**
+ * @brief Body-membership query for a batch of @p n rays (SoA inputs).
+ *
+ * @details
+ * Processes the batch in fixed-size chunks to keep the temporary transformed
+ * coordinates on the stack.  Each chunk is transformed once into the body's
+ * local coordinate system, then every surface predicate is applied across the
+ * chunk via osh_gemca_runtime_check_surface_batch().
+ */
+void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
+                                        size_t body_idx,
+                                        double const *x,
+                                        double const *y,
+                                        double const *z,
+                                        double const *ux,
+                                        double const *uy,
+                                        double const *uz,
+                                        size_t n,
+                                        int *inside_out) {
+    struct gemca_rt_body const *b;
+    size_t base;
+    size_t i;
+    size_t is;
+    size_t chunk;
+    int any_inside;
+    double tx[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double ty[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tz[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tux[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tuy[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tuz[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    int surface_inside[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+
+    if (!x || !y || !z || !ux || !uy || !uz || !inside_out) {
+        return;
+    }
+
+    if (!rt || body_idx >= rt->nbodies) {
+        for (i = 0; i < n; ++i) {
+            inside_out[i] = 0;
+        }
+        return;
+    }
+
+    b = &rt->bodies[body_idx];
+
+    for (base = 0; base < n; base += chunk) {
+        chunk = n - base;
+        if (chunk > (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK) {
+            chunk = (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK;
+        }
+
+        if (transform_to_local_batch_rt(b,
+                                        x + base, y + base, z + base,
+                                        ux + base, uy + base, uz + base,
+                                        chunk,
+                                        tx, ty, tz,
+                                        tux, tuy, tuz) != OSH_OK) {
+            for (i = 0; i < chunk; ++i) {
+                inside_out[base + i] = 0;
+            }
+            continue;
+        }
+
+        for (i = 0; i < chunk; ++i) {
+            inside_out[base + i] = 1;
+        }
+
+        for (is = 0; is < (size_t) b->nsurfs; ++is) {
+            osh_gemca_runtime_check_surface_batch(&rt->surfaces[b->surf_begin + is],
+                                                 tx, ty, tz,
+                                                 tux, tuy, tuz,
+                                                 chunk, surface_inside);
+
+            any_inside = 0;
+            for (i = 0; i < chunk; ++i) {
+                inside_out[base + i] = inside_out[base + i] && surface_inside[i];
+                any_inside |= inside_out[base + i];
+            }
+
+            if (!any_inside) {
+                break;
+            }
+        }
+    }
+}
 
 /**
  * @brief Zone lookup for a batch of @p n particles (SoA inputs).
@@ -995,7 +1132,199 @@ static inline enum osh_status transform_to_local_rt(struct gemca_rt_body const *
     return OSH_OK;
 }
 
+/**
+ * @brief Transform a batch of rays from OSH_COORD_UNIVERSE to one body's local coordinates.
+ *
+ * @details
+ * Batched SoA counterpart of transform_to_local_rt().  The formulas are
+ * identical to the scalar path; only the storage layout differs.
+ */
+static inline enum osh_status transform_to_local_batch_rt(struct gemca_rt_body const *b,
+                                                          double const *x,
+                                                          double const *y,
+                                                          double const *z,
+                                                          double const *ux,
+                                                          double const *uy,
+                                                          double const *uz,
+                                                          size_t n,
+                                                          double *tx,
+                                                          double *ty,
+                                                          double *tz,
+                                                          double *tux,
+                                                          double *tuy,
+                                                          double *tuz) {
+    size_t i;
+
+    switch (b->coord) {
+    case OSH_COORD_UNIVERSE:
+        for (i = 0; i < n; ++i) {
+            tx[i] = x[i];
+            ty[i] = y[i];
+            tz[i] = z[i];
+            tux[i] = ux[i];
+            tuy[i] = uy[i];
+            tuz[i] = uz[i];
+        }
+        break;
+
+    case OSH_COORD_BCALIGN:
+        for (i = 0; i < n; ++i) {
+            tx[i] = x[i] + b->t[3];
+            ty[i] = y[i] + b->t[7];
+            tz[i] = z[i] + b->t[11];
+            tux[i] = ux[i];
+            tuy[i] = uy[i];
+            tuz[i] = uz[i];
+        }
+        break;
+
+    case OSH_COORD_BZALIGN:
+        for (i = 0; i < n; ++i) {
+            tx[i] = x[i] * b->t[0] + y[i] * b->t[1] + z[i] * b->t[2] - b->t[3];
+            ty[i] = x[i] * b->t[4] + y[i] * b->t[5] + z[i] * b->t[6] - b->t[7];
+            tz[i] = x[i] * b->t[8] + y[i] * b->t[9] + z[i] * b->t[10] - b->t[11];
+            tux[i] = ux[i] * b->t[0] + uy[i] * b->t[1] + uz[i] * b->t[2];
+            tuy[i] = ux[i] * b->t[4] + uy[i] * b->t[5] + uz[i] * b->t[6];
+            tuz[i] = ux[i] * b->t[8] + uy[i] * b->t[9] + uz[i] * b->t[10];
+        }
+        break;
+
+    default:
+        osh_error("transform_to_local_batch_rt(): unsupported coordinate system %d", (int) b->coord);
+        return OSH_ENOTSUP;
+    }
+
+    return OSH_OK;
+}
+
 /* ---- Surface evaluators -------------------------------------------------- */
+
+/**
+ * @brief Check whether one ray is on the inside of a flat surface.
+ *
+ * @details
+ * Scalar primitive predicate shared by both the legacy scalar ray wrapper and
+ * the new SoA batch surface helper.  Inputs are already in body-local
+ * coordinates; no transform is applied here.
+ */
+static inline int _check_surface_components_rt(struct gemca_rt_surface const *sf,
+                                               double px,
+                                               double py,
+                                               double pz,
+                                               double ux,
+                                               double uy,
+                                               double uz) {
+    double d;
+    double dot;
+    int i;
+    double p[3];
+    double u[3];
+
+    p[0] = px;
+    p[1] = py;
+    p[2] = pz;
+    u[0] = ux;
+    u[1] = uy;
+    u[2] = uz;
+
+    switch (sf->type) {
+
+    case OSH_GEMCA_SURF_SPHERE:
+        d = (px * px) + (py * py) + (pz * pz) - sf->p[0];
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        return ((px * ux) + (py * uy) + (pz * uz) < 0.0) ? 1 : 0;
+
+    case OSH_GEMCA_SURF_ELLIPSOID:
+        d = 0.0;
+        for (i = 0; i < 3; i++) {
+            d += (p[i] * p[i]) / sf->p[i];
+        }
+        if (d > 1.0 + OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < 1.0 - OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        dot = 0.0;
+        for (i = 0; i < 3; i++) {
+            dot += (p[i] / sf->p[i]) * u[i];
+        }
+        return (dot < 0.0) ? 1 : 0;
+
+    case OSH_GEMCA_SURF_CYLZ:
+        d = (px * px) + (py * py) - sf->p[0];
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        dot = (px * ux) + (py * uy);
+        return (dot < 0.0) ? 1 : 0;
+
+    case OSH_GEMCA_SURF_ELLZ:
+        d = (px * px / sf->p[0]) + (py * py / sf->p[1]) - 1.0;
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        dot = (px / sf->p[0]) * ux + (py / sf->p[1]) * uy;
+        return (dot < 0.0) ? 1 : 0;
+
+    case OSH_GEMCA_SURF_CONE:
+        d = (px * px) + (py * py) - sf->p[1] * (pz * pz);
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        dot = (px * ux) + (py * uy) - (sf->p[1] * pz * uz);
+        return (dot < 0.0) ? 1 : 0;
+
+    case OSH_GEMCA_SURF_PLANEX:
+        d = sf->p[0] * px + sf->p[1];
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        return (sf->p[0] * ux > 0.0) ? 0 : 1;
+
+    case OSH_GEMCA_SURF_PLANEY:
+        d = sf->p[0] * py + sf->p[1];
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        return (sf->p[0] * uy > 0.0) ? 0 : 1;
+
+    case OSH_GEMCA_SURF_PLANEZ:
+        d = sf->p[0] * pz + sf->p[1];
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        return (sf->p[0] * uz > 0.0) ? 0 : 1;
+
+    case OSH_GEMCA_SURF_PLANE:
+        d = (sf->p[0] * px) + (sf->p[1] * py) + (sf->p[2] * pz) + sf->p[3];
+        if (d > OSH_GEMCA_SMALL) {
+            return 0;
+        } else if (d < -OSH_GEMCA_SMALL) {
+            return 1;
+        }
+        return ((sf->p[0] * ux) + (sf->p[1] * uy) + (sf->p[2] * uz) > 0.0) ? 0 : 1;
+
+    default:
+        osh_error("_check_surface_components_rt(): unknown surface type %d", sf->type);
+        return 1;
+    }
+}
 
 /**
  * @brief Check whether a ray is on the inside of a flat surface.
@@ -1012,108 +1341,9 @@ static inline enum osh_status transform_to_local_rt(struct gemca_rt_body const *
  * @returns 1 if inside (or on boundary travelling in), 0 if outside.
  */
 static inline int _check_surface_rt(struct gemca_rt_surface const *sf, struct ray const *r) {
-    double d;
-    double dot;
-    int i;
-
-    switch (sf->type) {
-
-    case OSH_GEMCA_SURF_SPHERE:
-        d = osh_vect_len2(r->p) - sf->p[0];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (osh_vect_dot(r->p, r->cp) < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_ELLIPSOID:
-        d = 0.0;
-        for (i = 0; i < 3; i++) {
-            d += (r->p[i] * r->p[i]) / sf->p[i];
-        }
-        if (d > 1.0 + OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < 1.0 - OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = 0.0;
-        for (i = 0; i < 3; i++) {
-            dot += (r->p[i] / sf->p[i]) * r->cp[i];
-        }
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_CYLZ:
-        d = r->p[0] * r->p[0] + r->p[1] * r->p[1] - sf->p[0];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = r->p[0] * r->cp[0] + r->p[1] * r->cp[1];
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_ELLZ:
-        d = (r->p[0] * r->p[0] / sf->p[0]) + (r->p[1] * r->p[1] / sf->p[1]) - 1.0;
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = (r->p[0] / sf->p[0]) * r->cp[0] + (r->p[1] / sf->p[1]) * r->cp[1];
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_CONE:
-        d = (r->p[0] * r->p[0]) + (r->p[1] * r->p[1]) - sf->p[1] * (r->p[2] * r->p[2]);
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = (r->p[0] * r->cp[0]) + (r->p[1] * r->cp[1]) - (sf->p[1] * r->p[2] * r->cp[2]);
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_PLANEX:
-        d = sf->p[0] * r->p[0] + sf->p[1];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (sf->p[0] * r->cp[0] > 0.0) ? 0 : 1;
-
-    case OSH_GEMCA_SURF_PLANEY:
-        d = sf->p[0] * r->p[1] + sf->p[1];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (sf->p[0] * r->cp[1] > 0.0) ? 0 : 1;
-
-    case OSH_GEMCA_SURF_PLANEZ:
-        d = sf->p[0] * r->p[2] + sf->p[1];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (sf->p[0] * r->cp[2] > 0.0) ? 0 : 1;
-
-    case OSH_GEMCA_SURF_PLANE:
-        /* p[0..2] = normal (A,B,C); p[3] = offset D.  Ax+By+Cz+D <= 0 is inside. */
-        d = osh_vect_dot(sf->p, r->p) + sf->p[3];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (osh_vect_dot(sf->p, r->cp) > 0.0) ? 0 : 1;
-
-    default:
-        osh_error("_check_surface_rt(): unknown surface type %d", sf->type);
-        return 1;
-    }
+    return _check_surface_components_rt(sf,
+                                        r->p[0], r->p[1], r->p[2],
+                                        r->cp[0], r->cp[1], r->cp[2]);
 }
 
 /**
