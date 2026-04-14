@@ -216,9 +216,9 @@ Do not use `/tmp`, `mkdtemp`, or `getpid`-based naming.
 | Preset | Binary dir | Flags | Use for |
 |---|---|---|---|
 | `debug` | `build/` | `-O0 -g` | Day-to-day development, sanitisers |
-| `release` | `build_rel/` | `-O2 -g` | Benchmarking with debug symbols |
-| `relwithdebinfo` | `build-rel/` | `-O2 -g -DNDEBUG` | Standard CMake release+debug |
-| `prof` | `build_prof/` | `-O2 -g -fno-omit-frame-pointer` | `perf record` / flamegraphs |
+| `release` | `build_rel/` | `-O3` | Fastest baseline benchmarking |
+| `relwithdebinfo` | `build-rel/` | `-O3 -g` | Optimised benchmarking with symbols |
+| `prof` | `build_prof/` | `-O3 -g -fno-omit-frame-pointer` | `perf record` / flamegraphs |
 
 ```bash
 # Configure (first time, or after CMakeLists changes)

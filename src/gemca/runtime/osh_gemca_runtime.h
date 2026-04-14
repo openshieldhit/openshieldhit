@@ -83,8 +83,8 @@ extern "C" {
  *   DIFF                — Pop a, b; push (a && !b)  (left minus right).
  */
 enum gemca_rt_op {
-    GEMCA_RT_GUARD_BODY,     /**< Fast-reject guard: early exit if outside body[operand]. */
-    GEMCA_RT_PUSH_BODY,      /**< Push body[operand] membership/distance result. */
+    GEMCA_RT_GUARD_BODY,      /**< Fast-reject guard: early exit if outside body[operand]. */
+    GEMCA_RT_PUSH_BODY,       /**< Push body[operand] membership/distance result. */
     GEMCA_RT_PUSH_VOXEL_BODY, /**< Push voxel body[operand]; future Jacobs dispatch point. */
     GEMCA_RT_UNION,           /**< Boolean OR of top two stack entries. */
     GEMCA_RT_INTERSECT,       /**< Boolean AND of top two stack entries. */
@@ -129,7 +129,7 @@ enum gemca_rt_op {
  */
 struct gemca_rt_surface {
     double p[OSH_GEMCA_RT_SURF_NPAR]; /**< Surface parameters, zero-padded for unused slots. */
-    int type;                          /**< Surface type: OSH_GEMCA_SURF_* */
+    int type;                         /**< Surface type: OSH_GEMCA_SURF_* */
 };
 
 /**
@@ -184,9 +184,9 @@ struct gemca_rt_insn {
  */
 struct gemca_rt_zone {
     struct gemca_rt_insn *insns; /**< Flat RPN instruction array; owned. */
-    size_t material_idx;          /**< Dense material index (resolved from cold zone). */
-    int ninsns;                   /**< Number of entries in insns[]. */
-    int voxel_body_idx;           /**< Index of voxel body in bodies[], or -1 if none. */
+    size_t material_idx;         /**< Dense material index (resolved from cold zone). */
+    int ninsns;                  /**< Number of entries in insns[]. */
+    int voxel_body_idx;          /**< Index of voxel body in bodies[], or -1 if none. */
 };
 
 /**
@@ -214,12 +214,12 @@ struct gemca_rt_zone {
  */
 struct gemca_runtime {
     struct gemca_workspace const *workspace; /**< Cold storage reference — not owned. */
-    struct gemca_rt_surface *surfaces;        /**< Flat surface array (owned). */
-    struct gemca_rt_body *bodies;             /**< Flat body array (owned). */
-    struct gemca_rt_zone *zones;              /**< Flat zone array; each zone owns its insns[]. */
-    size_t nsurfaces;                         /**< Number of entries in surfaces[]. */
-    size_t nbodies;                           /**< Number of entries in bodies[]. */
-    size_t nzones;                            /**< Number of entries in zones[]. */
+    struct gemca_rt_surface *surfaces;       /**< Flat surface array (owned). */
+    struct gemca_rt_body *bodies;            /**< Flat body array (owned). */
+    struct gemca_rt_zone *zones;             /**< Flat zone array; each zone owns its insns[]. */
+    size_t nsurfaces;                        /**< Number of entries in surfaces[]. */
+    size_t nbodies;                          /**< Number of entries in bodies[]. */
+    size_t nzones;                           /**< Number of entries in zones[]. */
 };
 
 /* ---- Lifecycle ------------------------------------------------------------ */

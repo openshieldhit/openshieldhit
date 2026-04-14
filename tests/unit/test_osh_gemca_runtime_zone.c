@@ -29,19 +29,39 @@ static double next_signed(double scale) {
     return (2.0 * next_unit() - 1.0) * scale;
 }
 
-static void fill_zone_cases(double *x,
-                            double *y,
-                            double *z,
-                            double *ux,
-                            double *uy,
-                            double *uz) {
+static void fill_zone_cases(double *x, double *y, double *z, double *ux, double *uy, double *uz) {
     size_t i;
 
-    x[0] = 0.0;  y[0] = 0.0;  z[0] = 0.0;  ux[0] = 1.0;  uy[0] = 0.0;  uz[0] = 0.0;
-    x[1] = 1.0;  y[1] = 0.0;  z[1] = 0.0;  ux[1] = -1.0; uy[1] = 0.0;  uz[1] = 0.0;
-    x[2] = 0.0;  y[2] = 1.0;  z[2] = 0.0;  ux[2] = 0.0;  uy[2] = -1.0; uz[2] = 0.0;
-    x[3] = 0.0;  y[3] = 0.0;  z[3] = 1.0;  ux[3] = 0.0;  uy[3] = 0.0;  uz[3] = -1.0;
-    x[4] = 5.0;  y[4] = 5.0;  z[4] = 5.0;  ux[4] = -1.0; uy[4] = -1.0; uz[4] = -1.0;
+    x[0] = 0.0;
+    y[0] = 0.0;
+    z[0] = 0.0;
+    ux[0] = 1.0;
+    uy[0] = 0.0;
+    uz[0] = 0.0;
+    x[1] = 1.0;
+    y[1] = 0.0;
+    z[1] = 0.0;
+    ux[1] = -1.0;
+    uy[1] = 0.0;
+    uz[1] = 0.0;
+    x[2] = 0.0;
+    y[2] = 1.0;
+    z[2] = 0.0;
+    ux[2] = 0.0;
+    uy[2] = -1.0;
+    uz[2] = 0.0;
+    x[3] = 0.0;
+    y[3] = 0.0;
+    z[3] = 1.0;
+    ux[3] = 0.0;
+    uy[3] = 0.0;
+    uz[3] = -1.0;
+    x[4] = 5.0;
+    y[4] = 5.0;
+    z[4] = 5.0;
+    ux[4] = -1.0;
+    uy[4] = -1.0;
+    uz[4] = -1.0;
 
     for (i = 5u; i < N_ZONE_CASES; ++i) {
         x[i] = next_signed(20.0);

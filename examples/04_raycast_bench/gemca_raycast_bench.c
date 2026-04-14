@@ -24,7 +24,6 @@
  */
 
 #include <SDL.h>
-#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,11 +37,6 @@
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "random/osh_rng.h"
-
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-void osh_gemca_f77_setup(char const *geo_path, int *ierr);
-void osh_gemca_f77_get_zone(double x, double y, double z, double ux, double uy, double uz, int *zone_out);
-#endif
 
 /* ---- Window layout --------------------------------------------------------- */
 
@@ -68,7 +62,7 @@ void osh_gemca_f77_get_zone(double x, double y, double z, double ux, double uy, 
  * against memory used for the temporary zone arrays.
  */
 // #define RENDER_CHUNK 4096
-#define RENDER_CHUNK 65336 /* same as BENCH_CHUNK — no memory issue, max batch size for runtime API */
+#define RENDER_CHUNK BENCH_CHUNK
 
 /* ---- Colormap (12 distinct colours, cycled by zone index) ------------------ */
 
@@ -195,63 +189,6 @@ static inline int coord_to_pixel(double val, double half) {
     return px;
 }
 
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-static int legacy_geo_looks_f77_compatible(char const *path) {
-    FILE *fp;
-    char line[512];
-    int non_comment = 0;
-
-    fp = fopen(path, "r");
-    if (!fp) {
-        return 0;
-    }
-
-    while (fgets(line, sizeof(line), fp)) {
-        char body_type[8];
-        char id_token[64];
-        char *p = line;
-        size_t k;
-        int all_digits = 1;
-        int ok;
-
-        while (*p && isspace((unsigned char) *p)) {
-            ++p;
-        }
-        if (*p == '\0' || *p == '\n' || *p == '#' || *p == '!' || *p == '*') {
-            continue;
-        }
-
-        ++non_comment;
-        if (non_comment == 1) {
-            continue; /* title line */
-        }
-
-        if (strncmp(p, "END", 3) == 0) {
-            fclose(fp);
-            return 0;
-        }
-
-        ok = sscanf(p, "%7s %63s", body_type, id_token);
-        if (ok < 2) {
-            fclose(fp);
-            return 0;
-        }
-
-        for (k = 0; id_token[k] != '\0'; ++k) {
-            if (!isdigit((unsigned char) id_token[k])) {
-                all_digits = 0;
-                break;
-            }
-        }
-        fclose(fp);
-        return all_digits;
-    }
-
-    fclose(fp);
-    return 0;
-}
-#endif
-
 /* ---- Ray generation -------------------------------------------------------- */
 
 /*
@@ -280,17 +217,17 @@ static void generate_chunk(struct osh_rng *rng,
     int n = (int) chunk; /* BENCH_CHUNK <= 65536, safe to cast */
 
     /* Batch-generate raw uniforms [0, 1) for positions and two direction components. */
-    osh_rng_double_vec(rng, bx,  n);
-    osh_rng_double_vec(rng, by,  n);
-    osh_rng_double_vec(rng, bz,  n);
+    osh_rng_double_vec(rng, bx, n);
+    osh_rng_double_vec(rng, by, n);
+    osh_rng_double_vec(rng, bz, n);
     osh_rng_double_vec(rng, bux, n); /* X direction raw → [-1, 1] */
     osh_rng_double_vec(rng, buz, n); /* Z direction raw → [-1, 1] */
 
     /* Transform in-place — no trig, fully vectorisable. */
     for (i = 0; i < chunk; ++i) {
-        bx[i]  = bx[i]  * 2.0 * half - half;
-        by[i]  = by[i]  * 2.0 * half - half;
-        bz[i]  = bz[i]  * 2.0 * half - half;
+        bx[i] = bx[i] * 2.0 * half - half;
+        by[i] = by[i] * 2.0 * half - half;
+        bz[i] = bz[i] * 2.0 * half - half;
         bux[i] = bux[i] * 2.0 - 1.0;
         buy[i] = 0.0;
         buz[i] = buz[i] * 2.0 - 1.0;
@@ -321,8 +258,7 @@ static void run_benchmark(struct gemca_workspace *g,
                           size_t *zone_out,
                           double half,
                           long nrays,
-                          uint64_t seed,
-                          int use_legacy_f77) {
+                          uint64_t seed) {
     struct osh_rng rng;
     struct ray ray;
     long done;
@@ -332,15 +268,9 @@ static void run_benchmark(struct gemca_workspace *g,
     clock_t t1;
     clock_t ticks_ast;
     clock_t ticks_batch;
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-    clock_t ticks_f77;
-#endif
     size_t volatile sink;
     double elapsed_ast;
     double elapsed_batch;
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-    double elapsed_f77;
-#endif
 
     printf("\n--- Benchmark: %ld rays, chunk %d ---\n", nrays, BENCH_CHUNK);
     printf("    Geometry: %zu zone(s), %zu body/bodies\n\n", g->nzones, g->nbodies);
@@ -348,9 +278,6 @@ static void run_benchmark(struct gemca_workspace *g,
     ray.system = OSH_COORD_UNIVERSE;
     ticks_ast = 0;
     ticks_batch = 0;
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-    ticks_f77 = 0;
-#endif
     sink = 0u;
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, seed, 10u /* independent stream */);
@@ -388,44 +315,15 @@ static void run_benchmark(struct gemca_workspace *g,
             sink ^= zone_out[i];
         }
 
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-        if (use_legacy_f77) {
-            t0 = clock();
-            for (i = 0; i < chunk; ++i) {
-                int zone_f77;
-                osh_gemca_f77_get_zone(bx[i], by[i], bz[i], bux[i], buy[i], buz[i], &zone_f77);
-                if (zone_f77 >= 0) {
-                    sink ^= (size_t) zone_f77;
-                } else {
-                    sink ^= OSH_GEMCA_ZONE_INDEX_INVALID;
-                }
-            }
-            t1 = clock();
-            ticks_f77 += t1 - t0;
-        }
-#else
-        (void) use_legacy_f77;
-#endif
-
         done += chunk;
     }
     (void) sink;
 
     elapsed_ast = (double) ticks_ast / (double) CLOCKS_PER_SEC;
     elapsed_batch = (double) ticks_batch / (double) CLOCKS_PER_SEC;
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-    elapsed_f77 = (double) ticks_f77 / (double) CLOCKS_PER_SEC;
-#endif
 
     printf("    AST (per-ray):    %8.3f s  —  %6.2f M rays/s\n", elapsed_ast, (double) nrays / elapsed_ast / 1e6);
     printf("    Runtime (batch):  %8.3f s  —  %6.2f M rays/s\n", elapsed_batch, (double) nrays / elapsed_batch / 1e6);
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-    if (use_legacy_f77 && elapsed_f77 > 0.0) {
-        printf("    Legacy F77 (per-ray): %5.3f s  —  %6.2f M rays/s\n",
-               elapsed_f77,
-               (double) nrays / elapsed_f77 / 1e6);
-    }
-#endif
     if (elapsed_batch > 0.0) {
         printf("    Speedup:          %6.2fx\n\n", elapsed_ast / elapsed_batch);
     }
@@ -590,15 +488,10 @@ int main(int argc, char *argv[]) {
     SDL_Renderer *renderer = NULL;
     SDL_Event event;
     char title[320];
-    int use_legacy_f77;
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-    int legacy_setup_rc;
-#endif
     int rc;
     int quit;
 
     memset(&rt, 0, sizeof(rt));
-    use_legacy_f77 = 0;
 
     osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
 
@@ -628,21 +521,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-#if defined(OSH_GEMCA_BENCH_WITH_F77)
-    if (legacy_geo_looks_f77_compatible(opts.geo_file)) {
-        osh_gemca_f77_setup(opts.geo_file, &legacy_setup_rc);
-        if (legacy_setup_rc == 0) {
-            use_legacy_f77 = 1;
-        } else {
-            fprintf(stderr,
-                    "warning: legacy F77 GEMCA setup failed (code %d); benchmarking AST/runtime only\n",
-                    legacy_setup_rc);
-        }
-    } else {
-        fprintf(stderr, "warning: geometry uses modern/named-body syntax; skipping legacy F77 benchmark path\n");
-    }
-#endif
-
     /* ---- Benchmark scratch (heap) ----------------------------------------- */
 
     bx = malloc((size_t) BENCH_CHUNK * sizeof(double));
@@ -661,7 +539,7 @@ int main(int argc, char *argv[]) {
 
     /* ---- Benchmark --------------------------------------------------------- */
 
-    run_benchmark(g, &rt, bx, by, bz, bux, buy, buz, zone_out, opts.half_width, opts.nrays, opts.seed, use_legacy_f77);
+    run_benchmark(g, &rt, bx, by, bz, bux, buy, buz, zone_out, opts.half_width, opts.nrays, opts.seed);
 
     if (opts.no_display) {
         goto cleanup;

@@ -31,8 +31,6 @@
  * AVX2 says outside — irrelevant in practice).
  */
 
-#include "gemca/runtime/osh_gemca_runtime.h"
-
 #include <immintrin.h>
 #include <stddef.h>
 
@@ -40,6 +38,7 @@
 #include "common/osh_ray.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
+#include "gemca/runtime/osh_gemca_runtime.h"
 
 /* ---- Sign helper ---------------------------------------------------------- */
 
@@ -50,19 +49,18 @@
  * @param vdot  Direction dot product (outward normal · direction) for 4 particles.
  * @returns     __m256i: all-bits-set lanes = inside, all-zero = outside.
  */
-static inline __m256i _surf_sign_avx2(__m256d vd, __m256d vdot)
-{
-    const __m256d vsmall  = _mm256_set1_pd(OSH_GEMCA_SMALL);
-    const __m256d vnsmall = _mm256_set1_pd(-OSH_GEMCA_SMALL);
-    const __m256d vzero   = _mm256_setzero_pd();
+static inline __m256i _surf_sign_avx2(__m256d vd, __m256d vdot) {
+    __m256d const vsmall = _mm256_set1_pd(OSH_GEMCA_SMALL);
+    __m256d const vnsmall = _mm256_set1_pd(-OSH_GEMCA_SMALL);
+    __m256d const vzero = _mm256_setzero_pd();
 
     /* d < -SMALL → clearly inside */
     __m256d m_inside = _mm256_cmp_pd(vd, vnsmall, _CMP_LT_OQ);
 
     /* |d| ≤ SMALL: use direction to break tie */
-    __m256d m_le     = _mm256_cmp_pd(vd, vsmall,  _CMP_LE_OQ);
-    __m256d m_ge     = _mm256_cmp_pd(vd, vnsmall, _CMP_GE_OQ);
-    __m256d m_on     = _mm256_and_pd(m_le, m_ge);          /* |d| ≤ SMALL   */
+    __m256d m_le = _mm256_cmp_pd(vd, vsmall, _CMP_LE_OQ);
+    __m256d m_ge = _mm256_cmp_pd(vd, vnsmall, _CMP_GE_OQ);
+    __m256d m_on = _mm256_and_pd(m_le, m_ge);                  /* |d| ≤ SMALL   */
     __m256d m_dot_lt = _mm256_cmp_pd(vdot, vzero, _CMP_LT_OQ); /* dot < 0  */
 
     m_inside = _mm256_or_pd(m_inside, _mm256_and_pd(m_on, m_dot_lt));
@@ -84,11 +82,9 @@ static inline __m256i _surf_sign_avx2(__m256d vd, __m256d vdot)
  * @param tuz  Transformed z-directions.
  * @returns    __m256i lane mask: all-bits-set = inside surface, all-zero = outside.
  */
-static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
-                                    __m256d tx, __m256d ty, __m256d tz,
-                                    __m256d tux, __m256d tuy, __m256d tuz)
-{
-    const double *p = sf->p;
+static __m256i _check_surface_avx2(
+    struct gemca_rt_surface const *sf, __m256d tx, __m256d ty, __m256d tz, __m256d tux, __m256d tuy, __m256d tuz) {
+    double const *p = sf->p;
     __m256d vd, vdot;
 
     switch (sf->type) {
@@ -96,12 +92,8 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
     case OSH_GEMCA_SURF_SPHERE: {
         /* f = x² + y² + z² - p[0],  dot = x·ux + y·uy + z·uz */
         __m256d vp0 = _mm256_set1_pd(p[0]);
-        vd   = _mm256_sub_pd(_mm256_fmadd_pd(tx, tx,
-                             _mm256_fmadd_pd(ty, ty,
-                             _mm256_mul_pd(tz, tz))), vp0);
-        vdot = _mm256_fmadd_pd(tx, tux,
-               _mm256_fmadd_pd(ty, tuy,
-               _mm256_mul_pd(tz, tuz)));
+        vd = _mm256_sub_pd(_mm256_fmadd_pd(tx, tx, _mm256_fmadd_pd(ty, ty, _mm256_mul_pd(tz, tz))), vp0);
+        vdot = _mm256_fmadd_pd(tx, tux, _mm256_fmadd_pd(ty, tuy, _mm256_mul_pd(tz, tuz)));
         return _surf_sign_avx2(vd, vdot);
     }
 
@@ -113,20 +105,22 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
         __m256d vi0 = _mm256_set1_pd(inv0);
         __m256d vi1 = _mm256_set1_pd(inv1);
         __m256d vi2 = _mm256_set1_pd(inv2);
-        vd   = _mm256_sub_pd(_mm256_fmadd_pd(_mm256_mul_pd(tx, tx), vi0,
-                             _mm256_fmadd_pd(_mm256_mul_pd(ty, ty), vi1,
-                             _mm256_mul_pd(_mm256_mul_pd(tz, tz), vi2))),
-                             _mm256_set1_pd(1.0));
-        vdot = _mm256_fmadd_pd(_mm256_mul_pd(tx, vi0), tux,
-               _mm256_fmadd_pd(_mm256_mul_pd(ty, vi1), tuy,
-               _mm256_mul_pd(_mm256_mul_pd(tz, vi2), tuz)));
+        vd = _mm256_sub_pd(
+            _mm256_fmadd_pd(_mm256_mul_pd(tx, tx),
+                            vi0,
+                            _mm256_fmadd_pd(_mm256_mul_pd(ty, ty), vi1, _mm256_mul_pd(_mm256_mul_pd(tz, tz), vi2))),
+            _mm256_set1_pd(1.0));
+        vdot =
+            _mm256_fmadd_pd(_mm256_mul_pd(tx, vi0),
+                            tux,
+                            _mm256_fmadd_pd(_mm256_mul_pd(ty, vi1), tuy, _mm256_mul_pd(_mm256_mul_pd(tz, vi2), tuz)));
         return _surf_sign_avx2(vd, vdot);
     }
 
     case OSH_GEMCA_SURF_CYLZ: {
         /* f = x² + y² - p[0],  dot = x·ux + y·uy */
         __m256d vp0 = _mm256_set1_pd(p[0]);
-        vd   = _mm256_sub_pd(_mm256_fmadd_pd(tx, tx, _mm256_mul_pd(ty, ty)), vp0);
+        vd = _mm256_sub_pd(_mm256_fmadd_pd(tx, tx, _mm256_mul_pd(ty, ty)), vp0);
         vdot = _mm256_fmadd_pd(tx, tux, _mm256_mul_pd(ty, tuy));
         return _surf_sign_avx2(vd, vdot);
     }
@@ -137,21 +131,18 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
         double inv1 = 1.0 / p[1];
         __m256d vi0 = _mm256_set1_pd(inv0);
         __m256d vi1 = _mm256_set1_pd(inv1);
-        vd   = _mm256_sub_pd(_mm256_fmadd_pd(_mm256_mul_pd(tx, tx), vi0,
-                             _mm256_mul_pd(_mm256_mul_pd(ty, ty), vi1)),
-                             _mm256_set1_pd(1.0));
-        vdot = _mm256_fmadd_pd(_mm256_mul_pd(tx, vi0), tux,
-               _mm256_mul_pd(_mm256_mul_pd(ty, vi1), tuy));
+        vd = _mm256_sub_pd(_mm256_fmadd_pd(_mm256_mul_pd(tx, tx), vi0, _mm256_mul_pd(_mm256_mul_pd(ty, ty), vi1)),
+                           _mm256_set1_pd(1.0));
+        vdot = _mm256_fmadd_pd(_mm256_mul_pd(tx, vi0), tux, _mm256_mul_pd(_mm256_mul_pd(ty, vi1), tuy));
         return _surf_sign_avx2(vd, vdot);
     }
 
     case OSH_GEMCA_SURF_CONE: {
         /* f = x² + y² - p[1]·z²,  dot = x·ux + y·uy - p[1]·z·uz */
         __m256d vp1 = _mm256_set1_pd(p[1]);
-        vd   = _mm256_sub_pd(_mm256_fmadd_pd(tx, tx, _mm256_mul_pd(ty, ty)),
-                             _mm256_mul_pd(vp1, _mm256_mul_pd(tz, tz)));
-        vdot = _mm256_sub_pd(_mm256_fmadd_pd(tx, tux, _mm256_mul_pd(ty, tuy)),
-                             _mm256_mul_pd(vp1, _mm256_mul_pd(tz, tuz)));
+        vd = _mm256_sub_pd(_mm256_fmadd_pd(tx, tx, _mm256_mul_pd(ty, ty)), _mm256_mul_pd(vp1, _mm256_mul_pd(tz, tz)));
+        vdot =
+            _mm256_sub_pd(_mm256_fmadd_pd(tx, tux, _mm256_mul_pd(ty, tuy)), _mm256_mul_pd(vp1, _mm256_mul_pd(tz, tuz)));
         return _surf_sign_avx2(vd, vdot);
     }
 
@@ -159,7 +150,7 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
         /* f = p[0]·x + p[1],  dot = p[0]·ux */
         __m256d vp0 = _mm256_set1_pd(p[0]);
         __m256d vp1 = _mm256_set1_pd(p[1]);
-        vd   = _mm256_fmadd_pd(vp0, tx, vp1);
+        vd = _mm256_fmadd_pd(vp0, tx, vp1);
         vdot = _mm256_mul_pd(vp0, tux);
         return _surf_sign_avx2(vd, vdot);
     }
@@ -168,7 +159,7 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
         /* f = p[0]·y + p[1],  dot = p[0]·uy */
         __m256d vp0 = _mm256_set1_pd(p[0]);
         __m256d vp1 = _mm256_set1_pd(p[1]);
-        vd   = _mm256_fmadd_pd(vp0, ty, vp1);
+        vd = _mm256_fmadd_pd(vp0, ty, vp1);
         vdot = _mm256_mul_pd(vp0, tuy);
         return _surf_sign_avx2(vd, vdot);
     }
@@ -177,7 +168,7 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
         /* f = p[0]·z + p[1],  dot = p[0]·uz */
         __m256d vp0 = _mm256_set1_pd(p[0]);
         __m256d vp1 = _mm256_set1_pd(p[1]);
-        vd   = _mm256_fmadd_pd(vp0, tz, vp1);
+        vd = _mm256_fmadd_pd(vp0, tz, vp1);
         vdot = _mm256_mul_pd(vp0, tuz);
         return _surf_sign_avx2(vd, vdot);
     }
@@ -188,12 +179,8 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
         __m256d vp1 = _mm256_set1_pd(p[1]);
         __m256d vp2 = _mm256_set1_pd(p[2]);
         __m256d vp3 = _mm256_set1_pd(p[3]);
-        vd   = _mm256_fmadd_pd(vp0, tx,
-               _mm256_fmadd_pd(vp1, ty,
-               _mm256_fmadd_pd(vp2, tz, vp3)));
-        vdot = _mm256_fmadd_pd(vp0, tux,
-               _mm256_fmadd_pd(vp1, tuy,
-               _mm256_mul_pd(vp2, tuz)));
+        vd = _mm256_fmadd_pd(vp0, tx, _mm256_fmadd_pd(vp1, ty, _mm256_fmadd_pd(vp2, tz, vp3)));
+        vdot = _mm256_fmadd_pd(vp0, tux, _mm256_fmadd_pd(vp1, tuy, _mm256_mul_pd(vp2, tuz)));
         return _surf_sign_avx2(vd, vdot);
     }
 
@@ -218,10 +205,13 @@ static __m256i _check_surface_avx2(struct gemca_rt_surface const *sf,
  * @returns         __m256i lane mask: all-bits-set = inside body, all-zero = outside.
  */
 static __m256i _in_body_avx2(struct gemca_runtime const *rt,
-                               int body_idx,
-                               __m256d vx, __m256d vy, __m256d vz,
-                               __m256d vux, __m256d vuy, __m256d vuz)
-{
+                             int body_idx,
+                             __m256d vx,
+                             __m256d vy,
+                             __m256d vz,
+                             __m256d vux,
+                             __m256d vuy,
+                             __m256d vuz) {
     struct gemca_rt_body const *b = &rt->bodies[body_idx];
     __m256d tx, ty, tz, tux, tuy, tuz;
     __m256i inside;
@@ -229,19 +219,25 @@ static __m256i _in_body_avx2(struct gemca_runtime const *rt,
 
     switch (b->coord) {
     case OSH_COORD_UNIVERSE:
-        tx  = vx;  ty  = vy;  tz  = vz;
-        tux = vux; tuy = vuy; tuz = vuz;
+        tx = vx;
+        ty = vy;
+        tz = vz;
+        tux = vux;
+        tuy = vuy;
+        tuz = vuz;
         break;
 
     case OSH_COORD_BCALIGN: {
         /* Translation only: p_local = p_universe + t[3,7,11] */
-        __m256d dt3  = _mm256_set1_pd(b->t[3]);
-        __m256d dt7  = _mm256_set1_pd(b->t[7]);
+        __m256d dt3 = _mm256_set1_pd(b->t[3]);
+        __m256d dt7 = _mm256_set1_pd(b->t[7]);
         __m256d dt11 = _mm256_set1_pd(b->t[11]);
-        tx  = _mm256_add_pd(vx, dt3);
-        ty  = _mm256_add_pd(vy, dt7);
-        tz  = _mm256_add_pd(vz, dt11);
-        tux = vux; tuy = vuy; tuz = vuz;
+        tx = _mm256_add_pd(vx, dt3);
+        ty = _mm256_add_pd(vy, dt7);
+        tz = _mm256_add_pd(vz, dt11);
+        tux = vux;
+        tuy = vuy;
+        tuz = vuz;
         break;
     }
 
@@ -258,22 +254,22 @@ static __m256i _in_body_avx2(struct gemca_runtime const *rt,
          *   tuy = ux·t[4] + uy·t[5] + uz·t[6]
          *   tuz = ux·t[8] + uy·t[9] + uz·t[10]
          */
-        __m256d b0  = _mm256_set1_pd(b->t[0]);
-        __m256d b1  = _mm256_set1_pd(b->t[1]);
-        __m256d b2  = _mm256_set1_pd(b->t[2]);
-        __m256d b3  = _mm256_set1_pd(b->t[3]);
-        __m256d b4  = _mm256_set1_pd(b->t[4]);
-        __m256d b5  = _mm256_set1_pd(b->t[5]);
-        __m256d b6  = _mm256_set1_pd(b->t[6]);
-        __m256d b7  = _mm256_set1_pd(b->t[7]);
-        __m256d b8  = _mm256_set1_pd(b->t[8]);
-        __m256d b9  = _mm256_set1_pd(b->t[9]);
+        __m256d b0 = _mm256_set1_pd(b->t[0]);
+        __m256d b1 = _mm256_set1_pd(b->t[1]);
+        __m256d b2 = _mm256_set1_pd(b->t[2]);
+        __m256d b3 = _mm256_set1_pd(b->t[3]);
+        __m256d b4 = _mm256_set1_pd(b->t[4]);
+        __m256d b5 = _mm256_set1_pd(b->t[5]);
+        __m256d b6 = _mm256_set1_pd(b->t[6]);
+        __m256d b7 = _mm256_set1_pd(b->t[7]);
+        __m256d b8 = _mm256_set1_pd(b->t[8]);
+        __m256d b9 = _mm256_set1_pd(b->t[9]);
         __m256d b10 = _mm256_set1_pd(b->t[10]);
         __m256d b11 = _mm256_set1_pd(b->t[11]);
 
-        tx  = _mm256_fmadd_pd(vx, b0,  _mm256_fmadd_pd(vy, b1,  _mm256_fmsub_pd(vz, b2,  b3)));
-        ty  = _mm256_fmadd_pd(vx, b4,  _mm256_fmadd_pd(vy, b5,  _mm256_fmsub_pd(vz, b6,  b7)));
-        tz  = _mm256_fmadd_pd(vx, b8,  _mm256_fmadd_pd(vy, b9,  _mm256_fmsub_pd(vz, b10, b11)));
+        tx = _mm256_fmadd_pd(vx, b0, _mm256_fmadd_pd(vy, b1, _mm256_fmsub_pd(vz, b2, b3)));
+        ty = _mm256_fmadd_pd(vx, b4, _mm256_fmadd_pd(vy, b5, _mm256_fmsub_pd(vz, b6, b7)));
+        tz = _mm256_fmadd_pd(vx, b8, _mm256_fmadd_pd(vy, b9, _mm256_fmsub_pd(vz, b10, b11)));
         tux = _mm256_fmadd_pd(vux, b0, _mm256_fmadd_pd(vuy, b1, _mm256_mul_pd(vuz, b2)));
         tuy = _mm256_fmadd_pd(vux, b4, _mm256_fmadd_pd(vuy, b5, _mm256_mul_pd(vuz, b6)));
         tuz = _mm256_fmadd_pd(vux, b8, _mm256_fmadd_pd(vuy, b9, _mm256_mul_pd(vuz, b10)));
@@ -288,9 +284,8 @@ static __m256i _in_body_avx2(struct gemca_runtime const *rt,
     inside = _mm256_set1_epi64x(-1LL);
 
     for (is = 0; is < b->nsurfs; ++is) {
-        inside = _mm256_and_si256(inside,
-                     _check_surface_avx2(&rt->surfaces[b->surf_begin + (size_t)is],
-                                         tx, ty, tz, tux, tuy, tuz));
+        inside = _mm256_and_si256(
+            inside, _check_surface_avx2(&rt->surfaces[b->surf_begin + (size_t) is], tx, ty, tz, tux, tuy, tuz));
         /* Early exit: all 4 particles are outside this body */
         if (_mm256_testz_si256(inside, inside)) {
             return _mm256_setzero_si256();
@@ -321,10 +316,13 @@ static __m256i _in_body_avx2(struct gemca_runtime const *rt,
  * @returns        __m256i: all-bits-set lanes = inside zone, all-zero = outside.
  */
 static __m256i _eval_membership_avx2(struct gemca_runtime const *rt,
-                                      struct gemca_rt_zone const *z,
-                                      __m256d vx, __m256d vy, __m256d vz,
-                                      __m256d vux, __m256d vuy, __m256d vuz)
-{
+                                     struct gemca_rt_zone const *z,
+                                     __m256d vx,
+                                     __m256d vy,
+                                     __m256d vz,
+                                     __m256d vux,
+                                     __m256d vuy,
+                                     __m256d vuz) {
     __m256i vstack[OSH_GEMCA_RT_MAX_STACK];
     int sp = 0;
     int i;
@@ -394,23 +392,22 @@ static __m256i _eval_membership_avx2(struct gemca_runtime const *rt,
  * runtime dispatch in osh_gemca_runtime_get_zone_batch().
  */
 void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt,
-                                            double const *x,
-                                            double const *y,
-                                            double const *z,
-                                            double const *ux,
-                                            double const *uy,
-                                            double const *uz,
-                                            size_t n,
-                                            size_t *zone_out)
-{
+                                           double const *x,
+                                           double const *y,
+                                           double const *z,
+                                           double const *ux,
+                                           double const *uy,
+                                           double const *uz,
+                                           size_t n,
+                                           size_t *zone_out) {
     size_t base;
     size_t j;
 
     /* --- 4-wide AVX2 loop --- */
     for (base = 0; base + 4 <= n; base += 4) {
-        __m256d vx  = _mm256_loadu_pd(x  + base);
-        __m256d vy  = _mm256_loadu_pd(y  + base);
-        __m256d vz  = _mm256_loadu_pd(z  + base);
+        __m256d vx = _mm256_loadu_pd(x + base);
+        __m256d vy = _mm256_loadu_pd(y + base);
+        __m256d vz = _mm256_loadu_pd(z + base);
         __m256d vux = _mm256_loadu_pd(ux + base);
         __m256d vuy = _mm256_loadu_pd(uy + base);
         __m256d vuz = _mm256_loadu_pd(uz + base);
@@ -435,8 +432,7 @@ void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt,
                 break; /* All 4 particles resolved */
             }
 
-            inside = _eval_membership_avx2(rt, &rt->zones[j],
-                                           vx, vy, vz, vux, vuy, vuz);
+            inside = _eval_membership_avx2(rt, &rt->zones[j], vx, vy, vz, vux, vuy, vuz);
 
             /*
              * _mm256_movemask_pd reads the sign bit of each 64-bit double lane.
@@ -448,10 +444,18 @@ void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt,
             /* Newly resolved: inside this zone AND not yet assigned */
             newly = m & ~resolved;
 
-            if (newly & 1) { zone_out[base + 0] = j; }
-            if (newly & 2) { zone_out[base + 1] = j; }
-            if (newly & 4) { zone_out[base + 2] = j; }
-            if (newly & 8) { zone_out[base + 3] = j; }
+            if (newly & 1) {
+                zone_out[base + 0] = j;
+            }
+            if (newly & 2) {
+                zone_out[base + 1] = j;
+            }
+            if (newly & 4) {
+                zone_out[base + 2] = j;
+            }
+            if (newly & 8) {
+                zone_out[base + 3] = j;
+            }
 
             resolved |= newly;
         }
@@ -460,9 +464,9 @@ void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt,
     /* --- Scalar tail for remaining 0-3 particles --- */
     for (; base < n; ++base) {
         struct ray r;
-        r.p[0]  = x[base];
-        r.p[1]  = y[base];
-        r.p[2]  = z[base];
+        r.p[0] = x[base];
+        r.p[1] = y[base];
+        r.p[2] = z[base];
         r.cp[0] = ux[base];
         r.cp[1] = uy[base];
         r.cp[2] = uz[base];
