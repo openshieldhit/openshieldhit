@@ -318,6 +318,78 @@ double osh_gemca_runtime_get_distance(struct gemca_runtime const *rt, size_t zon
 /* ---- Batch query API ----------------------------------------------------- */
 
 /**
+ * @brief Surface-membership query for a batch of @p n rays already expressed in
+ *        a body's local coordinate system.
+ *
+ * @details
+ * Evaluates the same inside/on-boundary predicate as the scalar runtime
+ * surface check used by zone membership.  Inputs are structure-of-arrays so
+ * future SIMD implementations can operate directly on contiguous coordinates.
+ *
+ * Boundary semantics are identical to the scalar path:
+ *   - negative implicit-function value => inside
+ *   - positive implicit-function value => outside
+ *   - on-surface cases are resolved by the ray direction
+ *
+ * This is a low-level primitive helper intended for batched body and zone
+ * evaluators.  The input coordinates must already be in the surface's local
+ * body coordinate system; no body transform is applied here.
+ *
+ * @param[in]  sf         Flat surface to test.
+ * @param[in]  x          Ray x-positions, length @p n.
+ * @param[in]  y          Ray y-positions, length @p n.
+ * @param[in]  z          Ray z-positions, length @p n.
+ * @param[in]  ux         Ray x-direction components, length @p n.
+ * @param[in]  uy         Ray y-direction components, length @p n.
+ * @param[in]  uz         Ray z-direction components, length @p n.
+ * @param[in]  n          Number of rays.
+ * @param[out] inside_out Per-ray 0/1 inside results, length @p n.
+ */
+void osh_gemca_runtime_check_surface_batch(struct gemca_rt_surface const *sf,
+                                           double const *x,
+                                           double const *y,
+                                           double const *z,
+                                           double const *ux,
+                                           double const *uy,
+                                           double const *uz,
+                                           size_t n,
+                                           int *inside_out);
+
+/**
+ * @brief Body-membership query for a batch of @p n rays in OSH_COORD_UNIVERSE.
+ *
+ * @details
+ * Applies the body's coordinate transform to the input SoA rays, then checks
+ * all surfaces in the body's contiguous surface slice.  The result for each
+ * ray is the logical AND of all surface-inside predicates for that body.
+ *
+ * This is the batched counterpart of the scalar runtime body-membership check
+ * used by zone evaluation.  It is intended as a reusable primitive for future
+ * batched zone evaluators.
+ *
+ * @param[in]  rt         Compiled gemca runtime.
+ * @param[in]  body_idx   Index into rt->bodies[].
+ * @param[in]  x          Ray x-positions in OSH_COORD_UNIVERSE, length @p n.
+ * @param[in]  y          Ray y-positions in OSH_COORD_UNIVERSE, length @p n.
+ * @param[in]  z          Ray z-positions in OSH_COORD_UNIVERSE, length @p n.
+ * @param[in]  ux         Ray x-direction components, length @p n.
+ * @param[in]  uy         Ray y-direction components, length @p n.
+ * @param[in]  uz         Ray z-direction components, length @p n.
+ * @param[in]  n          Number of rays.
+ * @param[out] inside_out Per-ray 0/1 inside results, length @p n.
+ */
+void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
+                                        size_t body_idx,
+                                        double const *x,
+                                        double const *y,
+                                        double const *z,
+                                        double const *ux,
+                                        double const *uy,
+                                        double const *uz,
+                                        size_t n,
+                                        int *inside_out);
+
+/**
  * @brief Zone lookup for a batch of @p n particles.
  *
  * @details
