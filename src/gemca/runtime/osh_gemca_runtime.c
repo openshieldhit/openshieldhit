@@ -183,6 +183,16 @@ enum osh_status osh_gemca_runtime_setup(struct gemca_workspace const *wg, struct
         return rc;
     }
 
+#ifdef OSH_GEMCA_RUNTIME_HAVE_AVX2
+    if (__builtin_cpu_supports("avx2")) {
+        osh_info("gemca_runtime: zone batch dispatcher: AVX2+FMA (4-wide SIMD)");
+    } else {
+        osh_info("gemca_runtime: zone batch dispatcher: scalar (AVX2 built-in but CPU lacks support)");
+    }
+#else
+    osh_info("gemca_runtime: zone batch dispatcher: scalar (built without AVX2)");
+#endif
+
     return OSH_OK;
 }
 
@@ -900,13 +910,26 @@ void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
     }
 }
 
+/* Forward declaration for AVX2 implementation (compiled separately). */
+#ifdef OSH_GEMCA_RUNTIME_HAVE_AVX2
+extern void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt,
+                                                   double const *x,
+                                                   double const *y,
+                                                   double const *z,
+                                                   double const *ux,
+                                                   double const *uy,
+                                                   double const *uz,
+                                                   size_t n,
+                                                   size_t *zone_out);
+#endif
+
 /**
  * @brief Zone lookup for a batch of @p n particles (SoA inputs).
  *
  * @details
- * Thin wrapper: reconstructs a struct ray per slot and delegates to
- * eval_membership().  The SoA layout lets the compiler generate prefetch
- * sequences naturally across the zone iteration inner loop.
+ * Dispatches to the AVX2+FMA implementation when the CPU supports it (runtime
+ * check via __builtin_cpu_supports), otherwise falls back to the scalar
+ * chunked-active-list implementation.
  */
 void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
                                       double const *x,
@@ -928,6 +951,13 @@ void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
     if (!rt || !x || !y || !z || !ux || !uy || !uz || !zone_out) {
         return;
     }
+
+#ifdef OSH_GEMCA_RUNTIME_HAVE_AVX2
+    if (__builtin_cpu_supports("avx2")) {
+        osh_gemca_runtime_get_zone_batch_avx2(rt, x, y, z, ux, uy, uz, n, zone_out);
+        return;
+    }
+#endif
 
     for (base = 0; base < n; base += chunk) {
         chunk = n - base;

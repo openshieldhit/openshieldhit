@@ -209,3 +209,45 @@ Do not use `/tmp`, `mkdtemp`, or `getpid`-based naming.
 
 - Uses CMake with a modular subdirectory layout.
 - Unit tests are built using `CTest`.
+- Named presets are defined in `CMakePresets.json`.
+
+### Presets
+
+| Preset | Binary dir | Flags | Use for |
+|---|---|---|---|
+| `debug` | `build/` | `-O0 -g` | Day-to-day development, sanitisers |
+| `release` | `build_rel/` | `-O2 -g` | Benchmarking with debug symbols |
+| `relwithdebinfo` | `build-rel/` | `-O2 -g -DNDEBUG` | Standard CMake release+debug |
+| `prof` | `build_prof/` | `-O2 -g -fno-omit-frame-pointer` | `perf record` / flamegraphs |
+
+```bash
+# Configure (first time, or after CMakeLists changes)
+cmake --preset release
+
+# Build everything
+cmake --build --preset release
+
+# Build one target
+cmake --build --preset release --target gemca_raycast_bench
+
+# Run tests
+ctest --preset debug
+```
+
+### AVX2 / SIMD acceleration
+
+AVX2+FMA is detected automatically at configure time for every preset via
+`check_c_compiler_flag`.  When the compiler supports `-mavx2 -mfma`,
+`src/gemca/runtime/osh_gemca_runtime_avx2.c` is compiled with those flags and
+linked in.  A runtime dispatch (`__builtin_cpu_supports("avx2")`) ensures the
+binary still runs on CPUs without AVX2.
+
+The configure output will tell you whether it was detected:
+
+```
+-- gemca_runtime: AVX2+FMA zone batch enabled
+-- gemca_runtime: AVX2+FMA not available, using scalar fallback
+```
+
+You do **not** need a separate preset for AVX2.  The `release` preset is the
+one to use for SIMD benchmarking.
