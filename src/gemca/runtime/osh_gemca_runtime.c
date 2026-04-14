@@ -1003,6 +1003,10 @@ void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
     double total;
     int is_inside;
 
+    if (!rt || !x || !y || !z || !ux || !uy || !uz || !zone_indices || !dist_out) {
+        return;
+    }
+
     for (i = 0; i < n; ++i) {
         zone_idx = zone_indices[i];
         if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID || zone_idx >= rt->nzones) {
@@ -1242,6 +1246,47 @@ static enum osh_status compile_zone(struct zone const *z, struct gemca_workspace
     compile_node(&z->node, wg, zrt->insns, &ninsns);
 
     zrt->ninsns = ninsns;
+
+    /*
+     * Validate that the generated RPN sequence will never exceed
+     * OSH_GEMCA_RT_MAX_STACK at runtime.  Simulate the stack depth by
+     * replaying the instruction sequence — GUARD_BODY does not touch the
+     * value stack; PUSH adds one slot; binary operators consume two and
+     * produce one (net -1).  This check is O(ninsns) and runs only once at
+     * setup time.
+     */
+    {
+        int sim_sp = 0;
+        int max_sp = 0;
+        for (i = 0; i < ninsns; ++i) {
+            switch (zrt->insns[i].op) {
+            case GEMCA_RT_PUSH_BODY:
+            case GEMCA_RT_PUSH_VOXEL_BODY:
+                sim_sp++;
+                if (sim_sp > max_sp) {
+                    max_sp = sim_sp;
+                }
+                break;
+            case GEMCA_RT_UNION:
+            case GEMCA_RT_INTERSECT:
+            case GEMCA_RT_DIFF:
+                sim_sp--;
+                break;
+            default:
+                break;
+            }
+        }
+        if (max_sp > OSH_GEMCA_RT_MAX_STACK) {
+            osh_error("compile_zone: zone '%s' requires RPN stack depth %d > max %d; "
+                      "increase OSH_GEMCA_RT_MAX_STACK",
+                      z->name,
+                      max_sp,
+                      OSH_GEMCA_RT_MAX_STACK);
+            free(zrt->insns);
+            zrt->insns = NULL;
+            return OSH_EINVAL;
+        }
+    }
     zrt->material_idx = z->material_idx;
 
     /* Detect voxel bodies for future Jacobs dispatch. */
@@ -1275,6 +1320,17 @@ compile_node(struct cgnode const *node, struct gemca_workspace const *wg, struct
     int body_idx;
 
     if (node->type == _OSH_GEMCA_CGNODE_BODY) {
+        if (!node->body) {
+            /* Parser can produce a NULL body pointer when a body name fails to
+             * resolve.  The error has already been logged; emit a sentinel
+             * operand (-1) so the RPN stack stays balanced.  Evaluators treat
+             * body_idx < 0 as "always outside", making the zone unreachable. */
+            osh_error("compile_node: leaf node has NULL body pointer — zone will be unreachable");
+            insns[*ninsns].op = GEMCA_RT_PUSH_BODY;
+            insns[*ninsns].operand = -1;
+            (*ninsns)++;
+            return;
+        }
         body_idx = find_body_index(wg, node->body);
         insns[*ninsns].op = (node->body->type == OSH_GEMCA_BODY_VOX) ? GEMCA_RT_PUSH_VOXEL_BODY : GEMCA_RT_PUSH_BODY;
         insns[*ninsns].operand = body_idx;
@@ -1416,20 +1472,33 @@ static inline int eval_membership(struct gemca_runtime const *rt, struct gemca_r
 
         case GEMCA_RT_PUSH_BODY:
         case GEMCA_RT_PUSH_VOXEL_BODY:
+            if (sp >= OSH_GEMCA_RT_MAX_STACK) {
+                osh_error("eval_membership(): RPN stack overflow (depth %d)", sp);
+                return 0;
+            }
             stack[sp++] = in_body_rt(rt, insn->operand, r);
             break;
 
         case GEMCA_RT_UNION:
+            if (sp < 2) {
+                return 0;
+            }
             stack[sp - 2] = stack[sp - 2] || stack[sp - 1];
             sp--;
             break;
 
         case GEMCA_RT_INTERSECT:
+            if (sp < 2) {
+                return 0;
+            }
             stack[sp - 2] = stack[sp - 2] && stack[sp - 1];
             sp--;
             break;
 
         case GEMCA_RT_DIFF:
+            if (sp < 2) {
+                return 0;
+            }
             /* left && !right  (left = sp-2, right = sp-1 in RPN order) */
             stack[sp - 2] = stack[sp - 2] && !stack[sp - 1];
             sp--;
@@ -1509,12 +1578,19 @@ static void eval_membership_batch_active(struct gemca_runtime const *rt,
 
         case GEMCA_RT_PUSH_BODY:
         case GEMCA_RT_PUSH_VOXEL_BODY:
+            if (sp >= OSH_GEMCA_RT_MAX_STACK) {
+                osh_error("eval_membership_batch_active(): RPN stack overflow (depth %d)", sp);
+                return;
+            }
             check_body_batch_indexed_rt(
                 rt, (size_t) insn->operand, x, y, zpos, ux, uy, uz, active_idx, active_n, stack[sp]);
             sp++;
             break;
 
         case GEMCA_RT_UNION:
+            if (sp < 2) {
+                return;
+            }
             for (lane = 0; lane < active_n; ++lane) {
                 stack[sp - 2][lane] = stack[sp - 2][lane] || stack[sp - 1][lane];
             }
@@ -1522,6 +1598,9 @@ static void eval_membership_batch_active(struct gemca_runtime const *rt,
             break;
 
         case GEMCA_RT_INTERSECT:
+            if (sp < 2) {
+                return;
+            }
             for (lane = 0; lane < active_n; ++lane) {
                 stack[sp - 2][lane] = stack[sp - 2][lane] && stack[sp - 1][lane];
             }
@@ -1529,6 +1608,9 @@ static void eval_membership_batch_active(struct gemca_runtime const *rt,
             break;
 
         case GEMCA_RT_DIFF:
+            if (sp < 2) {
+                return;
+            }
             for (lane = 0; lane < active_n; ++lane) {
                 stack[sp - 2][lane] = stack[sp - 2][lane] && !stack[sp - 1][lane];
             }
@@ -1593,6 +1675,11 @@ eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, str
 
         case GEMCA_RT_PUSH_BODY:
         case GEMCA_RT_PUSH_VOXEL_BODY:
+            if (sp >= OSH_GEMCA_RT_MAX_STACK) {
+                osh_error("eval_distance(): RPN stack overflow (depth %d)", sp);
+                *is_inside = 0;
+                return 0.0;
+            }
             /*
              * TODO: for PUSH_VOXEL_BODY and z->voxel_body_idx >= 0, dispatch to
              * the Jacobs voxel traversal algorithm here instead of the RPP
@@ -1604,6 +1691,10 @@ eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, str
             break;
 
         case GEMCA_RT_UNION:
+            if (sp < 2) {
+                *is_inside = 0;
+                return 0.0;
+            }
             b = stack[--sp];
             a = stack[sp - 1];
             stack[sp - 1].is_inside = a.is_inside || b.is_inside;
@@ -1611,6 +1702,10 @@ eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, str
             break;
 
         case GEMCA_RT_INTERSECT:
+            if (sp < 2) {
+                *is_inside = 0;
+                return 0.0;
+            }
             b = stack[--sp];
             a = stack[sp - 1];
             stack[sp - 1].is_inside = a.is_inside && b.is_inside;
@@ -1618,6 +1713,10 @@ eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, str
             break;
 
         case GEMCA_RT_DIFF:
+            if (sp < 2) {
+                *is_inside = 0;
+                return 0.0;
+            }
             b = stack[--sp];
             a = stack[sp - 1];
             stack[sp - 1].is_inside = a.is_inside && !b.is_inside;
@@ -1660,6 +1759,10 @@ static inline int in_body_rt(struct gemca_runtime const *rt, int body_idx, struc
     struct gemca_rt_body const *b;
     struct ray tr;
     int i;
+
+    if (body_idx < 0 || (size_t) body_idx >= rt->nbodies) {
+        return 0;
+    }
 
     b = &rt->bodies[body_idx];
 

@@ -61,8 +61,7 @@
  * Zone indices accumulated before plotting — balances SDL call overhead
  * against memory used for the temporary zone arrays.
  */
-// #define RENDER_CHUNK 4096
-#define RENDER_CHUNK BENCH_CHUNK
+#define RENDER_CHUNK 4096
 
 /* ---- Colormap (12 distinct colours, cycled by zone index) ------------------ */
 
