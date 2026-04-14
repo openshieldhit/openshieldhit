@@ -29,6 +29,16 @@
  * This matches the scalar _check_surface_components_rt() logic exactly, with
  * a measure-zero difference at the vdot = 0 boundary (scalar says inside,
  * AVX2 says outside — irrelevant in practice).
+ *
+ * GPU migration note
+ * ------------------
+ * The structure of _eval_membership_avx2() maps almost directly to a GPU
+ * kernel body: replace __m256d with scalar double (the GPU does its own SIMD
+ * across threads in a warp), replace __m256i boolean lanes with a single int,
+ * and launch one thread per particle.  The RPN stack fits in registers at
+ * OSH_GEMCA_RT_MAX_STACK = 32 slots.  The only prerequisite is flattening
+ * zones[j].insns into a device-accessible insns_flat[] array — see
+ * runtime/README.md.
  */
 
 #include <immintrin.h>

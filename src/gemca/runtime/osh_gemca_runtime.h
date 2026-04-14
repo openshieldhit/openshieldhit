@@ -181,6 +181,11 @@ struct gemca_rt_insn {
  * treats the voxel's surfaces as a regular body (RPP half-planes).  Distance
  * queries for this zone will eventually dispatch to Jacobs traversal once the
  * zone is confirmed occupied; currently falls back to RPP boundary distance.
+ *
+ * @note GPU migration: `insns` is a host heap pointer and cannot be followed
+ * on a GPU device.  Before writing a GPU kernel, add a flat `insns_flat[]`
+ * array and a per-zone `insn_begin[]` offset array to `gemca_runtime` (see
+ * runtime/README.md for the full plan).  The CPU path is unaffected.
  */
 struct gemca_rt_zone {
     struct gemca_rt_insn *insns; /**< Flat RPN instruction array; owned. */
@@ -211,6 +216,11 @@ struct gemca_rt_zone {
  *
  * Ownership: surfaces[], bodies[], and zones[] (including each zone's insns[])
  * are heap-allocated by setup and freed by osh_gemca_runtime_free().
+ *
+ * @note GPU migration: surfaces[], bodies[], and zones[] are plain contiguous
+ * buffers suitable for device-memory copies as-is.  The only host-specific
+ * field is zones[j].insns (a heap pointer).  See runtime/README.md for the
+ * planned `insns_flat` / `insn_begin` addition that closes this gap.
  */
 struct gemca_runtime {
     struct gemca_workspace const *workspace; /**< Cold storage reference — not owned. */
