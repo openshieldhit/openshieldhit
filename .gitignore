@@ -5,7 +5,8 @@ NB*.dat
 *.bdo
 plot*.py
 build-*/
-
+build_*/
+perf*
 
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,cmake,linux
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,cmake,linux
