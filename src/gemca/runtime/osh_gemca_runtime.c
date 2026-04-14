@@ -56,6 +56,17 @@ static int find_body_index(struct gemca_workspace const *wg, struct body const *
 static inline int eval_membership(struct gemca_runtime const *rt,
                                    struct gemca_rt_zone const *z,
                                    struct ray const *r);
+static void eval_membership_batch_active(struct gemca_runtime const *rt,
+                                         struct gemca_rt_zone const *z,
+                                         double const *x,
+                                         double const *y,
+                                         double const *zpos,
+                                         double const *ux,
+                                         double const *uy,
+                                         double const *uz,
+                                         size_t const *candidate_idx,
+                                         size_t n_candidates,
+                                         int *inside_out);
 static inline double eval_distance(struct gemca_runtime const *rt,
                                     struct gemca_rt_zone const *z,
                                     struct ray const *r,
@@ -83,6 +94,27 @@ static inline enum osh_status transform_to_local_batch_rt(struct gemca_rt_body c
                                                           double *tux,
                                                           double *tuy,
                                                           double *tuz);
+static void check_surface_batch_indexed_rt(struct gemca_rt_surface const *sf,
+                                           double const *x,
+                                           double const *y,
+                                           double const *z,
+                                           double const *ux,
+                                           double const *uy,
+                                           double const *uz,
+                                           size_t const *indices,
+                                           size_t n,
+                                           int *inside_out);
+static void check_body_batch_indexed_rt(struct gemca_runtime const *rt,
+                                        size_t body_idx,
+                                        double const *x,
+                                        double const *y,
+                                        double const *z,
+                                        double const *ux,
+                                        double const *uy,
+                                        double const *uz,
+                                        size_t const *indices,
+                                        size_t n,
+                                        int *inside_out);
 
 /* Surface evaluators */
 static inline int _check_surface_components_rt(struct gemca_rt_surface const *sf,
@@ -281,6 +313,296 @@ double osh_gemca_runtime_get_distance(struct gemca_runtime const *rt, size_t zon
 
 /* ---- Batch query API ----------------------------------------------------- */
 
+static void check_surface_batch_indexed_rt(struct gemca_rt_surface const *sf,
+                                           double const *x,
+                                           double const *y,
+                                           double const *z,
+                                           double const *ux,
+                                           double const *uy,
+                                           double const *uz,
+                                           size_t const *indices,
+                                           size_t n,
+                                           int *inside_out) {
+    double d;
+    double dot;
+    size_t lane;
+    size_t i;
+    double p0;
+    double p1;
+    double p2;
+    double p3;
+
+    if (!sf || !x || !y || !z || !ux || !uy || !uz || !indices || !inside_out) {
+        return;
+    }
+
+    p0 = sf->p[0];
+    p1 = sf->p[1];
+    p2 = sf->p[2];
+    p3 = sf->p[3];
+
+    switch (sf->type) {
+    case OSH_GEMCA_SURF_SPHERE:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = (x[i] * x[i]) + (y[i] * y[i]) + (z[i] * z[i]) - p0;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                inside_out[lane] = (((x[i] * ux[i]) + (y[i] * uy[i]) + (z[i] * uz[i])) < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_ELLIPSOID:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = (x[i] * x[i]) / p0 + (y[i] * y[i]) / p1 + (z[i] * z[i]) / p2;
+            if (d > 1.0 + OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < 1.0 - OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                dot = (x[i] / p0) * ux[i] + (y[i] / p1) * uy[i] + (z[i] / p2) * uz[i];
+                inside_out[lane] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_CYLZ:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = (x[i] * x[i]) + (y[i] * y[i]) - p0;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                dot = (x[i] * ux[i]) + (y[i] * uy[i]);
+                inside_out[lane] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_ELLZ:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = (x[i] * x[i] / p0) + (y[i] * y[i] / p1) - 1.0;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                dot = (x[i] / p0) * ux[i] + (y[i] / p1) * uy[i];
+                inside_out[lane] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_CONE:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = (x[i] * x[i]) + (y[i] * y[i]) - p1 * (z[i] * z[i]);
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                dot = (x[i] * ux[i]) + (y[i] * uy[i]) - (p1 * z[i] * uz[i]);
+                inside_out[lane] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANEX:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = p0 * x[i] + p1;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                inside_out[lane] = (p0 * ux[i] > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANEY:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = p0 * y[i] + p1;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                inside_out[lane] = (p0 * uy[i] > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANEZ:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = p0 * z[i] + p1;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                inside_out[lane] = (p0 * uz[i] > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANE:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            d = (p0 * x[i]) + (p1 * y[i]) + (p2 * z[i]) + p3;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[lane] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[lane] = 1;
+            } else {
+                inside_out[lane] = ((p0 * ux[i]) + (p1 * uy[i]) + (p2 * uz[i]) > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    default:
+        for (lane = 0; lane < n; ++lane) {
+            i = indices[lane];
+            inside_out[lane] = _check_surface_components_rt(sf, x[i], y[i], z[i], ux[i], uy[i], uz[i]);
+        }
+        break;
+    }
+}
+
+static void check_body_batch_indexed_rt(struct gemca_runtime const *rt,
+                                        size_t body_idx,
+                                        double const *x,
+                                        double const *y,
+                                        double const *z,
+                                        double const *ux,
+                                        double const *uy,
+                                        double const *uz,
+                                        size_t const *indices,
+                                        size_t n,
+                                        int *inside_out) {
+    struct gemca_rt_body const *b;
+    size_t lane;
+    size_t is;
+    size_t local_idx[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tx[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double ty[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tz[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tux[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tuy[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double tuz[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    int surface_inside[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    double const *lx;
+    double const *ly;
+    double const *lz;
+    double const *lux;
+    double const *luy;
+    double const *luz;
+
+    if (!x || !y || !z || !ux || !uy || !uz || !indices || !inside_out) {
+        return;
+    }
+
+    if (!rt || body_idx >= rt->nbodies || n > (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK) {
+        for (lane = 0; lane < n; ++lane) {
+            inside_out[lane] = 0;
+        }
+        return;
+    }
+
+    b = &rt->bodies[body_idx];
+    lx = x;
+    ly = y;
+    lz = z;
+    lux = ux;
+    luy = uy;
+    luz = uz;
+
+    switch (b->coord) {
+    case OSH_COORD_UNIVERSE:
+        for (lane = 0; lane < n; ++lane) {
+            inside_out[lane] = 1;
+            local_idx[lane] = indices[lane];
+        }
+        break;
+
+    case OSH_COORD_BCALIGN:
+        for (lane = 0; lane < n; ++lane) {
+            size_t i = indices[lane];
+            tx[lane] = x[i] + b->t[3];
+            ty[lane] = y[i] + b->t[7];
+            tz[lane] = z[i] + b->t[11];
+            tux[lane] = ux[i];
+            tuy[lane] = uy[i];
+            tuz[lane] = uz[i];
+            inside_out[lane] = 1;
+            local_idx[lane] = lane;
+        }
+        lx = tx;
+        ly = ty;
+        lz = tz;
+        lux = tux;
+        luy = tuy;
+        luz = tuz;
+        break;
+
+    case OSH_COORD_BZALIGN:
+        for (lane = 0; lane < n; ++lane) {
+            size_t i = indices[lane];
+            tx[lane] = x[i] * b->t[0] + y[i] * b->t[1] + z[i] * b->t[2] - b->t[3];
+            ty[lane] = x[i] * b->t[4] + y[i] * b->t[5] + z[i] * b->t[6] - b->t[7];
+            tz[lane] = x[i] * b->t[8] + y[i] * b->t[9] + z[i] * b->t[10] - b->t[11];
+            tux[lane] = ux[i] * b->t[0] + uy[i] * b->t[1] + uz[i] * b->t[2];
+            tuy[lane] = ux[i] * b->t[4] + uy[i] * b->t[5] + uz[i] * b->t[6];
+            tuz[lane] = ux[i] * b->t[8] + uy[i] * b->t[9] + uz[i] * b->t[10];
+            inside_out[lane] = 1;
+            local_idx[lane] = lane;
+        }
+        lx = tx;
+        ly = ty;
+        lz = tz;
+        lux = tux;
+        luy = tuy;
+        luz = tuz;
+        break;
+
+    default:
+        for (lane = 0; lane < n; ++lane) {
+            inside_out[lane] = 0;
+        }
+        return;
+    }
+
+    for (is = 0; is < (size_t) b->nsurfs; ++is) {
+        int any_inside;
+
+        check_surface_batch_indexed_rt(&rt->surfaces[b->surf_begin + is],
+                                       lx, ly, lz, lux, luy, luz,
+                                       local_idx, n, surface_inside);
+
+        any_inside = 0;
+        for (lane = 0; lane < n; ++lane) {
+            inside_out[lane] = inside_out[lane] && surface_inside[lane];
+            any_inside |= inside_out[lane];
+        }
+
+        if (!any_inside) {
+            break;
+        }
+    }
+}
+
 /**
  * @brief Surface-membership query for a batch of @p n rays (SoA inputs).
  *
@@ -298,14 +620,150 @@ void osh_gemca_runtime_check_surface_batch(struct gemca_rt_surface const *sf,
                                            double const *uz,
                                            size_t n,
                                            int *inside_out) {
+    double d;
+    double dot;
     size_t i;
+    double p0;
+    double p1;
+    double p2;
+    double p3;
 
     if (!sf || !x || !y || !z || !ux || !uy || !uz || !inside_out) {
         return;
     }
 
-    for (i = 0; i < n; ++i) {
-        inside_out[i] = _check_surface_components_rt(sf, x[i], y[i], z[i], ux[i], uy[i], uz[i]);
+    p0 = sf->p[0];
+    p1 = sf->p[1];
+    p2 = sf->p[2];
+    p3 = sf->p[3];
+
+    switch (sf->type) {
+    case OSH_GEMCA_SURF_SPHERE:
+        for (i = 0; i < n; ++i) {
+            d = (x[i] * x[i]) + (y[i] * y[i]) + (z[i] * z[i]) - p0;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                inside_out[i] = (((x[i] * ux[i]) + (y[i] * uy[i]) + (z[i] * uz[i])) < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_ELLIPSOID:
+        for (i = 0; i < n; ++i) {
+            d = (x[i] * x[i]) / p0 + (y[i] * y[i]) / p1 + (z[i] * z[i]) / p2;
+            if (d > 1.0 + OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < 1.0 - OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                dot = (x[i] / p0) * ux[i] + (y[i] / p1) * uy[i] + (z[i] / p2) * uz[i];
+                inside_out[i] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_CYLZ:
+        for (i = 0; i < n; ++i) {
+            d = (x[i] * x[i]) + (y[i] * y[i]) - p0;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                dot = (x[i] * ux[i]) + (y[i] * uy[i]);
+                inside_out[i] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_ELLZ:
+        for (i = 0; i < n; ++i) {
+            d = (x[i] * x[i] / p0) + (y[i] * y[i] / p1) - 1.0;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                dot = (x[i] / p0) * ux[i] + (y[i] / p1) * uy[i];
+                inside_out[i] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_CONE:
+        for (i = 0; i < n; ++i) {
+            d = (x[i] * x[i]) + (y[i] * y[i]) - p1 * (z[i] * z[i]);
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                dot = (x[i] * ux[i]) + (y[i] * uy[i]) - (p1 * z[i] * uz[i]);
+                inside_out[i] = (dot < 0.0) ? 1 : 0;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANEX:
+        for (i = 0; i < n; ++i) {
+            d = p0 * x[i] + p1;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                inside_out[i] = (p0 * ux[i] > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANEY:
+        for (i = 0; i < n; ++i) {
+            d = p0 * y[i] + p1;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                inside_out[i] = (p0 * uy[i] > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANEZ:
+        for (i = 0; i < n; ++i) {
+            d = p0 * z[i] + p1;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                inside_out[i] = (p0 * uz[i] > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    case OSH_GEMCA_SURF_PLANE:
+        for (i = 0; i < n; ++i) {
+            d = (p0 * x[i]) + (p1 * y[i]) + (p2 * z[i]) + p3;
+            if (d > OSH_GEMCA_SMALL) {
+                inside_out[i] = 0;
+            } else if (d < -OSH_GEMCA_SMALL) {
+                inside_out[i] = 1;
+            } else {
+                inside_out[i] = ((p0 * ux[i]) + (p1 * uy[i]) + (p2 * uz[i]) > 0.0) ? 0 : 1;
+            }
+        }
+        break;
+
+    default:
+        for (i = 0; i < n; ++i) {
+            inside_out[i] = _check_surface_components_rt(sf, x[i], y[i], z[i], ux[i], uy[i], uz[i]);
+        }
+        break;
     }
 }
 
@@ -329,6 +787,12 @@ void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
                                         size_t n,
                                         int *inside_out) {
     struct gemca_rt_body const *b;
+    double const *lx;
+    double const *ly;
+    double const *lz;
+    double const *lux;
+    double const *luy;
+    double const *luz;
     size_t base;
     size_t i;
     size_t is;
@@ -356,37 +820,77 @@ void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
     b = &rt->bodies[body_idx];
 
     for (base = 0; base < n; base += chunk) {
+        int *inside_chunk;
+
         chunk = n - base;
         if (chunk > (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK) {
             chunk = (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK;
         }
 
-        if (transform_to_local_batch_rt(b,
-                                        x + base, y + base, z + base,
-                                        ux + base, uy + base, uz + base,
-                                        chunk,
-                                        tx, ty, tz,
-                                        tux, tuy, tuz) != OSH_OK) {
+        inside_chunk = inside_out + base;
+        lx = x + base;
+        ly = y + base;
+        lz = z + base;
+        lux = ux + base;
+        luy = uy + base;
+        luz = uz + base;
+
+        switch (b->coord) {
+        case OSH_COORD_UNIVERSE:
+            break;
+
+        case OSH_COORD_BCALIGN:
             for (i = 0; i < chunk; ++i) {
-                inside_out[base + i] = 0;
+                tx[i] = lx[i] + b->t[3];
+                ty[i] = ly[i] + b->t[7];
+                tz[i] = lz[i] + b->t[11];
+            }
+            lx = tx;
+            ly = ty;
+            lz = tz;
+            break;
+
+        case OSH_COORD_BZALIGN:
+            if (transform_to_local_batch_rt(b,
+                                            lx, ly, lz,
+                                            lux, luy, luz,
+                                            chunk,
+                                            tx, ty, tz,
+                                            tux, tuy, tuz) != OSH_OK) {
+                for (i = 0; i < chunk; ++i) {
+                    inside_chunk[i] = 0;
+                }
+                continue;
+            }
+            lx = tx;
+            ly = ty;
+            lz = tz;
+            lux = tux;
+            luy = tuy;
+            luz = tuz;
+            break;
+
+        default:
+            for (i = 0; i < chunk; ++i) {
+                inside_chunk[i] = 0;
             }
             continue;
         }
 
         for (i = 0; i < chunk; ++i) {
-            inside_out[base + i] = 1;
+            inside_chunk[i] = 1;
         }
 
         for (is = 0; is < (size_t) b->nsurfs; ++is) {
             osh_gemca_runtime_check_surface_batch(&rt->surfaces[b->surf_begin + is],
-                                                 tx, ty, tz,
-                                                 tux, tuy, tuz,
+                                                 lx, ly, lz,
+                                                 lux, luy, luz,
                                                  chunk, surface_inside);
 
             any_inside = 0;
             for (i = 0; i < chunk; ++i) {
-                inside_out[base + i] = inside_out[base + i] && surface_inside[i];
-                any_inside |= inside_out[base + i];
+                inside_chunk[i] = inside_chunk[i] && surface_inside[i];
+                any_inside |= inside_chunk[i];
             }
 
             if (!any_inside) {
@@ -413,26 +917,48 @@ void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
                                       double const *uz,
                                       size_t n,
                                       size_t *zone_out) {
-    struct ray r;
+    size_t base;
     size_t i;
     size_t j;
+    size_t chunk;
+    size_t unresolved_n;
+    size_t unresolved_idx[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    int inside_chunk[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
 
-    r.system = OSH_COORD_UNIVERSE;
+    if (!rt || !x || !y || !z || !ux || !uy || !uz || !zone_out) {
+        return;
+    }
 
-    for (i = 0; i < n; ++i) {
-        r.p[0] = x[i];
-        r.p[1] = y[i];
-        r.p[2] = z[i];
-        r.cp[0] = ux[i];
-        r.cp[1] = uy[i];
-        r.cp[2] = uz[i];
+    for (base = 0; base < n; base += chunk) {
+        chunk = n - base;
+        if (chunk > (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK) {
+            chunk = (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK;
+        }
 
-        zone_out[i] = OSH_GEMCA_ZONE_INDEX_INVALID;
-        for (j = 0; j < rt->nzones; ++j) {
-            if (eval_membership(rt, &rt->zones[j], &r)) {
-                zone_out[i] = j;
-                break;
+        for (i = 0; i < chunk; ++i) {
+            zone_out[base + i] = OSH_GEMCA_ZONE_INDEX_INVALID;
+            unresolved_idx[i] = i;
+        }
+
+        unresolved_n = chunk;
+        for (j = 0; j < rt->nzones && unresolved_n > 0u; ++j) {
+            size_t write = 0u;
+            size_t k;
+
+            eval_membership_batch_active(rt, &rt->zones[j],
+                                         x + base, y + base, z + base,
+                                         ux + base, uy + base, uz + base,
+                                         unresolved_idx, unresolved_n, inside_chunk);
+
+            for (k = 0; k < unresolved_n; ++k) {
+                i = unresolved_idx[k];
+                if (inside_chunk[i]) {
+                    zone_out[base + i] = j;
+                } else {
+                    unresolved_idx[write++] = i;
+                }
             }
+            unresolved_n = write;
         }
     }
 }
@@ -910,6 +1436,115 @@ static inline int eval_membership(struct gemca_runtime const *rt,
     }
 
     return (sp > 0) ? stack[0] : 0;
+}
+
+static void eval_membership_batch_active(struct gemca_runtime const *rt,
+                                         struct gemca_rt_zone const *z,
+                                         double const *x,
+                                         double const *y,
+                                         double const *zpos,
+                                         double const *ux,
+                                         double const *uy,
+                                         double const *uz,
+                                         size_t const *candidate_idx,
+                                         size_t n_candidates,
+                                         int *inside_out) {
+    int stack[OSH_GEMCA_RT_MAX_STACK][OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    int body_inside[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    size_t active_idx[OSH_GEMCA_RT_BODY_BATCH_CHUNK];
+    size_t active_n;
+    size_t lane;
+    int sp;
+    int i;
+    struct gemca_rt_insn const *insn;
+
+    if (!rt || !z || !x || !y || !zpos || !ux || !uy || !uz || !candidate_idx || !inside_out ||
+        n_candidates > (size_t) OSH_GEMCA_RT_BODY_BATCH_CHUNK) {
+        return;
+    }
+
+    for (lane = 0; lane < n_candidates; ++lane) {
+        inside_out[candidate_idx[lane]] = 0;
+        active_idx[lane] = candidate_idx[lane];
+    }
+    active_n = n_candidates;
+
+    if (z->ninsns == 1) {
+        check_body_batch_indexed_rt(rt, (size_t) z->insns[0].operand,
+                                    x, y, zpos, ux, uy, uz,
+                                    active_idx, active_n, body_inside);
+        for (lane = 0; lane < active_n; ++lane) {
+            inside_out[active_idx[lane]] = body_inside[lane];
+        }
+        return;
+    }
+
+    sp = 0;
+
+    for (i = 0; i < z->ninsns; ++i) {
+        size_t write;
+
+        insn = &z->insns[i];
+
+        switch (insn->op) {
+        case GEMCA_RT_GUARD_BODY:
+            check_body_batch_indexed_rt(rt, (size_t) insn->operand,
+                                        x, y, zpos, ux, uy, uz,
+                                        active_idx, active_n, body_inside);
+            write = 0u;
+            for (lane = 0; lane < active_n; ++lane) {
+                if (body_inside[lane]) {
+                    active_idx[write++] = active_idx[lane];
+                }
+            }
+            active_n = write;
+            if (active_n == 0u) {
+                return;
+            }
+            break;
+
+        case GEMCA_RT_PUSH_BODY:
+        case GEMCA_RT_PUSH_VOXEL_BODY:
+            check_body_batch_indexed_rt(rt, (size_t) insn->operand,
+                                        x, y, zpos, ux, uy, uz,
+                                        active_idx, active_n, stack[sp]);
+            sp++;
+            break;
+
+        case GEMCA_RT_UNION:
+            for (lane = 0; lane < active_n; ++lane) {
+                stack[sp - 2][lane] = stack[sp - 2][lane] || stack[sp - 1][lane];
+            }
+            sp--;
+            break;
+
+        case GEMCA_RT_INTERSECT:
+            for (lane = 0; lane < active_n; ++lane) {
+                stack[sp - 2][lane] = stack[sp - 2][lane] && stack[sp - 1][lane];
+            }
+            sp--;
+            break;
+
+        case GEMCA_RT_DIFF:
+            for (lane = 0; lane < active_n; ++lane) {
+                stack[sp - 2][lane] = stack[sp - 2][lane] && !stack[sp - 1][lane];
+            }
+            sp--;
+            break;
+
+        default:
+            osh_error("eval_membership_batch_active(): unknown opcode %d", insn->op);
+            return;
+        }
+    }
+
+    if (sp < 1) {
+        return;
+    }
+
+    for (lane = 0; lane < active_n; ++lane) {
+        inside_out[active_idx[lane]] = stack[0][lane];
+    }
 }
 
 /**
