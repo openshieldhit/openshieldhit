@@ -112,6 +112,20 @@ The repo has moved past the original bootstrap phase. We now have:
 - [ ] Install the public library target and headers under `include/openshieldhit/`
 - [ ] Keep internal headers and the internal CLI parser non-installed
 
+## Geometry Runtime (GEMCA)
+
+- [x] Flat runtime structs: surfaces[], bodies[], zones[] replacing pointer-linked AST
+- [x] RPN instruction evaluator replacing recursive AST traversal (zone membership + distance)
+- [x] GUARD_BODY fast-reject prepended to each zone at setup time
+- [x] AVX2+FMA zone-batch path (`osh_gemca_runtime_get_zone_batch_avx2`) with runtime dispatch
+- [ ] AVX2 batch path for `eval_distance` / `osh_gemca_runtime_get_distance_batch`: vectorise
+      inner body-distance loop with `_mm256_min_pd` (Roth minpos) and `_mm256_blendv_pd`
+      (CSG combine); advance 4 rays simultaneously in the step-loop.  See TODO in eval_distance
+      and runtime/README.md.
+- [ ] Flat `insns_flat[]` + `insn_begin[]` layout in `gemca_runtime` to close the GPU-migration
+      gap (current `zones[j].insns` is a host heap pointer; see runtime/README.md).
+- [ ] Jacobs voxel-traversal dispatch in `eval_distance` (current fallback: RPP distance)
+
 ## Cleanup / Follow-up
 
 - [ ] Revisit data-module structure (`material/`, `particle/`, embedded tables)

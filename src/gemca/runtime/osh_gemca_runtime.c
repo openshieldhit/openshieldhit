@@ -1004,6 +1004,11 @@ void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
     int is_inside;
 
     if (!rt || !x || !y || !z || !ux || !uy || !uz || !zone_indices || !dist_out) {
+        if (dist_out && n) {
+            size_t _k;
+            for (_k = 0; _k < n; ++_k)
+                dist_out[_k] = 0.0;
+        }
         return;
     }
 
@@ -1652,6 +1657,13 @@ static void eval_membership_batch_active(struct gemca_runtime const *rt,
  * @param[out] is_inside  Set to 1 if ray is currently inside the zone, else 0.
  *
  * @returns Minimum positive distance to the nearest zone boundary.
+ *
+ * @todo AVX2 batch path: eval_distance has no SIMD implementation.  A future
+ *       osh_gemca_runtime_get_distance_batch_avx2() would vectorise the inner
+ *       body-distance loop (one body, 4 particles at a time) using _mm256_min_pd
+ *       for Roth's minpos() and _mm256_blendv_pd for the CSG combine step.
+ *       The step-loop in get_distance_batch must then be restructured to advance
+ *       all 4 rays simultaneously.  See runtime/README.md for context.
  */
 static inline double
 eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r, int *is_inside) {
@@ -2207,8 +2219,9 @@ static inline double _dist_plane_rt(struct gemca_rt_surface const *sf, struct ra
  *
  * @details
  * Returns OSH_GEMCA_INFINITY if there are no real roots or both roots are
- * non-positive.  The tangential case (discriminant == 0) is treated as no
- * intersection.
+ * non-positive.  The tangential case (discriminant == 0) produces a repeated
+ * root at -b/(2a); if that root is positive it is returned as the hit distance
+ * (grazing contact counts as a boundary crossing).
  *
  * @param[in] a,b,c  Quadratic coefficients.
  *
