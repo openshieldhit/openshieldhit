@@ -54,14 +54,8 @@ static void append_case(double *x,
     (*idx)++;
 }
 
-static void fill_edge_cases(int type,
-                            double *x,
-                            double *y,
-                            double *z,
-                            double *ux,
-                            double *uy,
-                            double *uz,
-                            size_t *idx) {
+static void
+fill_edge_cases(int type, double *x, double *y, double *z, double *ux, double *uy, double *uz, size_t *idx) {
     switch (type) {
     case OSH_GEMCA_SURF_SPHERE:
         append_case(x, y, z, ux, uy, uz, idx, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0);
@@ -140,17 +134,21 @@ static void fill_edge_cases(int type,
     }
 }
 
-static void fill_random_cases(double *x,
-                              double *y,
-                              double *z,
-                              double *ux,
-                              double *uy,
-                              double *uz,
-                              size_t *idx) {
+static void fill_random_cases(double *x, double *y, double *z, double *ux, double *uy, double *uz, size_t *idx) {
     while (*idx < N_CASES) {
-        append_case(x, y, z, ux, uy, uz, idx,
-                    next_signed(5.0), next_signed(5.0), next_signed(5.0),
-                    next_signed(1.0), next_signed(1.0), next_signed(1.0));
+        append_case(x,
+                    y,
+                    z,
+                    ux,
+                    uy,
+                    uz,
+                    idx,
+                    next_signed(5.0),
+                    next_signed(5.0),
+                    next_signed(5.0),
+                    next_signed(1.0),
+                    next_signed(1.0),
+                    next_signed(1.0));
     }
 }
 

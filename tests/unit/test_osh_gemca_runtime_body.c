@@ -136,12 +136,7 @@ static void init_cold_body_from_runtime(struct body *cold,
     }
 }
 
-static void fill_sphere_cases(double *x,
-                              double *y,
-                              double *z,
-                              double *ux,
-                              double *uy,
-                              double *uz) {
+static void fill_sphere_cases(double *x, double *y, double *z, double *ux, double *uy, double *uz) {
     size_t idx;
 
     idx = 0u;
@@ -153,44 +148,54 @@ static void fill_sphere_cases(double *x,
     append_case(x, y, z, ux, uy, uz, &idx, -1.0, -1.0, -1.0, 0.2, 0.3, -0.4);
 
     while (idx < N_CASES) {
-        append_case(x, y, z, ux, uy, uz, &idx,
-                    next_signed(4.0), next_signed(4.0), next_signed(4.0),
-                    next_signed(1.0), next_signed(1.0), next_signed(1.0));
+        append_case(x,
+                    y,
+                    z,
+                    ux,
+                    uy,
+                    uz,
+                    &idx,
+                    next_signed(4.0),
+                    next_signed(4.0),
+                    next_signed(4.0),
+                    next_signed(1.0),
+                    next_signed(1.0),
+                    next_signed(1.0));
     }
 }
 
-static void fill_bcalign_box_cases(double *x,
-                                   double *y,
-                                   double *z,
-                                   double *ux,
-                                   double *uy,
-                                   double *uz) {
+static void fill_bcalign_box_cases(double *x, double *y, double *z, double *ux, double *uy, double *uz) {
     size_t idx;
     double const tx = 1.5;
     double const ty = -0.5;
     double const tz = 2.0;
 
     idx = 0u;
-    append_case(x, y, z, ux, uy, uz, &idx, -tx, -ty, -tz, 1.0, 0.0, 0.0);            /* local (0,0,0) */
-    append_case(x, y, z, ux, uy, uz, &idx, 1.0 - tx, -ty, -tz, -1.0, 0.0, 0.0);      /* local on +X face */
-    append_case(x, y, z, ux, uy, uz, &idx, -1.0 - tx, -ty, -tz, 1.0, 0.0, 0.0);      /* local on -X face */
-    append_case(x, y, z, ux, uy, uz, &idx, 1.2 - tx, -ty, -tz, -1.0, 0.0, 0.0);      /* outside +X */
-    append_case(x, y, z, ux, uy, uz, &idx, -tx, 1.1 - ty, -tz, 0.0, -1.0, 0.0);      /* outside +Y */
-    append_case(x, y, z, ux, uy, uz, &idx, -tx, -ty, -1.0 - tz, 0.0, 0.0, 1.0);      /* local on -Z face */
+    append_case(x, y, z, ux, uy, uz, &idx, -tx, -ty, -tz, 1.0, 0.0, 0.0);       /* local (0,0,0) */
+    append_case(x, y, z, ux, uy, uz, &idx, 1.0 - tx, -ty, -tz, -1.0, 0.0, 0.0); /* local on +X face */
+    append_case(x, y, z, ux, uy, uz, &idx, -1.0 - tx, -ty, -tz, 1.0, 0.0, 0.0); /* local on -X face */
+    append_case(x, y, z, ux, uy, uz, &idx, 1.2 - tx, -ty, -tz, -1.0, 0.0, 0.0); /* outside +X */
+    append_case(x, y, z, ux, uy, uz, &idx, -tx, 1.1 - ty, -tz, 0.0, -1.0, 0.0); /* outside +Y */
+    append_case(x, y, z, ux, uy, uz, &idx, -tx, -ty, -1.0 - tz, 0.0, 0.0, 1.0); /* local on -Z face */
 
     while (idx < N_CASES) {
-        append_case(x, y, z, ux, uy, uz, &idx,
-                    next_signed(4.0), next_signed(4.0), next_signed(4.0),
-                    next_signed(1.0), next_signed(1.0), next_signed(1.0));
+        append_case(x,
+                    y,
+                    z,
+                    ux,
+                    uy,
+                    uz,
+                    &idx,
+                    next_signed(4.0),
+                    next_signed(4.0),
+                    next_signed(4.0),
+                    next_signed(1.0),
+                    next_signed(1.0),
+                    next_signed(1.0));
     }
 }
 
-static void fill_bzalign_capped_cyl_cases(double *x,
-                                          double *y,
-                                          double *z,
-                                          double *ux,
-                                          double *uy,
-                                          double *uz) {
+static void fill_bzalign_capped_cyl_cases(double *x, double *y, double *z, double *ux, double *uy, double *uz) {
     size_t idx;
 
     idx = 0u;
@@ -200,24 +205,35 @@ static void fill_bzalign_capped_cyl_cases(double *x,
      * local_y = -world_x + 2
      * local_z = world_z - 0.5
      */
-    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 1.5, 1.0, 0.0, 0.0);            /* local (0,0,1) */
-    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 2.0, 1.5, 0.0, -1.0, 0.0);           /* local (1,0,1) on cyl */
-    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 0.5, 0.0, 0.0, 1.0);            /* local z=0 cap */
-    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 2.5, 0.0, 0.0, -1.0);           /* local z=2 cap */
-    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 2.2, 1.5, 0.0, -1.0, 0.0);           /* outside cyl */
-    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 2.8, 0.0, 0.0, -1.0);           /* above cap */
+    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 1.5, 1.0, 0.0, 0.0);  /* local (0,0,1) */
+    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 2.0, 1.5, 0.0, -1.0, 0.0); /* local (1,0,1) on cyl */
+    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 0.5, 0.0, 0.0, 1.0);  /* local z=0 cap */
+    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 2.5, 0.0, 0.0, -1.0); /* local z=2 cap */
+    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 2.2, 1.5, 0.0, -1.0, 0.0); /* outside cyl */
+    append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 2.8, 0.0, 0.0, -1.0); /* above cap */
 
     while (idx < N_CASES) {
-        append_case(x, y, z, ux, uy, uz, &idx,
-                    next_signed(4.0), next_signed(4.0), next_signed(4.0),
-                    next_signed(1.0), next_signed(1.0), next_signed(1.0));
+        append_case(x,
+                    y,
+                    z,
+                    ux,
+                    uy,
+                    uz,
+                    &idx,
+                    next_signed(4.0),
+                    next_signed(4.0),
+                    next_signed(4.0),
+                    next_signed(1.0),
+                    next_signed(1.0),
+                    next_signed(1.0));
     }
 }
 
-static void compare_body_batch_with_scalar(struct gemca_runtime const *rt,
-                                           size_t body_idx,
-                                           struct body const *cold_body,
-                                           void (*fill_cases)(double *, double *, double *, double *, double *, double *)) {
+static void
+compare_body_batch_with_scalar(struct gemca_runtime const *rt,
+                               size_t body_idx,
+                               struct body const *cold_body,
+                               void (*fill_cases)(double *, double *, double *, double *, double *, double *)) {
     double x[N_CASES];
     double y[N_CASES];
     double z[N_CASES];
@@ -285,32 +301,58 @@ static void test_body_batch_matches_scalar(void) {
     rt_bodies[1].t[7] = -0.5;
     rt_bodies[1].t[11] = 2.0;
 
-    rt_surfaces[1].type = OSH_GEMCA_SURF_PLANEX; rt_surfaces[1].p[0] = 1.0;  rt_surfaces[1].p[1] = -1.0;
-    rt_surfaces[2].type = OSH_GEMCA_SURF_PLANEX; rt_surfaces[2].p[0] = -1.0; rt_surfaces[2].p[1] = -1.0;
-    rt_surfaces[3].type = OSH_GEMCA_SURF_PLANEY; rt_surfaces[3].p[0] = 1.0;  rt_surfaces[3].p[1] = -1.0;
-    rt_surfaces[4].type = OSH_GEMCA_SURF_PLANEY; rt_surfaces[4].p[0] = -1.0; rt_surfaces[4].p[1] = -1.0;
-    rt_surfaces[5].type = OSH_GEMCA_SURF_PLANEZ; rt_surfaces[5].p[0] = 1.0;  rt_surfaces[5].p[1] = -1.0;
-    rt_surfaces[6].type = OSH_GEMCA_SURF_PLANEZ; rt_surfaces[6].p[0] = -1.0; rt_surfaces[6].p[1] = -1.0;
+    rt_surfaces[1].type = OSH_GEMCA_SURF_PLANEX;
+    rt_surfaces[1].p[0] = 1.0;
+    rt_surfaces[1].p[1] = -1.0;
+    rt_surfaces[2].type = OSH_GEMCA_SURF_PLANEX;
+    rt_surfaces[2].p[0] = -1.0;
+    rt_surfaces[2].p[1] = -1.0;
+    rt_surfaces[3].type = OSH_GEMCA_SURF_PLANEY;
+    rt_surfaces[3].p[0] = 1.0;
+    rt_surfaces[3].p[1] = -1.0;
+    rt_surfaces[4].type = OSH_GEMCA_SURF_PLANEY;
+    rt_surfaces[4].p[0] = -1.0;
+    rt_surfaces[4].p[1] = -1.0;
+    rt_surfaces[5].type = OSH_GEMCA_SURF_PLANEZ;
+    rt_surfaces[5].p[0] = 1.0;
+    rt_surfaces[5].p[1] = -1.0;
+    rt_surfaces[6].type = OSH_GEMCA_SURF_PLANEZ;
+    rt_surfaces[6].p[0] = -1.0;
+    rt_surfaces[6].p[1] = -1.0;
 
     /* Body 2: BZALIGN capped cylinder */
     rt_bodies[2].surf_begin = 7u;
     rt_bodies[2].nsurfs = 3;
     rt_bodies[2].coord = OSH_COORD_BZALIGN;
-    rt_bodies[2].t[0] = 0.0;  rt_bodies[2].t[1] = 1.0;  rt_bodies[2].t[2] = 0.0;  rt_bodies[2].t[3] = 1.0;
-    rt_bodies[2].t[4] = -1.0; rt_bodies[2].t[5] = 0.0;  rt_bodies[2].t[6] = 0.0;  rt_bodies[2].t[7] = -2.0;
-    rt_bodies[2].t[8] = 0.0;  rt_bodies[2].t[9] = 0.0;  rt_bodies[2].t[10] = 1.0; rt_bodies[2].t[11] = 0.5;
+    rt_bodies[2].t[0] = 0.0;
+    rt_bodies[2].t[1] = 1.0;
+    rt_bodies[2].t[2] = 0.0;
+    rt_bodies[2].t[3] = 1.0;
+    rt_bodies[2].t[4] = -1.0;
+    rt_bodies[2].t[5] = 0.0;
+    rt_bodies[2].t[6] = 0.0;
+    rt_bodies[2].t[7] = -2.0;
+    rt_bodies[2].t[8] = 0.0;
+    rt_bodies[2].t[9] = 0.0;
+    rt_bodies[2].t[10] = 1.0;
+    rt_bodies[2].t[11] = 0.5;
     rt_bodies[2].t[15] = 1.0;
 
-    rt_surfaces[7].type = OSH_GEMCA_SURF_CYLZ;   rt_surfaces[7].p[0] = 1.0;
-    rt_surfaces[8].type = OSH_GEMCA_SURF_PLANEZ; rt_surfaces[8].p[0] = 1.0;  rt_surfaces[8].p[1] = -2.0;
-    rt_surfaces[9].type = OSH_GEMCA_SURF_PLANEZ; rt_surfaces[9].p[0] = -1.0; rt_surfaces[9].p[1] = 0.0;
+    rt_surfaces[7].type = OSH_GEMCA_SURF_CYLZ;
+    rt_surfaces[7].p[0] = 1.0;
+    rt_surfaces[8].type = OSH_GEMCA_SURF_PLANEZ;
+    rt_surfaces[8].p[0] = 1.0;
+    rt_surfaces[8].p[1] = -2.0;
+    rt_surfaces[9].type = OSH_GEMCA_SURF_PLANEZ;
+    rt_surfaces[9].p[0] = -1.0;
+    rt_surfaces[9].p[1] = 0.0;
 
-    init_cold_body_from_runtime(&cold_bodies[0], &rt_bodies[0], rt_surfaces,
-                                cold_surfaces[0], cold_surface_ptrs[0], cold_params[0]);
-    init_cold_body_from_runtime(&cold_bodies[1], &rt_bodies[1], rt_surfaces,
-                                cold_surfaces[1], cold_surface_ptrs[1], cold_params[1]);
-    init_cold_body_from_runtime(&cold_bodies[2], &rt_bodies[2], rt_surfaces,
-                                cold_surfaces[2], cold_surface_ptrs[2], cold_params[2]);
+    init_cold_body_from_runtime(
+        &cold_bodies[0], &rt_bodies[0], rt_surfaces, cold_surfaces[0], cold_surface_ptrs[0], cold_params[0]);
+    init_cold_body_from_runtime(
+        &cold_bodies[1], &rt_bodies[1], rt_surfaces, cold_surfaces[1], cold_surface_ptrs[1], cold_params[1]);
+    init_cold_body_from_runtime(
+        &cold_bodies[2], &rt_bodies[2], rt_surfaces, cold_surfaces[2], cold_surface_ptrs[2], cold_params[2]);
 
     compare_body_batch_with_scalar(&rt, 0u, &cold_bodies[0], fill_sphere_cases);
     compare_body_batch_with_scalar(&rt, 1u, &cold_bodies[1], fill_bcalign_box_cases);

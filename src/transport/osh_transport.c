@@ -104,8 +104,8 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
     struct osh_rng rng;
     struct osh_beam_runtime *beam_rt = NULL;
     struct osh_particle_pool *pool = NULL;
-    size_t zone_batch[OSH_TRANSPORT_POOL_CAPACITY];   /* stack-safe: capacity is compile-time constant */
-    double dist_batch[OSH_TRANSPORT_POOL_CAPACITY];   /* stack-safe: ~32 KiB at 4096 doubles */
+    size_t zone_batch[OSH_TRANSPORT_POOL_CAPACITY]; /* stack-safe: capacity is compile-time constant */
+    double dist_batch[OSH_TRANSPORT_POOL_CAPACITY]; /* stack-safe: ~32 KiB at 4096 doubles */
     size_t capacity;
     size_t primaries_done;
     size_t n_fill;
@@ -165,14 +165,10 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
         /* Batch geometry: zone lookup and boundary distance for all live particles.
          * The scratch arrays are stack-allocated — safe because pool->n is always
          * <= pool->capacity <= OSH_TRANSPORT_POOL_CAPACITY at this point. */
-        osh_gemca_runtime_get_zone_batch(geom_rt,
-                                         pool->x, pool->y, pool->z,
-                                         pool->ux, pool->uy, pool->uz,
-                                         pool->n, zone_batch);
-        osh_gemca_runtime_get_distance_batch(geom_rt,
-                                              pool->x, pool->y, pool->z,
-                                              pool->ux, pool->uy, pool->uz,
-                                              zone_batch, pool->n, dist_batch);
+        osh_gemca_runtime_get_zone_batch(
+            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, pool->n, zone_batch);
+        osh_gemca_runtime_get_distance_batch(
+            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, zone_batch, pool->n, dist_batch);
 
         /* Advance every live particle by one step using the precomputed geometry */
         for (i = 0u; i < pool->n; ++i) {
@@ -180,8 +176,16 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
                 rc = OSH_ESTATE; /* step budget exceeded — likely stuck particle */
                 goto cleanup;
             }
-            rc = transport_step_one(pool, i, zone_batch[i], dist_batch[i],
-                                    geom_rt, beam, materials, tables, scoring, (double) beam->deltae);
+            rc = transport_step_one(pool,
+                                    i,
+                                    zone_batch[i],
+                                    dist_batch[i],
+                                    geom_rt,
+                                    beam,
+                                    materials,
+                                    tables,
+                                    scoring,
+                                    (double) beam->deltae);
             if (rc != OSH_OK) {
                 goto cleanup;
             }
