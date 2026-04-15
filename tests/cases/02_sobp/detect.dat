@@ -35,4 +35,4 @@ Output
     Filename NB_msh_fludos_z6.bdo
     Geo MyMesh
     Quantity FLUENCE MyFilter
-    Quantity DOSE MyFilter
+    # Quantity DOSE MyFilter
