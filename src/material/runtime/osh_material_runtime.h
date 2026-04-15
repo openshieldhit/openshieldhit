@@ -31,14 +31,14 @@ extern "C" {
  * per step without rebuilding material tables for every density.
  */
 struct osh_material_runtime {
-    double log_emin;            /* log(energy_grid[0]) for O(1) index. */
-    double inv_dlog;            /* 1 / (log(emax/emin) / (nenergy-1)). */
-    double emin;                /* Minimum energy [MeV/nucleon]. */
-    double emax;                /* Maximum energy [MeV/nucleon]. */
-    float *mass_stopping_power; /* [nmaterials][nprojectiles][nenergy] [MeV cm^2/g]. */
-    float *range_csda;          /* [nmaterials][nprojectiles][nenergy] [g/cm^2]. */
-    unsigned int *projectile_z; /* [nprojectiles]. */
-    unsigned int *projectile_a; /* [nprojectiles]. */
+    double log_emin;             /* log(energy_grid[0]) for O(1) index. */
+    double inv_dlog;             /* 1 / (log(emax/emin) / (nenergy-1)). */
+    double emin;                 /* Minimum energy [MeV/nucleon]. */
+    double emax;                 /* Maximum energy [MeV/nucleon]. */
+    float *mass_stopping_power;  /* [nmaterials][nprojectiles][nenergy] [MeV cm^2/g]. */
+    float *range_csda;           /* [nmaterials][nprojectiles][nenergy] [g/cm^2]. */
+    unsigned int *projectile_z;  /* [nprojectiles]. */
+    unsigned int *projectile_a;  /* [nprojectiles]. */
     double *projectile_mass_mev; /* [nprojectiles] nuclear rest mass [MeV/c^2]. */
 
     /*
@@ -55,9 +55,9 @@ struct osh_material_runtime {
      *               Used by the Highland MCS formula in osh_physics_moliere_theta0().
      *               Zero for vacuum and blackhole (skips scattering in transport).
      */
-    float *z_mean;      /* [nmaterials] effective atomic number. */
-    float *z_over_a;    /* [nmaterials] Z/A [mol/g]. */
-    float *rad_length;  /* [nmaterials] radiation length X0 [g/cm^2]. */
+    float *z_mean;     /* [nmaterials] effective atomic number. */
+    float *z_over_a;   /* [nmaterials] Z/A [mol/g]. */
+    float *rad_length; /* [nmaterials] radiation length X0 [g/cm^2]. */
 
     size_t nmaterials;
     size_t nprojectiles;

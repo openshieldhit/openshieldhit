@@ -245,10 +245,7 @@ double osh_physics_bethe_eval(double t_per_nucleon,
 
 /* ---- Public: Hubert effective charge Z_eff -------------------------------- */
 
-double osh_physics_bethe_z_eff(double t_per_nucleon,
-                                double proj_z,
-                                double proj_a,
-                                double target_z_mean) {
+double osh_physics_bethe_z_eff(double t_per_nucleon, double proj_z, double proj_a, double target_z_mean) {
     double dd;
     double u1;
     double u2;

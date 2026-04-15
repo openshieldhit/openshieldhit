@@ -208,10 +208,8 @@ static void build_bethe_target(struct material const *mat, struct osh_physics_be
  * ~2% accuracy for most elements.  Compounds use the standard mixture rule.
  * Returns 0 for all three on invalid input (zero atoms or missing mass data).
  */
-static void compute_material_atomic(struct material const *mat,
-                                    float *z_mean_out,
-                                    float *z_over_a_out,
-                                    float *x0_gcm2_out) {
+static void
+compute_material_atomic(struct material const *mat, float *z_mean_out, float *z_over_a_out, float *x0_gcm2_out) {
     size_t i;
     double sum_wz;
     double sum_wz_over_a;
@@ -590,10 +588,7 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
         /* Compute per-material atomic scalars (z_mean, z/a, X₀) for MCS and
          * straggling.  These depend only on composition, not on projectile or
          * energy, so they are computed once here and stored in the flat arrays. */
-        compute_material_atomic(mat,
-                                &t.z_mean[mat_idx],
-                                &t.z_over_a[mat_idx],
-                                &t.rad_length[mat_idx]);
+        compute_material_atomic(mat, &t.z_mean[mat_idx], &t.z_over_a[mat_idx], &t.rad_length[mat_idx]);
         osh_info("Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2",
                  mat->name,
                  (double) t.z_mean[mat_idx],

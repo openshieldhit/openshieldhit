@@ -157,9 +157,6 @@ double osh_physics_bethe_eval(double t_per_nucleon,
  *
  * @returns Z_eff in [0, proj_z].
  */
-double osh_physics_bethe_z_eff(double t_per_nucleon,
-                                double proj_z,
-                                double proj_a,
-                                double target_z_mean);
+double osh_physics_bethe_z_eff(double t_per_nucleon, double proj_z, double proj_a, double target_z_mean);
 
 #endif /* OSH_PHYSICS_BETHE_H */
