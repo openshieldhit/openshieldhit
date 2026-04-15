@@ -18,9 +18,9 @@ Output
          Geo MyMesh
          Quantity Energy
          Quantity Fluence
-         Quantity Dose
-         Quantity DLET
-         Quantity TLET
+         # Quantity Dose
+         # Quantity DLET
+         # Quantity TLET
 
 Output
          Filename NB_cyl.dat
@@ -28,9 +28,9 @@ Output
          Geo MyCyl
          Quantity Energy
          Quantity Fluence
-         Quantity Dose
-         Quantity DLET
-         Quantity TLET
+         # Quantity Dose
+         # Quantity DLET
+         # Quantity TLET
 
 # BDO format
 Output
@@ -38,15 +38,15 @@ Output
          Geo MyMesh
          Quantity Energy
          Quantity Fluence
-         Quantity Dose
-         Quantity DLET
-         Quantity TLET
+         # Quantity Dose
+         # Quantity DLET
+         # Quantity TLET
 
 Output
          Filename NB_cyl.bdo
          Geo MyCyl
          Quantity Energy
          Quantity Fluence
-         Quantity Dose
-         Quantity DLET
-         Quantity TLET
+         # Quantity Dose
+         # Quantity DLET
+         # Quantity TLET

@@ -358,40 +358,50 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
         return;
     }
 
-    for (i = 0; i < rt->nfilters; ++i) {
-        free(rt->filters[i].name);
-        free(rt->filters[i].rules);
+    if (rt->filters) {
+        for (i = 0; i < rt->nfilters; ++i) {
+            free(rt->filters[i].name);
+            free(rt->filters[i].rules);
+        }
     }
     free(rt->filters);
 
-    for (i = 0; i < rt->nsettings; ++i) {
-        free(rt->settings[i].name);
+    if (rt->settings) {
+        for (i = 0; i < rt->nsettings; ++i) {
+            free(rt->settings[i].name);
+        }
     }
     free(rt->settings);
 
-    for (i = 0; i < rt->ngeometries; ++i) {
-        free(rt->geometries[i].kind);
-        free(rt->geometries[i].name);
-        free(rt->geometries[i].axes);
-        free(rt->geometries[i].groups);
+    if (rt->geometries) {
+        for (i = 0; i < rt->ngeometries; ++i) {
+            free(rt->geometries[i].kind);
+            free(rt->geometries[i].name);
+            free(rt->geometries[i].axes);
+            free(rt->geometries[i].groups);
+        }
     }
     free(rt->geometries);
 
-    for (i = 0; i < rt->npages; ++i) {
-        free(rt->pages[i].quantity);
-        free(rt->pages[i].filters);
-        free(rt->pages[i].settings);
-        free(rt->pages[i].data);
-        free(rt->pages[i].data_var);
-        free(rt->pages[i].data2);
-        free(rt->pages[i].data2_var);
+    if (rt->pages) {
+        for (i = 0; i < rt->npages; ++i) {
+            free(rt->pages[i].quantity);
+            free(rt->pages[i].filters);
+            free(rt->pages[i].settings);
+            free(rt->pages[i].data);
+            free(rt->pages[i].data_var);
+            free(rt->pages[i].data2);
+            free(rt->pages[i].data2_var);
+        }
     }
     free(rt->pages);
 
-    for (i = 0; i < rt->noutputs; ++i) {
-        free(rt->outputs[i].filename);
-        free(rt->outputs[i].fileformat);
-        free(rt->outputs[i].page_indices);
+    if (rt->outputs) {
+        for (i = 0; i < rt->noutputs; ++i) {
+            free(rt->outputs[i].filename);
+            free(rt->outputs[i].fileformat);
+            free(rt->outputs[i].page_indices);
+        }
     }
     free(rt->outputs);
 

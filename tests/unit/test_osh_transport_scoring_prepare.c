@@ -14,6 +14,18 @@
         }                                                                                                              \
     } while (0)
 
+static int tmp_counter = 0;
+
+static void write_temp_file(char *path, size_t path_cap, char const *content) {
+    FILE *fp;
+
+    snprintf(path, path_cap, "osh_scoring_prepare_test_%d.tmp", tmp_counter++);
+    fp = fopen(path, "w");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fputs(content, fp) >= 0);
+    ASSERT_TRUE(fclose(fp) == 0);
+}
+
 static void test_compile_fixture_test01_detect(void) {
     char path[512];
     struct osh_scoring_workspace *ws = NULL;
@@ -111,7 +123,41 @@ static void test_compile_fixture_test01_detect(void) {
     osh_scoring_workspace_free(ws);
 }
 
+static void test_prepare_rejects_dose_without_crashing(void) {
+    char path[512];
+    char const *text = "Geometry Mesh\n"
+                       "    Name MyMesh\n"
+                       "    X 0.0 1.0 1\n"
+                       "    Y 0.0 1.0 1\n"
+                       "    Z 0.0 1.0 1\n"
+                       "\n"
+                       "Output\n"
+                       "    Filename out.bdo\n"
+                       "    Geo MyMesh\n"
+                       "    Quantity DOSE\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), text);
+
+    rc = osh_scoring_setup_from_path(path, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_prepare(ws, &rt);
+    ASSERT_TRUE(rc == OSH_ENOTSUP);
+
+    /* Prepare() already frees partial state on failure; this double-free check
+     * guards against future regressions in failure cleanup. */
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    ASSERT_TRUE(remove(path) == 0);
+}
+
 int main(void) {
     test_compile_fixture_test01_detect();
+    test_prepare_rejects_dose_without_crashing();
     return 0;
 }

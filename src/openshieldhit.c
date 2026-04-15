@@ -423,6 +423,13 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
         fprintf(out, "Loaded scoring: %s\n", detect_path);
     }
 
+    if (ctx->run_mode == OPENSHIELDHIT_RUN_VALIDATE) {
+        if (out) {
+            fprintf(out, "Validation completed.\n");
+        }
+        goto cleanup;
+    }
+
     if (osh_scoring_prepare(scoring, &scoring_runtime) != OSH_OK) {
         ctx_set_error(ctx, err, "failed to prepare scoring runtime: %s", detect_path);
         rc = OPENSHIELDHIT_STATUS_PARSE_ERROR;
@@ -434,13 +441,6 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
                 (unsigned long long) scoring_runtime.ngeometries,
                 (unsigned long long) scoring_runtime.noutputs,
                 (unsigned long long) scoring_runtime.npages);
-    }
-
-    if (ctx->run_mode == OPENSHIELDHIT_RUN_VALIDATE) {
-        if (out) {
-            fprintf(out, "Validation completed.\n");
-        }
-        goto cleanup;
     }
 
     if (osh_transport_run_minimal(beam, &geom_rt, mat, &transport_tables, &scoring_runtime) != OSH_OK) {
