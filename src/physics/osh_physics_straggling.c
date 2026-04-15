@@ -15,22 +15,18 @@
  *
  * Reference: PDG "Passage of Particles through Matter" eq. 34.14.
  */
-#define BOHR_C 0.156917 /* MeV² cm²/mol */
-#define BOHR_SQRT_C 0.396128 /* sqrt(0.156917) */
+#define BOHR_SQRT_C 0.396128 /* sqrt(K_bethe × m_e c²) = sqrt(0.156917)  [MeV·cm/√(mol/g)·√(g/cm²)] */
 
 double osh_physics_straggling_sigma(double z_eff, double z_over_a, double thickness_gcm2) {
-    double variance;
-
     if (z_eff <= 0.0 || z_over_a <= 0.0 || thickness_gcm2 <= 0.0) {
         return 0.0;
     }
 
     /*
-     * σ² = C_bohr × z_eff² × (Z/A) × d
-     * σ  = sqrt(C_bohr) × |z_eff| × sqrt((Z/A) × d)
+     * σ = sqrt(C_bohr) × z_eff × sqrt((Z/A) × d)
      *
-     * Written as a single sqrt to avoid two square-root calls.
+     * Factoring out sqrt(C_bohr) = BOHR_SQRT_C avoids computing the intermediate
+     * variance and keeps the expression in one sqrt call.
      */
-    variance = BOHR_C * z_eff * z_eff * z_over_a * thickness_gcm2;
-    return sqrt(variance);
+    return BOHR_SQRT_C * z_eff * sqrt(z_over_a * thickness_gcm2);
 }

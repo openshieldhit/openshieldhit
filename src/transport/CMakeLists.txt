@@ -1,5 +1,9 @@
 add_library(osh_transport
     osh_transport.c
+    osh_transport_ion.c
+    osh_transport_ion_step.c
+    osh_transport_neutron.c
+    osh_transport_photon.c
 )
 
 # Make sure consumers of the library see the headers
@@ -12,6 +16,7 @@ target_include_directories(osh_transport
 target_link_libraries(osh_transport
     PRIVATE
         osh_common
+        osh_physics
         osh_random
         osh_beam
         osh_beam_runtime
