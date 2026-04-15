@@ -51,11 +51,8 @@ struct osh_rng;
  *
  * @returns θ₀ [rad], always ≥ 0.
  */
-double osh_physics_moliere_theta0(double t_total_mev,
-                                  double mass_mev,
-                                  double z_eff,
-                                  double thickness_gcm2,
-                                  double x0_gcm2);
+double
+osh_physics_moliere_theta0(double t_total_mev, double mass_mev, double z_eff, double thickness_gcm2, double x0_gcm2);
 
 /**
  * @brief Maximum step length such that θ₀ does not exceed a given threshold.
@@ -90,12 +87,8 @@ double osh_physics_moliere_theta0(double t_total_mev,
  *
  * @returns Maximum step length [cm], or 0 if inputs are invalid.
  */
-double osh_physics_moliere_s_theta(double t_total_mev,
-                                   double mass_mev,
-                                   double z_eff,
-                                   double rho_gcm3,
-                                   double x0_gcm2,
-                                   double theta_max_rad);
+double osh_physics_moliere_s_theta(
+    double t_total_mev, double mass_mev, double z_eff, double rho_gcm3, double x0_gcm2, double theta_max_rad);
 
 /**
  * @brief Sample a scattered exit direction from a Gaussian MCS deflection.
@@ -117,9 +110,6 @@ double osh_physics_moliere_s_theta(double t_total_mev,
  * @param[in]  theta0 RMS projected scattering angle θ₀ [rad].
  * @param[in]  rng    RNG state; consumes 2 Gaussian deviates per call.
  */
-void osh_physics_moliere_scatter(double const v[3],
-                                 double w[3],
-                                 double theta0,
-                                 struct osh_rng *rng);
+void osh_physics_moliere_scatter(double const v[3], double w[3], double theta0, struct osh_rng *rng);
 
 #endif /* OSH_PHYSICS_MOLIERE_H */
