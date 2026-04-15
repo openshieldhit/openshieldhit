@@ -1,11 +1,13 @@
 #include "scoring/runtime/osh_scoring_step.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "common/raytrace/osh_raytrace.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
+static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out);
 static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                              struct osh_raytrace_grid *grid,
                                              double *voxel_volume_out);
@@ -14,7 +16,8 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
                                           struct osh_voxel_crossing const *crossings,
                                           size_t ncross,
                                           struct particle const *part,
-                                          struct step const *st);
+                                          struct step const *st,
+                                          double score_len);
 static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            struct osh_scoring_geometry_score_group const *group,
                                            struct osh_voxel_crossing const *crossings,
@@ -29,6 +32,8 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
     size_t cap;
     size_t ncross;
     double voxel_volume;
+    double score_dir[3];
+    double score_len;
     struct osh_raytrace_grid grid;
     struct osh_voxel_crossing *crossings;
     enum osh_status rc;
@@ -38,6 +43,11 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         return OSH_EINVAL;
     }
     if (!(st->ds > 0.0)) {
+        return OSH_EINVAL;
+    }
+
+    step_scoring_segment(st, score_dir, &score_len);
+    if (!(score_len > 0.0)) {
         return OSH_EINVAL;
     }
 
@@ -62,7 +72,7 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
             return OSH_ENOMEM;
         }
 
-        hit = osh_raytrace_traverse(&grid, st->p, st->v, st->ds, crossings, &ncross);
+        hit = osh_raytrace_traverse(&grid, st->p, score_dir, score_len, crossings, &ncross);
         if (!hit || ncross == 0u) {
             free(crossings);
             continue;
@@ -75,7 +85,7 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         for (g = 0; g < geo->ngroups; ++g) {
             switch (geo->groups[g].score_kind) {
             case OSH_SCORING_SCORE_ENERGY:
-                rc = score_group_energy(rt, &geo->groups[g], crossings, ncross, part, st);
+                rc = score_group_energy(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_FLUENCE:
                 rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st, voxel_volume);
@@ -102,6 +112,37 @@ osh_scoring_score_point(struct osh_scoring_runtime *rt, struct particle const *p
     (void) part;
     (void) pos;
     return OSH_ENOTSUP;
+}
+
+static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out) {
+    double dx;
+    double dy;
+    double dz;
+    double chord_len;
+
+    dx = st->q[0] - st->p[0];
+    dy = st->q[1] - st->p[1];
+    dz = st->q[2] - st->p[2];
+    chord_len = sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (chord_len > 1.0e-12) {
+        dir_out[0] = dx / chord_len;
+        dir_out[1] = dy / chord_len;
+        dir_out[2] = dz / chord_len;
+        *len_out = chord_len;
+        return;
+    }
+
+    /*
+     * Degenerate fallback: a strongly bent condensed-history step can in
+     * principle return to its starting point, giving a zero chord but a
+     * non-zero physical track length.  Preserve legacy behaviour rather than
+     * rejecting the step outright.
+     */
+    dir_out[0] = st->v[0];
+    dir_out[1] = st->v[1];
+    dir_out[2] = st->v[2];
+    *len_out = st->ds;
 }
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label) {
@@ -173,7 +214,8 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
                                           struct osh_voxel_crossing const *crossings,
                                           size_t ncross,
                                           struct particle const *part,
-                                          struct step const *st) {
+                                          struct step const *st,
+                                          double score_len) {
     size_t i;
     size_t j;
     double frac;
@@ -188,7 +230,7 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
             if (crossings[j].idx >= page->len) {
                 return OSH_ESTATE;
             }
-            frac = crossings[j].path_len / st->ds;
+            frac = crossings[j].path_len / score_len;
             page->data[crossings[j].idx] += st->de * frac;
         }
     }

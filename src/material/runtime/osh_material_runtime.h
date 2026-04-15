@@ -39,6 +39,26 @@ struct osh_material_runtime {
     float *range_csda;          /* [nmaterials][nprojectiles][nenergy] [g/cm^2]. */
     unsigned int *projectile_z; /* [nprojectiles]. */
     unsigned int *projectile_a; /* [nprojectiles]. */
+    double *projectile_mass_mev; /* [nprojectiles] nuclear rest mass [MeV/c^2]. */
+
+    /*
+     * Per-material scalars used by multiple-scattering and energy-straggling
+     * models.  These are derived from the element composition at prepare time
+     * and stored here so the hot transport kernel does not need to touch the
+     * material_workspace (which is setup-only data).
+     *
+     * z_mean      — effective atomic number (mass-fraction-weighted sum of Z_i).
+     *               Used by the Hubert effective-charge formula in osh_physics_bethe_z_eff().
+     * z_over_a    — effective Z/A [mol/g] (sum_i w_i * Z_i / A_i).
+     *               Used by the Bohr straggling variance in osh_physics_straggling_sigma().
+     * rad_length  — radiation length X₀ [g/cm²] (PDG approximate formula, mixture rule).
+     *               Used by the Highland MCS formula in osh_physics_moliere_theta0().
+     *               Zero for vacuum and blackhole (skips scattering in transport).
+     */
+    float *z_mean;      /* [nmaterials] effective atomic number. */
+    float *z_over_a;    /* [nmaterials] Z/A [mol/g]. */
+    float *rad_length;  /* [nmaterials] radiation length X0 [g/cm^2]. */
+
     size_t nmaterials;
     size_t nprojectiles;
     size_t nenergy;

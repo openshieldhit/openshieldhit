@@ -40,6 +40,57 @@ static int _name_eq(char const *lhs, char const *rhs) {
     return *lhs == '\0' && *rhs == '\0';
 }
 
+static int populate_light_ion_fields(struct particle *p, int pdg) {
+    if (!p) {
+        return 0;
+    }
+
+    switch (pdg) {
+    case OSH_PART_PDG_PROTON:
+        p->z = 1u;
+        p->a = 1u;
+        p->is_nucleus = 0u;
+        return 1;
+    case OSH_PART_PDG_APROTON:
+        p->z = 1u;
+        p->a = 1u;
+        p->is_nucleus = 0u;
+        return 1;
+    case OSH_PART_PDG_NEUTRON:
+        p->z = 0u;
+        p->a = 1u;
+        p->is_nucleus = 0u;
+        return 1;
+    case OSH_PART_PDG_ANEUTRON:
+        p->z = 0u;
+        p->a = 1u;
+        p->is_nucleus = 0u;
+        return 1;
+    case OSH_PART_PDG_DEUTERON:
+        p->z = 1u;
+        p->a = 2u;
+        p->is_nucleus = 1u;
+        return 1;
+    case OSH_PART_PDG_TRITON:
+        p->z = 1u;
+        p->a = 3u;
+        p->is_nucleus = 1u;
+        return 1;
+    case OSH_PART_PDG_HE3:
+        p->z = 2u;
+        p->a = 3u;
+        p->is_nucleus = 1u;
+        return 1;
+    case OSH_PART_PDG_HE4:
+        p->z = 2u;
+        p->a = 4u;
+        p->is_nucleus = 1u;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 int osh_particle_from_pdg(struct particle *p, int pdg) {
 
     size_t i;
@@ -80,6 +131,7 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
             if (osh_particle_db[i].pdg == pdg) {
                 p->charge = osh_particle_db[i].charge_e;
                 p->pdg = pdg;
+                (void) populate_light_ion_fields(p, pdg);
                 return 1;
             }
         }

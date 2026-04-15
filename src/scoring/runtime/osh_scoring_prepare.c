@@ -159,6 +159,26 @@ static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind
     }
 }
 
+static int runtime_supports_geometry(struct osh_scoring_geometry_runtime const *geo) {
+    if (!geo) {
+        return 0;
+    }
+    if (geo->has_rotation) {
+        return 0;
+    }
+    return geo->geo_kind == OSH_SCORING_GEO_MESH;
+}
+
+static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
+    switch (score_kind) {
+    case OSH_SCORING_SCORE_ENERGY:
+    case OSH_SCORING_SCORE_FLUENCE:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 static int compare_prepared_pages(void const *a, void const *b) {
     struct prepared_page_ref const *pa;
     struct prepared_page_ref const *pb;
@@ -452,6 +472,26 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
             goto fail;
         }
         output_geom_idx[i] = gidx;
+        if (!runtime_supports_geometry(&rt->geometries[gidx])) {
+            osh_error("Scoring output '%s' uses unsupported runtime geometry '%s' (kind=%s)",
+                      ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                      ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)",
+                      ws->geometries[gidx].kind ? ws->geometries[gidx].kind : "(unknown)");
+            rc = OSH_ENOTSUP;
+            goto fail;
+        }
+        for (j = 0; j < ws->outputs[i].npages; ++j) {
+            enum osh_scoring_score_kind score_kind;
+
+            score_kind = quantity_to_score_kind(ws->outputs[i].pages[j].quantity);
+            if (!runtime_supports_score_kind(score_kind)) {
+                osh_error("Scoring output '%s' uses unsupported quantity '%s' for runtime scoring",
+                          ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                          ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)");
+                rc = OSH_ENOTSUP;
+                goto fail;
+            }
+        }
         geom_page_counts[gidx] += ws->outputs[i].npages;
         total_pages += ws->outputs[i].npages;
     }

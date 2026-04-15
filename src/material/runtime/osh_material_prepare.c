@@ -193,6 +193,73 @@ static void build_bethe_target(struct material const *mat, struct osh_physics_be
 }
 
 /**
+ * @brief Compute per-material atomic scalars used by MCS and straggling.
+ *
+ * @details
+ * Fills three scalars derived from the element composition:
+ *
+ *   z_mean   = sum_i(w_i * Z_i)          effective atomic number
+ *   z_over_a = sum_i(w_i * Z_i / A_i)    Z/A [mol/g] for Bohr straggling
+ *   x0_gcm2  = 1 / sum_i(w_i / X0_i)     radiation length [g/cm²]
+ *              where X0_i = 716.4 * A_i / [Z_i*(Z_i+1)*ln(287/√Z_i)]
+ *              is the approximate element radiation length (PDG eq. 34.25).
+ *
+ * The radiation-length formula is the PDG first-order approximation and gives
+ * ~2% accuracy for most elements.  Compounds use the standard mixture rule.
+ * Returns 0 for all three on invalid input (zero atoms or missing mass data).
+ */
+static void compute_material_atomic(struct material const *mat,
+                                    float *z_mean_out,
+                                    float *z_over_a_out,
+                                    float *x0_gcm2_out) {
+    size_t i;
+    double sum_wz;
+    double sum_wz_over_a;
+    double inv_x0;
+    double z_i;
+    double a_i;
+    double w_i;
+    double x0_i;
+
+    sum_wz = 0.0;
+    sum_wz_over_a = 0.0;
+    inv_x0 = 0.0;
+
+    if (!mat || mat->nelements == 0u) {
+        *z_mean_out = 0.0f;
+        *z_over_a_out = 0.0f;
+        *x0_gcm2_out = 0.0f;
+        return;
+    }
+
+    for (i = 0; i < mat->nelements; ++i) {
+        z_i = (double) mat->elements[i].z;
+        w_i = (mat->elements[i].mass_fraction >= 0.0) ? mat->elements[i].mass_fraction : 0.0;
+
+        if (osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &a_i) != OSH_OK) {
+            a_i = 2.0 * z_i;
+        }
+        if (a_i <= 0.0 || z_i < 1.0) {
+            continue;
+        }
+
+        sum_wz += w_i * z_i;
+        sum_wz_over_a += w_i * z_i / a_i;
+
+        /* PDG approximate radiation length for pure element [g/cm²]
+         * X0 = 716.4 * A / [Z*(Z+1)*ln(287/√Z)]  (PDG eq. 34.25) */
+        x0_i = 716.4 * a_i / (z_i * (z_i + 1.0) * log(287.0 / sqrt(z_i)));
+        if (x0_i > 0.0) {
+            inv_x0 += w_i / x0_i;
+        }
+    }
+
+    *z_mean_out = (float) sum_wz;
+    *z_over_a_out = (float) sum_wz_over_a;
+    *x0_gcm2_out = (inv_x0 > 0.0) ? (float) (1.0 / inv_x0) : 0.0f;
+}
+
+/**
  * @brief Build one pure-element Bethe target for compound summation.
  *
  * @details
@@ -462,10 +529,11 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
     osh_info("Preparing runtime stopping-power tables: %zu energy points from %.3f to %.1f MeV/u", ne, t.emin, t.emax);
     osh_info("Runtime projectile set: %zu representative ions (Z = 1..%zu)", nproj, nproj);
 
-    /* Projectile Z and A arrays. */
+    /* Projectile Z, A, and nuclear-mass arrays. */
     t.projectile_z = calloc(nproj, sizeof(*t.projectile_z));
     t.projectile_a = calloc(nproj, sizeof(*t.projectile_a));
-    if (!t.projectile_z || !t.projectile_a) {
+    t.projectile_mass_mev = calloc(nproj, sizeof(*t.projectile_mass_mev));
+    if (!t.projectile_z || !t.projectile_a || !t.projectile_mass_mev) {
         rc = OSH_ENOMEM;
         goto fail;
     }
@@ -473,6 +541,7 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
     for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
         unsigned int z;
         unsigned int a;
+        double mass_mev;
 
         z = (unsigned int) (proj_idx + 1u);
         if (!osh_particle_default_isotope_a(z, &a)) {
@@ -481,9 +550,16 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
             goto fail;
         }
 
+        if (!osh_particle_nuclear_mass_mev_from_za(z, a, &mass_mev)) {
+            osh_error("Missing nuclear rest mass for projectile Z=%u A=%u", z, a);
+            rc = OSH_EINVAL;
+            goto fail;
+        }
+
         t.projectile_z[proj_idx] = z;
         t.projectile_a[proj_idx] = a;
-        osh_info("    projectile[%zu]: Z=%u A=%u", proj_idx, t.projectile_z[proj_idx], t.projectile_a[proj_idx]);
+        t.projectile_mass_mev[proj_idx] = mass_mev;
+        osh_info("    projectile[%zu]: Z=%u A=%u mass=%.4f MeV", proj_idx, z, a, mass_mev);
     }
 
     /* ---- Table storage --------------------------------------------------- */
@@ -495,18 +571,34 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
 
     t.mass_stopping_power = calloc(1, nbytes_sp);
     t.range_csda = calloc(1, nbytes_range);
-    if (!t.mass_stopping_power || !t.range_csda) {
+    t.z_mean = calloc(nmat, sizeof(*t.z_mean));
+    t.z_over_a = calloc(nmat, sizeof(*t.z_over_a));
+    t.rad_length = calloc(nmat, sizeof(*t.rad_length));
+    if (!t.mass_stopping_power || !t.range_csda || !t.z_mean || !t.z_over_a || !t.rad_length) {
         rc = OSH_ENOMEM;
         goto fail;
     }
 
-    /* Indices 0 (blackhole) and 1 (vacuum) remain zero. */
+    /* Indices 0 (blackhole) and 1 (vacuum) remain zero for all arrays. */
 
     /* ---- Fill per-material rows ------------------------------------------ */
     for (mat_idx = OSH_MATERIAL_INDEX_FIRST_USER; mat_idx < nmat; ++mat_idx) {
         mat = osh_material_by_index(wm, mat_idx);
         if (!mat)
             continue;
+
+        /* Compute per-material atomic scalars (z_mean, z/a, X₀) for MCS and
+         * straggling.  These depend only on composition, not on projectile or
+         * energy, so they are computed once here and stored in the flat arrays. */
+        compute_material_atomic(mat,
+                                &t.z_mean[mat_idx],
+                                &t.z_over_a[mat_idx],
+                                &t.rad_length[mat_idx]);
+        osh_info("Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2",
+                 mat->name,
+                 (double) t.z_mean[mat_idx],
+                 (double) t.z_over_a[mat_idx],
+                 (double) t.rad_length[mat_idx]);
 
         /* ================================================================
          * LOADDEDX path
@@ -621,5 +713,9 @@ void osh_material_runtime_free(struct osh_material_runtime *tables) {
     free(tables->range_csda);
     free(tables->projectile_z);
     free(tables->projectile_a);
+    free(tables->projectile_mass_mev);
+    free(tables->z_mean);
+    free(tables->z_over_a);
+    free(tables->rad_length);
     memset(tables, 0, sizeof(*tables));
 }

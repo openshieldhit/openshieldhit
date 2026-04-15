@@ -46,6 +46,8 @@ void test_particles(void) {
     assert(p.pdg == OSH_PART_PDG_PROTON);
     assert(p.charge == 1);
     assert(p.mass == MASS_PROTON);
+    assert(p.z == 1);
+    assert(p.a == 1);
     assert(p.is_nucleus == 0);
 }
 
