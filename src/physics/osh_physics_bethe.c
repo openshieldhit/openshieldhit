@@ -243,6 +243,45 @@ double osh_physics_bethe_eval(double t_per_nucleon,
     return bethe_raw(t_total, proj, target);
 }
 
+/* ---- Public: Hubert effective charge Z_eff -------------------------------- */
+
+double osh_physics_bethe_z_eff(double t_per_nucleon,
+                                double proj_z,
+                                double proj_a,
+                                double target_z_mean) {
+    double dd;
+    double u1;
+    double u2;
+    double u3;
+    double u4;
+    double gamma_eff;
+
+    if (target_z_mean <= 0.0 || proj_z <= 0.0) {
+        return proj_z; /* guard: treat as fully stripped */
+    }
+
+    /*
+     * Hubert effective-charge GAMMA [H89], identical to the calculation
+     * inside bethe_raw().  t_per_nucleon corresponds to t_total_mev / proj->a
+     * in that function.
+     */
+    dd = 1.164 + 0.2319 * exp(-0.004302 * target_z_mean);
+    u1 = dd + 1.658 * exp(-0.05170 * proj_z);
+    u2 = 8.144 + 0.09876 * log(target_z_mean);
+    u3 = 0.3140 + 0.01072 * log(target_z_mean);
+    u4 = 0.5218 + 0.02521 * log(target_z_mean);
+    gamma_eff = 1.0 - u1 * exp((-u2 * pow(t_per_nucleon, u3)) / pow(proj_z, u4));
+
+    if (gamma_eff < 0.0) {
+        gamma_eff = 0.0;
+    } else if (gamma_eff > 1.0) {
+        gamma_eff = 1.0;
+    }
+
+    (void) proj_a; /* A not needed by the Hubert formula; kept for caller symmetry */
+    return proj_z * gamma_eff;
+}
+
 /* ---- Internal Bethe evaluator -------------------------------------------- */
 
 /**

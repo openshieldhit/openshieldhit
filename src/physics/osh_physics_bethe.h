@@ -130,4 +130,36 @@ double osh_physics_bethe_eval(double t_per_nucleon,
                               struct osh_physics_bethe_target const *target,
                               struct osh_physics_bethe_sewn const *sewn);
 
+/**
+ * @brief Compute the Hubert effective charge Z_eff at a given energy.
+ *
+ * @details
+ * Returns Z_eff = Z_proj × GAMMA, where GAMMA is the fractional charge factor
+ * from the Hubert et al. parameterisation [H89].  At high energies GAMMA → 1
+ * and Z_eff → Z_proj (fully stripped ion); at low energies GAMMA decreases as
+ * the ion captures electrons from the target.
+ *
+ * Z_eff is shared between the stopping-power model (already embedded in
+ * bethe_raw()), Molière / Highland multiple-scattering, and the Bohr energy-
+ * straggling variance.  This function exposes the calculation so those modules
+ * can call it without duplicating the Hubert coefficients.
+ *
+ * Result is clamped to [0, Z_proj].  For protons (Z_proj = 1) the result is
+ * always effectively 1 at clinical energies.
+ *
+ * @par References
+ * [H89] Hubert, Bimbot & Gauvin, NIMB 36, 357 (1989).
+ *
+ * @param[in] t_per_nucleon  Kinetic energy per nucleon [MeV/nucleon].
+ * @param[in] proj_z         Projectile atomic number Z.
+ * @param[in] proj_a         Projectile mass number A (integer, as double).
+ * @param[in] target_z_mean  Effective atomic number of the target medium.
+ *
+ * @returns Z_eff in [0, proj_z].
+ */
+double osh_physics_bethe_z_eff(double t_per_nucleon,
+                                double proj_z,
+                                double proj_a,
+                                double target_z_mean);
+
 #endif /* OSH_PHYSICS_BETHE_H */

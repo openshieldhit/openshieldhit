@@ -1,15 +1,22 @@
 #include "transport/osh_transport.h"
 
+#include <math.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "beam/osh_beam.h"
 #include "beam/osh_beamdef.h"
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_coord.h"
+#include "common/osh_logger.h"
 #include "common/osh_particle_pool.h"
+#include "common/osh_ray.h"
 #include "gemca/runtime/osh_gemca_runtime.h" /* replaces gemca/osh_gemca2.h — all gemca access goes through the runtime */
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
+#include "physics/osh_physics_bethe.h"
+#include "physics/osh_physics_moliere.h"
+#include "physics/osh_physics_straggling.h"
 #include "random/osh_rng.h"
 #include "scoring/runtime/osh_scoring_step.h"
 
@@ -35,6 +42,21 @@
 #define OSH_TRANSPORT_BOUNDARY_EPS 1e-8
 #define OSH_TRANSPORT_POOL_CAPACITY 4096u
 #define OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY 1000000u
+#define OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S 1.0
+#define OSH_TRANSPORT_PROGRESS_MAX_INTERVAL_S 10.0
+#define OSH_TRANSPORT_PROGRESS_MIN_CHUNK 1000u
+#define OSH_TRANSPORT_PROGRESS_TARGET_CHUNKS 20u
+
+/*
+ * Maximum projected RMS scattering angle allowed in a single substep [rad].
+ *
+ * The Highland / Molière Gaussian model is reliable while θ₀ is small.
+ * This threshold drives the s_theta substep criterion: steps are split so
+ * that θ₀ ≤ OSH_TRANSPORT_THETA_MAX before MCS is sampled.  The value 0.1 rad
+ * is a conservative limit well inside the Gaussian regime; for clinical beams
+ * the DELTAE criterion typically dominates and s_theta is never reached.
+ */
+#define OSH_TRANSPORT_THETA_MAX_RAD 0.1
 
 /* ---- Forward declarations ------------------------------------------------ */
 
@@ -47,7 +69,8 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           struct material_workspace const *materials,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring,
-                                          double deltae);
+                                          double deltae,
+                                          struct osh_rng *rng);
 static double cutoff_total_energy(struct beam_workspace const *beam,
                                   struct osh_material_runtime const *tables,
                                   struct particle const *part);
@@ -61,6 +84,9 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
                                              size_t *projectile_idx_out);
 static int is_blackhole_material(size_t material_idx);
 static int is_vacuum_material(size_t material_idx);
+static double monotonic_seconds(void);
+static size_t transport_progress_chunk_size(size_t total);
+static void report_transport_progress(size_t completed, size_t total, double elapsed_s);
 
 static void step_from_pool(struct step *st,
                            struct osh_particle_pool const *pool,
@@ -91,8 +117,7 @@ static void step_from_pool(struct step *st,
  * The pool capacity controls the trade-off between cache pressure (small pool)
  * and parallelism (large pool).  Physics results are independent of capacity.
  *
- * Current limitations (straight-line CSDA only, no secondaries):
- *   - no multiple scattering, no energy straggling
+ * Current limitations:
  *   - no nuclear interactions, no secondaries
  *   - SOBP and single-spot beam modes only (PHSP returns OSH_ENOTSUP)
  */
@@ -108,10 +133,16 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
     double dist_batch[OSH_TRANSPORT_POOL_CAPACITY]; /* stack-safe: ~32 KiB at 4096 doubles */
     size_t capacity;
     size_t primaries_done;
+    size_t primaries_completed;
     size_t n_fill;
     size_t i;
     size_t step_budget;
     size_t steps_taken;
+    size_t last_report_completed;
+    size_t progress_chunk;
+    size_t next_report_completed;
+    double t_start;
+    double t_last_report;
     enum osh_status rc = OSH_OK;
 
     if (!beam || !geom_rt || !materials || !tables || !scoring) {
@@ -147,6 +178,14 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
     }
     steps_taken = 0u;
     primaries_done = 0u;
+    primaries_completed = 0u;
+    last_report_completed = 0u;
+    progress_chunk = transport_progress_chunk_size(beam->nstat);
+    next_report_completed = progress_chunk;
+    t_start = monotonic_seconds();
+    t_last_report = t_start;
+
+    report_transport_progress(0u, beam->nstat, 0.0);
 
     while (primaries_done < beam->nstat || pool->n > 0u) {
         /* Fill the pool when it is empty and primaries remain */
@@ -173,6 +212,18 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
         /* Advance every live particle by one step using the precomputed geometry */
         for (i = 0u; i < pool->n; ++i) {
             if (steps_taken >= step_budget) {
+                osh_error("transport: step budget exceeded after %zu steps (pool slot %zu, primaries_done=%zu, zone=%zu, e=%.17g, pos=(%.17g, %.17g, %.17g), dir=(%.17g, %.17g, %.17g))",
+                          steps_taken,
+                          i,
+                          primaries_done,
+                          zone_batch[i],
+                          pool->e[i],
+                          pool->x[i],
+                          pool->y[i],
+                          pool->z[i],
+                          pool->ux[i],
+                          pool->uy[i],
+                          pool->uz[i]);
                 rc = OSH_ESTATE; /* step budget exceeded — likely stuck particle */
                 goto cleanup;
             }
@@ -185,8 +236,21 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
                                     materials,
                                     tables,
                                     scoring,
-                                    (double) beam->deltae);
+                                    (double) beam->deltae,
+                                    &rng);
             if (rc != OSH_OK) {
+                osh_error("transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, %.17g, %.17g) dir=(%.17g, %.17g, %.17g)",
+                          i,
+                          (int) rc,
+                          zone_batch[i],
+                          dist_batch[i],
+                          pool->e[i],
+                          pool->x[i],
+                          pool->y[i],
+                          pool->z[i],
+                          pool->ux[i],
+                          pool->uy[i],
+                          pool->uz[i]);
                 goto cleanup;
             }
             ++steps_taken;
@@ -194,6 +258,29 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
 
         /* Compact dead entries (e[i] <= 0) so the next fill appends cleanly */
         osh_particle_pool_compact(pool);
+        primaries_completed = primaries_done - pool->n;
+        if (primaries_completed > last_report_completed) {
+            double const t_now = monotonic_seconds();
+            int const chunk_reached = (primaries_completed >= next_report_completed);
+            int const min_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S);
+            int const max_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MAX_INTERVAL_S);
+            if (primaries_completed == beam->nstat || (chunk_reached && min_interval_elapsed) || max_interval_elapsed) {
+                report_transport_progress(primaries_completed, beam->nstat, t_now - t_start);
+                last_report_completed = primaries_completed;
+                t_last_report = t_now;
+                while (next_report_completed <= primaries_completed && next_report_completed < beam->nstat) {
+                    next_report_completed += progress_chunk;
+                }
+                if (next_report_completed > beam->nstat) {
+                    next_report_completed = beam->nstat;
+                }
+            }
+        }
+    }
+
+    if (last_report_completed < beam->nstat) {
+        double const t_now = monotonic_seconds();
+        report_transport_progress(beam->nstat, beam->nstat, t_now - t_start);
     }
 
 cleanup:
@@ -232,6 +319,35 @@ cleanup:
  * direction and the function returns without scoring a zero-length step.  The
  * particle remains alive; transport_step_one() is called again for it in the
  * next wavefront round.
+ *
+ * Random-hinge MCS (physics detail):
+ * Multiple Coulomb scattering is applied via the random hinge method rather
+ * than at the end of the step.  A hinge point h is sampled uniformly in
+ * [0, step_len].  The particle travels straight from p to the hinge along the
+ * incident direction u0, then is deflected by Gaussian angles (tx, ty) drawn
+ * from the Highland distribution, and continues in the scattered direction u1
+ * for the remaining (step_len - h).  The actual exit position is therefore:
+ *
+ *   q = p + h·u0 + tail·u1
+ *
+ * This avoids the parallel-boundary pathology of the 2-pass approach (where
+ * re-querying geometry in the scattered direction can give infinite boundary
+ * distances for backscatter) and correctly distributes the deflection
+ * throughout the step rather than applying it entirely at the endpoint.
+ *
+ * To keep every scored step inside a single GEMCA zone, the post-hinge leg is
+ * clipped by a second distance query from the hinge point along u1:
+ *
+ *   tail = min(step_len - h, get_dist(ph, u1))
+ *
+ * where ph = p + h·u0.  The actual transported track length is then
+ *
+ *   ds = h + tail
+ *
+ * Three substep criteria are applied before sampling the hinge:
+ *   1. boundary distance (geometric)
+ *   2. ds_csda  — DELTAE fraction of CSDA range
+ *   3. ds_theta — θ₀ ≤ OSH_TRANSPORT_THETA_MAX_RAD (keeps Highland valid)
  */
 static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           size_t slot,
@@ -242,7 +358,8 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
                                           struct material_workspace const *materials,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring,
-                                          double deltae) {
+                                          double deltae,
+                                          struct osh_rng *rng) {
     struct particle const *part;
     size_t projectile_idx;
     double cutoff_total;
@@ -251,18 +368,49 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
     double rho;
     double step_len;
     double exit_energy;
+    double requested_step_len;
     double a_proj;
     double e0_total;
     double e1_target;
     double r0;
-    double r1_target;
-    double ds_csda;
+    double r1_csda;   /* CSDA range at the DELTAE target energy */
+    double ds_csda;   /* DELTAE substep length [cm] */
+    double ds_theta;  /* MCS substep length [cm] */
     double residual_range;
+    double h;         /* hinge point [cm] along incident direction */
+    double tail_len;  /* post-hinge leg [cm] along scattered direction */
+    double qx;        /* exit position — bent-path endpoint */
+    double qy;
+    double qz;
     struct step st;
     int hit_boundary;
+    int requested_hit_boundary;
+    int requested_is_csda;
     enum osh_status rc;
+    /* Per-material atomic scalars (loaded in non-vacuum branch) */
+    double mat_z_mean;
+    double mat_z_over_a;
+    double mat_x0_gcm2;
+    double proj_mass_mev;
+    /* Mid-step physics quantities */
+    double z_eff_0;   /* z_eff at entry energy — used for s_theta */
+    double e_mid;
+    double z_eff;
+    double ds_gcm2;
+    double proposed_ds_gcm2;
+    double proposed_exit_energy;
+    double sigma_strag;
+    double theta0;
+    double boundary_tail_ds;
+    double w_scat[3]; /* exit direction after MCS (= u0 if no scatter) */
+    double nudge_dir[3];
+    struct ray hinge_ray;
+    int enable_mcs;
+    int enable_straggling;
 
     part = pool->species[slot];
+    a_proj = (part->a > 0u) ? (double) part->a : 1.0;
+    e0_total = pool->e[slot];
 
     rc = find_projectile_index(tables, part, &projectile_idx);
     if (rc != OSH_OK) {
@@ -304,12 +452,53 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
     }
 
     rho = (material->rho > 0.0) ? material->rho : 0.0;
+
+    /* Exit direction default: incident direction (no scatter in vacuum) */
+    w_scat[0] = pool->ux[slot];
+    w_scat[1] = pool->uy[slot];
+    w_scat[2] = pool->uz[slot];
+    nudge_dir[0] = pool->ux[slot];
+    nudge_dir[1] = pool->uy[slot];
+    nudge_dir[2] = pool->uz[slot];
+    h = 0.0;
+    tail_len = 0.0;
+    requested_hit_boundary = 0;
+    requested_step_len = 0.0;
+    requested_is_csda = 0;
+    hit_boundary = 0;
+    enable_mcs = (beam && beam->scatter != OSH_BEAM_MSCAT_OFF);
+    enable_straggling = (beam && beam->straggl != OSH_BEAM_STRAGG_OFF);
+
     if (is_vacuum_material(zone->material_idx) || rho <= 0.0) {
+        /* Vacuum: straight shot to next boundary, no energy loss or scatter */
         step_len = boundary_ds;
-        exit_energy = pool->e[slot];
+        requested_step_len = step_len;
+        requested_hit_boundary = 1;
+        exit_energy = e0_total;
+        h = step_len;
+        tail_len = 0.0;
+        hit_boundary = 1;
     } else {
-        a_proj = (part->a > 0u) ? (double) part->a : 1.0;
-        e0_total = pool->e[slot];
+        /*
+         * ---- Step-length determination: three substep criteria -------------
+         *
+         * The substep is the minimum of:
+         *   1. boundary_ds   — next geometry boundary in incident direction
+         *   2. ds_csda       — DELTAE fraction of the CSDA range
+         *   3. ds_theta      — maximum step keeping θ₀ ≤ OSH_TRANSPORT_THETA_MAX_RAD
+         *
+         * After the minimum is chosen, exit energy is recovered from the
+         * CSDA residual range for the actual step_len.  Using residual range
+         * for all three cases is slightly less accurate than using e1_target
+         * when step_len == ds_csda (round-trip through inverse range table),
+         * but the difference is below the energy grid spacing and avoids a
+         * branch in the exit-energy computation.
+         */
+        mat_z_mean    = (double) tables->z_mean[zone->material_idx];
+        mat_z_over_a  = (double) tables->z_over_a[zone->material_idx];
+        mat_x0_gcm2   = (double) tables->rad_length[zone->material_idx];
+        proj_mass_mev = tables->projectile_mass_mev[projectile_idx];
+
         e1_target = e0_total * (1.0 - deltae);
         if (e1_target < cutoff_total) {
             e1_target = cutoff_total;
@@ -319,56 +508,236 @@ static enum osh_status transport_step_one(struct osh_particle_pool *pool,
             return OSH_OK;
         }
 
-        r0 = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e0_total / a_proj);
-        r1_target = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e1_target / a_proj);
-        ds_csda = (r0 - r1_target) / rho;
+        r0      = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e0_total / a_proj);
+        r1_csda = osh_material_runtime_range_lookup(tables, zone->material_idx, projectile_idx, e1_target / a_proj);
+        ds_csda = (r0 - r1_csda) / rho;
         if (ds_csda <= 0.0) {
             pool->e[slot] = 0.0;
             return OSH_OK;
         }
 
-        if (ds_csda <= boundary_ds) {
-            step_len = ds_csda;
+        /* MCS substep criterion evaluated at entry energy */
+        if (enable_mcs) {
+            z_eff_0  = osh_physics_bethe_z_eff(e0_total / a_proj, (double) part->z, a_proj, mat_z_mean);
+            ds_theta = osh_physics_moliere_s_theta(e0_total, proj_mass_mev, z_eff_0,
+                                                   rho, mat_x0_gcm2, OSH_TRANSPORT_THETA_MAX_RAD);
+        } else {
+            ds_theta = 0.0;
+        }
+
+        requested_step_len = boundary_ds;
+        if (ds_csda < requested_step_len) {
+            requested_step_len = ds_csda;
+        }
+        if (ds_theta > 0.0 && ds_theta < requested_step_len) {
+            requested_step_len = ds_theta;
+        }
+        requested_hit_boundary = (requested_step_len >= boundary_ds - OSH_TRANSPORT_BOUNDARY_EPS);
+        requested_is_csda = (fabs(requested_step_len - ds_csda) <= 1.0e-12 * fmax(1.0, requested_step_len));
+
+        /*
+         * Geometry-limited step: stay on the entry chord to the boundary and
+         * apply the direction change at the endpoint.
+         *
+         * Physics-limited step: sample a random hinge, scatter there, then
+         * clip the post-hinge leg with a second get_distance() so the final
+         * endpoint remains inside the current zone.
+         */
+        if (requested_hit_boundary) {
+            h = requested_step_len;
+            tail_len = 0.0;
+            step_len = requested_step_len;
+            hit_boundary = 1;
+        } else {
+            h = requested_step_len * osh_rng_double(rng);
+            tail_len = requested_step_len - h;
+
+            residual_range = r0 - rho * requested_step_len;
+            if (residual_range <= 0.0) {
+                pool->e[slot] = 0.0;
+                return OSH_OK;
+            }
+            if (requested_is_csda) {
+                proposed_exit_energy = e1_target;
+            } else {
+                proposed_exit_energy =
+                    energy_from_residual_range(tables, zone->material_idx, projectile_idx, residual_range) * a_proj;
+                if (proposed_exit_energy > e0_total) {
+                    proposed_exit_energy = e0_total;
+                }
+                if (proposed_exit_energy < cutoff_total) {
+                    proposed_exit_energy = cutoff_total;
+                }
+            }
+
+            e_mid = 0.5 * (e0_total + proposed_exit_energy);
+            z_eff = osh_physics_bethe_z_eff(e_mid / a_proj, (double) part->z, a_proj, mat_z_mean);
+            proposed_ds_gcm2 = rho * requested_step_len;
+
+            if (enable_mcs && mat_x0_gcm2 > 0.0) {
+                theta0 = osh_physics_moliere_theta0(e_mid, proj_mass_mev, z_eff, proposed_ds_gcm2, mat_x0_gcm2);
+                if (theta0 > 0.0) {
+                    double const v_in[3] = {pool->ux[slot], pool->uy[slot], pool->uz[slot]};
+                    osh_physics_moliere_scatter(v_in, w_scat, theta0, rng);
+                }
+            }
+
+            hinge_ray.p[0] = pool->x[slot] + pool->ux[slot] * h;
+            hinge_ray.p[1] = pool->y[slot] + pool->uy[slot] * h;
+            hinge_ray.p[2] = pool->z[slot] + pool->uz[slot] * h;
+            hinge_ray.cp[0] = w_scat[0];
+            hinge_ray.cp[1] = w_scat[1];
+            hinge_ray.cp[2] = w_scat[2];
+            hinge_ray.system = OSH_COORD_UNIVERSE;
+
+            boundary_tail_ds = osh_gemca_runtime_get_distance(geom_rt, zone_idx, &hinge_ray);
+            if (boundary_tail_ds < 0.0) {
+                osh_error("transport: negative hinge boundary distance zone=%zu h=%.17g tail_req=%.17g hinge=(%.17g, %.17g, %.17g) w=(%.17g, %.17g, %.17g)",
+                          zone_idx,
+                          h,
+                          tail_len,
+                          hinge_ray.p[0],
+                          hinge_ray.p[1],
+                          hinge_ray.p[2],
+                          hinge_ray.cp[0],
+                          hinge_ray.cp[1],
+                          hinge_ray.cp[2]);
+                return OSH_ESTATE;
+            }
+            if (boundary_tail_ds < tail_len) {
+                tail_len = boundary_tail_ds;
+                hit_boundary = 1;
+                nudge_dir[0] = w_scat[0];
+                nudge_dir[1] = w_scat[1];
+                nudge_dir[2] = w_scat[2];
+            }
+            step_len = h + tail_len;
+        }
+
+        /* Actual exit energy and straggling use the clipped in-zone step. */
+        residual_range = r0 - rho * step_len;
+        if (residual_range <= 0.0) {
+            pool->e[slot] = 0.0;
+            return OSH_OK;
+        }
+        if (requested_is_csda && fabs(step_len - requested_step_len) <= 1.0e-12 * fmax(1.0, requested_step_len)) {
             exit_energy = e1_target;
         } else {
-            step_len = boundary_ds;
-            residual_range = r0 - rho * step_len;
-            if (residual_range < 0.0) {
-                residual_range = 0.0;
+            exit_energy = energy_from_residual_range(tables, zone->material_idx, projectile_idx, residual_range) * a_proj;
+            if (exit_energy > e0_total) {
+                exit_energy = e0_total;
             }
-            exit_energy =
-                energy_from_residual_range(tables, zone->material_idx, projectile_idx, residual_range) * a_proj;
             if (exit_energy < cutoff_total) {
                 exit_energy = cutoff_total;
+            }
+        }
+
+        e_mid = 0.5 * (e0_total + exit_energy);
+        z_eff = osh_physics_bethe_z_eff(e_mid / a_proj, (double) part->z, a_proj, mat_z_mean);
+        ds_gcm2 = rho * step_len;
+
+        /* Gaussian energy straggling (Bohr variance) */
+        sigma_strag = enable_straggling ? osh_physics_straggling_sigma(z_eff, mat_z_over_a, ds_gcm2) : 0.0;
+        if (sigma_strag > 0.0) {
+            exit_energy += osh_rng_gauss(rng, 0.0, sigma_strag);
+            if (exit_energy > e0_total) {
+                exit_energy = e0_total;
+            }
+            if (exit_energy < cutoff_total) {
+                exit_energy = cutoff_total;
+            }
+        }
+
+        if (requested_hit_boundary && enable_mcs && mat_x0_gcm2 > 0.0) {
+            theta0 = osh_physics_moliere_theta0(e_mid, proj_mass_mev, z_eff, ds_gcm2, mat_x0_gcm2);
+            if (theta0 > 0.0) {
+                double const v_in[3] = {pool->ux[slot], pool->uy[slot], pool->uz[slot]};
+                osh_physics_moliere_scatter(v_in, w_scat, theta0, rng);
             }
         }
     }
 
     if (step_len <= 0.0) {
-        pool->e[slot] = 0.0;
+        pool->ux[slot] = w_scat[0];
+        pool->uy[slot] = w_scat[1];
+        pool->uz[slot] = w_scat[2];
+        if (hit_boundary) {
+            pool->x[slot] += nudge_dir[0] * OSH_TRANSPORT_BOUNDARY_EPS;
+            pool->y[slot] += nudge_dir[1] * OSH_TRANSPORT_BOUNDARY_EPS;
+            pool->z[slot] += nudge_dir[2] * OSH_TRANSPORT_BOUNDARY_EPS;
+        }
         return OSH_OK;
     }
-    if (exit_energy > pool->e[slot]) {
-        exit_energy = pool->e[slot];
-    }
+
+    /*
+     * Exit position: two-segment bent path.
+     *
+     *   q = p + h·u0 + tail·u1
+ *
+     * For vacuum (h == 0, w_scat == u0) this reduces to q = p + step_len·u0.
+     * For material steps the hinge bends the path; q is no longer collinear
+     * with p and u0 but ds = step_len is still the correct track length.
+     *
+     * Scoring uses p, q, v=u0, w=u1, ds, de — no hinge position stored.
+     * Zone-based scorers deposit de in the zone containing p (single zone per
+     * step, guaranteed by the boundary criterion).  Voxel DDA scorers trace
+     * the chord p→q; the approximation error is O(θ₀² × step_len) ≈ 10⁻⁵ cm
+     * for clinical beams, well below voxel resolution.
+     */
+    qx = pool->x[slot] + pool->ux[slot] * h + w_scat[0] * tail_len;
+    qy = pool->y[slot] + pool->uy[slot] * h + w_scat[1] * tail_len;
+    qz = pool->z[slot] + pool->uz[slot] * h + w_scat[2] * tail_len;
 
     step_from_pool(&st, pool, slot, step_len, exit_energy, rho, (int) zone->material_idx, (int) zone_idx);
+    st.q[0] = qx;
+    st.q[1] = qy;
+    st.q[2] = qz;
+    st.w[0] = w_scat[0];
+    st.w[1] = w_scat[1];
+    st.w[2] = w_scat[2];
+
     rc = osh_scoring_score_step(scoring, part, &st);
     if (rc != OSH_OK) {
+        osh_error("transport: scoring rejected step rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) q=(%.17g, %.17g, %.17g) v=(%.17g, %.17g, %.17g) w=(%.17g, %.17g, %.17g)",
+                  (int) rc,
+                  st.ds,
+                  st.p[0],
+                  st.p[1],
+                  st.p[2],
+                  st.q[0],
+                  st.q[1],
+                  st.q[2],
+                  st.v[0],
+                  st.v[1],
+                  st.v[2],
+                  st.w[0],
+                  st.w[1],
+                  st.w[2]);
         return rc;
     }
 
-    /* Advance position and update energy in the pool SoA arrays */
-    hit_boundary = (step_len >= boundary_ds - OSH_TRANSPORT_BOUNDARY_EPS);
-    pool->x[slot] += pool->ux[slot] * step_len;
-    pool->y[slot] += pool->uy[slot] * step_len;
-    pool->z[slot] += pool->uz[slot] * step_len;
+    /* Update pool: position to bent endpoint, energy, heading to u1 */
+    pool->x[slot] = qx;
+    pool->y[slot] = qy;
+    pool->z[slot] = qz;
     pool->e[slot] = exit_energy;
+    pool->ux[slot] = w_scat[0];
+    pool->uy[slot] = w_scat[1];
+    pool->uz[slot] = w_scat[2];
 
     if (hit_boundary) {
-        pool->x[slot] += pool->ux[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
-        pool->y[slot] += pool->uy[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
-        pool->z[slot] += pool->uz[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        /*
+         * Nudge past the boundary in the direction of the leg that actually
+         * reached it:
+         *   - straight / geometry-limited boundary steps use u0
+         *   - hinge-clipped steps use u1
+         *
+         * This avoids trapping a boundary-limited step in the old zone when an
+         * end-of-step scatter happens to backscatter into the medium.
+         */
+        pool->x[slot] += nudge_dir[0] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->y[slot] += nudge_dir[1] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->z[slot] += nudge_dir[2] * OSH_TRANSPORT_BOUNDARY_EPS;
     }
 
     return OSH_OK;
@@ -485,6 +854,45 @@ static int is_blackhole_material(size_t material_idx) {
 
 static int is_vacuum_material(size_t material_idx) {
     return material_idx == OSH_MATERIAL_INDEX_VACUUM;
+}
+
+static double monotonic_seconds(void) {
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double) ts.tv_sec + 1.0e-9 * (double) ts.tv_nsec;
+}
+
+static size_t transport_progress_chunk_size(size_t total) {
+    size_t chunk;
+
+    if (total == 0u) {
+        return 1u;
+    }
+
+    chunk = (total + OSH_TRANSPORT_PROGRESS_TARGET_CHUNKS - 1u) / OSH_TRANSPORT_PROGRESS_TARGET_CHUNKS;
+    if (chunk < OSH_TRANSPORT_PROGRESS_MIN_CHUNK && total > OSH_TRANSPORT_PROGRESS_MIN_CHUNK) {
+        chunk = OSH_TRANSPORT_PROGRESS_MIN_CHUNK;
+    }
+    if (chunk == 0u) {
+        chunk = 1u;
+    }
+
+    return chunk;
+}
+
+static void report_transport_progress(size_t completed, size_t total, double elapsed_s) {
+    double primaries_per_second;
+    size_t remaining;
+
+    remaining = (completed < total) ? (total - completed) : 0u;
+    primaries_per_second = (elapsed_s > 0.0) ? ((double) completed / elapsed_s) : 0.0;
+
+    osh_info("Transport progress: %zu/%zu completed, %zu left, %.1f primaries/s",
+             completed,
+             total,
+             remaining,
+             primaries_per_second);
 }
 
 /* ---- Pool ↔ geometry/scoring adapters ------------------------------------ */
