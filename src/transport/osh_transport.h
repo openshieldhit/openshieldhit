@@ -32,11 +32,14 @@ struct osh_scoring_runtime;
  *   - energy loss is computed from material CSDA range tables
  *   - scoring is applied step-by-step through scoring/runtime
  *
- * The current implementation is intentionally narrow:
- *   - no multiple scattering
- *   - no energy straggling
- *   - no nuclear interactions
- *   - no secondaries
+ * Physics included:
+ *   - CSDA energy loss (residual-range tables)
+ *   - multiple Coulomb scattering (Highland/Molière, random-hinge method)
+ *   - Gaussian energy straggling (Bohr variance)
+ *
+ * Not yet implemented:
+ *   - nuclear interactions
+ *   - secondaries
  *
  * DELTAE is treated as a maximum fractional energy-loss step criterion in
  * material. Boundary-limited steps are truncated and the exit energy is

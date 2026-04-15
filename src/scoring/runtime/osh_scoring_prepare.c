@@ -110,27 +110,44 @@ static enum osh_scoring_filter_field filter_field_to_enum(char const *field) {
 }
 
 static enum osh_scoring_filter_op filter_op_to_enum(char const *op) {
-    if (!op) {
+    if (!op || op[0] == '\0') {
         return OSH_SCORING_FILTER_OP_INVALID;
     }
-    if (strcmp(op, "<") == 0) {
-        return OSH_SCORING_FILTER_OP_LT;
+
+    switch (op[0]) {
+    case '<':
+        if (op[1] == '\0') {
+            return OSH_SCORING_FILTER_OP_LT;
+        }
+        if (op[1] == '=' && op[2] == '\0') {
+            return OSH_SCORING_FILTER_OP_LE;
+        }
+        break;
+    case '>':
+        if (op[1] == '\0') {
+            return OSH_SCORING_FILTER_OP_GT;
+        }
+        if (op[1] == '=' && op[2] == '\0') {
+            return OSH_SCORING_FILTER_OP_GE;
+        }
+        break;
+    case '=':
+        if (op[1] == '\0') {
+            return OSH_SCORING_FILTER_OP_EQ;
+        }
+        if (op[1] == '=' && op[2] == '\0') {
+            return OSH_SCORING_FILTER_OP_EQ;
+        }
+        break;
+    case '!':
+        if (op[1] == '=' && op[2] == '\0') {
+            return OSH_SCORING_FILTER_OP_NE;
+        }
+        break;
+    default:
+        break;
     }
-    if (strcmp(op, "<=") == 0) {
-        return OSH_SCORING_FILTER_OP_LE;
-    }
-    if (strcmp(op, ">") == 0) {
-        return OSH_SCORING_FILTER_OP_GT;
-    }
-    if (strcmp(op, ">=") == 0) {
-        return OSH_SCORING_FILTER_OP_GE;
-    }
-    if ((strcmp(op, "=") == 0) || (strcmp(op, "==") == 0)) {
-        return OSH_SCORING_FILTER_OP_EQ;
-    }
-    if (strcmp(op, "!=") == 0) {
-        return OSH_SCORING_FILTER_OP_NE;
-    }
+
     return OSH_SCORING_FILTER_OP_INVALID;
 }
 

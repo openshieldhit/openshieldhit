@@ -6,11 +6,8 @@
 
 /* ---- Highland formula ----------------------------------------------------- */
 
-double osh_physics_moliere_theta0(double t_total_mev,
-                                  double mass_mev,
-                                  double z_eff,
-                                  double thickness_gcm2,
-                                  double x0_gcm2) {
+double
+osh_physics_moliere_theta0(double t_total_mev, double mass_mev, double z_eff, double thickness_gcm2, double x0_gcm2) {
     double momentum; /* p = sqrt(T*(T + 2m))                      [MeV/c] */
     double e_total;  /* E = T + m                                  [MeV]   */
     double pv;       /* βcp = p²/E = T(T+2m)/(T+m)               [MeV]   */
@@ -53,18 +50,20 @@ double osh_physics_moliere_theta0(double t_total_mev,
     log_arg = z_eff * z_eff * d_over_x0;
     theta0 = (13.6 / pv) * z_eff * sqrt(d_over_x0) * (1.0 + 0.038 * log(log_arg));
 
+    /*
+     * For ultra-thin slabs (log_arg << 1) the log correction term is a large
+     * negative number and the correction factor (1 + 0.038*ln(...)) can become
+     * negative before the Highland approximation has any physical meaning.
+     * Clamp to zero in that regime rather than returning a negative angle.
+     */
     return (theta0 > 0.0) ? theta0 : 0.0;
 }
 
 /* ---- MCS substep criterion ----------------------------------------------- */
 
-double osh_physics_moliere_s_theta(double t_total_mev,
-                                   double mass_mev,
-                                   double z_eff,
-                                   double rho_gcm3,
-                                   double x0_gcm2,
-                                   double theta_max_rad) {
-    double pv;        /* βcp = p²/E = T(T+2m)/(T+m)  [MeV] */
+double osh_physics_moliere_s_theta(
+    double t_total_mev, double mass_mev, double z_eff, double rho_gcm3, double x0_gcm2, double theta_max_rad) {
+    double pv; /* βcp = p²/E = T(T+2m)/(T+m)  [MeV] */
     double momentum;
     double e_total;
     double ratio;
@@ -98,10 +97,7 @@ double osh_physics_moliere_s_theta(double t_total_mev,
 
 /* ---- Direction scatter ---------------------------------------------------- */
 
-void osh_physics_moliere_scatter(double const v[3],
-                                 double w[3],
-                                 double theta0,
-                                 struct osh_rng *rng) {
+void osh_physics_moliere_scatter(double const v[3], double w[3], double theta0, struct osh_rng *rng) {
     double u1[3]; /* first transverse basis vector  */
     double u2[3]; /* second transverse basis vector  */
     double tx;    /* projected angle in the u1 plane [rad] */

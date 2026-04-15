@@ -1,0 +1,836 @@
+#include "transport/osh_transport_ion_step.h"
+
+#include <math.h>
+#include <stdlib.h>
+
+#include "beam/osh_beam.h"
+#include "beam/osh_beamdef.h"
+#include "common/osh_coord.h"
+#include "common/osh_logger.h"
+#include "common/osh_particle_pool.h"
+#include "common/osh_ray.h"
+#include "common/osh_step.h"
+#include "gemca/runtime/osh_gemca_runtime.h"
+#include "material/osh_material.h"
+#include "material/runtime/osh_material_runtime.h"
+#include "physics/osh_physics_bethe.h"
+#include "physics/osh_physics_moliere.h"
+#include "physics/osh_physics_straggling.h"
+#include "random/osh_rng.h"
+#include "scoring/runtime/osh_scoring_step.h"
+
+/*
+ * Spatial boundary epsilon [cm]: particles closer than this to a zone boundary
+ * are nudged forward rather than stepping into it.
+ */
+#define OSH_TRANSPORT_BOUNDARY_EPS 1e-8
+
+/*
+ * Relative tolerance for step-length equality comparisons [dimensionless].
+ * Used to detect that the actual step equals the requested CSDA step after a
+ * hinge clip.  Not a spatial quantity — do not confuse with BOUNDARY_EPS.
+ */
+#define OSH_TRANSPORT_STEP_LEN_REL_TOL 1.0e-12
+
+/*
+ * Maximum projected RMS scattering angle per substep [rad].
+ * Steps are split so that θ₀ ≤ this threshold before MCS is sampled,
+ * keeping the Highland Gaussian approximation valid.
+ */
+#define OSH_TRANSPORT_THETA_MAX_RAD 0.1
+
+/* ---- Per-step computation context --------------------------------------- */
+
+/*
+ * Holds all intermediate state for one transport substep, populated
+ * progressively by the five step-phase functions below.  The pool SoA arrays
+ * (pool->x, pool->e, ...) are NOT cached here; each phase accesses them
+ * directly via (pool, slot).
+ *
+ * Phase ownership:
+ *   ion_step_setup()                — particle/material fields + done flag
+ *   ion_step_vacuum()               — step geometry (straight flight)
+ *   ion_step_length()               — step-length limits (CSDA/theta/boundary)
+ *   ion_step_hinge_and_scatter()    — hinge geometry + MCS direction
+ *   ion_step_energy_and_straggling() — exit energy + straggling + boundary MCS
+ *   ion_step_commit()               — scoring + pool update + nudge
+ */
+struct ion_step_ctx {
+    /* --- Set by ion_step_setup() ----------------------------------------- */
+    struct particle const *part; /* shortcut: pool->species[slot]         */
+    size_t projectile_idx;       /* index into tables->projectile_*       */
+    size_t zone_idx;             /* caller-provided zone index            */
+    size_t zone_material_idx;    /* zone->material_idx                    */
+    double e0;                   /* entry total kinetic energy [MeV]      */
+    double a_proj;               /* mass number (float cast, ≥ 1)         */
+    double cutoff;               /* energy cutoff for this particle [MeV] */
+    double boundary_ds;          /* distance to next zone boundary [cm]   */
+    double rho;                  /* material density [g/cm³]              */
+    double mat_z_mean;
+    double mat_z_over_a;
+    double mat_x0_gcm2;
+    double proj_mass_mev;
+    int enable_mcs;
+    int enable_straggling;
+    int is_vacuum;           /* 1 if vacuum zone or ρ ≤ 0            */
+    int done;                /* 1 if step already handled (kill/nudge/error) */
+    enum osh_status done_rc; /* return value when done == 1           */
+
+    /* --- Set by ion_step_length() ---------------------------------------- */
+    double r0;                 /* CSDA range at e0 [g/cm²]             */
+    double e1_target;          /* CSDA energy target (DELTAE fraction)  */
+    double requested_step_len; /* step length before hinge clip [cm]    */
+    int requested_hit_boundary;
+    int requested_is_csda;
+
+    /* --- Set by ion_step_hinge_and_scatter() / ion_step_vacuum() --------- */
+    double step_len; /* actual track length [cm]              */
+    double h;        /* hinge position along entry dir [cm]   */
+    double tail_len; /* post-hinge leg [cm]                   */
+    int hit_boundary;
+    double nudge_dir[3]; /* direction for post-boundary nudge     */
+    double w_scat[3];    /* exit direction after MCS              */
+
+    /* --- Set by ion_step_energy_and_straggling() ------------------------- */
+    double exit_energy; /* exit total kinetic energy [MeV]       */
+    double ds_gcm2;     /* areal density of actual step [g/cm²] */
+};
+
+/* ---- Forward declarations ------------------------------------------------ */
+
+static void ion_step_setup(struct ion_step_ctx *ctx,
+                           struct osh_particle_pool *pool,
+                           size_t slot,
+                           size_t zone_idx,
+                           double boundary_ds,
+                           struct gemca_runtime const *geom_rt,
+                           struct beam_workspace const *beam,
+                           struct material_workspace const *materials,
+                           struct osh_material_runtime const *tables);
+
+static void ion_step_vacuum(struct ion_step_ctx *ctx);
+
+static void ion_step_length(struct ion_step_ctx *ctx,
+                            struct osh_particle_pool *pool,
+                            size_t slot,
+                            struct osh_material_runtime const *tables,
+                            double deltae);
+
+static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
+                                                  struct osh_particle_pool *pool,
+                                                  size_t slot,
+                                                  struct gemca_runtime const *geom_rt,
+                                                  struct osh_material_runtime const *tables,
+                                                  struct osh_rng *rng);
+
+static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
+                                           struct osh_particle_pool *pool,
+                                           size_t slot,
+                                           struct osh_material_runtime const *tables,
+                                           struct osh_rng *rng);
+
+static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
+                                       struct osh_particle_pool *pool,
+                                       size_t slot,
+                                       struct osh_scoring_runtime *scoring);
+
+/* Table helpers */
+static double cutoff_total_energy(struct beam_workspace const *beam,
+                                  struct osh_material_runtime const *tables,
+                                  struct particle const *part);
+static double energy_from_residual_range(struct osh_material_runtime const *tables,
+                                         size_t material_idx,
+                                         size_t projectile_idx,
+                                         double residual_range);
+static double energy_grid_value(struct osh_material_runtime const *tables, size_t energy_idx);
+static enum osh_status find_projectile_index(struct osh_material_runtime const *tables,
+                                             struct particle const *part,
+                                             size_t *projectile_idx_out);
+static int is_blackhole_material(size_t material_idx);
+static int is_vacuum_material(size_t material_idx);
+static void step_from_pool(struct step *st,
+                           struct osh_particle_pool const *pool,
+                           size_t slot,
+                           double step_len,
+                           double exit_energy,
+                           double rho,
+                           int medium,
+                           int zone);
+
+/* ---- Public API ---------------------------------------------------------- */
+
+/**
+ * Top-level ion step function: sequences the five physics phases.
+ *
+ * Transport is entirely encapsulated here; the wavefront loop only calls this
+ * function and does not touch the physics.
+ */
+enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
+                                           size_t slot,
+                                           size_t zone_idx,
+                                           double boundary_ds,
+                                           struct gemca_runtime const *geom_rt,
+                                           struct beam_workspace const *beam,
+                                           struct material_workspace const *materials,
+                                           struct osh_material_runtime const *tables,
+                                           struct osh_scoring_runtime *scoring,
+                                           double deltae,
+                                           struct osh_rng *rng) {
+    struct ion_step_ctx ctx;
+    enum osh_status rc;
+
+    /* Phase 1 — identify particle, load material, handle early exits */
+    ion_step_setup(&ctx, pool, slot, zone_idx, boundary_ds, geom_rt, beam, materials, tables);
+    if (ctx.done)
+        return ctx.done_rc;
+
+    if (ctx.is_vacuum) {
+        /* Phase 2a — vacuum: straight shot, no energy loss or scatter */
+        ion_step_vacuum(&ctx);
+    } else {
+        /* Phase 2b — determine step length (boundary / CSDA / θ limits) */
+        ion_step_length(&ctx, pool, slot, tables, deltae);
+        if (ctx.done)
+            return ctx.done_rc;
+
+        /* Phase 3 — sample random hinge; MCS scatter for physics-limited steps;
+         *           clip post-hinge leg against zone boundary */
+        rc = ion_step_hinge_and_scatter(&ctx, pool, slot, geom_rt, tables, rng);
+        if (rc != OSH_OK)
+            return rc;
+        if (ctx.done)
+            return ctx.done_rc;
+
+        /* Phase 4 — exit energy from CSDA residual range; Bohr straggling;
+         *           end-of-step MCS for boundary-limited steps */
+        ion_step_energy_and_straggling(&ctx, pool, slot, tables, rng);
+        if (ctx.done)
+            return ctx.done_rc;
+    }
+
+    /* Phase 5 — score step, update pool position/energy/direction, nudge */
+    return ion_step_commit(&ctx, pool, slot, scoring);
+}
+
+/* ---- Phase 1: setup ------------------------------------------------------ */
+
+/**
+ * Identify the particle species, load material properties, and handle all
+ * early-exit conditions (unknown species, energy cutoff, invalid zone,
+ * blackhole, boundary nudge).
+ *
+ * Sets ctx->done = 1 if the particle is handled here; the caller should
+ * return ctx->done_rc without proceeding to later phases.
+ */
+static void ion_step_setup(struct ion_step_ctx *ctx,
+                           struct osh_particle_pool *pool,
+                           size_t slot,
+                           size_t zone_idx,
+                           double boundary_ds,
+                           struct gemca_runtime const *geom_rt,
+                           struct beam_workspace const *beam,
+                           struct material_workspace const *materials,
+                           struct osh_material_runtime const *tables) {
+    struct gemca_rt_zone const *zone;
+    struct material const *material;
+    enum osh_status rc;
+
+    ctx->done = 0;
+    ctx->done_rc = OSH_OK;
+    ctx->part = pool->species[slot];
+    ctx->a_proj = (ctx->part->a > 0u) ? (double) ctx->part->a : 1.0;
+    ctx->e0 = pool->e[slot];
+    ctx->zone_idx = zone_idx;
+    ctx->boundary_ds = boundary_ds;
+
+    rc = find_projectile_index(tables, ctx->part, &ctx->projectile_idx);
+    if (rc != OSH_OK) {
+        pool->e[slot] = 0.0; /* unknown species — kill silently */
+        ctx->done = 1;
+        return;
+    }
+
+    ctx->cutoff = cutoff_total_energy(beam, tables, ctx->part);
+    if (ctx->e0 <= ctx->cutoff) {
+        pool->e[slot] = 0.0;
+        ctx->done = 1;
+        return;
+    }
+
+    if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
+        pool->e[slot] = 0.0; /* escaped geometry */
+        ctx->done = 1;
+        return;
+    }
+
+    zone = &geom_rt->zones[zone_idx];
+    ctx->zone_material_idx = zone->material_idx;
+
+    if (is_blackhole_material(zone->material_idx)) {
+        pool->e[slot] = 0.0;
+        ctx->done = 1;
+        return;
+    }
+
+    material = osh_material_by_index(materials, zone->material_idx);
+    if (!material) {
+        ctx->done = 1;
+        ctx->done_rc = OSH_ESTATE;
+        return;
+    }
+
+    if (boundary_ds < 0.0) {
+        ctx->done = 1;
+        ctx->done_rc = OSH_ESTATE;
+        return;
+    }
+    if (boundary_ds <= OSH_TRANSPORT_BOUNDARY_EPS) {
+        /* Particle is sitting on a boundary: nudge it forward and re-step
+         * in the next wavefront round without scoring a zero-length step. */
+        pool->x[slot] += pool->ux[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->y[slot] += pool->uy[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->z[slot] += pool->uz[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        ctx->done = 1;
+        return;
+    }
+
+    /* Load material scalars used by later phases */
+    ctx->rho = (material->rho > 0.0) ? material->rho : 0.0;
+    ctx->mat_z_mean = (double) tables->z_mean[zone->material_idx];
+    ctx->mat_z_over_a = (double) tables->z_over_a[zone->material_idx];
+    ctx->mat_x0_gcm2 = (double) tables->rad_length[zone->material_idx];
+    ctx->proj_mass_mev = tables->projectile_mass_mev[ctx->projectile_idx];
+    ctx->enable_mcs = (beam && beam->scatter != OSH_BEAM_MSCAT_OFF);
+    ctx->enable_straggling = (beam && beam->straggl != OSH_BEAM_STRAGG_OFF);
+    ctx->is_vacuum = (is_vacuum_material(zone->material_idx) || ctx->rho <= 0.0);
+
+    /* Default exit direction: incident direction (overwritten by MCS phases) */
+    ctx->w_scat[0] = pool->ux[slot];
+    ctx->w_scat[1] = pool->uy[slot];
+    ctx->w_scat[2] = pool->uz[slot];
+    ctx->nudge_dir[0] = pool->ux[slot];
+    ctx->nudge_dir[1] = pool->uy[slot];
+    ctx->nudge_dir[2] = pool->uz[slot];
+    ctx->h = 0.0;
+    ctx->tail_len = 0.0;
+    ctx->step_len = 0.0;
+    ctx->hit_boundary = 0;
+    ctx->exit_energy = ctx->e0;
+    ctx->ds_gcm2 = 0.0;
+}
+
+/* ---- Phase 2a: vacuum step ----------------------------------------------- */
+
+/**
+ * Vacuum: fly straight to the next boundary at constant energy.
+ * No energy loss, no scatter, no straggling.
+ */
+static void ion_step_vacuum(struct ion_step_ctx *ctx) {
+    ctx->step_len = ctx->boundary_ds;
+    ctx->h = ctx->boundary_ds;
+    ctx->tail_len = 0.0;
+    ctx->hit_boundary = 1;
+    ctx->requested_hit_boundary = 1;
+    ctx->requested_is_csda = 0;
+    ctx->requested_step_len = ctx->boundary_ds;
+    ctx->exit_energy = ctx->e0;
+}
+
+/* ---- Phase 2b: step-length determination --------------------------------- */
+
+/**
+ * Determine the substep length as the minimum of three criteria:
+ *   1. boundary_ds     — next geometry boundary in the incident direction
+ *   2. ds_csda         — DELTAE fraction of the CSDA range
+ *   3. ds_theta        — maximum step keeping θ₀ ≤ OSH_TRANSPORT_THETA_MAX_RAD
+ *
+ * Sets ctx->requested_step_len, ctx->requested_hit_boundary,
+ * ctx->requested_is_csda, ctx->r0, and ctx->e1_target.
+ * Kills the particle (ctx->done = 1) if the CSDA step limit is degenerate.
+ */
+static void ion_step_length(struct ion_step_ctx *ctx,
+                            struct osh_particle_pool *pool,
+                            size_t slot,
+                            struct osh_material_runtime const *tables,
+                            double deltae) {
+    double r1_csda;
+    double ds_csda;
+    double ds_theta;
+    double z_eff_0;
+
+    ctx->e1_target = ctx->e0 * (1.0 - deltae);
+    if (ctx->e1_target < ctx->cutoff) {
+        ctx->e1_target = ctx->cutoff;
+    }
+    if (ctx->e1_target >= ctx->e0) {
+        pool->e[slot] = 0.0;
+        ctx->done = 1;
+        return;
+    }
+
+    ctx->r0 =
+        osh_material_runtime_range_lookup(tables, ctx->zone_material_idx, ctx->projectile_idx, ctx->e0 / ctx->a_proj);
+    r1_csda = osh_material_runtime_range_lookup(
+        tables, ctx->zone_material_idx, ctx->projectile_idx, ctx->e1_target / ctx->a_proj);
+    ds_csda = (ctx->r0 - r1_csda) / ctx->rho;
+    if (ds_csda <= 0.0) {
+        pool->e[slot] = 0.0;
+        ctx->done = 1;
+        return;
+    }
+
+    /* MCS substep criterion evaluated at entry energy */
+    if (ctx->enable_mcs) {
+        z_eff_0 = osh_physics_bethe_z_eff(ctx->e0 / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
+        ds_theta = osh_physics_moliere_s_theta(
+            ctx->e0, ctx->proj_mass_mev, z_eff_0, ctx->rho, ctx->mat_x0_gcm2, OSH_TRANSPORT_THETA_MAX_RAD);
+    } else {
+        ds_theta = 0.0;
+    }
+
+    ctx->requested_step_len = ctx->boundary_ds;
+    if (ds_csda < ctx->requested_step_len) {
+        ctx->requested_step_len = ds_csda;
+    }
+    if (ds_theta > 0.0 && ds_theta < ctx->requested_step_len) {
+        ctx->requested_step_len = ds_theta;
+    }
+
+    ctx->requested_hit_boundary = (ctx->boundary_ds - ctx->requested_step_len <= OSH_TRANSPORT_BOUNDARY_EPS);
+    ctx->requested_is_csda = (fabs(ctx->requested_step_len - ds_csda)
+                              <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->requested_step_len));
+}
+
+/* ---- Phase 3: random hinge + MCS ---------------------------------------- */
+
+/**
+ * For boundary-limited steps: record the straight path to the boundary;
+ * MCS is deferred to ion_step_energy_and_straggling() once the exit energy is
+ * known.
+ *
+ * For physics-limited steps: sample a random hinge point uniformly along the
+ * requested step, compute the Highland θ₀ at mid-step kinematics, rotate the
+ * direction there, then clip the post-hinge leg against the zone boundary in
+ * the scattered direction.  The actual track length is h + tail_len.
+ *
+ * The random-hinge method avoids the parallel-boundary pathology of applying
+ * MCS only at the step endpoint and distributes the deflection along the step.
+ */
+static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
+                                                  struct osh_particle_pool *pool,
+                                                  size_t slot,
+                                                  struct gemca_runtime const *geom_rt,
+                                                  struct osh_material_runtime const *tables,
+                                                  struct osh_rng *rng) {
+    double residual_range;
+    double proposed_exit_energy;
+    double proposed_ds_gcm2;
+    double e_mid;
+    double z_eff;
+    double theta0;
+    double boundary_tail_ds;
+    struct ray hinge_ray;
+
+    if (ctx->requested_hit_boundary) {
+        /* Boundary-limited: fly straight to the boundary. */
+        ctx->h = ctx->requested_step_len;
+        ctx->tail_len = 0.0;
+        ctx->step_len = ctx->requested_step_len;
+        ctx->hit_boundary = 1;
+        return OSH_OK;
+    }
+
+    /* Physics-limited: sample hinge, compute scatter, clip tail. */
+    ctx->h = ctx->requested_step_len * osh_rng_double(rng);
+    ctx->tail_len = ctx->requested_step_len - ctx->h;
+
+    residual_range = ctx->r0 - ctx->rho * ctx->requested_step_len;
+    if (residual_range <= 0.0) {
+        pool->e[slot] = 0.0;
+        ctx->done = 1;
+        return OSH_OK;
+    }
+
+    /* Proposed exit energy (pre-hinge-clip) for mid-step kinematics */
+    if (ctx->requested_is_csda) {
+        proposed_exit_energy = ctx->e1_target;
+    } else {
+        proposed_exit_energy =
+            energy_from_residual_range(tables, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
+            * ctx->a_proj;
+        if (proposed_exit_energy > ctx->e0)
+            proposed_exit_energy = ctx->e0;
+        if (proposed_exit_energy < ctx->cutoff)
+            proposed_exit_energy = ctx->cutoff;
+    }
+
+    e_mid = 0.5 * (ctx->e0 + proposed_exit_energy);
+    z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
+    proposed_ds_gcm2 = ctx->rho * ctx->requested_step_len;
+
+    if (ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
+        theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, proposed_ds_gcm2, ctx->mat_x0_gcm2);
+        if (theta0 > 0.0) {
+            double const v_in[3] = {pool->ux[slot], pool->uy[slot], pool->uz[slot]};
+            osh_physics_moliere_scatter(v_in, ctx->w_scat, theta0, rng);
+        }
+    }
+
+    /* Build hinge ray and query boundary distance in the scattered direction */
+    hinge_ray.p[0] = pool->x[slot] + pool->ux[slot] * ctx->h;
+    hinge_ray.p[1] = pool->y[slot] + pool->uy[slot] * ctx->h;
+    hinge_ray.p[2] = pool->z[slot] + pool->uz[slot] * ctx->h;
+    hinge_ray.cp[0] = ctx->w_scat[0];
+    hinge_ray.cp[1] = ctx->w_scat[1];
+    hinge_ray.cp[2] = ctx->w_scat[2];
+    hinge_ray.system = OSH_COORD_UNIVERSE;
+
+    boundary_tail_ds = osh_gemca_runtime_get_distance(geom_rt, ctx->zone_idx, &hinge_ray);
+    if (boundary_tail_ds < 0.0) {
+        osh_error("transport: negative hinge boundary distance zone=%zu h=%.17g tail_req=%.17g hinge=(%.17g, %.17g, "
+                  "%.17g) w=(%.17g, %.17g, %.17g)",
+                  ctx->zone_idx,
+                  ctx->h,
+                  ctx->tail_len,
+                  hinge_ray.p[0],
+                  hinge_ray.p[1],
+                  hinge_ray.p[2],
+                  hinge_ray.cp[0],
+                  hinge_ray.cp[1],
+                  hinge_ray.cp[2]);
+        return OSH_ESTATE;
+    }
+    if (boundary_tail_ds < ctx->tail_len) {
+        ctx->tail_len = boundary_tail_ds;
+        ctx->hit_boundary = 1;
+        ctx->nudge_dir[0] = ctx->w_scat[0];
+        ctx->nudge_dir[1] = ctx->w_scat[1];
+        ctx->nudge_dir[2] = ctx->w_scat[2];
+    }
+    ctx->step_len = ctx->h + ctx->tail_len;
+    return OSH_OK;
+}
+
+/* ---- Phase 4: exit energy + straggling ----------------------------------- */
+
+/**
+ * Compute the exit energy from the CSDA residual range for the actual
+ * (possibly hinge-clipped) step length.  Apply Bohr Gaussian straggling.
+ * For boundary-limited steps, also apply end-of-step Highland/Molière MCS
+ * using the post-straggling mid-step kinematics.
+ */
+static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
+                                           struct osh_particle_pool *pool,
+                                           size_t slot,
+                                           struct osh_material_runtime const *tables,
+                                           struct osh_rng *rng) {
+    double residual_range;
+    double e_mid;
+    double z_eff;
+    double sigma_strag;
+    double theta0;
+
+    ctx->ds_gcm2 = ctx->rho * ctx->step_len;
+    residual_range = ctx->r0 - ctx->rho * ctx->step_len;
+    if (residual_range <= 0.0) {
+        pool->e[slot] = 0.0;
+        ctx->done = 1;
+        return;
+    }
+
+    /* Exit energy: shortcut to e1_target when step exactly matches CSDA step */
+    if (ctx->requested_is_csda
+        && fabs(ctx->step_len - ctx->requested_step_len)
+               <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->requested_step_len)) {
+        ctx->exit_energy = ctx->e1_target;
+    } else {
+        ctx->exit_energy =
+            energy_from_residual_range(tables, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
+            * ctx->a_proj;
+        if (ctx->exit_energy > ctx->e0)
+            ctx->exit_energy = ctx->e0;
+        if (ctx->exit_energy < ctx->cutoff)
+            ctx->exit_energy = ctx->cutoff;
+    }
+
+    /* Bohr Gaussian energy straggling */
+    if (ctx->enable_straggling) {
+        e_mid = 0.5 * (ctx->e0 + ctx->exit_energy);
+        z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
+        sigma_strag = osh_physics_straggling_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2);
+        if (sigma_strag > 0.0) {
+            ctx->exit_energy += osh_rng_gauss(rng, 0.0, sigma_strag);
+            if (ctx->exit_energy > ctx->e0)
+                ctx->exit_energy = ctx->e0;
+            if (ctx->exit_energy < ctx->cutoff)
+                ctx->exit_energy = ctx->cutoff;
+        }
+    }
+
+    /* End-of-step MCS for boundary-limited steps.
+     * Physics-limited steps already received their scatter at the hinge.
+     * Recompute e_mid from the post-straggling exit energy for consistency. */
+    if (ctx->requested_hit_boundary && ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
+        e_mid = 0.5 * (ctx->e0 + ctx->exit_energy);
+        z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
+        theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, ctx->ds_gcm2, ctx->mat_x0_gcm2);
+        if (theta0 > 0.0) {
+            double const v_in[3] = {pool->ux[slot], pool->uy[slot], pool->uz[slot]};
+            osh_physics_moliere_scatter(v_in, ctx->w_scat, theta0, rng);
+        }
+    }
+}
+
+/* ---- Phase 5: commit ----------------------------------------------------- */
+
+/**
+ * Finalise the step: compute the bent-path exit position, score the step,
+ * write the updated state back to the pool, and nudge past any boundary.
+ *
+ * Exit position (two-segment bent path):
+ *   q = p + h·u0 + tail·w_scat
+ *
+ * For vacuum (h == boundary_ds, w_scat == u0) this reduces to q = p + ds·u0.
+ * For material steps the hinge bends the path; the scoring chord p→q has an
+ * O(θ₀² × step_len) ≈ 10⁻⁵ cm error in voxel DDA scoring, negligible
+ * compared to voxel resolution.
+ */
+static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
+                                       struct osh_particle_pool *pool,
+                                       size_t slot,
+                                       struct osh_scoring_runtime *scoring) {
+    double qx;
+    double qy;
+    double qz;
+    struct step st;
+    enum osh_status rc;
+
+    if (ctx->step_len <= 0.0) {
+        /* Zero-length step: update direction only, then nudge if at a boundary */
+        pool->ux[slot] = ctx->w_scat[0];
+        pool->uy[slot] = ctx->w_scat[1];
+        pool->uz[slot] = ctx->w_scat[2];
+        if (ctx->hit_boundary) {
+            pool->x[slot] += ctx->nudge_dir[0] * OSH_TRANSPORT_BOUNDARY_EPS;
+            pool->y[slot] += ctx->nudge_dir[1] * OSH_TRANSPORT_BOUNDARY_EPS;
+            pool->z[slot] += ctx->nudge_dir[2] * OSH_TRANSPORT_BOUNDARY_EPS;
+        }
+        return OSH_OK;
+    }
+
+    qx = pool->x[slot] + pool->ux[slot] * ctx->h + ctx->w_scat[0] * ctx->tail_len;
+    qy = pool->y[slot] + pool->uy[slot] * ctx->h + ctx->w_scat[1] * ctx->tail_len;
+    qz = pool->z[slot] + pool->uz[slot] * ctx->h + ctx->w_scat[2] * ctx->tail_len;
+
+    step_from_pool(
+        &st, pool, slot, ctx->step_len, ctx->exit_energy, ctx->rho, (int) ctx->zone_material_idx, (int) ctx->zone_idx);
+    st.q[0] = qx;
+    st.q[1] = qy;
+    st.q[2] = qz;
+    st.w[0] = ctx->w_scat[0];
+    st.w[1] = ctx->w_scat[1];
+    st.w[2] = ctx->w_scat[2];
+
+    rc = osh_scoring_score_step(scoring, ctx->part, &st);
+    if (rc != OSH_OK) {
+        osh_error("transport: scoring rejected step rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) q=(%.17g, %.17g, %.17g) "
+                  "v=(%.17g, %.17g, %.17g) w=(%.17g, %.17g, %.17g)",
+                  (int) rc,
+                  st.ds,
+                  st.p[0],
+                  st.p[1],
+                  st.p[2],
+                  st.q[0],
+                  st.q[1],
+                  st.q[2],
+                  st.v[0],
+                  st.v[1],
+                  st.v[2],
+                  st.w[0],
+                  st.w[1],
+                  st.w[2]);
+        return rc;
+    }
+
+    pool->x[slot] = qx;
+    pool->y[slot] = qy;
+    pool->z[slot] = qz;
+    pool->e[slot] = ctx->exit_energy;
+    pool->ux[slot] = ctx->w_scat[0];
+    pool->uy[slot] = ctx->w_scat[1];
+    pool->uz[slot] = ctx->w_scat[2];
+
+    if (ctx->hit_boundary) {
+        /*
+         * Nudge past the boundary in the leg direction that reached it:
+         *   - straight / boundary steps:     u0 (nudge_dir == initial direction)
+         *   - hinge-clipped scatter steps:   w_scat (nudge_dir was updated in phase 3)
+         */
+        pool->x[slot] += ctx->nudge_dir[0] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->y[slot] += ctx->nudge_dir[1] * OSH_TRANSPORT_BOUNDARY_EPS;
+        pool->z[slot] += ctx->nudge_dir[2] * OSH_TRANSPORT_BOUNDARY_EPS;
+    }
+
+    return OSH_OK;
+}
+
+/* ---- Table helpers ------------------------------------------------------- */
+
+static double cutoff_total_energy(struct beam_workspace const *beam,
+                                  struct osh_material_runtime const *tables,
+                                  struct particle const *part) {
+    double a_proj;
+    double cutoff_total;
+    double cutoff_from_beam;
+    double cutoff_from_transport;
+
+    a_proj = (part->a > 0u) ? (double) part->a : 1.0;
+    cutoff_total = OSH_BEAM_TMIN;
+    cutoff_from_beam = 0.0;
+    if (beam) {
+        cutoff_from_beam = (double) beam->tcut * a_proj;
+        if (cutoff_from_beam > cutoff_total) {
+            cutoff_total = cutoff_from_beam;
+        }
+    }
+    cutoff_from_transport = tables->emin * a_proj;
+    if (cutoff_from_transport > cutoff_total) {
+        cutoff_total = cutoff_from_transport;
+    }
+    return cutoff_total;
+}
+
+static double energy_from_residual_range(struct osh_material_runtime const *tables,
+                                         size_t material_idx,
+                                         size_t projectile_idx,
+                                         double residual_range) {
+    float const *range_col;
+    size_t lo;
+    size_t hi;
+    size_t mid;
+    double r_lo;
+    double r_hi;
+    double e_lo;
+    double e_hi;
+    double frac;
+
+    range_col = tables->range_csda + (material_idx * tables->nprojectiles + projectile_idx) * tables->nenergy;
+
+    if (residual_range <= (double) range_col[0]) {
+        return tables->emin;
+    }
+    if (residual_range >= (double) range_col[tables->nenergy - 1u]) {
+        return tables->emax;
+    }
+
+    lo = 0u;
+    hi = tables->nenergy - 1u;
+    while (hi - lo > 1u) {
+        mid = lo + (hi - lo) / 2u;
+        if ((double) range_col[mid] <= residual_range) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    r_lo = (double) range_col[lo];
+    r_hi = (double) range_col[hi];
+    e_lo = energy_grid_value(tables, lo);
+    e_hi = energy_grid_value(tables, hi);
+    if (r_hi <= r_lo) {
+        return e_lo;
+    }
+    frac = (residual_range - r_lo) / (r_hi - r_lo);
+    return e_lo * (1.0 - frac) + e_hi * frac;
+}
+
+static double energy_grid_value(struct osh_material_runtime const *tables, size_t energy_idx) {
+    return exp(tables->log_emin + (double) energy_idx / tables->inv_dlog);
+}
+
+static enum osh_status find_projectile_index(struct osh_material_runtime const *tables,
+                                             struct particle const *part,
+                                             size_t *projectile_idx_out) {
+    unsigned int z_match;
+    unsigned int a_match;
+    size_t i;
+
+    if (!tables || !part || !projectile_idx_out) {
+        return OSH_EINVAL;
+    }
+    z_match = part->z;
+    a_match = part->a;
+    if (part->pdg == 2212 && z_match == 0u && a_match == 0u) {
+        z_match = 1u;
+        a_match = 1u;
+    }
+    /* First pass: match both Z and A */
+    for (i = 0; i < tables->nprojectiles; ++i) {
+        if (tables->projectile_z[i] == z_match && tables->projectile_a[i] == a_match) {
+            *projectile_idx_out = i;
+            return OSH_OK;
+        }
+    }
+    /* Second pass: match Z only (e.g. different isotope) */
+    for (i = 0; i < tables->nprojectiles; ++i) {
+        if (tables->projectile_z[i] == z_match) {
+            *projectile_idx_out = i;
+            return OSH_OK;
+        }
+    }
+    return OSH_ENOTSUP;
+}
+
+static int is_blackhole_material(size_t material_idx) {
+    return material_idx == OSH_MATERIAL_INDEX_BLACKHOLE;
+}
+
+static int is_vacuum_material(size_t material_idx) {
+    return material_idx == OSH_MATERIAL_INDEX_VACUUM;
+}
+
+/**
+ * @brief Build a scoring step from pool slot @p slot and step kinematics.
+ *
+ * @details
+ * Populates all fields of @p st that can be derived from the pool SoA state
+ * and the computed step kinematics.  The caller must still override st.q and
+ * st.w with the actual bent-path endpoint and exit direction.
+ */
+static void step_from_pool(struct step *st,
+                           struct osh_particle_pool const *pool,
+                           size_t slot,
+                           double step_len,
+                           double exit_energy,
+                           double rho,
+                           int medium,
+                           int zone) {
+    st->p[0] = pool->x[slot];
+    st->p[1] = pool->y[slot];
+    st->p[2] = pool->z[slot];
+    st->p[3] = pool->e[slot];
+    /* st->q and st->w are overridden by the caller with bent-path values */
+    st->q[0] = pool->x[slot] + pool->ux[slot] * step_len;
+    st->q[1] = pool->y[slot] + pool->uy[slot] * step_len;
+    st->q[2] = pool->z[slot] + pool->uz[slot] * step_len;
+    st->q[3] = exit_energy;
+    st->v[0] = pool->ux[slot];
+    st->v[1] = pool->uy[slot];
+    st->v[2] = pool->uz[slot];
+    st->w[0] = pool->ux[slot];
+    st->w[1] = pool->uy[slot];
+    st->w[2] = pool->uz[slot];
+    st->ds = step_len;
+    st->de = pool->e[slot] - exit_energy;
+    if (st->de < 0.0) {
+        st->de = 0.0;
+    }
+    st->rho = rho;
+    st->wt = pool->wt[slot];
+    st->medium = medium;
+    st->zone = zone;
+    st->system = OSH_COORD_UNIVERSE;
+    st->prim_idx = pool->prim_idx[slot];
+    st->gen = pool->gen[slot];
+}
