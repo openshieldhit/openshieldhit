@@ -214,7 +214,7 @@ static __m256i _check_surface_avx2(
  * @param vx … vuz  4-wide position and direction vectors in universe coordinates.
  * @returns         __m256i lane mask: all-bits-set = inside body, all-zero = outside.
  */
-static __m256i _in_body_avx2(struct gemca_runtime const *rt,
+static __m256i _in_body_avx2(struct osh_gemca_runtime const *rt,
                              int body_idx,
                              __m256d vx,
                              __m256d vy,
@@ -331,7 +331,7 @@ static __m256i _in_body_avx2(struct gemca_runtime const *rt,
  * @param vx … vuz 4-wide position + direction in universe coordinates.
  * @returns        __m256i: all-bits-set lanes = inside zone, all-zero = outside.
  */
-static __m256i _eval_membership_avx2(struct gemca_runtime const *rt,
+static __m256i _eval_membership_avx2(struct osh_gemca_runtime const *rt,
                                      struct gemca_rt_zone const *z,
                                      __m256d vx,
                                      __m256d vy,
@@ -419,7 +419,7 @@ static __m256i _eval_membership_avx2(struct gemca_runtime const *rt,
  * support and defines OSH_GEMCA_RUNTIME_HAVE_AVX2=1.  It is called via a
  * runtime dispatch in osh_gemca_runtime_get_zone_batch().
  */
-void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt,
+void osh_gemca_runtime_get_zone_batch_avx2(struct osh_gemca_runtime const *rt,
                                            double const *x,
                                            double const *y,
                                            double const *z,

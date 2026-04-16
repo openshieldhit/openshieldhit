@@ -2,7 +2,7 @@
 
 ## What this layer does
 
-`osh_gemca_runtime` compiles the internal compatibility `gemca_workspace`
+`osh_gemca_runtime` compiles the internal compatibility `osh_gemca_prepared`
 (pointer-linked structs produced by the GEMCA prepare layer) into a flat,
 cache-friendly representation that the transport kernel can query in a tight
 inner loop.
@@ -79,7 +79,7 @@ A GPU kernel cannot chase a host heap pointer.  The fix is a second flat layout
 added alongside the current one — additive, no breakage of the CPU path:
 
 ```c
-struct gemca_runtime {
+struct osh_gemca_runtime {
     /* ... existing fields ... */
 
     /* GPU-portable flat instruction store (populated by setup_zones): */
@@ -99,7 +99,7 @@ needed before a GPU kernel can be written.
 | `osh_error()` in hot path | `eval_membership_batch_active` | Replace with per-particle error flag or silent no-op in GPU kernel |
 | `struct ray` in scalar tail | `get_zone_batch_avx2` | Drop — no scalar tail on GPU; all lanes run in parallel |
 | `__builtin_cpu_supports` dispatch | `get_zone_batch` | Host-only; kernel is launched unconditionally from host code |
-| `workspace` pointer in `gemca_runtime` | diagnostics | Not copied to device |
+| `workspace` pointer in `osh_gemca_runtime` | diagnostics | Not copied to device |
 
 ### Recommended GPU kernel structure
 

@@ -9,7 +9,7 @@
  *
  * @details
  * These helpers operate on the internal compatibility workspace
- * @ref gemca_workspace built from the public cold
+ * @ref osh_gemca_prepared built from the public cold
  * @ref osh_geometry_workspace. They are not file parsers.
  */
 

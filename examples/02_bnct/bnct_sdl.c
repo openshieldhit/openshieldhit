@@ -14,7 +14,6 @@
 #include "common/osh_vect.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
-#include "gemca/osh_geometry_prepared.h"
 #include "openshieldhit/geometry.h"
 #include "random/osh_rng.h"
 
@@ -95,18 +94,18 @@ SDL_Color colormap[6] = {
 
 int random_ray(struct ray *r);
 int zero_ray(struct ray *r);
-int plot(struct gemca_workspace *g, int nrays, int zone);
+int plot(struct osh_gemca_prepared *g, int nrays, int zone);
 void setRendererColor(SDL_Renderer *renderer, int zid);
 static size_t material_debug_index(char const *material_name);
 void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
-int ray_cast_statistics(struct gemca_workspace *g, int nstat);
-static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray ray0, double max_range_cm);
-static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots);
+int ray_cast_statistics(struct osh_gemca_prepared *g, int nstat);
+static void draw_ray_path(SDL_Renderer *s, struct osh_gemca_prepared *g, struct ray ray0, double max_range_cm);
+static void draw_map(SDL_Renderer *s, struct osh_gemca_prepared *g, int ndots);
 
 int main(int argc, char *argv[]) {
 
     struct osh_geometry_workspace *geom = NULL;
-    struct gemca_workspace *g = NULL;
+    struct osh_gemca_prepared *g = NULL;
     int zone = 1;
 
     /* Setup logger, select OSH_LOG_DEBUG for more information. */
@@ -154,7 +153,7 @@ int main(int argc, char *argv[]) {
         osh_geometry_workspace_free(geom);
         return EXIT_FAILURE;
     }
-    g = geom->prepared->gemca;
+    g = geom->prepared;
 
     if (g->bodies == NULL || g->zones == NULL || g->nbodies == 0 || g->nzones == 0) {
         fprintf(stderr, "bnct_sdl: geometry workspace is incomplete\n");
@@ -167,7 +166,7 @@ int main(int argc, char *argv[]) {
            (unsigned long long) g->nzones);
     fflush(stdout);
 
-    osh_gemca_print_gemca(g);
+    osh_gemca_prepared_print(g);
 
     if (plot(g, 4000, zone) != 0) {
         fprintf(stderr, "bnct_sdl: plot() failed\n");
@@ -352,7 +351,7 @@ int ray2line(struct ray *r, double d, float *x, float *z) {
     return 0;
 }
 
-int plot(struct gemca_workspace *g, int nrays, int zone) {
+int plot(struct osh_gemca_prepared *g, int nrays, int zone) {
     int const windowHeight = WINDOW_HEIGHT;
     int const windowWidth = WINDOW_WIDTH;
     int quit = 0;
@@ -548,7 +547,7 @@ void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius) {
     }
 }
 
-int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
+int ray_cast_statistics(struct osh_gemca_prepared *g, int nstat) {
     struct ray *r;
     struct ray_array *ra;
 
@@ -694,7 +693,7 @@ int ray_cast_statistics(struct gemca_workspace *g, int nstat) {
     return 0;
 }
 
-static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray ray0, double max_range_cm) {
+static void draw_ray_path(SDL_Renderer *s, struct osh_gemca_prepared *g, struct ray ray0, double max_range_cm) {
     struct ray r = ray0; /* work on a copy */
     double remaining = max_range_cm;
     SDL_Event dummy;
@@ -749,7 +748,7 @@ static void draw_ray_path(SDL_Renderer *s, struct gemca_workspace *g, struct ray
     }
 }
 
-static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots) {
+static void draw_map(SDL_Renderer *s, struct osh_gemca_prepared *g, int ndots) {
     struct ray r;
     int i = 0;
 

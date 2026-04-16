@@ -50,7 +50,7 @@ static void _vertex_index_arb_fluka(double d, int *i);
  *
  * @author Niels Bassler
  */
-enum osh_status osh_gemca_body_setup(struct gemca_workspace *g) {
+enum osh_status osh_gemca_body_setup(struct osh_gemca_prepared *g) {
 
     enum osh_status rc;
     size_t i;

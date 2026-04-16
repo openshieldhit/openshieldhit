@@ -52,16 +52,14 @@
  * This is not the public geometry API. The public cold geometry model is
  * exposed via `include/openshieldhit/geometry.h`.
  *
- * `gemca_workspace` is currently a private compatibility layer used between
+ * `osh_gemca_prepared` is currently a private compatibility layer used between
  * `osh_geometry_workspace_prepare()` and `osh_gemca_runtime_setup()`.
  * It owns pointer-linked bodies and zones, plus the derived state needed by
  * the legacy analytic GEMCA implementation.
  *
- * Allocated by osh_gemca_workspace_init() and released by
- * osh_gemca_workspace_free(). Zones and bodies are owned by this struct and
- * must not be freed independently.
+ * Zones and bodies are owned by this struct and must not be freed independently.
  */
-struct gemca_workspace {
+struct osh_gemca_prepared {
     struct body **bodies; /**< Array of pointers to all body primitives */
     struct zone **zones;  /**< Array of pointers to all zones */
     size_t nbodies;       /**< Number of entries in bodies[] */
@@ -143,30 +141,12 @@ struct surface {
 };
 
 /**
- * @brief Allocate and zero-initialise a gemca workspace.
- *
- * @param[out] wg  Receives a pointer to the newly allocated workspace.
- *
- * @returns OSH_OK on success, OSH_ENOMEM if allocation fails.
- */
-enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg);
-
-/**
- * @brief Free a gemca workspace and all geometry it owns.
- *
- * @param[in] wg  Workspace to free. Passing NULL is a no-op.
- *
- * @returns OSH_OK.
- */
-enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg);
-
-/**
  * @brief Return the dense zone index for the zone containing a ray.
  *
  * @details
  * Reference implementation: walks the pointer-linked cgnode AST directly.
  * Retained for use by standalone tools (SDL viewer, bench) that operate on a
- * cold @ref gemca_workspace without the transport pool machinery.
+ * cold @ref osh_gemca_prepared without the transport pool machinery.
  *
  * @deprecated For transport, use osh_gemca_runtime_get_zone() from
  *             gemca/runtime/osh_gemca_runtime.h, which evaluates the compiled
@@ -180,7 +160,7 @@ enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg);
  * @returns 0-based index into g->zones[], or OSH_GEMCA_ZONE_INDEX_INVALID if the
  *          ray is outside all defined zones.
  */
-size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r);
+size_t osh_gemca_get_zone_index(struct osh_gemca_prepared *g, struct ray *r);
 
 /**
  * @brief Return the distance a ray travels inside zone `z` before leaving it.
@@ -201,11 +181,11 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r);
 
 /** @name Debug printing */
 /** @{ */
-void osh_gemca_print_gemca(struct gemca_workspace const *g); /**< Print full workspace summary to debug log */
-void osh_gemca_print_body(struct body const *b);             /**< Print body parameters to debug log */
-void osh_gemca_print_zone(struct zone const *z);             /**< Print zone parameters to debug log */
-void osh_gemca_print_surface(struct surface const *s);       /**< Print surface parameters to debug log */
-void osh_gemca_print_cgnodes(struct cgnode const *self);     /**< Recursively print CSG tree to debug log */
+void osh_gemca_prepared_print(struct osh_gemca_prepared const *g); /**< Print full workspace summary to debug log */
+void osh_gemca_print_body(struct body const *b);                   /**< Print body parameters to debug log */
+void osh_gemca_print_zone(struct zone const *z);                   /**< Print zone parameters to debug log */
+void osh_gemca_print_surface(struct surface const *s);             /**< Print surface parameters to debug log */
+void osh_gemca_print_cgnodes(struct cgnode const *self);           /**< Recursively print CSG tree to debug log */
 /** @} */
 
 /** @} */ /* end defgroup gemca */

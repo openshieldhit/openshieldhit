@@ -111,7 +111,7 @@ struct osh_transport_context {
  */
 enum osh_status osh_transport_run_minimal(struct osh_transport_context *transport_ctx,
                                           struct osh_beam_runtime *beam_rt,
-                                          struct gemca_runtime const *geom_rt,
+                                          struct osh_gemca_runtime const *geom_rt,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring);
 

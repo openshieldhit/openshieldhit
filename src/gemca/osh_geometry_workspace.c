@@ -1,14 +1,13 @@
-#include "openshieldhit/geometry.h"
-
 #include <stdlib.h>
 #include <string.h>
 
 #include "common/osh_logger.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_calc_body.h"
-#include "gemca/osh_geometry_prepared.h"
+#include "gemca/osh_gemca2_internal.h"
 #include "gemca/prepare/osh_gemca_body_prepare.h"
 #include "gemca/prepare/osh_gemca_zone_compile.h"
+#include "openshieldhit/geometry.h"
 
 /* ---- Internal helpers ---------------------------------------------------- */
 
@@ -19,7 +18,7 @@ static void geometry_body_free_fields(struct osh_geometry_body *b) {
     free(b->name);
     free(b->a);
     b->name = NULL;
-    b->a    = NULL;
+    b->a = NULL;
 }
 
 static void geometry_zone_free_fields(struct osh_geometry_zone *z) {
@@ -29,9 +28,9 @@ static void geometry_zone_free_fields(struct osh_geometry_zone *z) {
     free(z->name);
     free(z->material_name);
     free(z->expr);
-    z->name          = NULL;
+    z->name = NULL;
     z->material_name = NULL;
-    z->expr          = NULL;
+    z->expr = NULL;
 }
 
 /* ---- Lifecycle ----------------------------------------------------------- */
@@ -52,8 +51,7 @@ int osh_geometry_workspace_create(struct osh_geometry_workspace **ws_out) {
 
 int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
     size_t i;
-    struct gemca_workspace *gemca = NULL;
-    struct osh_geometry_prepared *prep = NULL;
+    struct osh_gemca_prepared *gemca = NULL;
 
     if (!ws) {
         return -1;
@@ -65,7 +63,8 @@ int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
 
     /* ---- 1. Allocate internal gemca workspace -------------------------------- */
 
-    if (osh_gemca_workspace_init(&gemca) != OSH_OK) {
+    gemca = (struct osh_gemca_prepared *) calloc(1, sizeof(*gemca));
+    if (!gemca) {
         return -1;
     }
 
@@ -89,9 +88,9 @@ int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
         }
         gemca->bodies[i] = b;
 
-        b->type  = cb->type;
+        b->type = cb->type;
         b->coord = cb->coord;
-        b->na    = cb->na;
+        b->na = cb->na;
 
         if (cb->name) {
             b->name = strdup(cb->name);
@@ -158,19 +157,11 @@ int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
         }
     }
 
-    /* ---- 4. Wrap in prepared struct and attach to workspace ------------------ */
-
-    prep = (struct osh_geometry_prepared *) calloc(1u, sizeof(*prep));
-    if (!prep) {
-        goto fail;
-    }
-    prep->gemca = gemca;
-    ws->prepared = prep;
+    ws->prepared = gemca;
     return 0;
 
 fail:
-    osh_gemca_workspace_free(gemca);
-    free(prep);
+    osh_gemca_prepared_free(gemca);
     return -1;
 }
 
@@ -196,8 +187,7 @@ void osh_geometry_workspace_free(struct osh_geometry_workspace *ws) {
     }
 
     if (ws->prepared) {
-        osh_gemca_workspace_free(ws->prepared->gemca);
-        free(ws->prepared);
+        osh_gemca_prepared_free(ws->prepared);
     }
 
     free(ws);

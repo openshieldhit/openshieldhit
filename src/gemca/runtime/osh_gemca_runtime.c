@@ -35,22 +35,24 @@ struct dist_frame {
 /* ---- Static function prototypes ------------------------------------------ */
 
 /* Setup helpers */
-static enum osh_status setup_surfaces(struct gemca_workspace const *wg, struct gemca_runtime *rt);
-static enum osh_status setup_bodies(struct gemca_workspace const *wg, struct gemca_runtime *rt);
-static enum osh_status setup_zones(struct gemca_workspace const *wg, struct gemca_runtime *rt);
+static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+static enum osh_status setup_zones(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 
 /* Zone compilation */
-static enum osh_status compile_zone(struct zone const *z, struct gemca_workspace const *wg, struct gemca_rt_zone *zrt);
+static enum osh_status
+compile_zone(struct zone const *z, struct osh_gemca_prepared const *wg, struct gemca_rt_zone *zrt);
 static void
-compile_node(struct cgnode const *node, struct gemca_workspace const *wg, struct gemca_rt_insn *insns, int *ninsns);
+compile_node(struct cgnode const *node, struct osh_gemca_prepared const *wg, struct gemca_rt_insn *insns, int *ninsns);
 static int count_leaves(struct cgnode const *node);
 static struct body const *find_guard_body(struct cgnode const *node);
-static int find_body_index(struct gemca_workspace const *wg, struct body const *b);
+static int find_body_index(struct osh_gemca_prepared const *wg, struct body const *b);
 
 /* RPN evaluators — inline so the compiler can fold body evaluations across the
  * guard/push boundary and into the zone-iteration outer loop. */
-static inline int eval_membership(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r);
-static void eval_membership_batch_active(struct gemca_runtime const *rt,
+static inline int
+eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r);
+static void eval_membership_batch_active(struct osh_gemca_runtime const *rt,
                                          struct gemca_rt_zone const *z,
                                          double const *x,
                                          double const *y,
@@ -62,11 +64,11 @@ static void eval_membership_batch_active(struct gemca_runtime const *rt,
                                          size_t n_candidates,
                                          int *inside_out);
 static inline double
-eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r, int *is_inside);
+eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r, int *is_inside);
 
 /* Body evaluators — inline for the same reason. */
-static inline int in_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r);
-static inline double dist_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r);
+static inline int in_body_rt(struct osh_gemca_runtime const *rt, int body_idx, struct ray const *r);
+static inline double dist_body_rt(struct osh_gemca_runtime const *rt, int body_idx, struct ray const *r);
 
 /* Ray transform — inline: called once per body check; the switch is cheap when inlined. */
 static inline enum osh_status transform_to_local_rt(struct gemca_rt_body const *b, struct ray const *r, struct ray *tr);
@@ -94,7 +96,7 @@ static void check_surface_batch_indexed_rt(struct gemca_rt_surface const *sf,
                                            size_t const *indices,
                                            size_t n,
                                            int *inside_out);
-static void check_body_batch_indexed_rt(struct gemca_runtime const *rt,
+static void check_body_batch_indexed_rt(struct osh_gemca_runtime const *rt,
                                         size_t body_idx,
                                         double const *x,
                                         double const *y,
@@ -141,7 +143,7 @@ static inline double _minpos(double a, double b);
  *
  * @returns OSH_OK on success, OSH_E* on failure.
  */
-enum osh_status osh_gemca_runtime_setup(struct gemca_workspace const *wg, struct gemca_runtime *rt) {
+enum osh_status osh_gemca_runtime_setup(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
     enum osh_status rc;
 
     if (!wg || !rt) {
@@ -170,12 +172,12 @@ enum osh_status osh_gemca_runtime_setup(struct gemca_workspace const *wg, struct
 
 #ifdef OSH_GEMCA_RUNTIME_HAVE_AVX2
     if (__builtin_cpu_supports("avx2")) {
-        osh_info("gemca_runtime: zone batch dispatcher: AVX2+FMA (4-wide SIMD)");
+        osh_info("osh_gemca_runtime: zone batch dispatcher: AVX2+FMA (4-wide SIMD)");
     } else {
-        osh_info("gemca_runtime: zone batch dispatcher: scalar (AVX2 built-in but CPU lacks support)");
+        osh_info("osh_gemca_runtime: zone batch dispatcher: scalar (AVX2 built-in but CPU lacks support)");
     }
 #else
-    osh_info("gemca_runtime: zone batch dispatcher: scalar (built without AVX2)");
+    osh_info("osh_gemca_runtime: zone batch dispatcher: scalar (built without AVX2)");
 #endif
 
     return OSH_OK;
@@ -191,7 +193,7 @@ enum osh_status osh_gemca_runtime_setup(struct gemca_workspace const *wg, struct
  *
  * @param[in] rt  Runtime to release; may be NULL.
  */
-void osh_gemca_runtime_free(struct gemca_runtime *rt) {
+void osh_gemca_runtime_free(struct osh_gemca_runtime *rt) {
     size_t i;
 
     if (!rt) {
@@ -233,7 +235,7 @@ void osh_gemca_runtime_free(struct gemca_runtime *rt) {
  *
  * @returns 0-based zone index, or OSH_GEMCA_ZONE_INDEX_INVALID.
  */
-size_t osh_gemca_runtime_get_zone(struct gemca_runtime const *rt, struct ray const *r) {
+size_t osh_gemca_runtime_get_zone(struct osh_gemca_runtime const *rt, struct ray const *r) {
     size_t i;
 
     if (!rt || !r) {
@@ -263,7 +265,7 @@ size_t osh_gemca_runtime_get_zone(struct gemca_runtime const *rt, struct ray con
  *
  * @returns Total path length inside the zone.
  */
-double osh_gemca_runtime_get_distance(struct gemca_runtime const *rt, size_t zone_idx, struct ray const *r) {
+double osh_gemca_runtime_get_distance(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r) {
     struct ray rr;
     double d;
     double total;
@@ -476,7 +478,7 @@ static void check_surface_batch_indexed_rt(struct gemca_rt_surface const *sf,
     }
 }
 
-static void check_body_batch_indexed_rt(struct gemca_runtime const *rt,
+static void check_body_batch_indexed_rt(struct osh_gemca_runtime const *rt,
                                         size_t body_idx,
                                         double const *x,
                                         double const *y,
@@ -770,7 +772,7 @@ void osh_gemca_runtime_check_surface_batch(struct gemca_rt_surface const *sf,
  * local coordinate system, then every surface predicate is applied across the
  * chunk via osh_gemca_runtime_check_surface_batch().
  */
-void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
+void osh_gemca_runtime_check_body_batch(struct osh_gemca_runtime const *rt,
                                         size_t body_idx,
                                         double const *x,
                                         double const *y,
@@ -889,7 +891,7 @@ void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
 
 /* Forward declaration for AVX2 implementation (compiled separately). */
 #ifdef OSH_GEMCA_RUNTIME_HAVE_AVX2
-extern void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt,
+extern void osh_gemca_runtime_get_zone_batch_avx2(struct osh_gemca_runtime const *rt,
                                                   double const *x,
                                                   double const *y,
                                                   double const *z,
@@ -908,7 +910,7 @@ extern void osh_gemca_runtime_get_zone_batch_avx2(struct gemca_runtime const *rt
  * check via __builtin_cpu_supports), otherwise falls back to the scalar
  * chunked-active-list implementation.
  */
-void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
+void osh_gemca_runtime_get_zone_batch(struct osh_gemca_runtime const *rt,
                                       double const *x,
                                       double const *y,
                                       double const *z,
@@ -985,7 +987,7 @@ void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
  * (outside all geometry) and writes 0.0 for those slots.  All other slots
  * call eval_distance() via the same step-loop used in get_distance().
  */
-void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
+void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
                                           double const *x,
                                           double const *y,
                                           double const *z,
@@ -1068,7 +1070,7 @@ void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
-static enum osh_status setup_surfaces(struct gemca_workspace const *wg, struct gemca_runtime *rt) {
+static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
     size_t total;
     size_t ib;
     size_t is;
@@ -1118,7 +1120,7 @@ static enum osh_status setup_surfaces(struct gemca_workspace const *wg, struct g
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
-static enum osh_status setup_bodies(struct gemca_workspace const *wg, struct gemca_runtime *rt) {
+static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
     size_t ib;
     size_t surf_offset;
     struct body const *b;
@@ -1160,7 +1162,7 @@ static enum osh_status setup_bodies(struct gemca_workspace const *wg, struct gem
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
-static enum osh_status setup_zones(struct gemca_workspace const *wg, struct gemca_runtime *rt) {
+static enum osh_status setup_zones(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
     size_t iz;
     enum osh_status rc;
 
@@ -1205,7 +1207,8 @@ static enum osh_status setup_zones(struct gemca_workspace const *wg, struct gemc
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
-static enum osh_status compile_zone(struct zone const *z, struct gemca_workspace const *wg, struct gemca_rt_zone *zrt) {
+static enum osh_status
+compile_zone(struct zone const *z, struct osh_gemca_prepared const *wg, struct gemca_rt_zone *zrt) {
     struct body const *guard;
     int guard_idx;
     int nleaves;
@@ -1321,7 +1324,7 @@ static enum osh_status compile_zone(struct zone const *z, struct gemca_workspace
  * @param[in,out] ninsns  Running count of instructions written so far.
  */
 static void
-compile_node(struct cgnode const *node, struct gemca_workspace const *wg, struct gemca_rt_insn *insns, int *ninsns) {
+compile_node(struct cgnode const *node, struct osh_gemca_prepared const *wg, struct gemca_rt_insn *insns, int *ninsns) {
     int body_idx;
 
     if (node->type == _OSH_GEMCA_CGNODE_BODY) {
@@ -1418,7 +1421,7 @@ static struct body const *find_guard_body(struct cgnode const *node) {
  *
  * @returns 0-based index, or -1 if not found.
  */
-static int find_body_index(struct gemca_workspace const *wg, struct body const *b) {
+static int find_body_index(struct osh_gemca_prepared const *wg, struct body const *b) {
     size_t i;
     for (i = 0; i < wg->nbodies; i++) {
         if (wg->bodies[i] == b) {
@@ -1446,7 +1449,8 @@ static int find_body_index(struct gemca_workspace const *wg, struct body const *
  *
  * @returns 1 if the ray is inside the zone, 0 otherwise.
  */
-static inline int eval_membership(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r) {
+static inline int
+eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r) {
     int stack[OSH_GEMCA_RT_MAX_STACK];
     int sp;
     int i;
@@ -1518,7 +1522,7 @@ static inline int eval_membership(struct gemca_runtime const *rt, struct gemca_r
     return (sp > 0) ? stack[0] : 0;
 }
 
-static void eval_membership_batch_active(struct gemca_runtime const *rt,
+static void eval_membership_batch_active(struct osh_gemca_runtime const *rt,
                                          struct gemca_rt_zone const *z,
                                          double const *x,
                                          double const *y,
@@ -1666,7 +1670,7 @@ static void eval_membership_batch_active(struct gemca_runtime const *rt,
  *       all 4 rays simultaneously.  See runtime/README.md for context.
  */
 static inline double
-eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r, int *is_inside) {
+eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r, int *is_inside) {
     struct dist_frame stack[OSH_GEMCA_RT_MAX_STACK];
     struct dist_frame a;
     struct dist_frame b;
@@ -1767,7 +1771,7 @@ eval_distance(struct gemca_runtime const *rt, struct gemca_rt_zone const *z, str
  *
  * @returns 1 if inside all surfaces, 0 otherwise.
  */
-static inline int in_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r) {
+static inline int in_body_rt(struct osh_gemca_runtime const *rt, int body_idx, struct ray const *r) {
     struct gemca_rt_body const *b;
     struct ray tr;
     int i;
@@ -1804,7 +1808,7 @@ static inline int in_body_rt(struct gemca_runtime const *rt, int body_idx, struc
  *
  * @returns Minimum positive distance to a body surface, or OSH_GEMCA_INFINITY.
  */
-static inline double dist_body_rt(struct gemca_runtime const *rt, int body_idx, struct ray const *r) {
+static inline double dist_body_rt(struct osh_gemca_runtime const *rt, int body_idx, struct ray const *r) {
     struct gemca_rt_body const *b;
     struct ray tr;
     double d;

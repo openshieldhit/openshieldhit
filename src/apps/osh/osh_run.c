@@ -9,7 +9,6 @@
 #include "beam/osh_beamdef.h"
 #include "beam/runtime/osh_beam_runtime.h"
 #include "gemca/osh_gemca2.h"
-#include "gemca/osh_geometry_prepared.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_prepare.h"
@@ -46,7 +45,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     struct osh_beam_runtime *beam_rt = NULL;
     struct osh_transport_context transport_ctx;
     struct osh_geometry_workspace *geom = NULL;
-    struct gemca_runtime geom_rt;
+    struct osh_gemca_runtime geom_rt;
     struct material_workspace *mat = NULL;
     struct osh_scoring_workspace *scoring = NULL;
     struct osh_material_runtime transport_tables;
@@ -157,7 +156,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     /* Resolve zone → material_name strings to dense material indices.
      * The names were stored in the internal gemca workspace during prepare(). */
     {
-        struct gemca_workspace *gemca = geom->prepared->gemca;
+        struct osh_gemca_prepared *gemca = geom->prepared;
         size_t iz;
         for (iz = 0u; iz < gemca->nzones; ++iz) {
             struct zone *z = gemca->zones[iz];
@@ -185,12 +184,10 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         }
     }
     if (out) {
-        fprintf(out,
-                "Material assembly complete: %llu zones resolved.\n",
-                (unsigned long long) geom->prepared->gemca->nzones);
+        fprintf(out, "Material assembly complete: %llu zones resolved.\n", (unsigned long long) geom->prepared->nzones);
     }
 
-    if (osh_gemca_runtime_setup(geom->prepared->gemca, &geom_rt) != OSH_OK) {
+    if (osh_gemca_runtime_setup(geom->prepared, &geom_rt) != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to compile geometry runtime\n");
         }

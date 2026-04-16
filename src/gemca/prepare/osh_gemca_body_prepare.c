@@ -10,7 +10,7 @@
  * @details
  * The public cold geometry API stores bodies as flat value objects in
  * @ref osh_geometry_workspace. During prepare those are copied into the
- * internal compatibility workspace @ref gemca_workspace, which still uses
+ * internal compatibility workspace @ref osh_gemca_prepared, which still uses
  * pointer-owned @ref body objects. This helper allocates one such internal
  * object.
  *

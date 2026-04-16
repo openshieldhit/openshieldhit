@@ -8,18 +8,9 @@
 #include "gemca/osh_gemca2_calc_zone.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/osh_gemca2_dist.h"
+#include "gemca/osh_gemca2_internal.h"
 
-enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg) {
-
-    *wg = calloc(1, sizeof(struct gemca_workspace));
-    if (*wg == NULL) {
-        osh_alloc_failed("osh_gemca_workspace_init()");
-        return OSH_ENOMEM;
-    }
-    return OSH_OK;
-}
-
-enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg) {
+enum osh_status osh_gemca_prepared_free(struct osh_gemca_prepared *wg) {
 
     size_t i;
 
@@ -55,7 +46,7 @@ enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg) {
 }
 
 /** @brief Print all bodies and zones in the workspace to the debug log. */
-void osh_gemca_print_gemca(struct gemca_workspace const *g) {
+void osh_gemca_prepared_print(struct osh_gemca_prepared const *g) {
 
     size_t i;
 

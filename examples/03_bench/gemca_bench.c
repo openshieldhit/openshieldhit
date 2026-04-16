@@ -23,7 +23,6 @@
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
-#include "gemca/osh_geometry_prepared.h"
 #include "openshieldhit/geometry.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
@@ -42,7 +41,7 @@ static double _now(void) {
  * the transformation matrices stored on bodies.  This is a best-effort
  * estimate; a dedicated AABB on the workspace would be cleaner.
  */
-static void _estimate_bbox(struct gemca_workspace const *g, double bbox_min[3], double bbox_max[3]) {
+static void _estimate_bbox(struct osh_gemca_prepared const *g, double bbox_min[3], double bbox_max[3]) {
     size_t ib;
     int i;
     double x;
@@ -107,7 +106,7 @@ static void _random_ray(struct ray *r, struct osh_rng *rng, double const bbox_mi
 int main(int argc, char *argv[]) {
 
     struct osh_geometry_workspace *geom = NULL;
-    struct gemca_workspace *g = NULL;
+    struct osh_gemca_prepared *g = NULL;
     struct osh_rng rng;
     struct ray r;
 
@@ -147,7 +146,7 @@ int main(int argc, char *argv[]) {
         osh_geometry_workspace_free(geom);
         return EXIT_FAILURE;
     }
-    g = geom->prepared->gemca;
+    g = geom->prepared;
     printf("  %llu bodies, %llu zones\n", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
 
     _estimate_bbox(g, bbox_min, bbox_max);
