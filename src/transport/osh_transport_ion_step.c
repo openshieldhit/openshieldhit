@@ -64,30 +64,32 @@ struct ion_step_ctx {
     double e0;                   /* entry total kinetic energy [MeV]      */
     double a_proj;               /* mass number (float cast, ≥ 1)         */
     double cutoff;               /* energy cutoff for this particle [MeV] */
+    double demin_total;          /* minimum energy loss per step [MeV]    */
     double boundary_ds;          /* distance to next zone boundary [cm]   */
     double rho;                  /* material density [g/cm³]              */
     double mat_z_mean;
     double mat_z_over_a;
     double mat_x0_gcm2;
     double proj_mass_mev;
-    int enable_mcs;
-    int enable_straggling;
-    int is_vacuum;           /* 1 if vacuum zone or ρ ≤ 0            */
-    int done;                /* 1 if step already handled (kill/nudge/error) */
+    char enable_mcs;
+    char enable_straggling;
+    char is_vacuum;          /* 1 if vacuum zone or ρ ≤ 0            */
+    char done;               /* 1 if step already handled (kill/nudge/error) */
     enum osh_status done_rc; /* return value when done == 1           */
 
     /* --- Set by ion_step_length() ---------------------------------------- */
-    double r0;                 /* CSDA range at e0 [g/cm²]             */
-    double e1_target;          /* CSDA energy target (DELTAE fraction)  */
-    double requested_step_len; /* step length before hinge clip [cm]    */
-    int requested_hit_boundary;
-    int requested_is_csda;
+    double r0;                    /* CSDA range at e0 [g/cm²]             */
+    double e1_target;             /* CSDA energy target (DELTAE/DEMIN)    */
+    double preclip_step_len;      /* step length before hinge clip [cm]   */
+    char preclip_hits_boundary;   /* 1 if preclip step is boundary-limited */
+    char preclip_is_csda_limited; /* 1 if preclip step is set by CSDA     */
+    char demin_limited;
 
     /* --- Set by ion_step_hinge_and_scatter() / ion_step_vacuum() --------- */
     double step_len; /* actual track length [cm]              */
     double h;        /* hinge position along entry dir [cm]   */
     double tail_len; /* post-hinge leg [cm]                   */
-    int hit_boundary;
+    char hit_boundary;
     double nudge_dir[3]; /* direction for post-boundary nudge     */
     double w_scat[3];    /* exit direction after MCS              */
 
@@ -105,7 +107,6 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
                            double boundary_ds,
                            struct gemca_runtime const *geom_rt,
                            struct beam_workspace const *beam,
-                           struct material_workspace const *materials,
                            struct osh_material_runtime const *tables);
 
 static void ion_step_vacuum(struct ion_step_ctx *ctx);
@@ -171,7 +172,6 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
                                            double boundary_ds,
                                            struct gemca_runtime const *geom_rt,
                                            struct beam_workspace const *beam,
-                                           struct material_workspace const *materials,
                                            struct osh_material_runtime const *tables,
                                            struct osh_scoring_runtime *scoring,
                                            double deltae,
@@ -180,7 +180,7 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
     enum osh_status rc;
 
     /* Phase 1 — identify particle, load material, handle early exits */
-    ion_step_setup(&ctx, pool, slot, zone_idx, boundary_ds, geom_rt, beam, materials, tables);
+    ion_step_setup(&ctx, pool, slot, zone_idx, boundary_ds, geom_rt, beam, tables);
     if (ctx.done)
         return ctx.done_rc;
 
@@ -229,10 +229,8 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
                            double boundary_ds,
                            struct gemca_runtime const *geom_rt,
                            struct beam_workspace const *beam,
-                           struct material_workspace const *materials,
                            struct osh_material_runtime const *tables) {
     struct gemca_rt_zone const *zone;
-    struct material const *material;
     enum osh_status rc;
 
     ctx->done = 0;
@@ -242,6 +240,10 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->e0 = pool->e[slot];
     ctx->zone_idx = zone_idx;
     ctx->boundary_ds = boundary_ds;
+    ctx->demin_total = 0.0;
+    if (beam && beam->demin > 0.0f) {
+        ctx->demin_total = (double) beam->demin * ctx->a_proj;
+    }
 
     rc = find_projectile_index(tables, ctx->part, &ctx->projectile_idx);
     if (rc != OSH_OK) {
@@ -272,8 +274,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
         return;
     }
 
-    material = osh_material_by_index(materials, zone->material_idx);
-    if (!material) {
+    if (zone->material_idx >= tables->nmaterials) {
         ctx->done = 1;
         ctx->done_rc = OSH_ESTATE;
         return;
@@ -295,7 +296,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     }
 
     /* Load material scalars used by later phases */
-    ctx->rho = (material->rho > 0.0) ? material->rho : 0.0;
+    ctx->rho = (double) tables->rho[zone->material_idx];
     ctx->mat_z_mean = (double) tables->z_mean[zone->material_idx];
     ctx->mat_z_over_a = (double) tables->z_over_a[zone->material_idx];
     ctx->mat_x0_gcm2 = (double) tables->rad_length[zone->material_idx];
@@ -317,6 +318,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->hit_boundary = 0;
     ctx->exit_energy = ctx->e0;
     ctx->ds_gcm2 = 0.0;
+    ctx->demin_limited = 0;
 }
 
 /* ---- Phase 2a: vacuum step ----------------------------------------------- */
@@ -330,9 +332,9 @@ static void ion_step_vacuum(struct ion_step_ctx *ctx) {
     ctx->h = ctx->boundary_ds;
     ctx->tail_len = 0.0;
     ctx->hit_boundary = 1;
-    ctx->requested_hit_boundary = 1;
-    ctx->requested_is_csda = 0;
-    ctx->requested_step_len = ctx->boundary_ds;
+    ctx->preclip_hits_boundary = 1;
+    ctx->preclip_is_csda_limited = 0;
+    ctx->preclip_step_len = ctx->boundary_ds;
     ctx->exit_energy = ctx->e0;
 }
 
@@ -341,11 +343,12 @@ static void ion_step_vacuum(struct ion_step_ctx *ctx) {
 /**
  * Determine the substep length as the minimum of three criteria:
  *   1. boundary_ds     — next geometry boundary in the incident direction
- *   2. ds_csda         — DELTAE fraction of the CSDA range
+ *   2. ds_csda         — DELTAE fraction of the CSDA range, but never less
+ *                        than DEMIN energy loss unless the boundary clips it
  *   3. ds_theta        — maximum step keeping θ₀ ≤ OSH_TRANSPORT_THETA_MAX_RAD
  *
- * Sets ctx->requested_step_len, ctx->requested_hit_boundary,
- * ctx->requested_is_csda, ctx->r0, and ctx->e1_target.
+ * Sets ctx->preclip_step_len, ctx->preclip_hits_boundary,
+ * ctx->preclip_is_csda_limited, ctx->r0, and ctx->e1_target.
  * Kills the particle (ctx->done = 1) if the CSDA step limit is degenerate.
  */
 static void ion_step_length(struct ion_step_ctx *ctx,
@@ -353,12 +356,24 @@ static void ion_step_length(struct ion_step_ctx *ctx,
                             size_t slot,
                             struct osh_material_runtime const *tables,
                             double deltae) {
+    /* TODO(thread-safety): function-local static — not safe once multiple worker
+     * threads call this concurrently.  Replace with an atomic flag or move the
+     * warning into the scheduler / wavefront loop before threading is added. */
+    static char warned_boundary_demin_override = 0;
+    double target_energy_loss;
     double r1_csda;
     double ds_csda;
     double ds_theta;
     double z_eff_0;
 
-    ctx->e1_target = ctx->e0 * (1.0 - deltae);
+    target_energy_loss = ctx->e0 * deltae;
+    ctx->demin_limited = 0;
+    if (ctx->demin_total > target_energy_loss) {
+        target_energy_loss = ctx->demin_total;
+        ctx->demin_limited = 1;
+    }
+
+    ctx->e1_target = ctx->e0 - target_energy_loss;
     if (ctx->e1_target < ctx->cutoff) {
         ctx->e1_target = ctx->cutoff;
     }
@@ -388,17 +403,27 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         ds_theta = 0.0;
     }
 
-    ctx->requested_step_len = ctx->boundary_ds;
-    if (ds_csda < ctx->requested_step_len) {
-        ctx->requested_step_len = ds_csda;
+    ctx->preclip_step_len = ctx->boundary_ds;
+    if (ds_csda < ctx->preclip_step_len) {
+        ctx->preclip_step_len = ds_csda;
     }
-    if (ds_theta > 0.0 && ds_theta < ctx->requested_step_len) {
-        ctx->requested_step_len = ds_theta;
+    if (ds_theta > 0.0 && ds_theta < ctx->preclip_step_len) {
+        ctx->preclip_step_len = ds_theta;
     }
 
-    ctx->requested_hit_boundary = (ctx->boundary_ds - ctx->requested_step_len <= OSH_TRANSPORT_BOUNDARY_EPS);
-    ctx->requested_is_csda = (fabs(ctx->requested_step_len - ds_csda)
-                              <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->requested_step_len));
+    ctx->preclip_hits_boundary = (ctx->boundary_ds - ctx->preclip_step_len <= OSH_TRANSPORT_BOUNDARY_EPS);
+    ctx->preclip_is_csda_limited =
+        (fabs(ctx->preclip_step_len - ds_csda) <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->preclip_step_len));
+    if (ctx->demin_limited && ctx->boundary_ds + OSH_TRANSPORT_BOUNDARY_EPS < ds_csda
+        && !warned_boundary_demin_override) {
+        osh_warn("transport: boundary-limited step shorter than DEMIN; allowing sub-DEMIN step near boundary "
+                 "(boundary_ds=%.17g cm, demin_loss=%.17g MeV, e0=%.17g MeV, zone=%zu)",
+                 ctx->boundary_ds,
+                 ctx->demin_total,
+                 ctx->e0,
+                 ctx->zone_idx);
+        warned_boundary_demin_override = 1;
+    }
 }
 
 /* ---- Phase 3: random hinge + MCS ---------------------------------------- */
@@ -409,12 +434,16 @@ static void ion_step_length(struct ion_step_ctx *ctx,
  * known.
  *
  * For physics-limited steps: sample a random hinge point uniformly along the
- * requested step, compute the Highland θ₀ at mid-step kinematics, rotate the
+ * preclip step, compute the Highland θ₀ at mid-step kinematics, rotate the
  * direction there, then clip the post-hinge leg against the zone boundary in
  * the scattered direction.  The actual track length is h + tail_len.
  *
  * The random-hinge method avoids the parallel-boundary pathology of applying
  * MCS only at the step endpoint and distributes the deflection along the step.
+ *
+ * @par References
+ * Fippel M, Soukup M. A Monte Carlo dose calculation algorithm for proton
+ * therapy. Med Phys. 2004;31(8):2263-2273. doi:10.1118/1.1769631.
  */
 static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
                                                   struct osh_particle_pool *pool,
@@ -431,28 +460,28 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
     double boundary_tail_ds;
     struct ray hinge_ray;
 
-    if (ctx->requested_hit_boundary) {
+    if (ctx->preclip_hits_boundary) {
         /* Boundary-limited: fly straight to the boundary. */
-        ctx->h = ctx->requested_step_len;
+        ctx->h = ctx->preclip_step_len;
         ctx->tail_len = 0.0;
-        ctx->step_len = ctx->requested_step_len;
+        ctx->step_len = ctx->preclip_step_len;
         ctx->hit_boundary = 1;
         return OSH_OK;
     }
 
     /* Physics-limited: sample hinge, compute scatter, clip tail. */
-    ctx->h = ctx->requested_step_len * osh_rng_double(rng);
-    ctx->tail_len = ctx->requested_step_len - ctx->h;
+    ctx->h = ctx->preclip_step_len * osh_rng_double(rng);
+    ctx->tail_len = ctx->preclip_step_len - ctx->h;
 
-    residual_range = ctx->r0 - ctx->rho * ctx->requested_step_len;
+    residual_range = ctx->r0 - ctx->rho * ctx->preclip_step_len;
     if (residual_range <= 0.0) {
         pool->e[slot] = 0.0;
         ctx->done = 1;
         return OSH_OK;
     }
 
-    /* Proposed exit energy (pre-hinge-clip) for mid-step kinematics */
-    if (ctx->requested_is_csda) {
+    /* Proposed exit energy before hinge clipping, used for mid-step kinematics. */
+    if (ctx->preclip_is_csda_limited) {
         proposed_exit_energy = ctx->e1_target;
     } else {
         proposed_exit_energy =
@@ -466,7 +495,7 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
 
     e_mid = 0.5 * (ctx->e0 + proposed_exit_energy);
     z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
-    proposed_ds_gcm2 = ctx->rho * ctx->requested_step_len;
+    proposed_ds_gcm2 = ctx->rho * ctx->preclip_step_len;
 
     if (ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
         theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, proposed_ds_gcm2, ctx->mat_x0_gcm2);
@@ -538,10 +567,10 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
         return;
     }
 
-    /* Exit energy: shortcut to e1_target when step exactly matches CSDA step */
-    if (ctx->requested_is_csda
-        && fabs(ctx->step_len - ctx->requested_step_len)
-               <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->requested_step_len)) {
+    /* Exit energy: shortcut to e1_target when the actual step equals the preclip CSDA step. */
+    if (ctx->preclip_is_csda_limited
+        && fabs(ctx->step_len - ctx->preclip_step_len)
+               <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->preclip_step_len)) {
         ctx->exit_energy = ctx->e1_target;
     } else {
         ctx->exit_energy =
@@ -570,7 +599,9 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     /* End-of-step MCS for boundary-limited steps.
      * Physics-limited steps already received their scatter at the hinge.
      * Recompute e_mid from the post-straggling exit energy for consistency. */
-    if (ctx->requested_hit_boundary && ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
+    if (ctx->preclip_hits_boundary && ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
+        /* e_mid and z_eff are recomputed here (not reused from phase 3) so that
+         * MCS uses the post-straggling exit energy for consistency. */
         e_mid = 0.5 * (ctx->e0 + ctx->exit_energy);
         z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
         theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, ctx->ds_gcm2, ctx->mat_x0_gcm2);
@@ -754,7 +785,7 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
                                              size_t *projectile_idx_out) {
     unsigned int z_match;
     unsigned int a_match;
-    size_t i;
+    size_t projectile_idx;
 
     if (!tables || !part || !projectile_idx_out) {
         return OSH_EINVAL;
@@ -765,21 +796,22 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
         z_match = 1u;
         a_match = 1u;
     }
-    /* First pass: match both Z and A */
-    for (i = 0; i < tables->nprojectiles; ++i) {
-        if (tables->projectile_z[i] == z_match && tables->projectile_a[i] == a_match) {
-            *projectile_idx_out = i;
-            return OSH_OK;
-        }
+    if (z_match == 0u) {
+        return OSH_ENOTSUP;
     }
-    /* Second pass: match Z only (e.g. different isotope) */
-    for (i = 0; i < tables->nprojectiles; ++i) {
-        if (tables->projectile_z[i] == z_match) {
-            *projectile_idx_out = i;
-            return OSH_OK;
-        }
+    projectile_idx = (size_t) (z_match - 1u);
+    if (projectile_idx >= tables->nprojectiles) {
+        return OSH_ENOTSUP;
     }
-    return OSH_ENOTSUP;
+    if (tables->projectile_z[projectile_idx] != z_match) {
+        return OSH_ESTATE;
+    }
+    if (a_match != 0u && tables->projectile_a[projectile_idx] != a_match) {
+        /* Runtime columns are keyed primarily by Z; differing isotopes share the
+         * representative projectile for that Z for now. */
+    }
+    *projectile_idx_out = projectile_idx;
+    return OSH_OK;
 }
 
 static int is_blackhole_material(size_t material_idx) {

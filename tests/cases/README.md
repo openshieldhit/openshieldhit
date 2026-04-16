@@ -13,7 +13,7 @@ A case directory may contain:
 - `geo.dat`, `beam.dat`, `mat.dat`, `detect.dat`
 - optional `README`
 - optional `args.cmake` to override default test runner arguments
-- optional `expected/` with reference `stdout`, `stderr`, or exit code files
+- optional `expected/` with reference `stdout`, `stderr`, exit code, or `*.dat` output files
 - reference output files such as `ref_*.bdo`
 
 These directories should be runnable as realistic user-style inputs, not just

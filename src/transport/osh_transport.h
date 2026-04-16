@@ -12,7 +12,6 @@ extern "C" {
 #endif
 
 struct beam_workspace;
-struct material_workspace;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
 
@@ -28,9 +27,16 @@ struct osh_scoring_runtime;
  * @details
  * This is the first end-to-end transport slice for OpenShieldHIT:
  *   - primaries are sampled from beam/
+ *   - the top-level driver currently seeds the ion family only
  *   - zones and boundary distances come from gemca/runtime/
  *   - energy loss is computed from material CSDA range tables
  *   - scoring is applied step-by-step through scoring/runtime
+ *
+ * Internally, transport is being prepared for a scheduler-owned outer loop
+ * with one queue or pool per particle family (ions, neutrons, photons,
+ * electrons, ...).  The current implementation still executes only the ion
+ * family, but the dispatch seam now lives in transport/ rather than inside
+ * the ion kernel.
  *
  * Physics included:
  *   - CSDA energy loss (residual-range tables)
@@ -50,7 +56,6 @@ struct osh_scoring_runtime;
  */
 enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
                                           struct gemca_runtime const *geom_rt,
-                                          struct material_workspace const *materials,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring);
 
