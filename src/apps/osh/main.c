@@ -3,8 +3,8 @@
 
 #include "cli/osh_cli.h"
 #include "common/osh_exit.h"
-#include "common/osh_file.h"
 #include "common/osh_logger.h"
+#include "openshieldhit/file.h"
 #include "openshieldhit/openshieldhit.h"
 
 /* Generic failure — not covered by a specific EX_* code. */

@@ -1,5 +1,5 @@
-#ifndef OSH_BEAM_PARSE_KEYS_H
-#define OSH_BEAM_PARSE_KEYS_H
+#ifndef OSH_FRONTEND_OPENSHIELDHIT_BEAM_PARSE_KEYS_H
+#define OSH_FRONTEND_OPENSHIELDHIT_BEAM_PARSE_KEYS_H
 
 // clang-format off
 #define OSH_BEAM_KEY_APCORR      "apcorr"
@@ -30,4 +30,4 @@
 #define OSH_BEAM_KEY_USEPARLEV   "useparlev"
 // clang-format on
 
-#endif /* OSH_BEAM_PARSE_KEYS_H */
+#endif /* OSH_FRONTEND_OPENSHIELDHIT_BEAM_PARSE_KEYS_H */

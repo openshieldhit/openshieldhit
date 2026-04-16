@@ -9,8 +9,22 @@ extern "C" {
 #endif
 
 /*
- * Public API for libopenshieldhit
+ * High-level opaque OpenShieldHIT API
  * ================================
+ *
+ * Role of this header
+ * -------------------
+ * This is the top-level application-style interface for callers that want
+ * one context object and one run entry point.
+ *
+ * This is NOT the same thing as:
+ *   - openshieldhit.h
+ *       convenience umbrella include
+ *   - openshieldhit/beam.h
+ *       public cold beam model used by core
+ *
+ * Format-specific parsers and executable entry points live under `src/apps/`
+ * and are intentionally not exposed as public installed headers.
  *
  * DESIGN RULE: No internal structs or types may appear in this header.
  *

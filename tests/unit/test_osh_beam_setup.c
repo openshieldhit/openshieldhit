@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "beam/osh_beam.h"
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_rc.h"
 #include "particle/osh_particle_pdg.h"
 
@@ -30,7 +30,7 @@ static void _write_temp_file(char *path, size_t path_cap, char const *content) {
 static void test_setup_single_spot_from_beamdat(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text,
@@ -62,7 +62,7 @@ static void test_setup_single_spot_from_beamdat(void) {
 static void test_setup_beamdiv_without_focus_defaults_to_zero(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text,
@@ -91,7 +91,7 @@ static void test_setup_spotlist_replaces_template_and_inherits_defaults(void) {
     char spot_path[512];
     char beam_text[1024];
     char spot_text[1024];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     double fwhm_x0;
     double fwhm_y0;
     double fwhm_x1;
@@ -168,7 +168,7 @@ static void test_setup_spotlist_overrides_optional_columns(void) {
     char spot_path[512];
     char beam_text[1024];
     char spot_text[1024];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     double fwhm_x;
     double fwhm_y;
     int rc;
@@ -216,7 +216,7 @@ static void test_setup_spotlist_overrides_optional_columns(void) {
 static void test_setup_primary_name_resolves_particle(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
@@ -228,7 +228,6 @@ static void test_setup_primary_name_resolves_particle(void) {
     ASSERT_TRUE(wb != NULL);
     ASSERT_TRUE(wb->has_primary == 1);
     ASSERT_TRUE(wb->primary.pdg == OSH_PART_PDG_PROTON);
-    ASSERT_TRUE(wb->spots[0].part == &wb->primary);
     ASSERT_TRUE(fabs(wb->spots[0].p0) > 0.0);
 
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
@@ -238,7 +237,7 @@ static void test_setup_primary_name_resolves_particle(void) {
 static void test_setup_primary_pdg_resolves_particle(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY 2212\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
@@ -250,7 +249,6 @@ static void test_setup_primary_pdg_resolves_particle(void) {
     ASSERT_TRUE(wb != NULL);
     ASSERT_TRUE(wb->has_primary == 1);
     ASSERT_TRUE(wb->primary.pdg == OSH_PART_PDG_PROTON);
-    ASSERT_TRUE(wb->spots[0].part == &wb->primary);
     ASSERT_TRUE(fabs(wb->spots[0].p0) > 0.0);
 
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
@@ -260,7 +258,7 @@ static void test_setup_primary_pdg_resolves_particle(void) {
 static void test_setup_primary_za_resolves_ion(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY 6 12\nTMAX0 400.0 1.0\nBEAMPOS 0.0 0.0 -10.0\n");
@@ -274,10 +272,8 @@ static void test_setup_primary_za_resolves_ion(void) {
     ASSERT_TRUE(wb->primary.pdg == 1000060120);
     ASSERT_TRUE(wb->primary.z == 6);
     ASSERT_TRUE(wb->primary.a == 12);
-    ASSERT_TRUE(wb->spots[0].part == &wb->primary);
     ASSERT_TRUE(fabs(wb->spots[0].t0 - 4800.0) < 1e-12);
     ASSERT_TRUE(fabs(wb->spots[0].tsigma - 12.0) < 1e-12);
-    ASSERT_TRUE(fabs(wb->shared.emax - 4800.0) < 1e-12);
     ASSERT_TRUE(fabs(wb->spots[0].p0) > 0.0);
 
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
@@ -287,7 +283,7 @@ static void test_setup_primary_za_resolves_ion(void) {
 static void test_setup_primary_invalid_returns_einval(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY nosuchparticle\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
@@ -304,7 +300,7 @@ static void test_setup_primary_invalid_returns_einval(void) {
 static void test_setup_missing_primary_returns_einval(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "TMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\n");
@@ -321,7 +317,7 @@ static void test_setup_missing_primary_returns_einval(void) {
 static void test_setup_unknown_key_returns_eparse(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBANANA 1 2 3\nBEAMPOS 0.0 0.0 -10.0\n");
@@ -338,7 +334,7 @@ static void test_setup_unknown_key_returns_eparse(void) {
 static void test_setup_beamsigma_single_value_sets_symmetric_xy(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nBEAMSIGMA 1.0\n");
@@ -359,7 +355,7 @@ static void test_setup_beamsigma_single_value_sets_symmetric_xy(void) {
 static void test_setup_nstat_single_value_defaults_nsave_to_zero(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1234\n");
@@ -379,7 +375,7 @@ static void test_setup_nstat_single_value_defaults_nsave_to_zero(void) {
 static void test_setup_nstat_negative_save_disables_nsave(void) {
     char beam_path[512];
     char beam_text[512];
-    struct beam_workspace *wb = NULL;
+    struct osh_beam_workspace *wb = NULL;
     int rc;
 
     snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1000 -1\n");

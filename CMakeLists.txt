@@ -91,6 +91,7 @@ endif()
 add_subdirectory(src/common)
 add_subdirectory(src/random)
 add_subdirectory(src/beam)
+add_subdirectory(src/apps/osh)
 add_subdirectory(src/material)
 add_subdirectory(src/particle)
 add_subdirectory(src/gemca)
@@ -124,7 +125,7 @@ target_include_directories(osh_cli PUBLIC ${PROJECT_SOURCE_DIR}/src)
 
 # ---- Public library facade ----
 add_library(openshieldhit_api STATIC src/openshieldhit.c)
-target_link_libraries(openshieldhit_api PUBLIC osh_all)
+target_link_libraries(openshieldhit_api PUBLIC osh_all PRIVATE osh_app_osh)
 target_include_directories(openshieldhit_api
     PUBLIC  ${PROJECT_SOURCE_DIR}/include
     PRIVATE ${PROJECT_SOURCE_DIR}/src
@@ -132,7 +133,7 @@ target_include_directories(openshieldhit_api
 )
 
 # ---- Main executable ----
-add_executable(openshieldhit src/main.c)
+add_executable(openshieldhit src/apps/osh/main.c)
 target_link_libraries(openshieldhit PRIVATE openshieldhit_api osh_cli)
 
 # ---- Tests ----

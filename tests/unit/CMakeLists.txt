@@ -53,6 +53,7 @@ foreach(test_src ${UNIT_SOURCES})
 
     target_include_directories(${test_name} PRIVATE
         ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/include
     )
 
     target_link_libraries(${test_name} PRIVATE
@@ -60,6 +61,7 @@ foreach(test_src ${UNIT_SOURCES})
         osh_raytrace
         osh_random
         osh_beam
+        osh_app_osh
         osh_material
         osh_particle
         osh_scoring

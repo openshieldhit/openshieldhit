@@ -37,13 +37,13 @@ int osh_beam_spots_free(struct beam_spot *sl);
  * stored in beam->spots[0] by the beam.dat parser. The loaded list replaces
  * the template; it is not appended.
  *
- * @param[in,out] beam  Workspace with fname_spotlist set and spots[0]
- *                      initialised as a template.
+ * @param[in,out] beam           Workspace with spots[0] initialised as a template.
+ * @param[in]     spotlist_path  Absolute or already-resolved spot-list path.
  *
  * @returns OSH_OK on success, OSH_EIO on file errors, OSH_EINVAL on format
  *          errors, OSH_ENOMEM on allocation failure.
  */
-int osh_beam_spotlist_load(struct beam_workspace *beam);
+int osh_beam_spotlist_load(struct beam_workspace *beam, char const *spotlist_path);
 
 /**
  * @brief Zero-initialise a beam_shared struct and set safe default values.
