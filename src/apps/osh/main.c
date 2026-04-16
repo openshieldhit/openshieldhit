@@ -1,23 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "apps/osh/osh_run.h"
 #include "cli/osh_cli.h"
 #include "common/osh_exit.h"
 #include "common/osh_logger.h"
 #include "openshieldhit/file.h"
-#include "openshieldhit/openshieldhit.h"
+#include "openshieldhit/status.h"
+#include "openshieldhit/version.h"
 
-/* Generic failure — not covered by a specific EX_* code. */
-#define OSH_EXIT_FAIL 1
-
-static int exit_code_for_status(enum openshieldhit_status status);
+static int exit_code_for_status(enum osh_status status);
 
 int main(int argc, char *argv[]) {
     struct osh_cli_options opt;
-    openshieldhit_config_t cfg = OPENSHIELDHIT_CONFIG_INIT;
-    openshieldhit_context_t *ctx;
+    struct osh_run_options run_opt;
     char err[256];
-    enum openshieldhit_status rc;
+    enum osh_status rc;
 
     if (osh_cli_parse(argc, argv, &opt, err, sizeof(err)) != 0) {
         fprintf(stderr, "Error: %s\n\n", err);
@@ -31,11 +29,11 @@ int main(int argc, char *argv[]) {
     }
 
     if (opt.action == OSH_CLI_ACTION_VERSION) {
-        printf("OpenShieldHIT version %s\n", openshieldhit_version_string());
+        printf("OpenShieldHIT version %s\n", osh_version_string());
         return EX_OK;
     }
 
-    /* Initialise the default logger.
+    /* Initialise the logger before any library calls.
      *   no -v  → OSH_LOG_WARN  (silent; only warnings and errors)
      *      -v  → OSH_LOG_INFO  (normal informational output)
      *     -vv  → OSH_LOG_DEBUG (verbose debug output)
@@ -44,12 +42,6 @@ int main(int argc, char *argv[]) {
         int log_level = (opt.verbose == 0) ? OSH_LOG_WARN : (opt.verbose == 1) ? OSH_LOG_INFO : OSH_LOG_DEBUG;
         osh_log_init(log_level, OSH_LOG_F_NONE);
         osh_log_enable_stdout(1);
-    }
-
-    ctx = openshieldhit_context_create();
-    if (!ctx) {
-        fprintf(stderr, "Error: out of memory\n");
-        return OSH_EXIT_FAIL;
     }
 
     /* Normalize path separators once here so all library code can assume '/'
@@ -61,42 +53,33 @@ int main(int argc, char *argv[]) {
     osh_path_normalize((char *) opt.detect_path);
     osh_path_normalize((char *) opt.out_dir);
 
-    cfg.workdir = opt.workdir;
-    cfg.out_dir = opt.out_dir;
-    cfg.geo_path = opt.geo_path;
-    cfg.beam_path = opt.beam_path;
-    cfg.mat_path = opt.mat_path;
-    cfg.detect_path = opt.detect_path;
-    cfg.run_mode = opt.dry_run ? OPENSHIELDHIT_RUN_VALIDATE : OPENSHIELDHIT_RUN_NORMAL;
-    cfg.log_level = opt.verbose;
-    cfg.nstat = opt.nstat;
-    cfg.has_nstat = opt.has_nstat;
+    run_opt.workdir = opt.workdir;
+    run_opt.out_dir = opt.out_dir;
+    run_opt.geo_path = opt.geo_path;
+    run_opt.beam_path = opt.beam_path;
+    run_opt.mat_path = opt.mat_path;
+    run_opt.detect_path = opt.detect_path;
+    run_opt.nstat = opt.nstat;
+    run_opt.has_nstat = opt.has_nstat;
+    run_opt.validate_only = opt.dry_run ? 1 : 0;
 
-    rc = openshieldhit_context_configure(ctx, &cfg);
-    if (rc != OPENSHIELDHIT_STATUS_OK) {
-        fprintf(stderr, "Error: failed to configure context\n");
-        openshieldhit_context_destroy(ctx);
-        return OSH_EXIT_FAIL;
-    }
-
-    rc = openshieldhit_run(ctx, stdout, stderr);
-    openshieldhit_context_destroy(ctx);
+    rc = osh_run(&run_opt, stdout, stderr);
     osh_log_close();
     return exit_code_for_status(rc);
 }
 
-static int exit_code_for_status(enum openshieldhit_status status) {
+static int exit_code_for_status(enum osh_status status) {
     switch (status) {
-    case OPENSHIELDHIT_STATUS_OK:
+    case OSH_OK:
         return EX_OK;
-    case OPENSHIELDHIT_STATUS_INVALID_ARGUMENT:
+    case OSH_EINVAL:
         return EX_USAGE;
-    case OPENSHIELDHIT_STATUS_IO_ERROR:
+    case OSH_EIO:
         return EX_NOINPUT;
-    case OPENSHIELDHIT_STATUS_PARSE_ERROR:
-    case OPENSHIELDHIT_STATUS_INCOMPLETE:
+    case OSH_EPARSE:
+    case OSH_EINCOMPLETE:
         return EX_CONFIG;
     default:
-        return OSH_EXIT_FAIL;
+        return 1;
     }
 }

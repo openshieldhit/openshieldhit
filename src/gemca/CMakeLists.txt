@@ -7,18 +7,19 @@ add_library(osh_gemca2
     osh_gemca2_calc_surface.c
     osh_gemca2_calc_zone.c
     osh_gemca2_dist.c
+    osh_geometry_workspace.c
 
-    parse/osh_gemca2_parse.c
-    parse/osh_gemca2_parse_body.c
-    parse/osh_gemca2_parse_zone.c
-    parse/osh_gemca2_parse_medium.c
-    parse/osh_gemca2_parse_stack.c
+    prepare/osh_gemca_body_prepare.c
+    prepare/osh_gemca_zone_compile.c
+    prepare/osh_gemca_stack.c
 )
 
-# Allow includes like "gemca/..." and "common/..."
+# Allow includes like "gemca/..." and "common/..." (src/) and
+# "openshieldhit/geometry.h" (include/).
 target_include_directories(osh_gemca2
     PUBLIC
         ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/include
 )
 
 # common headers/functions, link it

@@ -3,10 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_geometry_parse.h"
 #include "common/osh_coord.h"
 #include "common/osh_ray.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_geometry_prepared.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "openshieldhit/geometry.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -74,6 +77,7 @@ static void fill_zone_cases(double *x, double *y, double *z, double *ux, double 
 }
 
 static void test_zone_batch_matches_scalar(void) {
+    struct osh_geometry_workspace *geom;
     struct gemca_workspace *g;
     struct gemca_runtime rt;
     struct ray r;
@@ -87,14 +91,16 @@ static void test_zone_batch_matches_scalar(void) {
     size_t zones_batch[N_ZONE_CASES];
     size_t i;
 
+    geom = NULL;
     g = NULL;
     memset(&rt, 0, sizeof(rt));
 
     snprintf(geo_path, sizeof(geo_path), "%s/examples/01_sdl_viewer/geo_RCC03.dat", OSH_PROJECT_SOURCE_DIR);
 
-    ASSERT_TRUE(osh_gemca_workspace_init(&g) == OSH_OK);
-    ASSERT_TRUE(g != NULL);
-    ASSERT_TRUE(osh_gemca_load(geo_path, g) == OSH_OK);
+    ASSERT_TRUE(osh_geometry_parse_file(geo_path, &geom) == OSH_OK);
+    ASSERT_TRUE(geom != NULL);
+    ASSERT_TRUE(osh_geometry_workspace_prepare(geom) == 0);
+    g = geom->prepared->gemca;
     ASSERT_TRUE(osh_gemca_runtime_setup(g, &rt) == OSH_OK);
 
     fill_zone_cases(x, y, z, ux, uy, uz);
@@ -116,7 +122,7 @@ static void test_zone_batch_matches_scalar(void) {
     }
 
     osh_gemca_runtime_free(&rt);
-    ASSERT_TRUE(osh_gemca_workspace_free(g) == OSH_OK);
+    osh_geometry_workspace_free(geom);
 }
 
 int main(void) {

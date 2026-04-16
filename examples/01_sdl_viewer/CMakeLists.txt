@@ -7,6 +7,7 @@ add_executable(gemca_sdl_viewer
 target_link_libraries(gemca_sdl_viewer
     PRIVATE
         osh_all
+        osh_app_osh
         SDL2::SDL2
 )
 

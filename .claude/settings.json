@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /home/bassler/Projects/openshieldhit/src/gemca/*.c)",
+      "Bash(ctest --output-on-failure -q)",
+      "Bash(ctest --test-dir /home/bassler/Projects/openshieldhit/build --output-on-failure -R test_osh_beam_setup)"
+    ]
+  }
+}

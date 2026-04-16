@@ -7,11 +7,14 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "apps/osh/osh_geometry_parse.h"
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_geometry_prepared.h"
+#include "openshieldhit/geometry.h"
 #include "transport/osh_transport.h"
 
 #define WINDOW_WIDTH 800
@@ -41,7 +44,8 @@ void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
 
 int main(int argc, char *argv[]) {
 
-    struct gemca_workspace g = {0};
+    struct osh_geometry_workspace *geom = NULL;
+    struct gemca_workspace *g = NULL;
 
     /* Setup logger, select OSH_LOG_DEBUG for more information. */
     osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
@@ -64,11 +68,21 @@ int main(int argc, char *argv[]) {
 
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
-    osh_gemca_load(argv[1], &g);
-    osh_gemca_print_gemca(&g);
+    if (osh_geometry_parse_file(argv[1], &geom) != OSH_OK) {
+        fprintf(stderr, "osh_geometry_parse_file() failed\n");
+        return EXIT_FAILURE;
+    }
+    if (osh_geometry_workspace_prepare(geom) != 0) {
+        fprintf(stderr, "osh_geometry_workspace_prepare() failed\n");
+        osh_geometry_workspace_free(geom);
+        return EXIT_FAILURE;
+    }
+    g = geom->prepared->gemca;
+    osh_gemca_print_gemca(g);
 
-    plot(&g, 4);
+    plot(g, 4);
 
+    osh_geometry_workspace_free(geom);
     return 0;
 }
 

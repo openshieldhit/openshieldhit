@@ -8,6 +8,7 @@ add_executable(gemca_raycast_bench
 target_link_libraries(gemca_raycast_bench
     PRIVATE
         osh_all
+        osh_app_osh
         SDL2::SDL2
 )
 

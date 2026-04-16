@@ -46,18 +46,27 @@
 /** @} */
 
 /**
- * @brief Top-level workspace holding all parsed geometry.
+ * @brief Internal compatibility workspace holding prepared analytic geometry.
  *
- * @details Allocated and populated by osh_gemca_workspace_init() and osh_gemca_load().
- *          Released by osh_gemca_workspace_free(). Zones and bodies are owned by this
- *          struct and must not be freed independently.
+ * @details
+ * This is not the public geometry API. The public cold geometry model is
+ * exposed via `include/openshieldhit/geometry.h`.
+ *
+ * `gemca_workspace` is currently a private compatibility layer used between
+ * `osh_geometry_workspace_prepare()` and `osh_gemca_runtime_setup()`.
+ * It owns pointer-linked bodies and zones, plus the derived state needed by
+ * the legacy analytic GEMCA implementation.
+ *
+ * Allocated by osh_gemca_workspace_init() and released by
+ * osh_gemca_workspace_free(). Zones and bodies are owned by this struct and
+ * must not be freed independently.
  */
 struct gemca_workspace {
     struct body **bodies; /**< Array of pointers to all body primitives */
     struct zone **zones;  /**< Array of pointers to all zones */
     size_t nbodies;       /**< Number of entries in bodies[] */
     size_t nzones;        /**< Number of entries in zones[] */
-    char *filename;       /**< Path to the geo.dat file that was loaded */
+    char *filename;       /**< Optional source filename kept only for diagnostics during the migration */
 };
 
 /**
@@ -150,16 +159,6 @@ enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg);
  * @returns OSH_OK.
  */
 enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg);
-
-/**
- * @brief Parse a geo.dat file and populate a gemca workspace.
- *
- * @param[in]  filename  Path to the geometry file.
- * @param[out] g         Workspace to populate (must have been initialised with osh_gemca_workspace_init()).
- *
- * @returns OSH_OK on success, OSH_EPARSE on parse error, OSH_ENOMEM on allocation failure.
- */
-enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g);
 
 /**
  * @brief Return the dense zone index for the zone containing a ray.

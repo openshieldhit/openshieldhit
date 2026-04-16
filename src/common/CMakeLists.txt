@@ -5,6 +5,7 @@ add_subdirectory(raytrace)
 add_library(osh_common
     osh_logger.c
     osh_rc.c
+    osh_version.c
     osh_vect.c
     osh_interpolate.c
     osh_file.c

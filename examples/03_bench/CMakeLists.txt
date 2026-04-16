@@ -5,6 +5,7 @@ add_executable(gemca_bench
 target_link_libraries(gemca_bench
     PRIVATE
         osh_all
+        osh_app_osh
 )
 
 if(UNIX)

@@ -156,11 +156,10 @@ static int _resolve_input_relative_path(struct oshfile *oshf, char const *input_
 
     *resolved_path_out = NULL;
     wdir = osh_path_dirname(oshf->filename);
-    if (!wdir) {
-        return OSH_ENOMEM;
-    }
+    /* NULL means the beam file has no directory separator (bare filename);
+     * treat it as relative to the current working directory ("."). */
 
-    rc = osh_relative_path_to_file(resolved_path_out, wdir, input_path);
+    rc = osh_relative_path_to_file(resolved_path_out, wdir ? wdir : ".", input_path);
     free(wdir);
     if (rc != 0) {
         return OSH_ENOMEM;

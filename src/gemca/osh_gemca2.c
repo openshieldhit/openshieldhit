@@ -8,7 +8,6 @@
 #include "gemca/osh_gemca2_calc_zone.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/osh_gemca2_dist.h"
-#include "gemca/parse/osh_gemca2_parse.h"
 
 enum osh_status osh_gemca_workspace_init(struct gemca_workspace **wg) {
 
@@ -52,24 +51,6 @@ enum osh_status osh_gemca_workspace_free(struct gemca_workspace *wg) {
 
     free(wg->filename);
     free(wg);
-    return OSH_OK;
-}
-
-enum osh_status osh_gemca_load(char const *filename, struct gemca_workspace *g) {
-    enum osh_status rc;
-
-    rc = osh_gemca_parse(filename, g);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-
-    osh_debug("Setting up bodies...");
-    rc = osh_gemca_body_setup(g);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-    osh_debug("Body setup complete.");
-
     return OSH_OK;
 }
 

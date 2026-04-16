@@ -2,9 +2,10 @@
 
 ## What this layer does
 
-`osh_gemca_runtime` compiles the cold `gemca_workspace` (pointer-linked structs
-produced by the parser) into a flat, cache-friendly representation that the
-transport kernel can query in a tight inner loop.
+`osh_gemca_runtime` compiles the internal compatibility `gemca_workspace`
+(pointer-linked structs produced by the GEMCA prepare layer) into a flat,
+cache-friendly representation that the transport kernel can query in a tight
+inner loop.
 
 Three contiguous arrays replace the cold layout:
 
