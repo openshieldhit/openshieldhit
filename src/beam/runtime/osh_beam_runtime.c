@@ -5,6 +5,7 @@
 #include "beam/osh_beam_model.h"
 #include "beam/osh_beamdef.h"
 #include "common/osh_ray.h"
+#include "particle/osh_particle.h"
 
 /* ---- Forward declarations ------------------------------------------------ */
 
@@ -31,6 +32,7 @@ enum osh_status osh_beam_runtime_setup(struct beam_workspace const *workspace, s
     }
 
     rt->workspace = workspace;
+    rt->primary = (struct particle){0};
     rt->primaries_generated = 0u;
 
     switch (workspace->beam_mode) {
@@ -113,6 +115,12 @@ static enum osh_status setup_spots(struct osh_beam_runtime *rt) {
      * array.  See the comment in osh_beam_runtime.h for the planned layout.
      */
     rt->source.spots._reserved = 0;
+    if (!rt->workspace->prepared) {
+        return OSH_EINVAL;
+    }
+    if (!rt->workspace->has_primary || !osh_particle_from_pdg(&rt->primary, rt->workspace->primary.pdg)) {
+        return OSH_EINVAL;
+    }
     return OSH_OK;
 }
 
@@ -121,22 +129,21 @@ fill_from_spots(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_par
     size_t i;
     size_t slot;
     struct ray_v ray;
-    struct particle *part;
     enum osh_status rc;
 
     /*
      * Scalar fill loop: one primary per iteration.
      *
-     * osh_beam_new_primary() returns a ray_v (AoS) and a species pointer.
-     * We copy the seven phase-space scalars into the pool's SoA arrays and
-     * assign per-history metadata.
+     * osh_beam_new_primary() returns one ray_v (AoS) at a time. We copy the
+     * seven phase-space scalars into the pool's SoA arrays and assign
+     * per-history metadata, reusing one resolved species descriptor per run.
      *
      * Future: replace with a vectorized kernel that samples directly into
      * the SoA arrays, eliminating the intermediate ray_v and enabling
      * auto-vectorization of the energy/position sampling arithmetic.
      */
     for (i = 0u; i < n; ++i) {
-        rc = osh_beam_new_primary(rt->workspace, rng, &part, &ray);
+        rc = osh_beam_new_primary(rt->workspace, rng, &ray);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -154,7 +161,7 @@ fill_from_spots(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_par
                                * weight remains 1.0 for unweighted transport */
         pool->prim_idx[slot] = (uint32_t) (rt->primaries_generated + i);
         pool->gen[slot] = 0u;
-        pool->species[slot] = part;
+        pool->species[slot] = &rt->primary;
     }
 
     pool->n += n;

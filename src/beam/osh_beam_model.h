@@ -3,7 +3,6 @@
 
 #include "beam/osh_beam.h"
 #include "common/osh_ray.h"
-#include "particle/osh_particle.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 
@@ -67,16 +66,11 @@
  *                 Current placeholder sampling may not use it yet, but the
  *                 API is designed around explicit RNG flow.
  * @param n        Number of primaries to sample.
- * @param part_out Receives n particle-species pointers (owned by wb).
  * @param ray_out  Receives n sampled rays in OSH_COORD_UNIVERSE.
  *                 ray_out[i].p[3] holds total kinetic energy [MeV].
  * @return OSH_OK on success, OSH_E* on error. */
-int osh_beam_new_primaries(
-    struct beam_workspace const *wb, struct osh_rng *rng, size_t n, struct particle **part_out, struct ray_v *ray_out);
+int osh_beam_new_primaries(struct beam_workspace const *wb, struct osh_rng *rng, size_t n, struct ray_v *ray_out);
 
-int osh_beam_new_primary(struct beam_workspace const *wb,
-                         struct osh_rng *rng,
-                         struct particle **part_out,
-                         struct ray_v *ray_out);
+int osh_beam_new_primary(struct beam_workspace const *wb, struct osh_rng *rng, struct ray_v *ray_out);
 
 #endif /* OSH_BEAM_MODEL_H */

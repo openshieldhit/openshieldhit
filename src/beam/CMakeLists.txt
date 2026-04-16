@@ -2,7 +2,6 @@
 # Cmake cannot track changes *.c glob files, so we list them explicitly
 add_library(osh_beam
     osh_beam.c
-    osh_beam_parse.c
     osh_beam_model.c
     osh_beam_spots.c
 )
@@ -11,6 +10,7 @@ add_library(osh_beam
 target_include_directories(osh_beam
     PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
 )
 
 target_link_libraries(osh_beam

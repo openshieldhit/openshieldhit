@@ -207,7 +207,7 @@ int osh_beam_spots_free(struct beam_spot *sl) {
     return OSH_OK;
 }
 
-int osh_beam_spotlist_load(struct beam_workspace *beam) {
+int osh_beam_spotlist_load(struct beam_workspace *beam, char const *spotlist_path) {
     struct beam_spot template_spot;
     struct beam_spot *spots_new;
     FILE *fp;
@@ -219,16 +219,16 @@ int osh_beam_spotlist_load(struct beam_workspace *beam) {
     int line_ncols;
     int rc;
 
-    if (!beam || !beam->fname_spotlist || !beam->spots || beam->nspots == 0) {
+    if (!beam || !spotlist_path || !beam->spots || beam->nspots == 0) {
         return OSH_EINVAL;
     }
 
-    fp = fopen(beam->fname_spotlist, "r");
+    fp = fopen(spotlist_path, "r");
     if (!fp) {
         return OSH_EIO;
     }
 
-    osh_info("Loading external spotlist: %s", beam->fname_spotlist);
+    osh_info("Loading external spotlist: %s", spotlist_path);
 
     rc = _spotlist_detect_layout(fp, &nspots, &ncols);
     if (rc != OSH_OK) {
@@ -304,9 +304,6 @@ int osh_beam_shared_init(struct beam_shared *shared) {
     }
     memset(shared, 0, sizeof *shared);
 
-    /* emax/pmax are derived after parse — leave at 0.0 until computed */
-    shared->emax = 0.0;
-    shared->pmax = 0.0;
     shared->sad[0] = 0.0;
     shared->sad[1] = 0.0;
     shared->focus = 0.0;

@@ -6,6 +6,7 @@
 #include "beam/osh_beam.h"
 #include "common/osh_particle_pool.h"
 #include "common/osh_rc.h"
+#include "particle/osh_particle.h"
 #include "random/osh_rng.h"
 
 #ifdef __cplusplus
@@ -43,6 +44,7 @@ extern "C" {
  */
 struct osh_beam_runtime {
     struct beam_workspace const *workspace; /* cold storage — not owned */
+    struct particle primary;                /* resolved species for beam primaries */
     size_t primaries_generated;             /* total primaries emitted so far */
 
     union {

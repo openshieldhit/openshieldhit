@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "beam/osh_beam.h"
+#include "apps/osh/osh_app_osh.h"
 #include "beam/osh_beamdef.h"
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_logger.h"
@@ -232,7 +232,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     char *beam_path = NULL;
     char *mat_path = NULL;
     char *detect_path = NULL;
-    struct beam_workspace *beam = NULL;
+    struct osh_beam_workspace *beam = NULL;
     struct osh_beam_runtime *beam_rt = NULL;
     struct osh_transport_context transport_ctx;
     struct gemca_workspace *geom = NULL;

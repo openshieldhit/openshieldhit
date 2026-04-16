@@ -19,6 +19,7 @@ add_library(osh_common
 target_include_directories(osh_common
     PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_BINARY_DIR}/generated
 )
 

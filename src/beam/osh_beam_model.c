@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "beam/osh_beam_prepared.h"
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_interpolate.h"
@@ -27,21 +28,26 @@
  * @returns Pointer into wb->spots, or NULL on invalid input.
  */
 static struct beam_spot const *_select_spot(struct beam_workspace const *wb, struct osh_rng *rng) {
+    struct osh_beam_prepared const *prepared;
     double w;
     long int idx;
 
     if (!wb || !wb->spots || wb->nspots == 0) {
         return NULL;
     }
+    prepared = wb->prepared;
+    if (!prepared) {
+        return NULL;
+    }
     if (wb->nspots == 1) {
         return &wb->spots[0];
     }
-    if (!rng || !wb->cum_wt || wb->wt_sum <= 0.0) {
+    if (!rng || !prepared->cum_wt || prepared->wt_sum <= 0.0) {
         return NULL;
     }
 
-    w = osh_rng_double(rng) * wb->wt_sum;
-    idx = osh_binary_search_upper_d(w, wb->cum_wt, wb->nspots);
+    w = osh_rng_double(rng) * prepared->wt_sum;
+    idx = osh_binary_search_upper_d(w, prepared->cum_wt, wb->nspots);
     if (idx < 0 || idx >= (long int) wb->nspots) {
         return NULL;
     }
@@ -386,15 +392,15 @@ static int _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct be
  *                      as consumed by osh_vect_trans_point_affine() and
  *                      osh_vect_trans_vector_affine().
  */
-static void _apply_transform(struct ray_v *ray, struct beam_spot const *spot) {
+static void _apply_transform(struct ray_v *ray, double const tm[16]) {
     double p[3];
     double v[3];
 
     osh_vect_copy(ray->p, p);
     osh_vect_copy(ray->v, v);
 
-    osh_vect_trans_point_affine(p, ray->p, spot->_tm);
-    osh_vect_trans_vector_affine(v, ray->v, spot->_tm);
+    osh_vect_trans_point_affine(p, ray->p, tm);
+    osh_vect_trans_vector_affine(v, ray->v, tm);
 
     ray->system = OSH_COORD_UNIVERSE;
 }
@@ -414,24 +420,25 @@ static void _apply_transform(struct ray_v *ray, struct beam_spot const *spot) {
  *
  * @param[in]  wb        Fully initialised beam workspace.
  * @param[in]  rng       Random-number generator.
- * @param[out] part_out  Receives a pointer to the sampled particle species
- *                       (owned by wb; caller must not free).
  * @param[out] ray_out   Receives the sampled ray in OSH_COORD_UNIVERSE;
  *                       ray_out->p[3] holds total kinetic energy [MeV].
  *
  * @returns OSH_OK on success, OSH_E* on error.
  */
-static int _sample_one_primary(struct beam_workspace const *wb,
-                               struct osh_rng *rng,
-                               struct particle **part_out,
-                               struct ray_v *ray_out) {
+static int _sample_one_primary(struct beam_workspace const *wb, struct osh_rng *rng, struct ray_v *ray_out) {
+    struct osh_beam_prepared const *prepared;
     struct beam_spot const *spot;
+    size_t spot_idx;
     double pos[2];
     double ang[2];
     double norm;
     int rc;
 
-    if (!wb || !rng || !part_out || !ray_out) {
+    if (!wb || !rng || !ray_out) {
+        return OSH_EINVAL;
+    }
+    prepared = wb->prepared;
+    if (!prepared || !prepared->tm) {
         return OSH_EINVAL;
     }
 
@@ -440,14 +447,15 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     if (!spot) {
         return OSH_ESTATE;
     }
+    spot_idx = (size_t) (spot - wb->spots);
+    if (spot_idx >= prepared->nspots) {
+        return OSH_ESTATE;
+    }
 
-    /* 2. Particle species */
-    *part_out = spot->part;
-
-    /* 3. Sample energy — stored in ray_out->p[3] */
+    /* 2. Sample energy — stored in ray_out->p[3] */
     ray_out->p[3] = _sample_energy(rng, spot);
 
-    /* 4. Sample transverse phase space (x, y, x', y') in PZALIGN */
+    /* 3. Sample transverse phase space (x, y, x', y') in PZALIGN */
     rc = _sample_phase_space_xy(rng, spot, pos, ang);
     if (rc != OSH_OK) {
         return rc;
@@ -464,7 +472,7 @@ static int _sample_one_primary(struct beam_workspace const *wb,
 
     ray_out->system = OSH_COORD_PZALIGN;
 
-    /* 5. SAD correction */
+    /* 4. SAD correction */
     if (wb->shared.use_sad) {
         rc = _apply_sad(ray_out, spot, &wb->shared);
         if (rc != OSH_OK) {
@@ -480,20 +488,19 @@ static int _sample_one_primary(struct beam_workspace const *wb,
     ray_out->v[1] /= norm;
     ray_out->v[2] /= norm;
 
-    /* 6. Apply affine transform PZALIGN -> UNIVERSE */
-    _apply_transform(ray_out, spot);
+    /* 5. Apply affine transform PZALIGN -> UNIVERSE */
+    _apply_transform(ray_out, &prepared->tm[spot_idx * 16u]);
 
     return OSH_OK;
 }
 
 /* ---- Public entry points ------------------------------------------------- */
 
-int osh_beam_new_primaries(
-    struct beam_workspace const *wb, struct osh_rng *rng, size_t n, struct particle **part_out, struct ray_v *ray_out) {
+int osh_beam_new_primaries(struct beam_workspace const *wb, struct osh_rng *rng, size_t n, struct ray_v *ray_out) {
     size_t i;
     int rc;
 
-    if (!wb || !rng || !part_out || !ray_out) {
+    if (!wb || !rng || !ray_out) {
         return OSH_EINVAL;
     }
 
@@ -501,7 +508,7 @@ int osh_beam_new_primaries(
      * SoA/vectorized internals next. Keeping one looped kernel lets us evolve
      * toward SIMD/GPU without changing the caller-facing contract again. */
     for (i = 0; i < n; i++) {
-        rc = _sample_one_primary(wb, rng, &part_out[i], &ray_out[i]);
+        rc = _sample_one_primary(wb, rng, &ray_out[i]);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -510,9 +517,6 @@ int osh_beam_new_primaries(
     return OSH_OK;
 }
 
-int osh_beam_new_primary(struct beam_workspace const *wb,
-                         struct osh_rng *rng,
-                         struct particle **part_out,
-                         struct ray_v *ray_out) {
-    return osh_beam_new_primaries(wb, rng, 1, part_out, ray_out);
+int osh_beam_new_primary(struct beam_workspace const *wb, struct osh_rng *rng, struct ray_v *ray_out) {
+    return osh_beam_new_primaries(wb, rng, 1, ray_out);
 }

@@ -1,64 +1,43 @@
 #include "beam/osh_beam.h"
 
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 
-#include "beam/osh_beam_parse.h"
+#include "beam/osh_beam_prepared.h"
 #include "beam/osh_beam_spots.h"
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
-#include "common/osh_file.h"
 #include "common/osh_logger.h"
 #include "common/osh_physics.h"
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
+#include "particle/osh_particle.h"
 
 static void _wb_defaults(struct beam_workspace *wb);
 static int _wb_validate(const struct beam_workspace *wb);
 static int _wb_postparse(struct beam_workspace *wb);
-static void _postparse_spot_energy(struct beam_spot *spot);
-static void _build_spot_tm(struct beam_spot *spot, struct beam_shared const *sh);
+static int _resolve_primary_particle(struct beam_workspace const *wb, struct particle *part_out);
+static void _postparse_spot_energy(struct beam_spot *spot, struct particle const *part);
+static void _build_spot_tm(struct beam_spot const *spot, struct beam_shared const *sh, double tm_out[16]);
 
-int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct beam_workspace **wb_out) {
+int osh_beam_workspace_create(struct beam_workspace **wb_out) {
     int rc = OSH_OK;
-    struct oshfile *sf = NULL;
     struct beam_workspace *wb = NULL;
-    char *wdir = NULL;
 
-    /* lg may be NULL — callers pass NULL to use the global default logger.
-     * Internal code should call osh_log_default() when lg is NULL. */
-    (void) lg; /* TODO: thread through to parser diagnostics */
-
-    if (!path || !wb_out) {
+    if (!wb_out) {
         return OSH_EINVAL;
     }
     *wb_out = NULL;
 
-    /* Derive working directory. Path must be pre-normalized to '/' by the
-     * caller (use osh_path_normalize() in main.c before any library calls). */
-    wdir = osh_path_dirname(path);
-
-    sf = osh_fopen(path);
-    if (!sf) {
-        free(wdir);
-        return OSH_EIO;
-    }
-
     wb = (struct beam_workspace *) calloc(1, sizeof *wb);
     if (!wb) {
-        osh_fclose(sf);
-        free(wdir);
         return OSH_ENOMEM;
     }
 
     _wb_defaults(wb);
-    wb->wdir = wdir; /* ownership transferred */
-    wdir = NULL;
 
     rc = osh_beam_spots_init(&wb->spots, 1);
     if (rc != OSH_OK) {
-        osh_fclose(sf);
         osh_beam_workspace_free(wb);
         return rc;
     }
@@ -66,37 +45,24 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
 
     rc = osh_beam_shared_init(&wb->shared);
     if (rc != OSH_OK) {
-        osh_fclose(sf);
         osh_beam_workspace_free(wb);
         return rc;
     }
 
-    rc = osh_beam_parse(sf, wb);
-    osh_fclose(sf);
-    sf = NULL;
-    if (rc != OSH_OK) {
-        osh_beam_workspace_free(wb);
-        return rc;
-    }
+    *wb_out = wb;
+    return OSH_OK;
+}
 
-    if (wb->fname_spotlist) {
-        osh_info("Loading spotlist before beam post-parse");
-        rc = osh_beam_spotlist_load(wb);
-        if (rc != OSH_OK) {
-            osh_beam_workspace_free(wb);
-            return rc;
-        }
-    }
+int osh_beam_workspace_prepare(struct beam_workspace *wb) {
+    int rc;
 
     rc = _wb_validate(wb);
     if (rc != OSH_OK) {
-        osh_beam_workspace_free(wb);
         return rc;
     }
 
     rc = _wb_postparse(wb);
     if (rc != OSH_OK) {
-        osh_beam_workspace_free(wb);
         return rc;
     }
 
@@ -104,7 +70,6 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct bea
         osh_beam_print(wb);
     }
 
-    *wb_out = wb;
     return OSH_OK;
 }
 
@@ -112,14 +77,13 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     if (!wb) {
         return OSH_OK;
     }
-    if (wb->wdir) {
-        free(wb->wdir);
-    }
     if (wb->spots) {
         osh_beam_spots_free(wb->spots);
     }
-    if (wb->cum_wt) {
-        free(wb->cum_wt);
+    if (wb->prepared) {
+        free(wb->prepared->cum_wt);
+        free(wb->prepared->tm);
+        free(wb->prepared);
     }
     /* wb->shared is embedded by value — no free needed */
     if (wb->phsp) {
@@ -132,12 +96,6 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     if (wb->parlev) {
         /* TODO: replace with osh_beam_parlev_free() once struct parlev is defined */
         free(wb->parlev);
-    }
-    if (wb->fname) {
-        free(wb->fname);
-    }
-    if (wb->fname_spotlist) {
-        free(wb->fname_spotlist);
     }
     free(wb);
     return OSH_OK;
@@ -178,20 +136,16 @@ static void _wb_defaults(struct beam_workspace *wb) {
         return;
     }
 
-    wb->wdir = NULL;
-    wb->fname = NULL;
-    wb->fname_spotlist = NULL;
     wb->spots = NULL;
-    wb->cum_wt = NULL;
     /* wb->shared is embedded by value (see osh_beam.h); zero-initialised by
      * calloc above, then given sensible defaults by osh_beam_shared_init(). */
     wb->phsp = NULL;
+    wb->prepared = NULL;
     wb->rifi = NULL;
     wb->parlev = NULL;
     wb->has_primary = 0;
 
     wb->nspots = 0;
-    wb->wt_sum = 0.0;
     wb->nstat = 0;
     wb->nsave = 0;
     wb->rndseed = 0;
@@ -260,24 +214,25 @@ static int _wb_validate(const struct beam_workspace *wb) {
  *   psigma = tsigma * (t0 + mass) / p0
  *
  * This linear approximation is valid when sigma << T0.
- * Silently skipped when spot->part is NULL (PRIMARY not yet resolved).
+ * Silently skipped when @p part is NULL (PRIMARY not yet resolved).
  *
  * @param[in,out] spot  Beam spot whose energy/momentum fields are completed.
+ * @param[in]     part  Resolved primary particle species.
  */
-static void _postparse_spot_energy(struct beam_spot *spot) {
+static void _postparse_spot_energy(struct beam_spot *spot, struct particle const *part) {
     double mass;
     double scale;
 
-    if (!spot->part) {
+    if (!spot || !part) {
         return;
     }
 
-    mass = spot->part->mass;
+    mass = part->mass;
 
     if (spot->t0_per_nucleon || spot->tsigma_per_nucleon) {
         scale = 1.0;
-        if (spot->part->is_nucleus && spot->part->a > 1u) {
-            scale = (double) spot->part->a;
+        if (part->is_nucleus && part->a > 1u) {
+            scale = (double) part->a;
         }
         if (spot->t0_per_nucleon) {
             spot->t0 *= scale;
@@ -303,6 +258,16 @@ static void _postparse_spot_energy(struct beam_spot *spot) {
     }
 }
 
+static int _resolve_primary_particle(struct beam_workspace const *wb, struct particle *part_out) {
+    if (!wb || !part_out || !wb->has_primary) {
+        return OSH_EINVAL;
+    }
+    if (!osh_particle_from_pdg(part_out, wb->primary.pdg)) {
+        return OSH_EINVAL;
+    }
+    return OSH_OK;
+}
+
 /**
  * @brief Build the affine sampling matrix spot->_tm for one beam spot.
  *
@@ -320,7 +285,7 @@ static void _postparse_spot_energy(struct beam_spot *spot) {
  * @param[in,out] spot  Spot whose _tm[16] matrix is written.
  * @param[in]     sh    Shared beam parameters providing theta and phi [rad].
  */
-static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh) {
+static void _build_spot_tm(struct beam_spot const *spot, const struct beam_shared *sh, double tm_out[16]) {
     double cs[3];
     double r[3];
 
@@ -335,7 +300,7 @@ static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh)
     }
 
     osh_coord_c2v(cs, r);
-    osh_vect_setup_tmatrix_bzalign_affine(spot->p, r, spot->_tm);
+    osh_vect_setup_tmatrix_bzalign_affine(spot->p, r, tm_out);
 }
 
 /**
@@ -343,7 +308,6 @@ static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh)
  *
  * @details
  * Iterates over all spots and for each:
- *   - assigns the resolved primary particle pointer
  *   - derives missing energy/momentum via _postparse_spot_energy()
  *   - builds the PZALIGN->UNIVERSE affine matrix via _build_spot_tm()
  *   - accumulates the cumulative weight array for SOBP spot selection
@@ -360,48 +324,75 @@ static void _build_spot_tm(struct beam_spot *spot, const struct beam_shared *sh)
 static int _wb_postparse(struct beam_workspace *wb) {
     size_t i;
     double wt_acc;
+    struct particle primary_part;
+    struct particle const *part;
+    int rc;
+    struct osh_beam_prepared *prepared;
 
     if (!wb) {
         return OSH_EINVAL;
     }
 
-    wb->shared.emax = 0.0;
-    wb->shared.pmax = 0.0;
-    wb->wt_sum = 0.0;
+    part = NULL;
+    if (wb->has_primary) {
+        rc = _resolve_primary_particle(wb, &primary_part);
+        if (rc != OSH_OK) {
+            return rc;
+        }
+        part = &primary_part;
+    }
 
-    free(wb->cum_wt);
-    wb->cum_wt = NULL;
+    prepared = wb->prepared;
+    if (!prepared) {
+        prepared = (struct osh_beam_prepared *) calloc(1, sizeof(*prepared));
+        if (!prepared) {
+            return OSH_ENOMEM;
+        }
+        wb->prepared = prepared;
+    }
+
+    free(prepared->cum_wt);
+    free(prepared->tm);
+    prepared->cum_wt = NULL;
+    prepared->tm = NULL;
+    prepared->wt_sum = 0.0;
+    prepared->emax = 0.0;
+    prepared->pmax = 0.0;
+    prepared->nspots = wb->nspots;
 
     if (wb->nspots > 0) {
-        wb->cum_wt = (double *) calloc(wb->nspots, sizeof(double));
-        if (!wb->cum_wt) {
+        prepared->cum_wt = (double *) calloc(wb->nspots, sizeof(double));
+        prepared->tm = (double *) calloc(wb->nspots * 16u, sizeof(double));
+        if (!prepared->cum_wt || !prepared->tm) {
+            free(prepared->cum_wt);
+            free(prepared->tm);
+            prepared->cum_wt = NULL;
+            prepared->tm = NULL;
+            prepared->nspots = 0u;
             return OSH_ENOMEM;
         }
     }
 
     wt_acc = 0.0;
     for (i = 0; i < wb->nspots; i++) {
-        if (wb->has_primary) {
-            wb->spots[i].part = &wb->primary;
-        }
-        _postparse_spot_energy(&wb->spots[i]);
-        _build_spot_tm(&wb->spots[i], &wb->shared);
+        _postparse_spot_energy(&wb->spots[i], part);
+        _build_spot_tm(&wb->spots[i], &wb->shared, &prepared->tm[i * 16u]);
 
         if (wb->spots[i].wt < 0.0) {
             return OSH_EINVAL;
         }
         wt_acc += wb->spots[i].wt;
-        wb->cum_wt[i] = wt_acc;
+        prepared->cum_wt[i] = wt_acc;
 
-        if (wb->spots[i].t0 > wb->shared.emax) {
-            wb->shared.emax = wb->spots[i].t0;
+        if (wb->spots[i].t0 > prepared->emax) {
+            prepared->emax = wb->spots[i].t0;
         }
-        if (wb->spots[i].p0 > wb->shared.pmax) {
-            wb->shared.pmax = wb->spots[i].p0;
+        if (wb->spots[i].p0 > prepared->pmax) {
+            prepared->pmax = wb->spots[i].p0;
         }
     }
 
-    wb->wt_sum = wt_acc;
+    prepared->wt_sum = wt_acc;
 
     return OSH_OK;
 }
@@ -409,9 +400,14 @@ static int _wb_postparse(struct beam_workspace *wb) {
 /* osh_beamdef.h name arrays (osh_beam_mscat_names etc.) included via osh_beam.h */
 
 void osh_beam_print(struct beam_workspace const *wb) {
+    struct particle primary_part;
+    struct osh_beam_prepared const *prepared;
+    int rc;
+
     if (!wb) {
         return;
     }
+    prepared = wb->prepared;
 
     osh_info("%s", "");
     osh_info("%s", "");
@@ -442,8 +438,16 @@ void osh_beam_print(struct beam_workspace const *wb) {
     osh_info("%-18s : %.3f  cm", "Focus", wb->shared.focus);
     osh_info("%-18s : %.3f  deg", "Theta", wb->shared.theta * 180.0 * OSH_M_1_PI);
     osh_info("%-18s : %.3f  deg", "Phi", wb->shared.phi * 180.0 * OSH_M_1_PI);
-    osh_info("%-18s : %.3f  MeV", "Emax", wb->shared.emax);
-    osh_info("%-18s : %.3f  MeV/c", "Pmax", wb->shared.pmax);
+    osh_info("%-18s : %.3f  MeV", "Emax", prepared ? prepared->emax : 0.0);
+    osh_info("%-18s : %.3f  MeV/c", "Pmax", prepared ? prepared->pmax : 0.0);
+
+    if (wb->has_primary) {
+        rc = _resolve_primary_particle(wb, &primary_part);
+        if (rc == OSH_OK) {
+            osh_info("%s", "");
+            osh_print_particle(&primary_part);
+        }
+    }
 
     if (wb->spots) {
         osh_beam_print_spot(&wb->spots[0]);
@@ -453,11 +457,6 @@ void osh_beam_print(struct beam_workspace const *wb) {
 void osh_beam_print_spot(struct beam_spot const *spot) {
     if (!spot) {
         return;
-    }
-
-    if (spot->part) {
-        osh_info("%s", "");
-        osh_print_particle(spot->part);
     }
 
     osh_info("%s", "");
