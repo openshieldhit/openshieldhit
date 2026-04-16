@@ -569,10 +569,11 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
 
     t.mass_stopping_power = calloc(1, nbytes_sp);
     t.range_csda = calloc(1, nbytes_range);
+    t.rho = calloc(nmat, sizeof(*t.rho));
     t.z_mean = calloc(nmat, sizeof(*t.z_mean));
     t.z_over_a = calloc(nmat, sizeof(*t.z_over_a));
     t.rad_length = calloc(nmat, sizeof(*t.rad_length));
-    if (!t.mass_stopping_power || !t.range_csda || !t.z_mean || !t.z_over_a || !t.rad_length) {
+    if (!t.mass_stopping_power || !t.range_csda || !t.rho || !t.z_mean || !t.z_over_a || !t.rad_length) {
         rc = OSH_ENOMEM;
         goto fail;
     }
@@ -584,6 +585,10 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
         mat = osh_material_by_index(wm, mat_idx);
         if (!mat)
             continue;
+
+        if (mat->rho > 0.0) {
+            t.rho[mat_idx] = (float) mat->rho;
+        }
 
         /* Compute per-material atomic scalars (z_mean, z/a, X₀) for MCS and
          * straggling.  These depend only on composition, not on projectile or
@@ -709,6 +714,7 @@ void osh_material_runtime_free(struct osh_material_runtime *tables) {
     free(tables->projectile_z);
     free(tables->projectile_a);
     free(tables->projectile_mass_mev);
+    free(tables->rho);
     free(tables->z_mean);
     free(tables->z_over_a);
     free(tables->rad_length);

@@ -66,7 +66,6 @@ static void report_transport_progress(size_t completed, size_t total, double ela
  */
 enum osh_status osh_transport_ion_run_minimal(struct beam_workspace const *beam,
                                               struct gemca_runtime const *geom_rt,
-                                              struct material_workspace const *materials,
                                               struct osh_material_runtime const *tables,
                                               struct osh_scoring_runtime *scoring) {
     struct osh_rng rng;
@@ -88,7 +87,7 @@ enum osh_status osh_transport_ion_run_minimal(struct beam_workspace const *beam,
     double t_last_report;
     enum osh_status rc = OSH_OK;
 
-    if (!beam || !geom_rt || !materials || !tables || !scoring) {
+    if (!beam || !geom_rt || !tables || !scoring) {
         return OSH_EINVAL;
     }
     if (beam->nstat == 0u) {
@@ -169,17 +168,8 @@ enum osh_status osh_transport_ion_run_minimal(struct beam_workspace const *beam,
                 rc = OSH_ESTATE;
                 goto cleanup;
             }
-            rc = osh_transport_ion_step_one(pool,
-                                            i,
-                                            zone_batch[i],
-                                            dist_batch[i],
-                                            geom_rt,
-                                            beam,
-                                            materials,
-                                            tables,
-                                            scoring,
-                                            (double) beam->deltae,
-                                            &rng);
+            rc = osh_transport_ion_step_one(
+                pool, i, zone_batch[i], dist_batch[i], geom_rt, beam, tables, scoring, (double) beam->deltae, &rng);
             if (rc != OSH_OK) {
                 osh_error("transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, %.17g, "
                           "%.17g) dir=(%.17g, %.17g, %.17g)",

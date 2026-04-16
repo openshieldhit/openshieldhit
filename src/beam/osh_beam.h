@@ -172,7 +172,7 @@ struct beam_workspace {
     float pcut;   /* lower primary momentum cutoff [MeV/c] */
     float ncut;   /* lower neutron energy cutoff [MeV] */
     float deltae; /* max fractional energy loss per step */
-    float demin;  /* lower Moliere multiple-scattering cutoff [MeV/nucleon] */
+    float demin;  /* minimum energy loss per material substep [MeV/nucleon] */
 
     /* --- Physics switches --- */
     char straggl;   /* energy straggling model: OSH_BEAM_STRAGG_* */

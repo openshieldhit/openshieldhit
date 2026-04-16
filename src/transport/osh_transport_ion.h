@@ -9,7 +9,6 @@ extern "C" {
 
 struct beam_workspace;
 struct gemca_runtime;
-struct material_workspace;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
 
@@ -22,6 +21,13 @@ struct osh_scoring_runtime;
  * (random-hinge method), Bohr Gaussian energy straggling.  No nuclear
  * interactions or secondaries.
  *
+ * The random-hinge treatment follows the fast proton-transport approach
+ * described by Fippel and Soukup.
+ *
+ * @par References
+ * Fippel M, Soukup M. A Monte Carlo dose calculation algorithm for proton
+ * therapy. Med Phys. 2004;31(8):2263-2273. doi:10.1118/1.1769631.
+ *
  * The caller must invoke osh_gemca_runtime_setup() before and
  * osh_gemca_runtime_free() after this function.
  *
@@ -29,7 +35,6 @@ struct osh_scoring_runtime;
  */
 enum osh_status osh_transport_ion_run_minimal(struct beam_workspace const *beam,
                                               struct gemca_runtime const *geom_rt,
-                                              struct material_workspace const *materials,
                                               struct osh_material_runtime const *tables,
                                               struct osh_scoring_runtime *scoring);
 

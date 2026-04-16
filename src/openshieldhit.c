@@ -443,7 +443,7 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
                 (unsigned long long) scoring_runtime.npages);
     }
 
-    if (osh_transport_run_minimal(beam, &geom_rt, mat, &transport_tables, &scoring_runtime) != OSH_OK) {
+    if (osh_transport_run_minimal(beam, &geom_rt, &transport_tables, &scoring_runtime) != OSH_OK) {
         ctx_set_error(ctx, err, "%s", "minimal transport failed");
         rc = OPENSHIELDHIT_STATUS_STATE_ERROR;
         goto cleanup;

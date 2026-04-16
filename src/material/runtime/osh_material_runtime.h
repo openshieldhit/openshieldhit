@@ -47,6 +47,9 @@ struct osh_material_runtime {
      * and stored here so the hot transport kernel does not need to touch the
      * material_workspace (which is setup-only data).
      *
+     * rho         — material density [g/cm^3].
+     *               Used to convert geometric step lengths to areal density in
+     *               the hot transport kernel. Zero for vacuum and blackhole.
      * z_mean      — effective atomic number (mass-fraction-weighted sum of Z_i).
      *               Used by the Hubert effective-charge formula in osh_physics_bethe_z_eff().
      * z_over_a    — effective Z/A [mol/g] (sum_i w_i * Z_i / A_i).
@@ -55,6 +58,7 @@ struct osh_material_runtime {
      *               Used by the Highland MCS formula in osh_physics_moliere_theta0().
      *               Zero for vacuum and blackhole (skips scattering in transport).
      */
+    float *rho;        /* [nmaterials] density [g/cm^3]. */
     float *z_mean;     /* [nmaterials] effective atomic number. */
     float *z_over_a;   /* [nmaterials] Z/A [mol/g]. */
     float *rad_length; /* [nmaterials] radiation length X0 [g/cm^2]. */
