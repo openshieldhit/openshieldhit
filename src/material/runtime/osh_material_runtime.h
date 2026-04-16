@@ -137,6 +137,11 @@ static inline double osh_material_runtime_sp_lookup(struct osh_material_runtime 
  * @param[in] e_per_nuc    Kinetic energy per nucleon [MeV/nucleon].
  *
  * @returns CSDA range [g/cm^2].
+ *
+ * @note
+ * Transport currently calls this in a scalar fashion.  A natural follow-up is
+ * a batch/SIMD sibling for lanes sharing the same material/projectile column,
+ * so the ion stepper can amortize the paired forward and inverse range lookups.
  */
 static inline double osh_material_runtime_range_lookup(struct osh_material_runtime const *tables,
                                                        size_t mat_idx,

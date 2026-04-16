@@ -51,6 +51,8 @@ The repo has moved past the original bootstrap phase. We now have:
 - [ ] Build optical depth tables
 - [ ] Build nuclear target-sampling table per material
 - [ ] Support lazy extension of material/projectile tables at batch boundaries
+- [ ] Add batch/SIMD runtime lookup helpers for stopping power and CSDA range
+- [ ] Add batch inverse-range-to-energy lookup for residual-range transport steps
 
 ## Transport
 
@@ -59,9 +61,13 @@ The repo has moved past the original bootstrap phase. We now have:
 - [x] Boundary-limited steps with exit energy from residual CSDA range
 - [x] Blackhole and vacuum zone handling
 - [x] Transport wired into `openshieldhit_run()` (end-to-end Bragg peak produces correct output)
-- [ ] Multiple Coulomb scattering
-- [ ] Energy straggling (Vavilov / Gaussian)
+- [x] Multiple Coulomb scattering (Moliere / random hinge)
+- [x] Gaussian energy straggling
+- [ ] Gaussian MCS mode
+- [ ] Vavilov energy straggling
 - [ ] Nuclear interactions and secondary particles
+- [ ] Batch ion step phases around runtime lookup hot spots (`range_lookup`, inverse residual-range lookup)
+- [ ] Measure SIMD benefit for mixed-material pools vs same-material/species micro-batches
 
 ## Scoring
 

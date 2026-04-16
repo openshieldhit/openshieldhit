@@ -121,7 +121,6 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     }
     steps_taken = 0u;
     primaries_done = 0u;
-    primaries_completed = 0u;
     last_report_completed = 0u;
     progress_chunk = transport_progress_chunk_size(params->nstat);
     next_report_completed = progress_chunk;
