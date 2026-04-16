@@ -1,20 +1,14 @@
-#include "gemca/parse/osh_gemca2_parse_zone.h"
+#include "gemca/prepare/osh_gemca_zone_compile.h"
 
 #include <ctype.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "common/osh_logger.h"
-#include "common/osh_readline.h"
 #include "gemca/osh_gemca2.h"
-#include "gemca/osh_gemca2_defines.h"
-#include "gemca/parse/osh_gemca2_parse_keys.h"
-#include "gemca/parse/osh_gemca2_parse_stack.h"
+#include "gemca/prepare/osh_gemca_stack.h"
 
-static int _key_is_zone_continuation(char const *key);
 static struct body *_body_from_name(char *bname, struct gemca_workspace *g);
-static int _rewind_oshfile(struct oshfile *shf);
 
 static struct cgnode *_new_node_comp(struct stack *st, char operator);
 static struct cgnode *_new_node_body(struct body *b);
@@ -24,17 +18,13 @@ static size_t _reformat(char const *input, char **output);
 static int _tokenizer(char const *input, char ***t);
 static void _reverse_tokens(char **tokens, int ntokens);
 static int _is_operator(char o);
-static void _concat(char **a, char const *b);
 
 /**
  * @brief Initialize a zone.
  *
- * @param[in,out] **body - body to be initialized, memory will be allocated and zeroed,
- *    and memory will also be allocated to the sub-bodies in this zone.
+ * @param[out] zone Receives the newly allocated internal zone object.
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
- *
- * @author Niels Bassler
  */
 enum osh_status osh_gemca_zone_init(struct zone **zone) {
 
@@ -53,231 +43,6 @@ enum osh_status osh_gemca_zone_init(struct zone **zone) {
 
     *zone = z;
     return OSH_OK;
-}
-
-/**
- * @brief Count the number of zones in the given geo.dat file.
- *
- * @param[in] shf - a oshfile struct which also is aware of the line number
- *
- * @returns The number of zones found in the geo.dat file.
- *
- * @author Niels Bassler
- */
-size_t osh_gemca_parse_count_zones(struct oshfile *shf) {
-    int lineno;
-    char *key = NULL;
-    char *args = NULL;
-    char *line = NULL;
-
-    size_t nzone = 0;
-    int in_block = 0;
-
-    if (!_rewind_oshfile(shf)) {
-        return 0;
-    }
-
-    while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
-        if (strcasecmp(OSH_GEMCA_KEY_END, key) != 0) {
-            if (in_block == 2) {
-                if (!_key_is_zone_continuation(key)) {
-                    /* new zone found */
-                    ++nzone;
-                }
-            }
-        } else {
-            /* proceed to next block */
-            in_block++;
-        }
-
-        if (in_block == 0) {
-            /* were done reading the header */
-            in_block = 1;
-        }
-
-        free(line);
-    }
-    free(line);
-    osh_info("Found %zu zones in geo.dat file", nzone);
-    return nzone;
-}
-
-/**
- * @brief Parse zone information
- *
- * @details This function parses the second part of the geo.dat file.
- * (1st part is body description, 2nd is zone description, 3rd is material description)
- *
- * @param[in] *fp - file pointer to file open for reading.
- * @param[in,out] *g - gemca workspace
- *
- * @returns OSH_OK on success, OSH_E* on failure.
- *
- * @author Niels Bassler
- */
-enum osh_status osh_gemca_parse_zones(struct oshfile *shf, struct gemca_workspace *g) {
-
-    char *key = NULL;
-    char *args = NULL;
-    char *line = NULL;
-
-    char *bstr = NULL;    /* entire body string as given by user */
-    char *tstr = NULL;    /* entire body string, formatted parser-friendly */
-    char **tokens = NULL; /* list of tokens */
-
-    size_t izone;
-    int zone_active = 0;
-
-    int lineno;  /* current line number */
-    int ntokens; /* number of tokens */
-    int i;
-    int len;
-
-    /* move to the second end statement */
-    if (!_rewind_oshfile(shf)) {
-        return OSH_EIO;
-    }
-
-    /* forward to the first line after the first END statement */
-    while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
-        if (strcasecmp(OSH_GEMCA_KEY_END, key) == 0) {
-            break;
-        }
-        free(line);
-    }
-    free(line);
-
-    /* prepare the temprary bstr buffer, which will hold all the user given logic for a single zone */
-    /* important: it must hold a NULL byte, so the _concat() function will work. */
-    bstr = calloc(1, sizeof(char));
-    tstr = calloc(1, sizeof(char));
-    if ((bstr == NULL) || (tstr == NULL)) {
-        free(bstr);
-        free(tstr);
-        return OSH_ENOMEM;
-    }
-
-    /* now proceed parsing */
-    zone_active = 0;
-    izone = 0;
-    while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
-
-        /**
-         * Checks if the KEY is an existing body name and if the args start with a valid operator.
-         * If KEY matches a body name AND args begins with '+', '-', or '|' operator,
-         * it is recognized as a body reference. The 'OR' operator is not supported at the
-         * beginning of a line; use '|' instead.
-         * If these conditions are not met, the input is treated as a new zone description.
-         */
-        /* check is KEY an existing body name. */
-        /* If not, then assume that this is a new zone description. */
-        /* A key is only a body if it matches a body name AND args starts with a valid operator prefix. */
-        if (_key_is_zone_continuation(key)) {
-            /* Continuation before any zone header is illegal */
-            if (!zone_active) {
-                osh_error("zone continuation before first zone at line %d", lineno);
-                free(line);
-                free(bstr);
-                free(tstr);
-                return OSH_EPARSE;
-            }
-            _concat(&bstr, key);
-        } else {
-            /* key is not a body, then it must be a new zone name or the END card.
-               1) Process the old zone and attach it to the zone */
-            if (zone_active && strlen(bstr) > 0) {
-
-                osh_debug(OSH_LOG_HLINE);
-                osh_debug("ZONE: #%3lli - '%s'", (long long int) izone, g->zones[izone]->name);
-                osh_debug("USERGIVEN STRING: '%s'", bstr);
-                _reformat(bstr, &tstr);
-                osh_debug("PRE-TOKEN STRING: '%s'", tstr);
-                ntokens = _tokenizer(tstr, &tokens);
-                _reverse_tokens(tokens, ntokens);
-
-                osh_debug("number of tokens: %i", ntokens);
-
-                for (i = 0; i < ntokens; i++) {
-                    osh_debug("token #%i '%s'", i, tokens[i]);
-                }
-                /* attach the tokens of this zone to the geometry */
-                g->zones[izone]->tokens = tokens;
-                g->zones[izone]->ntokens = ntokens;
-
-                /* build the abstract syntax tree from the tokens */
-                _build_ast(g->zones[izone], g);
-
-                bstr[0] = '\0'; /* reset bstr */
-                tstr[0] = '\0'; /* reset tstr */
-            }
-
-            /* 2) check if we have reached the second END statement */
-            if (strcasecmp(key, OSH_GEMCA_KEY_END) == 0) {
-                /* there is nothing more to read, bail out */
-                break; /* break out of while loop */
-            }
-
-            /* 3) new zone: increment the internal zone index and copy the user-facing zone name.
-             * Numeric-looking zone names from legacy inputs, e.g. "001", stay strings and must be referenced exactly as
-             * such by later material assignments. */
-            if (!zone_active) {
-                zone_active = 1;
-            } else {
-                izone++;
-            }
-            /* we may have crossed the END card, which will exceed the number of zones */
-            if (izone >= g->nzones) {
-                osh_error("Error parsing geometry line %li - too many zones (max=%li)",
-                          (long int) lineno,
-                          (long int) g->nzones);
-                free(line);
-                free(bstr);
-                free(tstr);
-                return OSH_EPARSE;
-            }
-            len = strlen(key);
-            g->zones[izone]->name = calloc(len + 1, sizeof(char));
-            if (g->zones[izone]->name == NULL) {
-                free(line);
-                free(bstr);
-                free(tstr);
-                return OSH_ENOMEM;
-            }
-            g->zones[izone]->lineno = lineno; /* save the line number where this zone was defined */
-            strncpy(g->zones[izone]->name, key, len + 1);
-        }
-
-        /* now parse whatever is left in the args string, these are always logic and bodies */
-        _concat(&bstr, args);
-        free(line);
-    } /* end while loop */
-
-    free(line);
-    free(bstr);
-    free(tstr);
-
-    return OSH_OK;
-}
-
-/* @brief Check if the given key is a zone continuation operator */
-static int _key_is_zone_continuation(char const *key) {
-    return key && (key[0] == '+' || key[0] == '-' || key[0] == '|' || key[0] == '(' || key[0] == ')');
-}
-
-/**
- * @brief Rewind an `oshfile` stream and reset its tracked line number.
- *
- * @param[in,out] shf Open geometry file wrapper to rewind.
- *
- * @returns Nothing. Exits via `osh_error()` if rewinding fails.
- */
-static int _rewind_oshfile(struct oshfile *shf) {
-    if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error("Failed to rewind geometry file '%s'", shf->filename);
-        return 0;
-    }
-    shf->lineno = 0;
-    return 1;
 }
 
 /**
@@ -714,29 +479,65 @@ static int _is_operator(char o) {
 }
 
 /**
- * @brief Copy string b to a, and increase memoery of a accordingly.
+ * @brief Compile a zone boolean expression into a cgnode AST.
  *
- * @details Both a and b must hold a '\0' byte so the initial string lengths can be determined.
+ * @details Exposes the _reformat → _tokenizer → _reverse_tokens → _build_ast
+ *          pipeline as a public entry point so that callers who build cold
+ *          struct zone objects without going through the file parser can still
+ *          produce a ready-to-use cgnode tree.
  *
- * @param[out] *a - pointer to destination string. Memory will be reallocated if needed.
- * @param[in] b - input string.
+ *          Bodies must already be set up in @p g before this is called because
+ *          _build_ast() looks up body pointers by name.
  *
- * @returns 1 if o is an operator. 0 If o is not an operator.
+ * @param[in,out] z     Zone to populate.
+ * @param[in]     expr  Raw zone expression (e.g. "+BODY1 -BODY2 | +BODY3").
+ * @param[in]     g     Gemca workspace with bodies[] already initialised.
  *
- * @author Niels Bassler
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-static void _concat(char **a, char const *b) {
-    int la;
-    int lb;
+/* Returns 1 if any leaf node in the cgnode tree has a NULL body pointer. */
+static int _has_null_body(struct cgnode const *node) {
+    if (!node) {
+        return 0;
+    }
+    if (node->type == _OSH_GEMCA_CGNODE_BODY) {
+        return node->body == NULL;
+    }
+    return _has_null_body(node->left) || _has_null_body(node->right);
+}
 
-    la = strlen(*a);
-    lb = strlen(b);
+enum osh_status osh_gemca_zone_compile_expr(struct zone *z, char const *expr, struct gemca_workspace *g) {
+    char *tstr = NULL;
+    char **tokens = NULL;
+    int ntokens;
 
-    *a = realloc(*a, sizeof(char) * (la + lb + 1));
-    if (*a == NULL) {
-        osh_error("_concat(): cannot reallocate memory");
+    if (!z || !expr || !g) {
+        return OSH_EINVAL;
     }
 
-    strncat(*a, b, lb);
-    return;
+    /* _reformat() uses realloc(), so the base pointer must be non-NULL and
+     * point to at least a NUL byte so that strlen() is safe on it. */
+    tstr = calloc(1, sizeof(char));
+    if (!tstr) {
+        return OSH_ENOMEM;
+    }
+
+    _reformat(expr, &tstr);
+    ntokens = _tokenizer(tstr, &tokens);
+    _reverse_tokens(tokens, ntokens);
+    free(tstr);
+
+    z->tokens = tokens;
+    z->ntokens = (size_t) ntokens;
+
+    _build_ast(z, g);
+
+    /* _build_ast() logs errors for unresolved body names but does not abort.
+     * Check the compiled tree: any NULL body pointer means the zone expr
+     * referenced a body name that does not exist in the workspace. */
+    if (_has_null_body(&z->node)) {
+        return OSH_EPARSE;
+    }
+
+    return OSH_OK;
 }

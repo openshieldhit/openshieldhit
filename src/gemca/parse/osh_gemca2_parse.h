@@ -1,8 +1,0 @@
-#ifndef _OSH_GEMCA2_PARSE
-#define _OSH_GEMCA2_PARSE
-
-#include "gemca/osh_gemca2.h"
-
-enum osh_status osh_gemca_parse(char const *filename, struct gemca_workspace *g);
-
-#endif /* _OSH_GEMCA2_PARSE */

@@ -7,12 +7,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "apps/osh/osh_geometry_parse.h"
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_ray.h"
 #include "common/osh_vect.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_geometry_prepared.h"
+#include "openshieldhit/geometry.h"
 #include "random/osh_rng.h"
 
 #define WINDOW_WIDTH 800
@@ -102,7 +105,8 @@ static void draw_map(SDL_Renderer *s, struct gemca_workspace *g, int ndots);
 
 int main(int argc, char *argv[]) {
 
-    struct gemca_workspace g = {0};
+    struct osh_geometry_workspace *geom = NULL;
+    struct gemca_workspace *g = NULL;
     int zone = 1;
 
     /* Setup logger, select OSH_LOG_DEBUG for more information. */
@@ -141,28 +145,37 @@ int main(int argc, char *argv[]) {
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
     fflush(stdout);
-    if (osh_gemca_load(argv[1], &g) != OSH_OK) {
-        fprintf(stderr, "bnct_sdl: osh_gemca_load() failed for '%s'\n", argv[1]);
+    if (osh_geometry_parse_file(argv[1], &geom) != OSH_OK) {
+        fprintf(stderr, "bnct_sdl: osh_geometry_parse_file() failed for '%s'\n", argv[1]);
         return EXIT_FAILURE;
     }
+    if (osh_geometry_workspace_prepare(geom) != 0) {
+        fprintf(stderr, "bnct_sdl: osh_geometry_workspace_prepare() failed\n");
+        osh_geometry_workspace_free(geom);
+        return EXIT_FAILURE;
+    }
+    g = geom->prepared->gemca;
 
-    if (g.bodies == NULL || g.zones == NULL || g.nbodies == 0 || g.nzones == 0) {
-        fprintf(stderr, "bnct_sdl: geometry workspace is incomplete after osh_gemca_load()\n");
+    if (g->bodies == NULL || g->zones == NULL || g->nbodies == 0 || g->nzones == 0) {
+        fprintf(stderr, "bnct_sdl: geometry workspace is incomplete\n");
+        osh_geometry_workspace_free(geom);
         return EXIT_FAILURE;
     }
 
     printf("PHASE 2: geometry loaded successfully (%llu bodies, %llu zones)\n",
-           (unsigned long long) g.nbodies,
-           (unsigned long long) g.nzones);
+           (unsigned long long) g->nbodies,
+           (unsigned long long) g->nzones);
     fflush(stdout);
 
-    osh_gemca_print_gemca(&g);
+    osh_gemca_print_gemca(g);
 
-    if (plot(&g, 4000, zone) != 0) {
+    if (plot(g, 4000, zone) != 0) {
         fprintf(stderr, "bnct_sdl: plot() failed\n");
+        osh_geometry_workspace_free(geom);
         return EXIT_FAILURE;
     }
 
+    osh_geometry_workspace_free(geom);
     return 0;
 }
 

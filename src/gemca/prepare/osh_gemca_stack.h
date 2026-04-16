@@ -1,5 +1,5 @@
-#ifndef _OSH_GEMCA2_PARSE_STACK
-#define _OSH_GEMCA2_PARSE_STACK
+#ifndef OSH_GEMCA_STACK_H
+#define OSH_GEMCA_STACK_H
 
 #include "gemca/osh_gemca2.h"
 
@@ -26,4 +26,4 @@ struct stackitem *osh_gemca_stack_pop(struct stack *s);
 void osh_gemca_stack_free(struct stack **ps);
 void osh_gemca_stack_print(struct stack *s);
 
-#endif /* _OSH_GEMCA2_PARSE_STACK */
+#endif /* OSH_GEMCA_STACK_H */

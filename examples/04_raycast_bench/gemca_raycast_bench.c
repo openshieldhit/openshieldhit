@@ -30,12 +30,15 @@
 #include <string.h>
 #include <time.h>
 
+#include "apps/osh/osh_geometry_parse.h"
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_geometry_prepared.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "openshieldhit/geometry.h"
 #include "random/osh_rng.h"
 
 /* ---- Window layout --------------------------------------------------------- */
@@ -473,6 +476,7 @@ static void render_comparison(SDL_Renderer *renderer,
 
 int main(int argc, char *argv[]) {
     struct options opts;
+    struct osh_geometry_workspace *geom = NULL;
     struct gemca_workspace *g = NULL;
     struct gemca_runtime rt;
     struct osh_rng rng;
@@ -501,15 +505,16 @@ int main(int argc, char *argv[]) {
 
     /* ---- Load geometry ---------------------------------------------------- */
 
-    if (osh_gemca_workspace_init(&g) != OSH_OK) {
-        fprintf(stderr, "error: failed to allocate gemca workspace\n");
+    if (osh_geometry_parse_file(opts.geo_file, &geom) != OSH_OK) {
+        fprintf(stderr, "error: failed to parse geometry from '%s'\n", opts.geo_file);
         return 1;
     }
-    if (osh_gemca_load(opts.geo_file, g) != OSH_OK) {
-        fprintf(stderr, "error: failed to load geometry from '%s'\n", opts.geo_file);
-        osh_gemca_workspace_free(g);
+    if (osh_geometry_workspace_prepare(geom) != 0) {
+        fprintf(stderr, "error: failed to prepare geometry\n");
+        osh_geometry_workspace_free(geom);
         return 1;
     }
+    g = geom->prepared->gemca;
     osh_gemca_print_gemca(g);
 
     /* ---- Compile runtime -------------------------------------------------- */
@@ -619,6 +624,6 @@ cleanup:
     free(buz);
     free(zone_out);
     osh_gemca_runtime_free(&rt);
-    osh_gemca_workspace_free(g);
+    osh_geometry_workspace_free(geom);
     return rc;
 }

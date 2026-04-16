@@ -18,10 +18,13 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "apps/osh/osh_geometry_parse.h"
 #include "common/osh_logger.h"
 #include "common/osh_rc.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_geometry_prepared.h"
+#include "openshieldhit/geometry.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 
@@ -103,7 +106,8 @@ static void _random_ray(struct ray *r, struct osh_rng *rng, double const bbox_mi
 
 int main(int argc, char *argv[]) {
 
-    struct gemca_workspace g = {0};
+    struct osh_geometry_workspace *geom = NULL;
+    struct gemca_workspace *g = NULL;
     struct osh_rng rng;
     struct ray r;
 
@@ -134,13 +138,19 @@ int main(int argc, char *argv[]) {
 
     /* --- load geometry ---------------------------------------------------- */
     printf("Loading geometry: %s\n", argv[1]);
-    if (osh_gemca_load(argv[1], &g) != OSH_OK) {
-        fprintf(stderr, "osh_gemca_load() failed\n");
+    if (osh_geometry_parse_file(argv[1], &geom) != OSH_OK) {
+        fprintf(stderr, "osh_geometry_parse_file() failed\n");
         return EXIT_FAILURE;
     }
-    printf("  %llu bodies, %llu zones\n", (unsigned long long) g.nbodies, (unsigned long long) g.nzones);
+    if (osh_geometry_workspace_prepare(geom) != 0) {
+        fprintf(stderr, "osh_geometry_workspace_prepare() failed\n");
+        osh_geometry_workspace_free(geom);
+        return EXIT_FAILURE;
+    }
+    g = geom->prepared->gemca;
+    printf("  %llu bodies, %llu zones\n", (unsigned long long) g->nbodies, (unsigned long long) g->nzones);
 
-    _estimate_bbox(&g, bbox_min, bbox_max);
+    _estimate_bbox(g, bbox_min, bbox_max);
     printf("  bbox  x[%.3g, %.3g]  y[%.3g, %.3g]  z[%.3g, %.3g]  (cm)\n",
            bbox_min[0],
            bbox_max[0],
@@ -161,7 +171,7 @@ int main(int argc, char *argv[]) {
     t0 = _now();
     for (i = 0; i < nrays; i++) {
         _random_ray(&r, &rng, bbox_min, bbox_max);
-        sink = osh_gemca_get_zone_index(&g, &r);
+        sink = osh_gemca_get_zone_index(g, &r);
     }
     t1 = _now();
     elapsed = t1 - t0;
@@ -179,11 +189,11 @@ int main(int argc, char *argv[]) {
     t0 = _now();
     for (i = 0; i < nrays; i++) {
         _random_ray(&r, &rng, bbox_min, bbox_max);
-        zone_idx = osh_gemca_get_zone_index(&g, &r);
+        zone_idx = osh_gemca_get_zone_index(g, &r);
         if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
             continue;
         }
-        dsink = osh_gemca_get_distance(g.zones[zone_idx], &r);
+        dsink = osh_gemca_get_distance(g->zones[zone_idx], &r);
     }
     t1 = _now();
     elapsed = t1 - t0;
@@ -191,5 +201,6 @@ int main(int argc, char *argv[]) {
     printf("  %.3f s   %.2f Mrays/s\n", elapsed, (double) nrays / elapsed * 1e-6);
     (void) dsink;
 
+    osh_geometry_workspace_free(geom);
     return 0;
 }

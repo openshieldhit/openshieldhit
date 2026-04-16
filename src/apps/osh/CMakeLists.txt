@@ -1,6 +1,8 @@
 add_library(osh_app_osh
     osh_beam_parse.c
+    osh_geometry_parse.c
     osh_app_osh.c
+    osh_run.c
 )
 
 target_include_directories(osh_app_osh
@@ -8,13 +10,21 @@ target_include_directories(osh_app_osh
         ${PROJECT_SOURCE_DIR}/include
     PRIVATE
         ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_BINARY_DIR}/generated
 )
 
 target_link_libraries(osh_app_osh
+    PUBLIC
+        osh_common
     PRIVATE
         osh_beam
-        osh_common
+        osh_beam_runtime
+        osh_gemca2
+        osh_gemca_runtime
+        osh_material
         osh_particle
+        osh_scoring
+        osh_transport
 )
 
 if(UNIX)

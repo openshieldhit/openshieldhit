@@ -8,6 +8,7 @@ add_executable(bnct_sdl
 target_link_libraries(bnct_sdl
     PRIVATE
         osh_all
+        osh_app_osh
         SDL2::SDL2
 )
 
