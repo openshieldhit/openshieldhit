@@ -7,7 +7,6 @@
 #include "common/osh_coord.h"
 #include "common/osh_ray.h"
 #include "gemca/osh_gemca2.h"
-#include "gemca/osh_geometry_prepared.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "openshieldhit/geometry.h"
 
@@ -78,8 +77,8 @@ static void fill_zone_cases(double *x, double *y, double *z, double *ux, double 
 
 static void test_zone_batch_matches_scalar(void) {
     struct osh_geometry_workspace *geom;
-    struct gemca_workspace *g;
-    struct gemca_runtime rt;
+    struct osh_gemca_prepared *g;
+    struct osh_gemca_runtime rt;
     struct ray r;
     char geo_path[512];
     double x[N_ZONE_CASES];
@@ -100,7 +99,7 @@ static void test_zone_batch_matches_scalar(void) {
     ASSERT_TRUE(osh_geometry_parse_file(geo_path, &geom) == OSH_OK);
     ASSERT_TRUE(geom != NULL);
     ASSERT_TRUE(osh_geometry_workspace_prepare(geom) == 0);
-    g = geom->prepared->gemca;
+    g = geom->prepared;
     ASSERT_TRUE(osh_gemca_runtime_setup(g, &rt) == OSH_OK);
 
     fill_zone_cases(x, y, z, ux, uy, uz);

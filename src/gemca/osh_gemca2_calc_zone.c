@@ -21,7 +21,7 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
    large portions of geometry from detailed evaluation.
  */
 
-size_t osh_gemca_get_zone_index(struct gemca_workspace *g, struct ray *r) {
+size_t osh_gemca_get_zone_index(struct osh_gemca_prepared *g, struct ray *r) {
 
     size_t i;
 

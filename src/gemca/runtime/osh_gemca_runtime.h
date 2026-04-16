@@ -16,13 +16,13 @@ extern "C" {
 #endif
 
 /**
- * @defgroup gemca_runtime Geometry Runtime (GEMCA runtime layer)
+ * @defgroup osh_gemca_runtime Geometry Runtime (GEMCA runtime layer)
  *
  * @brief Compiled, cache-friendly representation of GEMCA geometry for use in
  *        the hot transport kernel.
  *
  * @details
- * The cold @ref gemca_workspace (produced by osh_gemca_load()) stores geometry
+ * The cold @ref osh_gemca_prepared (produced by osh_gemca_load()) stores geometry
  * as a set of pointer-linked structs: zones reference cgnode ASTs, cgnodes
  * reference bodies, bodies reference dynamically-allocated surface arrays.
  * This layout is convenient for parsing but causes pointer-chasing cache misses
@@ -144,12 +144,12 @@ struct gemca_rt_surface {
  * indirection with a direct offset into the runtime's flat surface array.
  * Parse-time fields (name, lineno, a[], tokens) are not carried over.
  *
- * Surfaces belonging to this body occupy `gemca_runtime.surfaces[surf_begin ..
+ * Surfaces belonging to this body occupy `osh_gemca_runtime.surfaces[surf_begin ..
  * surf_begin + nsurfs)` as a contiguous slice.
  */
 struct gemca_rt_body {
     double t[16];      /**< 4x4 row-major transformation matrix (universe → body-local). */
-    size_t surf_begin; /**< Start index into gemca_runtime.surfaces[]. */
+    size_t surf_begin; /**< Start index into osh_gemca_runtime.surfaces[]. */
     int nsurfs;        /**< Number of surfaces in surfaces[surf_begin..surf_begin+nsurfs). */
     int type;          /**< Body type: OSH_GEMCA_BODY_* (used to detect voxel bodies). */
     char coord;        /**< Coordinate system: OSH_COORD_* value. */
@@ -160,7 +160,7 @@ struct gemca_rt_body {
  *
  * @details
  * For GUARD_BODY, PUSH_BODY, and PUSH_VOXEL_BODY: `operand` is the 0-based
- * index into gemca_runtime.bodies[].  For operator instructions (UNION,
+ * index into osh_gemca_runtime.bodies[].  For operator instructions (UNION,
  * INTERSECT, DIFF): `operand` is unused and is set to -1 at setup time.
  */
 struct gemca_rt_insn {
@@ -188,7 +188,7 @@ struct gemca_rt_insn {
  *
  * @note GPU migration: `insns` is a host heap pointer and cannot be followed
  * on a GPU device.  Before writing a GPU kernel, add a flat `insns_flat[]`
- * array and a per-zone `insn_begin[]` offset array to `gemca_runtime` (see
+ * array and a per-zone `insn_begin[]` offset array to `osh_gemca_runtime` (see
  * runtime/README.md for the full plan).  The CPU path is unaffected.
  */
 struct gemca_rt_zone {
@@ -202,7 +202,7 @@ struct gemca_rt_zone {
  * @brief Compiled runtime representation of the full GEMCA geometry.
  *
  * @details
- * Built once from a cold @ref gemca_workspace by osh_gemca_runtime_setup() and
+ * Built once from a cold @ref osh_gemca_prepared by osh_gemca_runtime_setup() and
  * passed to the transport kernel for the duration of a run.  The cold workspace
  * is not owned and must outlive this struct.
  *
@@ -226,14 +226,14 @@ struct gemca_rt_zone {
  * field is zones[j].insns (a heap pointer).  See runtime/README.md for the
  * planned `insns_flat` / `insn_begin` addition that closes this gap.
  */
-struct gemca_runtime {
-    struct gemca_workspace const *workspace; /**< Cold storage reference — not owned. */
-    struct gemca_rt_surface *surfaces;       /**< Flat surface array (owned). */
-    struct gemca_rt_body *bodies;            /**< Flat body array (owned). */
-    struct gemca_rt_zone *zones;             /**< Flat zone array; each zone owns its insns[]. */
-    size_t nsurfaces;                        /**< Number of entries in surfaces[]. */
-    size_t nbodies;                          /**< Number of entries in bodies[]. */
-    size_t nzones;                           /**< Number of entries in zones[]. */
+struct osh_gemca_runtime {
+    struct osh_gemca_prepared const *workspace; /**< Cold storage reference — not owned. */
+    struct gemca_rt_surface *surfaces;          /**< Flat surface array (owned). */
+    struct gemca_rt_body *bodies;               /**< Flat body array (owned). */
+    struct gemca_rt_zone *zones;                /**< Flat zone array; each zone owns its insns[]. */
+    size_t nsurfaces;                           /**< Number of entries in surfaces[]. */
+    size_t nbodies;                             /**< Number of entries in bodies[]. */
+    size_t nzones;                              /**< Number of entries in zones[]. */
 };
 
 /* ---- Lifecycle ------------------------------------------------------------ */
@@ -242,7 +242,7 @@ struct gemca_runtime {
  * @brief Compile a cold gemca workspace into a flat runtime representation.
  *
  * @details
- * Walks the cold @ref gemca_workspace and produces three flat arrays:
+ * Walks the cold @ref osh_gemca_prepared and produces three flat arrays:
  *
  *   1. surfaces[] — all body surfaces copied into a contiguous block with
  *      fixed-size parameter arrays (no `double *p` indirection).
@@ -270,7 +270,7 @@ struct gemca_runtime {
  * @returns OSH_OK on success, OSH_EINVAL if wg or rt is NULL, OSH_ENOMEM on
  *          allocation failure.
  */
-enum osh_status osh_gemca_runtime_setup(struct gemca_workspace const *wg, struct gemca_runtime *rt);
+enum osh_status osh_gemca_runtime_setup(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 
 /**
  * @brief Release all allocations owned by a gemca runtime.
@@ -282,7 +282,7 @@ enum osh_status osh_gemca_runtime_setup(struct gemca_workspace const *wg, struct
  *
  * @param[in] rt  Runtime to release; may be NULL.
  */
-void osh_gemca_runtime_free(struct gemca_runtime *rt);
+void osh_gemca_runtime_free(struct osh_gemca_runtime *rt);
 
 /* ---- Hot query API ------------------------------------------------------- */
 
@@ -304,7 +304,7 @@ void osh_gemca_runtime_free(struct gemca_runtime *rt);
  * @returns 0-based zone index, or OSH_GEMCA_ZONE_INDEX_INVALID if the ray is
  *          outside all defined zones.
  */
-size_t osh_gemca_runtime_get_zone(struct gemca_runtime const *rt, struct ray const *r);
+size_t osh_gemca_runtime_get_zone(struct osh_gemca_runtime const *rt, struct ray const *r);
 
 /**
  * @brief Return the distance a ray travels inside zone `zone_idx` before leaving it.
@@ -327,7 +327,7 @@ size_t osh_gemca_runtime_get_zone(struct gemca_runtime const *rt, struct ray con
  *
  * @returns Total path length inside the zone, in the same units as the geometry.
  */
-double osh_gemca_runtime_get_distance(struct gemca_runtime const *rt, size_t zone_idx, struct ray const *r);
+double osh_gemca_runtime_get_distance(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r);
 
 /* ---- Batch query API ----------------------------------------------------- */
 
@@ -392,7 +392,7 @@ void osh_gemca_runtime_check_surface_batch(struct gemca_rt_surface const *sf,
  * @param[in]  n          Number of rays.
  * @param[out] inside_out Per-ray 0/1 inside results, length @p n.
  */
-void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
+void osh_gemca_runtime_check_body_batch(struct osh_gemca_runtime const *rt,
                                         size_t body_idx,
                                         double const *x,
                                         double const *y,
@@ -424,7 +424,7 @@ void osh_gemca_runtime_check_body_batch(struct gemca_runtime const *rt,
  * @param[in]  n        Number of particles.
  * @param[out] zone_out Receives the zone index for each particle, length @p n.
  */
-void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
+void osh_gemca_runtime_get_zone_batch(struct osh_gemca_runtime const *rt,
                                       double const *x,
                                       double const *y,
                                       double const *z,
@@ -453,7 +453,7 @@ void osh_gemca_runtime_get_zone_batch(struct gemca_runtime const *rt,
  * @param[in]  n            Number of particles.
  * @param[out] dist_out     Receives the boundary distance for each particle, length @p n.
  */
-void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
+void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
                                           double const *x,
                                           double const *y,
                                           double const *z,
@@ -464,7 +464,7 @@ void osh_gemca_runtime_get_distance_batch(struct gemca_runtime const *rt,
                                           size_t n,
                                           double *dist_out);
 
-/** @} */ /* end defgroup gemca_runtime */
+/** @} */ /* end defgroup osh_gemca_runtime */
 
 #ifdef __cplusplus
 }

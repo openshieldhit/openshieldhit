@@ -36,7 +36,6 @@
 #include "common/osh_logger.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
-#include "gemca/osh_geometry_prepared.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "openshieldhit/geometry.h"
 #include "random/osh_rng.h"
@@ -249,8 +248,8 @@ static void generate_chunk(struct osh_rng *rng,
  * A volatile sink accumulates XOR'd zone indices to prevent dead-code
  * elimination by the compiler.
  */
-static void run_benchmark(struct gemca_workspace *g,
-                          struct gemca_runtime const *rt,
+static void run_benchmark(struct osh_gemca_prepared *g,
+                          struct osh_gemca_runtime const *rt,
                           double *bx,
                           double *by,
                           double *bz,
@@ -376,8 +375,8 @@ static void draw_separator(SDL_Renderer *renderer) {
  * has no effect on the comparison.
  */
 static void render_comparison(SDL_Renderer *renderer,
-                              struct gemca_workspace *g,
-                              struct gemca_runtime const *rt,
+                              struct osh_gemca_prepared *g,
+                              struct osh_gemca_runtime const *rt,
                               double half,
                               struct osh_rng *rng,
                               long npoints) {
@@ -477,8 +476,8 @@ static void render_comparison(SDL_Renderer *renderer,
 int main(int argc, char *argv[]) {
     struct options opts;
     struct osh_geometry_workspace *geom = NULL;
-    struct gemca_workspace *g = NULL;
-    struct gemca_runtime rt;
+    struct osh_gemca_prepared *g = NULL;
+    struct osh_gemca_runtime rt;
     struct osh_rng rng;
     double *bx = NULL;
     double *by = NULL;
@@ -514,14 +513,14 @@ int main(int argc, char *argv[]) {
         osh_geometry_workspace_free(geom);
         return 1;
     }
-    g = geom->prepared->gemca;
-    osh_gemca_print_gemca(g);
+    g = geom->prepared;
+    osh_gemca_prepared_print(g);
 
     /* ---- Compile runtime -------------------------------------------------- */
 
     if (osh_gemca_runtime_setup(g, &rt) != OSH_OK) {
         fprintf(stderr, "error: failed to compile gemca runtime\n");
-        osh_gemca_workspace_free(g);
+        osh_geometry_workspace_free(geom);
         return 1;
     }
 

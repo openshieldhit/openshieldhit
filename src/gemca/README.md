@@ -15,7 +15,7 @@ This directory now has three distinct responsibilities:
 3. `src/gemca/prepare/`
    Core-internal preparation and compilation helpers.
    This layer turns the cold geometry model into the internal compatibility
-   workspace `gemca_workspace` by:
+   workspace `osh_gemca_prepared` by:
    - allocating internal body/zone objects
    - building body surfaces and transforms
    - compiling raw zone expressions into pointer-linked CSG trees
@@ -36,5 +36,22 @@ Two consequences follow from that:
   construct cold geometry programmatically and still need the same prepare step
   before runtime compilation.
 
-The current `gemca_workspace` remains an internal compatibility type during the
+The current `osh_gemca_prepared` remains an internal compatibility type during the
 migration. It is no longer the public geometry API.
+
+## Cold structs and compiled state coexist intentionally
+
+After `osh_geometry_workspace_prepare()` succeeds, both representations live in
+memory simultaneously:
+
+- `osh_geometry_workspace` (cold) — the user-facing record: body names, types,
+  raw argument lists, zone expressions, material name strings.
+- `osh_gemca_prepared` (compiled) — derived state: surface lists, transformation
+  matrices, compiled CSG ASTs, resolved material indices.
+
+This is not redundancy to remove. The cold structs are the permanent,
+stable description of the geometry as the user specified it. Post-runtime they
+are the natural source for output headers, result annotations, and any
+serialisation that needs to correlate scoring results back to zone or body
+names. The compiled workspace is an ephemeral runtime artefact that could in
+principle be rebuilt from the cold model at any time.

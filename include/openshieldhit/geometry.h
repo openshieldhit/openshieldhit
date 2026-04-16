@@ -32,7 +32,7 @@ extern "C" {
  */
 
 /** @cond PRIVATE */
-struct osh_geometry_prepared; /* defined in src/gemca/osh_geometry_prepared.h */
+struct osh_gemca_prepared; /* defined in src/gemca/osh_gemca2.h */
 /** @endcond */
 
 /**
@@ -94,7 +94,7 @@ struct osh_geometry_workspace {
     struct osh_geometry_zone *zones;       /**< Flat array of zone descriptions; length is @p nzones. */
     size_t                    nbodies;     /**< Number of entries in @p bodies[]. */
     size_t                    nzones;      /**< Number of entries in @p zones[]. */
-    struct osh_geometry_prepared *prepared; /**< Internal prepared state; owned by core. */
+    struct osh_gemca_prepared *prepared; /**< Internal prepared state; owned by core. */
 };
 
 /**

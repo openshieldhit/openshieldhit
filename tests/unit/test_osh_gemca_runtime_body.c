@@ -230,7 +230,7 @@ static void fill_bzalign_capped_cyl_cases(double *x, double *y, double *z, doubl
 }
 
 static void
-compare_body_batch_with_scalar(struct gemca_runtime const *rt,
+compare_body_batch_with_scalar(struct osh_gemca_runtime const *rt,
                                size_t body_idx,
                                struct body const *cold_body,
                                void (*fill_cases)(double *, double *, double *, double *, double *, double *)) {
@@ -265,7 +265,7 @@ compare_body_batch_with_scalar(struct gemca_runtime const *rt,
 }
 
 static void test_body_batch_matches_scalar(void) {
-    struct gemca_runtime rt;
+    struct osh_gemca_runtime rt;
     struct gemca_rt_body rt_bodies[3];
     struct gemca_rt_surface rt_surfaces[10];
     struct body cold_bodies[3];

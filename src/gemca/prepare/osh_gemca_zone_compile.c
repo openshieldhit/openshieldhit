@@ -8,11 +8,11 @@
 #include "gemca/osh_gemca2.h"
 #include "gemca/prepare/osh_gemca_stack.h"
 
-static struct body *_body_from_name(char *bname, struct gemca_workspace *g);
+static struct body *_body_from_name(char *bname, struct osh_gemca_prepared *g);
 
 static struct cgnode *_new_node_comp(struct stack *st, char operator);
 static struct cgnode *_new_node_body(struct body *b);
-static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g);
+static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g);
 
 static size_t _reformat(char const *input, char **output);
 static int _tokenizer(char const *input, char ***t);
@@ -56,7 +56,7 @@ enum osh_status osh_gemca_zone_init(struct zone **zone) {
  *
  * @author Niels Bassler
  */
-static struct body *_body_from_name(char *bname, struct gemca_workspace *g) {
+static struct body *_body_from_name(char *bname, struct osh_gemca_prepared *g) {
 
     size_t i = 0;
 
@@ -140,7 +140,7 @@ static struct cgnode *_new_node_body(struct body *b) {
  *
  * @author Niels Bassler
  */
-static struct cgnode *_build_ast(struct zone *z, struct gemca_workspace *g) {
+static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
 
     size_t i;
     char *token;
@@ -506,7 +506,7 @@ static int _has_null_body(struct cgnode const *node) {
     return _has_null_body(node->left) || _has_null_body(node->right);
 }
 
-enum osh_status osh_gemca_zone_compile_expr(struct zone *z, char const *expr, struct gemca_workspace *g) {
+enum osh_status osh_gemca_zone_compile_expr(struct zone *z, char const *expr, struct osh_gemca_prepared *g) {
     char *tstr = NULL;
     char **tokens = NULL;
     int ntokens;

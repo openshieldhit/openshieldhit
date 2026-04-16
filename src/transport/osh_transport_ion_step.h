@@ -11,7 +11,7 @@
 #include "common/osh_rc.h"
 
 struct osh_particle_pool;
-struct gemca_runtime;
+struct osh_gemca_runtime;
 struct osh_transport_context;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
@@ -41,7 +41,7 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
                                            size_t slot,
                                            size_t zone_idx,
                                            double boundary_ds,
-                                           struct gemca_runtime const *geom_rt,
+                                           struct osh_gemca_runtime const *geom_rt,
                                            struct osh_transport_context *transport_ctx,
                                            struct osh_material_runtime const *tables,
                                            struct osh_scoring_runtime *scoring,
