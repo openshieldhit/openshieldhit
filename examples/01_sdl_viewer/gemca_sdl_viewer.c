@@ -13,7 +13,6 @@
 #include "common/osh_logger.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
-#include "gemca/osh_geometry_prepared.h"
 #include "openshieldhit/geometry.h"
 #include "transport/osh_transport.h"
 
@@ -38,14 +37,14 @@ SDL_Color colormap[6] = {
 
 int random_ray(struct ray *r);
 int zero_ray(struct ray *r);
-int plot(struct gemca_workspace *g, int ndots);
+int plot(struct osh_gemca_prepared *g, int ndots);
 void setRendererColor(SDL_Renderer *renderer, int zid);
 void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
 
 int main(int argc, char *argv[]) {
 
     struct osh_geometry_workspace *geom = NULL;
-    struct gemca_workspace *g = NULL;
+    struct osh_gemca_prepared *g = NULL;
 
     /* Setup logger, select OSH_LOG_DEBUG for more information. */
     osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
@@ -77,8 +76,8 @@ int main(int argc, char *argv[]) {
         osh_geometry_workspace_free(geom);
         return EXIT_FAILURE;
     }
-    g = geom->prepared->gemca;
-    osh_gemca_print_gemca(g);
+    g = geom->prepared;
+    osh_gemca_prepared_print(g);
 
     plot(g, 4);
 
@@ -154,7 +153,7 @@ int ray2line(struct ray *r, double d, float *x, float *z) {
     return 0;
 }
 
-int plot(struct gemca_workspace *g, int ndots) {
+int plot(struct osh_gemca_prepared *g, int ndots) {
     int const windowHeight = WINDOW_HEIGHT;
     int const windowWidth = WINDOW_WIDTH;
     int pointLocationx;
