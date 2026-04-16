@@ -370,7 +370,13 @@ static void ion_step_length(struct ion_step_ctx *ctx,
     double ds_theta;
     double z_eff_0;
 
-    params = transport_ctx ? &transport_ctx->params : NULL;
+    if (!transport_ctx) {
+        pool->e[slot] = 0.0;
+        ctx->done = 1;
+        ctx->done_rc = OSH_EINVAL;
+        return;
+    }
+    params = &transport_ctx->params;
     target_energy_loss = ctx->e0 * (double) params->deltae;
     ctx->demin_limited = 0;
     if (ctx->demin_total > target_energy_loss) {
@@ -728,7 +734,6 @@ static double cutoff_total_energy(struct osh_transport_params const *params,
 
     a_proj = (part->a > 0u) ? (double) part->a : 1.0;
     cutoff_total = OSH_TRANSPORT_ION_EMIN_MEV_PER_U * a_proj;
-    cutoff_from_params = 0.0;
     if (params) {
         cutoff_from_params = (double) params->tcut * a_proj;
         if (cutoff_from_params > cutoff_total) {
@@ -746,6 +751,9 @@ static double energy_from_residual_range(struct osh_material_runtime const *tabl
                                          size_t material_idx,
                                          size_t projectile_idx,
                                          double residual_range) {
+    /* TODO(simd): add a batch form alongside osh_material_runtime_range_lookup()
+     * so the transport stepper can process residual-range -> energy inversion
+     * for multiple lanes without scalar binary-searching each slot separately. */
     float const *range_col;
     size_t lo;
     size_t hi;

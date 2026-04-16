@@ -590,6 +590,10 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
         src_page = &ws->outputs[prepared_pages[page_idx].output_idx].pages[prepared_pages[page_idx].src_page_idx];
         dst_page = &rt->pages[page_idx];
 
+        if (!out->page_indices || prepared_pages[page_idx].src_page_idx >= out->npages) {
+            rc = OSH_ESTATE;
+            goto fail;
+        }
         out->page_indices[prepared_pages[page_idx].src_page_idx] = page_idx;
         dst_page->quantity = strdup(src_page->quantity);
         if (!dst_page->quantity) {

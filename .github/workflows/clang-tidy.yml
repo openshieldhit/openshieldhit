@@ -31,9 +31,21 @@ jobs:
       - name: Configure project
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DOSH_BUILD_EXAMPLES=ON
 
-      - name: Run clang-tidy
+      - name: Run clang-tidy on changed lines
+        shell: bash
         run: |
-          find src examples tests \
-            -name '*.c' \
-            -print0 \
-            | xargs -0 run-clang-tidy-19 -p build -quiet
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "No valid diff base found; skipping clang-tidy."
+            exit 0
+          fi
+
+          git diff --diff-filter=AMRT -U0 "$BASE" "$HEAD" -- src examples tests \
+            | clang-tidy-diff-19.py -p1 -path build -quiet
