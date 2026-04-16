@@ -7,7 +7,8 @@
 extern "C" {
 #endif
 
-struct beam_workspace;
+struct osh_transport_context;
+struct osh_beam_runtime;
 struct gemca_runtime;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
@@ -16,7 +17,7 @@ struct osh_scoring_runtime;
  * @brief Wavefront CSDA transport loop for ion primaries.
  *
  * @details
- * Transports all beam->nstat ion primaries to termination using a pool-based
+ * Transports all params->nstat ion primaries to termination using a pool-based
  * (BFS) wavefront loop.  Physics: CSDA energy loss, Highland/Molière MCS
  * (random-hinge method), Bohr Gaussian energy straggling.  No nuclear
  * interactions or secondaries.
@@ -33,7 +34,8 @@ struct osh_scoring_runtime;
  *
  * @sa osh_transport_run_minimal() — public dispatcher that calls this.
  */
-enum osh_status osh_transport_ion_run_minimal(struct beam_workspace const *beam,
+enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *transport_ctx,
+                                              struct osh_beam_runtime *beam_rt,
                                               struct gemca_runtime const *geom_rt,
                                               struct osh_material_runtime const *tables,
                                               struct osh_scoring_runtime *scoring);

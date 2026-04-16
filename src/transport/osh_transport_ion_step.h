@@ -12,7 +12,7 @@
 
 struct osh_particle_pool;
 struct gemca_runtime;
-struct beam_workspace;
+struct osh_transport_context;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
 struct osh_rng;
@@ -42,10 +42,9 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
                                            size_t zone_idx,
                                            double boundary_ds,
                                            struct gemca_runtime const *geom_rt,
-                                           struct beam_workspace const *beam,
+                                           struct osh_transport_context *transport_ctx,
                                            struct osh_material_runtime const *tables,
                                            struct osh_scoring_runtime *scoring,
-                                           double deltae,
                                            struct osh_rng *rng);
 
 #endif /* OSH_TRANSPORT_ION_STEP_H */

@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "beam/osh_beam.h"
+#include "beam/osh_beamdef.h"
+#include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_logger.h"
 #include "common/osh_rc.h"
 #include "common/osh_version.h"
@@ -231,6 +233,8 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
     char *mat_path = NULL;
     char *detect_path = NULL;
     struct beam_workspace *beam = NULL;
+    struct osh_beam_runtime *beam_rt = NULL;
+    struct osh_transport_context transport_ctx;
     struct gemca_workspace *geom = NULL;
     struct gemca_runtime geom_rt;
     struct material_workspace *mat = NULL;
@@ -443,13 +447,55 @@ enum openshieldhit_status openshieldhit_run(openshieldhit_context_t *ctx, FILE *
                 (unsigned long long) scoring_runtime.npages);
     }
 
-    if (osh_transport_run_minimal(beam, &geom_rt, &transport_tables, &scoring_runtime) != OSH_OK) {
+    memset(&transport_ctx, 0, sizeof(transport_ctx));
+    transport_ctx.params.nstat = beam->nstat;
+    transport_ctx.params.deltae = beam->deltae;
+    transport_ctx.params.demin = beam->demin;
+    transport_ctx.params.tcut = beam->tcut;
+    transport_ctx.params.rndseed = beam->rndseed;
+    transport_ctx.params.rndoffset = beam->rndoffset;
+    switch (beam->scatter) {
+    case OSH_BEAM_MSCAT_OFF:
+        transport_ctx.params.mcs_mode = OSH_TRANSPORT_MCS_OFF;
+        break;
+    case OSH_BEAM_MSCAT_GAUSS:
+        transport_ctx.params.mcs_mode = OSH_TRANSPORT_MCS_GAUSSIAN;
+        break;
+    case OSH_BEAM_MSCAT_MOLIERE:
+        transport_ctx.params.mcs_mode = OSH_TRANSPORT_MCS_MOLIERE;
+        break;
+    default:
+        transport_ctx.params.mcs_mode = OSH_TRANSPORT_MCS_OFF;
+        break;
+    }
+    switch (beam->straggl) {
+    case OSH_BEAM_STRAGG_OFF:
+        transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_OFF;
+        break;
+    case OSH_BEAM_STRAGG_GAUSS:
+        transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_GAUSSIAN;
+        break;
+    case OSH_BEAM_STRAGG_VAVILOV:
+        transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_VAVILOV;
+        break;
+    default:
+        transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_OFF;
+        break;
+    }
+
+    if (osh_beam_runtime_setup(beam, &beam_rt) != OSH_OK) {
+        ctx_set_error(ctx, err, "%s", "failed to initialise beam runtime");
+        rc = OPENSHIELDHIT_STATUS_STATE_ERROR;
+        goto cleanup;
+    }
+
+    if (osh_transport_run_minimal(&transport_ctx, beam_rt, &geom_rt, &transport_tables, &scoring_runtime) != OSH_OK) {
         ctx_set_error(ctx, err, "%s", "minimal transport failed");
         rc = OPENSHIELDHIT_STATUS_STATE_ERROR;
         goto cleanup;
     }
     if (out) {
-        fprintf(out, "Transport completed: %llu primaries.\n", (unsigned long long) beam->nstat);
+        fprintf(out, "Transport completed: %llu primaries.\n", (unsigned long long) transport_ctx.params.nstat);
     }
 
     if (osh_scoring_postprocess(&scoring_runtime) != OSH_OK) {
@@ -492,6 +538,7 @@ cleanup:
     if (mat) {
         osh_material_workspace_free(mat);
     }
+    osh_beam_runtime_free(beam_rt);
     if (beam) {
         osh_beam_workspace_free(beam);
     }

@@ -9,7 +9,8 @@
 /* ---- Forward declarations ------------------------------------------------ */
 
 static enum osh_status dispatch_transport_family(enum osh_transport_family family,
-                                                 struct beam_workspace const *beam,
+                                                 struct osh_transport_context *transport_ctx,
+                                                 struct osh_beam_runtime *beam_rt,
                                                  struct gemca_runtime const *geom_rt,
                                                  struct osh_material_runtime const *tables,
                                                  struct osh_scoring_runtime *scoring);
@@ -33,7 +34,8 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
  * family is enabled and seeded with primary work, so the function preserves
  * the current ion-only behaviour exactly.
  */
-enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
+enum osh_status osh_transport_run_minimal(struct osh_transport_context *transport_ctx,
+                                          struct osh_beam_runtime *beam_rt,
                                           struct gemca_runtime const *geom_rt,
                                           struct osh_material_runtime const *tables,
                                           struct osh_scoring_runtime *scoring) {
@@ -53,7 +55,7 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
         return OSH_OK;
     }
 
-    return dispatch_transport_family(family, beam, geom_rt, tables, scoring);
+    return dispatch_transport_family(family, transport_ctx, beam_rt, geom_rt, tables, scoring);
 }
 
 /**
@@ -65,7 +67,7 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
  * per-family source files through the rest of transport/.
  *
  * @param[in]     family     Scheduled family to transport.
- * @param[in]     beam       Beam workspace for the run.
+ * @param[in]     beam_rt    Hot beam runtime for primary generation.
  * @param[in]     geom_rt    Compiled geometry runtime.
  * @param[in]     tables     Hot material runtime tables.
  * @param[in,out] scoring    Scoring runtime.
@@ -74,17 +76,18 @@ enum osh_status osh_transport_run_minimal(struct beam_workspace const *beam,
  *          implementation, or another OSH_E* from the family kernel.
  */
 static enum osh_status dispatch_transport_family(enum osh_transport_family family,
-                                                 struct beam_workspace const *beam,
+                                                 struct osh_transport_context *transport_ctx,
+                                                 struct osh_beam_runtime *beam_rt,
                                                  struct gemca_runtime const *geom_rt,
                                                  struct osh_material_runtime const *tables,
                                                  struct osh_scoring_runtime *scoring) {
     switch (family) {
     case OSH_TRANSPORT_FAMILY_ION:
-        return osh_transport_ion_run_minimal(beam, geom_rt, tables, scoring);
+        return osh_transport_ion_run_minimal(transport_ctx, beam_rt, geom_rt, tables, scoring);
     case OSH_TRANSPORT_FAMILY_NEUTRON:
-        return osh_transport_neutron_run_minimal(beam, geom_rt, tables, scoring);
+        return osh_transport_neutron_run_minimal(transport_ctx, beam_rt, geom_rt, tables, scoring);
     case OSH_TRANSPORT_FAMILY_PHOTON:
-        return osh_transport_photon_run_minimal(beam, geom_rt, tables, scoring);
+        return osh_transport_photon_run_minimal(transport_ctx, beam_rt, geom_rt, tables, scoring);
     case OSH_TRANSPORT_FAMILY_ELECTRON:
     case OSH_TRANSPORT_FAMILY_COUNT:
         break;
