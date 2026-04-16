@@ -475,7 +475,9 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
     size_t nmat, nproj, ne, nbytes_sp, nbytes_range;
     size_t mat_idx, proj_idx, e_idx, base;
     size_t i;
+    unsigned int z, a;
     double dlog, log_e, e_val;
+    double mass_mev;
     struct osh_material_runtime t;
     struct material const *mat;
     struct osh_material_loaddedx_table src;
@@ -537,10 +539,6 @@ osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, st
     }
 
     for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
-        unsigned int z;
-        unsigned int a;
-        double mass_mev;
-
         z = (unsigned int) (proj_idx + 1u);
         if (!osh_particle_default_isotope_a(z, &a)) {
             osh_error("Unsupported projectile Z=%u: no default isotope in the isotope database", z);

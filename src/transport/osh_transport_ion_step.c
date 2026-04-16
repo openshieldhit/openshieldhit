@@ -458,6 +458,7 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
     double z_eff;
     double theta0;
     double boundary_tail_ds;
+    double v_in[3];
     struct ray hinge_ray;
 
     if (ctx->preclip_hits_boundary) {
@@ -500,7 +501,9 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
     if (ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
         theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, proposed_ds_gcm2, ctx->mat_x0_gcm2);
         if (theta0 > 0.0) {
-            double const v_in[3] = {pool->ux[slot], pool->uy[slot], pool->uz[slot]};
+            v_in[0] = pool->ux[slot];
+            v_in[1] = pool->uy[slot];
+            v_in[2] = pool->uz[slot];
             osh_physics_moliere_scatter(v_in, ctx->w_scat, theta0, rng);
         }
     }
@@ -558,6 +561,7 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     double z_eff;
     double sigma_strag;
     double theta0;
+    double v_in[3];
 
     ctx->ds_gcm2 = ctx->rho * ctx->step_len;
     residual_range = ctx->r0 - ctx->rho * ctx->step_len;
@@ -606,7 +610,9 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
         z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
         theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, ctx->ds_gcm2, ctx->mat_x0_gcm2);
         if (theta0 > 0.0) {
-            double const v_in[3] = {pool->ux[slot], pool->uy[slot], pool->uz[slot]};
+            v_in[0] = pool->ux[slot];
+            v_in[1] = pool->uy[slot];
+            v_in[2] = pool->uz[slot];
             osh_physics_moliere_scatter(v_in, ctx->w_scat, theta0, rng);
         }
     }

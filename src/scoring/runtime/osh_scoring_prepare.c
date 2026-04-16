@@ -419,6 +419,7 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
     size_t current_group;
     long gidx;
     long fidx;
+    enum osh_scoring_score_kind score_kind;
     long *output_geom_idx = NULL;
     size_t *geom_page_counts = NULL;
     struct prepared_page_ref *prepared_pages = NULL;
@@ -508,8 +509,6 @@ enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, stru
             goto fail;
         }
         for (j = 0; j < ws->outputs[i].npages; ++j) {
-            enum osh_scoring_score_kind score_kind;
-
             score_kind = quantity_to_score_kind(ws->outputs[i].pages[j].quantity);
             if (!runtime_supports_score_kind(score_kind)) {
                 osh_error("Scoring output '%s' uses unsupported quantity '%s' for runtime scoring",
