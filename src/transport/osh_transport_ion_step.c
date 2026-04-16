@@ -3,8 +3,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "beam/osh_beam.h"
-#include "beam/osh_beamdef.h"
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_particle_pool.h"
@@ -18,6 +16,7 @@
 #include "physics/osh_physics_straggling.h"
 #include "random/osh_rng.h"
 #include "scoring/runtime/osh_scoring_step.h"
+#include "transport/osh_transport.h"
 
 /*
  * Spatial boundary epsilon [cm]: particles closer than this to a zone boundary
@@ -38,6 +37,13 @@
  * keeping the Highland Gaussian approximation valid.
  */
 #define OSH_TRANSPORT_THETA_MAX_RAD 0.1
+
+/*
+ * Hard minimum ion kinetic energy [MeV/nucleon].
+ * Particles below this threshold are killed regardless of tcut or table emin.
+ * Mirrors the OSH_BEAM_TMIN floor previously imported from beam headers.
+ */
+#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U 0.1
 
 /* ---- Per-step computation context --------------------------------------- */
 
@@ -106,7 +112,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
                            size_t zone_idx,
                            double boundary_ds,
                            struct gemca_runtime const *geom_rt,
-                           struct beam_workspace const *beam,
+                           struct osh_transport_context const *transport_ctx,
                            struct osh_material_runtime const *tables);
 
 static void ion_step_vacuum(struct ion_step_ctx *ctx);
@@ -114,8 +120,8 @@ static void ion_step_vacuum(struct ion_step_ctx *ctx);
 static void ion_step_length(struct ion_step_ctx *ctx,
                             struct osh_particle_pool *pool,
                             size_t slot,
-                            struct osh_material_runtime const *tables,
-                            double deltae);
+                            struct osh_transport_context *transport_ctx,
+                            struct osh_material_runtime const *tables);
 
 static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
                                                   struct osh_particle_pool *pool,
@@ -136,7 +142,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_scoring_runtime *scoring);
 
 /* Table helpers */
-static double cutoff_total_energy(struct beam_workspace const *beam,
+static double cutoff_total_energy(struct osh_transport_params const *params,
                                   struct osh_material_runtime const *tables,
                                   struct particle const *part);
 static double energy_from_residual_range(struct osh_material_runtime const *tables,
@@ -171,16 +177,15 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
                                            size_t zone_idx,
                                            double boundary_ds,
                                            struct gemca_runtime const *geom_rt,
-                                           struct beam_workspace const *beam,
+                                           struct osh_transport_context *transport_ctx,
                                            struct osh_material_runtime const *tables,
                                            struct osh_scoring_runtime *scoring,
-                                           double deltae,
                                            struct osh_rng *rng) {
     struct ion_step_ctx ctx;
     enum osh_status rc;
 
     /* Phase 1 — identify particle, load material, handle early exits */
-    ion_step_setup(&ctx, pool, slot, zone_idx, boundary_ds, geom_rt, beam, tables);
+    ion_step_setup(&ctx, pool, slot, zone_idx, boundary_ds, geom_rt, transport_ctx, tables);
     if (ctx.done)
         return ctx.done_rc;
 
@@ -189,7 +194,7 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
         ion_step_vacuum(&ctx);
     } else {
         /* Phase 2b — determine step length (boundary / CSDA / θ limits) */
-        ion_step_length(&ctx, pool, slot, tables, deltae);
+        ion_step_length(&ctx, pool, slot, transport_ctx, tables);
         if (ctx.done)
             return ctx.done_rc;
 
@@ -228,11 +233,13 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
                            size_t zone_idx,
                            double boundary_ds,
                            struct gemca_runtime const *geom_rt,
-                           struct beam_workspace const *beam,
+                           struct osh_transport_context const *transport_ctx,
                            struct osh_material_runtime const *tables) {
     struct gemca_rt_zone const *zone;
+    struct osh_transport_params const *params;
     enum osh_status rc;
 
+    params = transport_ctx ? &transport_ctx->params : NULL;
     ctx->done = 0;
     ctx->done_rc = OSH_OK;
     ctx->part = pool->species[slot];
@@ -241,8 +248,8 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->zone_idx = zone_idx;
     ctx->boundary_ds = boundary_ds;
     ctx->demin_total = 0.0;
-    if (beam && beam->demin > 0.0f) {
-        ctx->demin_total = (double) beam->demin * ctx->a_proj;
+    if (params && params->demin > 0.0f) {
+        ctx->demin_total = (double) params->demin * ctx->a_proj;
     }
 
     rc = find_projectile_index(tables, ctx->part, &ctx->projectile_idx);
@@ -252,7 +259,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
         return;
     }
 
-    ctx->cutoff = cutoff_total_energy(beam, tables, ctx->part);
+    ctx->cutoff = cutoff_total_energy(params, tables, ctx->part);
     if (ctx->e0 <= ctx->cutoff) {
         pool->e[slot] = 0.0;
         ctx->done = 1;
@@ -301,8 +308,8 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->mat_z_over_a = (double) tables->z_over_a[zone->material_idx];
     ctx->mat_x0_gcm2 = (double) tables->rad_length[zone->material_idx];
     ctx->proj_mass_mev = tables->projectile_mass_mev[ctx->projectile_idx];
-    ctx->enable_mcs = (beam && beam->scatter != OSH_BEAM_MSCAT_OFF);
-    ctx->enable_straggling = (beam && beam->straggl != OSH_BEAM_STRAGG_OFF);
+    ctx->enable_mcs = (params && params->mcs_mode != OSH_TRANSPORT_MCS_OFF);
+    ctx->enable_straggling = (params && params->straggling_mode != OSH_TRANSPORT_STRAGGLING_OFF);
     ctx->is_vacuum = (is_vacuum_material(zone->material_idx) || ctx->rho <= 0.0);
 
     /* Default exit direction: incident direction (overwritten by MCS phases) */
@@ -354,19 +361,17 @@ static void ion_step_vacuum(struct ion_step_ctx *ctx) {
 static void ion_step_length(struct ion_step_ctx *ctx,
                             struct osh_particle_pool *pool,
                             size_t slot,
-                            struct osh_material_runtime const *tables,
-                            double deltae) {
-    /* TODO(thread-safety): function-local static — not safe once multiple worker
-     * threads call this concurrently.  Replace with an atomic flag or move the
-     * warning into the scheduler / wavefront loop before threading is added. */
-    static char warned_boundary_demin_override = 0;
+                            struct osh_transport_context *transport_ctx,
+                            struct osh_material_runtime const *tables) {
+    struct osh_transport_params const *params;
     double target_energy_loss;
     double r1_csda;
     double ds_csda;
     double ds_theta;
     double z_eff_0;
 
-    target_energy_loss = ctx->e0 * deltae;
+    params = transport_ctx ? &transport_ctx->params : NULL;
+    target_energy_loss = ctx->e0 * (double) params->deltae;
     ctx->demin_limited = 0;
     if (ctx->demin_total > target_energy_loss) {
         target_energy_loss = ctx->demin_total;
@@ -414,15 +419,15 @@ static void ion_step_length(struct ion_step_ctx *ctx,
     ctx->preclip_hits_boundary = (ctx->boundary_ds - ctx->preclip_step_len <= OSH_TRANSPORT_BOUNDARY_EPS);
     ctx->preclip_is_csda_limited =
         (fabs(ctx->preclip_step_len - ds_csda) <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->preclip_step_len));
-    if (ctx->demin_limited && ctx->boundary_ds + OSH_TRANSPORT_BOUNDARY_EPS < ds_csda
-        && !warned_boundary_demin_override) {
+    if (ctx->demin_limited && ctx->boundary_ds + OSH_TRANSPORT_BOUNDARY_EPS < ds_csda && transport_ctx
+        && !transport_ctx->warned_boundary_demin_override) {
         osh_warn("transport: boundary-limited step shorter than DEMIN; allowing sub-DEMIN step near boundary "
                  "(boundary_ds=%.17g cm, demin_loss=%.17g MeV, e0=%.17g MeV, zone=%zu)",
                  ctx->boundary_ds,
                  ctx->demin_total,
                  ctx->e0,
                  ctx->zone_idx);
-        warned_boundary_demin_override = 1;
+        transport_ctx->warned_boundary_demin_override = 1;
     }
 }
 
@@ -713,21 +718,21 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
 
 /* ---- Table helpers ------------------------------------------------------- */
 
-static double cutoff_total_energy(struct beam_workspace const *beam,
+static double cutoff_total_energy(struct osh_transport_params const *params,
                                   struct osh_material_runtime const *tables,
                                   struct particle const *part) {
     double a_proj;
     double cutoff_total;
-    double cutoff_from_beam;
+    double cutoff_from_params;
     double cutoff_from_transport;
 
     a_proj = (part->a > 0u) ? (double) part->a : 1.0;
-    cutoff_total = OSH_BEAM_TMIN;
-    cutoff_from_beam = 0.0;
-    if (beam) {
-        cutoff_from_beam = (double) beam->tcut * a_proj;
-        if (cutoff_from_beam > cutoff_total) {
-            cutoff_total = cutoff_from_beam;
+    cutoff_total = OSH_TRANSPORT_ION_EMIN_MEV_PER_U * a_proj;
+    cutoff_from_params = 0.0;
+    if (params) {
+        cutoff_from_params = (double) params->tcut * a_proj;
+        if (cutoff_from_params > cutoff_total) {
+            cutoff_total = cutoff_from_params;
         }
     }
     cutoff_from_transport = tables->emin * a_proj;
