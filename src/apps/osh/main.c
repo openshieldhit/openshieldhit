@@ -68,6 +68,8 @@ int main(int argc, char *argv[]) {
     run_opt.detect_path = opt.detect_path;
     run_opt.nstat = opt.nstat;
     run_opt.has_nstat = opt.has_nstat;
+    run_opt.seed_offset = opt.seed_offset;
+    run_opt.has_seed_offset = opt.has_seed_offset;
     run_opt.validate_only = opt.dry_run ? 1 : 0;
 
     rc = osh_run(&run_opt, stdout, stderr);
