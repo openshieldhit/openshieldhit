@@ -221,6 +221,7 @@ static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
     si = osh_gemca_stack_pop(st);
     if (si == NULL) {
         osh_error("empty zone description");
+        return NULL;
     }
     z->node = *si->v.cgnode;
     free(si);
@@ -262,9 +263,13 @@ static size_t _reformat(char const *input, char **output) {
     if (il > ol) {
         ol = 2 * il;
     }
-    *output = realloc(*output, ol * sizeof(char));
-    if (*output == NULL) {
-        osh_error("_reformat(): cannot malloc");
+    {
+        char *tmp = realloc(*output, ol * sizeof(char));
+        if (tmp == NULL) {
+            osh_error("_reformat(): cannot malloc");
+            return -1;
+        }
+        *output = tmp;
     }
     memset(*output, 0, ol);
 
@@ -324,9 +329,13 @@ static size_t _reformat(char const *input, char **output) {
         /* check if output string will need more memory */
         if ((j + 4) > ol) {
             ol += 0x100; /* add another 256 bytes */
-            *output = realloc(*output, ol * sizeof(char));
-            if (*output == NULL) {
-                osh_error("_reformat(): cannot realloc #2");
+            {
+                char *tmp = realloc(*output, ol * sizeof(char));
+                if (tmp == NULL) {
+                    osh_error("_reformat(): cannot realloc #2");
+                    return -1;
+                }
+                *output = tmp;
             }
         }
 
@@ -336,9 +345,13 @@ static size_t _reformat(char const *input, char **output) {
     (*output)[j] = '\0';
 
     /* trim size of output string to the memory actually needed */
-    *output = realloc(*output, (j + 1) * sizeof(char));
-    if (*output == NULL) {
-        osh_error("_reformat(): cannot realloc #3");
+    {
+        char *tmp = realloc(*output, (j + 1) * sizeof(char));
+        if (tmp == NULL) {
+            osh_error("_reformat(): cannot realloc #3");
+            return -1;
+        }
+        *output = tmp;
     }
 
     return j;
@@ -389,6 +402,7 @@ static int _tokenizer(char const *input, char ***ptokens) {
     *ptokens = (char **) calloc(n, sizeof(char *));
     if (*ptokens == NULL) {
         osh_error("_tokenizer(): cannot allocate token list");
+        return -1;
     }
 
     /* Now repeat the loop, while also adding the tokens to the token list. */

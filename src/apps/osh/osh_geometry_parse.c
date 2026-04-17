@@ -299,8 +299,6 @@ static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_wo
 
             btype = btype_new;
             body_active = 1;
-            npar = 0;
-            off = 0;
 
             if (!args) {
                 osh_error("%s line %d: missing body name or parameters", shf->filename, lineno);

@@ -63,7 +63,9 @@ static int _spotlist_detect_layout(FILE *fp, size_t *nspots_out, int *ncols_out)
         return OSH_EINVAL;
     }
 
-    rewind(fp);
+    if (fseek(fp, 0L, SEEK_SET) != 0) {
+        return OSH_EIO;
+    }
     clearerr(fp);
 
     nspots = 0;
@@ -246,7 +248,9 @@ int osh_beam_spotlist_load(struct beam_workspace *beam, char const *spotlist_pat
 
     template_spot = beam->spots[0];
 
-    rewind(fp);
+    if (fseek(fp, 0L, SEEK_SET) != 0) {
+        return OSH_EIO;
+    }
     clearerr(fp);
 
     i = 0;
