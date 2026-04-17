@@ -84,7 +84,8 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         struct osh_geometry_body const *cb = &ws->bodies[i];
         struct body *b;
 
-        if ((rc = osh_gemca_body_init(&b)) != OSH_OK) {
+        rc = osh_gemca_body_init(&b);
+        if (rc != OSH_OK) {
             goto fail;
         }
         gemca->bodies[i] = b;
@@ -111,7 +112,8 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
     }
 
     /* Compute surfaces and transformation matrices for all bodies. */
-    if ((rc = osh_gemca_body_setup(gemca)) != OSH_OK) {
+    rc = osh_gemca_body_setup(gemca);
+    if (rc != OSH_OK) {
         goto fail;
     }
 
@@ -130,7 +132,8 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         struct osh_geometry_zone const *cz = &ws->zones[i];
         struct zone *z;
 
-        if ((rc = osh_gemca_zone_init(&z)) != OSH_OK) {
+        rc = osh_gemca_zone_init(&z);
+        if (rc != OSH_OK) {
             goto fail;
         }
         gemca->zones[i] = z;
@@ -155,7 +158,8 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
          * set up already (step 2 above) because the tokeniser resolves body
          * names to pointers at this stage. */
         if (cz->expr && cz->expr[0]) {
-            if ((rc = osh_gemca_zone_compile_expr(z, cz->expr, gemca)) != OSH_OK) {
+            rc = osh_gemca_zone_compile_expr(z, cz->expr, gemca);
+            if (rc != OSH_OK) {
                 goto fail;
             }
         }
