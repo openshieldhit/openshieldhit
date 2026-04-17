@@ -30,7 +30,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "apps/osh/osh_geometry_parse.h"
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
@@ -504,13 +504,8 @@ int main(int argc, char *argv[]) {
 
     /* ---- Load geometry ---------------------------------------------------- */
 
-    if (osh_geometry_parse_file(opts.geo_file, &geom) != OSH_OK) {
-        fprintf(stderr, "error: failed to parse geometry from '%s'\n", opts.geo_file);
-        return 1;
-    }
-    if (osh_geometry_workspace_prepare(geom) != 0) {
-        fprintf(stderr, "error: failed to prepare geometry\n");
-        osh_geometry_workspace_free(geom);
+    if (osh_geometry_setup_from_path(opts.geo_file, NULL, &geom) != OSH_OK) {
+        fprintf(stderr, "error: failed to load geometry from '%s'\n", opts.geo_file);
         return 1;
     }
     g = geom->prepared;

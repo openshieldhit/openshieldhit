@@ -2,8 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "beam/osh_beam_model.h"
 #include "beam/osh_beam.h"
+#include "beam/osh_beam_model.h"
 #include "beam/osh_beam_prepared.h"
 #include "common/osh_const.h"
 #include "common/osh_rc.h"
@@ -40,7 +40,7 @@ static void test_single_spot_gaussian_sampling(void) {
     double y_exp;
     double yp_exp;
     double vnorm;
-    int rc;
+    enum osh_status rc;
 
     wb.spots = &spot;
     wb.nspots = 1;
@@ -115,7 +115,7 @@ static void test_single_spot_sad_fanout(void) {
     double vz_exp;
     double x_iso;
     double norm;
-    int rc;
+    enum osh_status rc;
 
     wb.spots = &spot;
     wb.nspots = 1;
@@ -170,7 +170,7 @@ static void test_single_spot_square_sampling(void) {
     struct osh_rng rng_ref;
     double x_exp;
     double y_exp;
-    int rc;
+    enum osh_status rc;
 
     wb.spots = &spot;
     wb.nspots = 1;
@@ -226,7 +226,7 @@ static void test_single_spot_circular_sampling(void) {
     double x_exp;
     double y_exp;
     double r_world;
-    int rc;
+    enum osh_status rc;
 
     wb.spots = &spot;
     wb.nspots = 1;
@@ -285,7 +285,7 @@ static void test_weighted_spot_selection(void) {
     double w;
     size_t idx_exp;
     int i;
-    int rc;
+    enum osh_status rc;
 
     wb.spots = spots;
     wb.nspots = 3;

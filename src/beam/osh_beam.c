@@ -20,8 +20,8 @@ static int _resolve_primary_particle(struct beam_workspace const *wb, struct par
 static void _postparse_spot_energy(struct beam_spot *spot, struct particle const *part);
 static void _build_spot_tm(struct beam_spot const *spot, struct beam_shared const *sh, double tm_out[16]);
 
-int osh_beam_workspace_create(struct beam_workspace **wb_out) {
-    int rc = OSH_OK;
+enum osh_status osh_beam_workspace_create(struct beam_workspace **wb_out) {
+    enum osh_status rc = OSH_OK;
     struct beam_workspace *wb = NULL;
 
     if (!wb_out) {
@@ -53,8 +53,8 @@ int osh_beam_workspace_create(struct beam_workspace **wb_out) {
     return OSH_OK;
 }
 
-int osh_beam_workspace_prepare(struct beam_workspace *wb) {
-    int rc;
+enum osh_status osh_beam_workspace_prepare(struct beam_workspace *wb) {
+    enum osh_status rc;
 
     rc = _wb_validate(wb);
     if (rc != OSH_OK) {
@@ -73,7 +73,7 @@ int osh_beam_workspace_prepare(struct beam_workspace *wb) {
     return OSH_OK;
 }
 
-int osh_beam_workspace_free(struct beam_workspace *wb) {
+enum osh_status osh_beam_workspace_free(struct beam_workspace *wb) {
     if (!wb) {
         return OSH_OK;
     }
@@ -101,7 +101,7 @@ int osh_beam_workspace_free(struct beam_workspace *wb) {
     return OSH_OK;
 }
 
-int osh_beam_phsp_free(struct beam_phsp *phsp) {
+enum osh_status osh_beam_phsp_free(struct beam_phsp *phsp) {
     int axis;
 
     if (!phsp) {

@@ -21,9 +21,9 @@ static void fixture_path(char *path, size_t cap, char const *rel) {
 
 static void load_workspace_from_fixture(char const *rel,
                                         enum osh_status expected_rc,
-                                        struct material_workspace **wm_out) {
+                                        struct osh_material_workspace **wm_out) {
     char path[1024];
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     enum osh_status rc;
 
     fixture_path(path, sizeof(path), rel);
@@ -73,7 +73,7 @@ static double test_material_bragg_mean_excitation_energy(struct material const *
 }
 
 static void test_valid_icru_override(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     struct material const *mat;
 
     load_workspace_from_fixture("valid/water_icru_override.dat", OSH_OK, &wm);
@@ -107,7 +107,7 @@ static void test_valid_icru_override(void) {
 }
 
 static void test_valid_explicit_composition(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     struct material const *mat;
 
     load_workspace_from_fixture("valid/water_explicit.dat", OSH_OK, &wm);
@@ -131,7 +131,7 @@ static void test_valid_explicit_composition(void) {
 
 static void test_valid_case_and_loaddedx(void) {
     char expected_dedx_path[1024];
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     struct material const *mat;
 
     load_workspace_from_fixture("valid/case_and_loaddedx.dat", OSH_OK, &wm);
@@ -153,7 +153,7 @@ static void test_valid_case_and_loaddedx(void) {
 }
 
 static void test_valid_mass_fraction_and_isotope(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     struct material const *mat;
 
     load_workspace_from_fixture("valid/water_by_mass.dat", OSH_OK, &wm);
@@ -178,7 +178,7 @@ static void test_valid_mass_fraction_and_isotope(void) {
 }
 
 static void test_valid_end_handling(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     struct material const *mat_a;
     struct material const *mat_b;
 
@@ -201,27 +201,27 @@ static void test_valid_end_handling(void) {
 }
 
 static void test_invalid_key_outside_material(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     load_workspace_from_fixture("invalid/key_outside_material.dat", OSH_EPARSE, &wm);
 }
 
 static void test_invalid_conflicting_mee(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     load_workspace_from_fixture("invalid/conflicting_mee.dat", OSH_EPARSE, &wm);
 }
 
 static void test_invalid_end_arguments(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     load_workspace_from_fixture("invalid/end_with_arguments.dat", OSH_EPARSE, &wm);
 }
 
 static void test_invalid_elementi_before_element(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     load_workspace_from_fixture("invalid/elementi_before_element.dat", OSH_EPARSE, &wm);
 }
 
 static void test_invalid_mixed_icru_and_elements(void) {
-    struct material_workspace *wm = NULL;
+    struct osh_material_workspace *wm = NULL;
     load_workspace_from_fixture("invalid/mixed_icru_and_elements.dat", OSH_EPARSE, &wm);
 }
 

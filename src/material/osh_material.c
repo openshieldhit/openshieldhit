@@ -11,11 +11,11 @@
 
 static void material_defaults(struct material *mat);
 static void material_set_rgba(struct material *mat, float r, float g, float b, float a);
-static enum osh_status material_workspace_init_reserved(struct material_workspace *wm);
+static enum osh_status material_workspace_init_reserved(struct osh_material_workspace *wm);
 static enum osh_status material_set_name(struct material *mat, char const *name);
-static enum osh_status material_workspace_complete(struct material_workspace *wm);
-static enum osh_status material_workspace_validate_completed(struct material_workspace const *wm);
-static enum osh_status material_workspace_validate_raw(struct material_workspace const *wm);
+static enum osh_status material_workspace_complete(struct osh_material_workspace *wm);
+static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm);
+static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm);
 static enum osh_status material_complete(struct material *mat);
 static enum osh_status material_complete_composition(struct material *mat);
 static enum osh_status material_complete_icru(struct material *mat);
@@ -32,16 +32,16 @@ static void material_free_fields(struct material *mat);
 static char const *material_state_name(int state);
 static int material_has_any_element_mee(struct material const *mat);
 
-enum osh_status osh_material_workspace_create(struct material_workspace **wm_out) {
+enum osh_status osh_material_workspace_create(struct osh_material_workspace **wm_out) {
     enum osh_status rc;
-    struct material_workspace *wm;
+    struct osh_material_workspace *wm;
 
     if (!wm_out) {
         return OSH_EINVAL;
     }
     *wm_out = NULL;
 
-    wm = (struct material_workspace *) calloc(1, sizeof(*wm));
+    wm = (struct osh_material_workspace *) calloc(1, sizeof(*wm));
     if (!wm) {
         return OSH_ENOMEM;
     }
@@ -56,7 +56,7 @@ enum osh_status osh_material_workspace_create(struct material_workspace **wm_out
     return OSH_OK;
 }
 
-enum osh_status osh_material_workspace_finalize(struct material_workspace *wm) {
+enum osh_status osh_material_workspace_finalize(struct osh_material_workspace *wm) {
     enum osh_status rc;
 
     if (!wm) {
@@ -85,7 +85,7 @@ enum osh_status osh_material_workspace_finalize(struct material_workspace *wm) {
     return OSH_OK;
 }
 
-enum osh_status osh_material_workspace_free(struct material_workspace *wm) {
+enum osh_status osh_material_workspace_free(struct osh_material_workspace *wm) {
     size_t i;
 
     if (!wm) {
@@ -106,7 +106,7 @@ enum osh_status osh_material_workspace_free(struct material_workspace *wm) {
     return OSH_OK;
 }
 
-struct material const *osh_material_by_index(struct material_workspace const *wm, size_t index) {
+struct material const *osh_material_by_index(struct osh_material_workspace const *wm, size_t index) {
     if (!wm || index >= wm->nmaterials) {
         return NULL;
     }
@@ -114,7 +114,7 @@ struct material const *osh_material_by_index(struct material_workspace const *wm
     return &wm->materials[index];
 }
 
-struct material const *osh_material_by_name(struct material_workspace const *wm, char const *name) {
+struct material const *osh_material_by_name(struct osh_material_workspace const *wm, char const *name) {
     size_t i;
 
     if (!wm || !name) {
@@ -132,7 +132,7 @@ struct material const *osh_material_by_name(struct material_workspace const *wm,
     return NULL;
 }
 
-void osh_material_print(struct material_workspace const *wm) {
+void osh_material_print(struct osh_material_workspace const *wm) {
     size_t i;
     size_t j;
     struct material const *mat;
@@ -231,7 +231,7 @@ static void material_set_rgba(struct material *mat, float r, float g, float b, f
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-static enum osh_status material_workspace_init_reserved(struct material_workspace *wm) {
+static enum osh_status material_workspace_init_reserved(struct osh_material_workspace *wm) {
     struct material *materials;
     enum osh_status rc;
 
@@ -296,7 +296,7 @@ static enum osh_status material_set_name(struct material *mat, char const *name)
  * complementary atom-count or mass-fraction fields. Explicit scalar cards such
  * as RHO, STATE, and MATERIALI remain user overrides and are not overwritten.
  */
-static enum osh_status material_workspace_complete(struct material_workspace *wm) {
+static enum osh_status material_workspace_complete(struct osh_material_workspace *wm) {
     enum osh_status rc;
     size_t i;
 
@@ -323,7 +323,7 @@ static enum osh_status material_workspace_complete(struct material_workspace *wm
  * Raw validation catches user inputs that would become ambiguous after
  * assembly, especially mixing ICRU with explicit element cards in one material.
  */
-static enum osh_status material_workspace_validate_raw(struct material_workspace const *wm) {
+static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm) {
     size_t i;
     size_t j;
     struct material const *mat;
@@ -406,7 +406,7 @@ static enum osh_status material_workspace_validate_raw(struct material_workspace
 /**
  * @brief Validate assembled material definitions.
  */
-static enum osh_status material_workspace_validate_completed(struct material_workspace const *wm) {
+static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm) {
     size_t i;
     size_t j;
     struct material const *mat;

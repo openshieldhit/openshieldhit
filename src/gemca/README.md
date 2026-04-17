@@ -11,6 +11,8 @@ This directory now has three distinct responsibilities:
    The current OpenShieldHIT `geo.dat` file parser.
    This is app-side code: it opens files, understands input-card syntax, and
    fills the public cold geometry structs.
+   `osh_geometry_setup_from_path()` (in `osh_app_osh`) wraps parse + prepare
+   into one call, matching the pattern used by beam and material.
 
 3. `src/gemca/prepare/`
    Core-internal preparation and compilation helpers.

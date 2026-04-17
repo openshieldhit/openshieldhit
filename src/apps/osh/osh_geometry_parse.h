@@ -1,6 +1,7 @@
 #ifndef OSH_FRONTEND_OPENSHIELDHIT_GEOMETRY_PARSE_H
 #define OSH_FRONTEND_OPENSHIELDHIT_GEOMETRY_PARSE_H
 
+#include "common/osh_file.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/status.h"
 
@@ -8,7 +9,7 @@
  * @brief Parse a geo.dat file into a cold geometry workspace.
  *
  * @details
- * Opens @p path and performs a three-phase parse:
+ * Reads from @p oshf and performs a three-phase parse:
  *
  *   1. **Body section** (before the first @c END card):
  *      Reads body-type keys (SPH, RCC, RPP, …), body names, and raw
@@ -25,21 +26,16 @@
  *      material names as strings in @ref osh_geometry_zone.material_name.
  *      No cross-reference against mat.dat is done here.
  *
- * On success, @p *ws_out is populated with a newly allocated workspace
- * that the caller owns and must eventually free with
- * @ref osh_geometry_workspace_free().  The workspace is not yet prepared;
- * call @ref osh_geometry_workspace_prepare() before passing it to the
- * geometry runtime.
+ * @p ws must be pre-allocated by the caller.  On failure the workspace may
+ * be partially populated; the caller is responsible for freeing it via
+ * @ref osh_geometry_workspace_free().
  *
- * On failure, @p *ws_out is set to NULL and the partially built workspace
- * is freed internally.
+ * @param[in]     oshf  Open geometry file positioned anywhere (rewound internally).
+ * @param[in,out] ws    Pre-allocated workspace to fill.
  *
- * @param[in]  path    Path to the geo.dat file.
- * @param[out] ws_out  Receives the newly allocated cold workspace.
- *
- * @returns OSH_OK on success, OSH_EIO if the file cannot be opened,
- *          OSH_EPARSE on format errors, OSH_ENOMEM on allocation failure.
+ * @returns OSH_OK on success, OSH_EPARSE on format errors, OSH_ENOMEM on
+ *          allocation failure.
  */
-enum osh_status osh_geometry_parse_file(char const *path, struct osh_geometry_workspace **ws_out);
+enum osh_status osh_geometry_parse(struct oshfile *oshf, struct osh_geometry_workspace *ws);
 
 #endif /* OSH_FRONTEND_OPENSHIELDHIT_GEOMETRY_PARSE_H */

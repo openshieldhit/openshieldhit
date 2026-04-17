@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "apps/osh/osh_geometry_parse.h"
 #include "beam/osh_beamdef.h"
 #include "beam/runtime/osh_beam_runtime.h"
 #include "gemca/osh_gemca2.h"
@@ -46,7 +45,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     struct osh_transport_context transport_ctx;
     struct osh_geometry_workspace *geom = NULL;
     struct osh_gemca_runtime geom_rt;
-    struct material_workspace *mat = NULL;
+    struct osh_material_workspace *mat = NULL;
     struct osh_scoring_workspace *scoring = NULL;
     struct osh_material_runtime transport_tables;
     struct osh_scoring_runtime scoring_runtime;
@@ -90,23 +89,15 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         fprintf(out, "  Detect input     : %s\n", detect_path);
     }
 
-    if (osh_geometry_parse_file(geo_path, &geom) != OSH_OK) {
+    if (osh_geometry_setup_from_path(geo_path, NULL, &geom) != OSH_OK) {
         if (err) {
-            fprintf(err, "Error: failed to parse geometry: %s\n", geo_path);
+            fprintf(err, "Error: failed to load geometry: %s\n", geo_path);
         }
         rc = OSH_EPARSE;
         goto cleanup;
     }
     if (out) {
         fprintf(out, "Loaded geometry: %s\n", geo_path);
-    }
-
-    if (osh_geometry_workspace_prepare(geom) != 0) {
-        if (err) {
-            fprintf(err, "Error: failed to prepare geometry workspace\n");
-        }
-        rc = OSH_EPARSE;
-        goto cleanup;
     }
 
     if (!run_file_exists(beam_path)) {

@@ -175,7 +175,7 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     char water_path[512];
     char ext20_path[512];
     char mat_text[4096];
-    struct material_workspace *wm;
+    struct osh_material_workspace *wm;
     struct osh_material_runtime tables;
     size_t idx_table18;
     size_t idx_table20;
@@ -271,7 +271,7 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
 static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(void) {
     char mat_path[512];
     char mat_text[4096];
-    struct material_workspace *wm;
+    struct osh_material_workspace *wm;
     struct osh_material_runtime tables;
     struct material const *mat_elements;
     struct material const *mat_effective;
@@ -332,7 +332,7 @@ static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(
 static void test_prepare_rejects_projectiles_beyond_isotope_db(void) {
     char mat_path[512];
     char mat_text[1024];
-    struct material_workspace *wm;
+    struct osh_material_workspace *wm;
     struct osh_material_runtime tables;
     enum osh_status rc;
 
