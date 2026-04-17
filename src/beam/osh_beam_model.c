@@ -6,8 +6,8 @@
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_interpolate.h"
-#include "common/osh_rc.h"
 #include "common/osh_vect.h"
+#include "openshieldhit/status.h"
 
 /* ---- Step 1: spot selection ---------------------------------------------- */
 

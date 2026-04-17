@@ -6,8 +6,8 @@
 #include <string.h>
 
 #include "common/osh_logger.h"
-#include "common/osh_rc.h"
 #include "common/osh_readline.h"
+#include "openshieldhit/status.h"
 
 #define OSH_SPOTLIST_MAX_COLS 11
 

@@ -9,10 +9,10 @@
 #include "beam/runtime/osh_beam_runtime.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
-#include "material/osh_material.h"
 #include "material/runtime/osh_material_prepare.h"
 #include "openshieldhit/geometry.h"
-#include "scoring/osh_scoring.h"
+#include "openshieldhit/material.h"
+#include "openshieldhit/scoring.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_prepare.h"
 #include "scoring/save/osh_scoring_save.h"
@@ -151,7 +151,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         size_t iz;
         for (iz = 0u; iz < gemca->nzones; ++iz) {
             struct zone *z = gemca->zones[iz];
-            struct material const *m;
+            struct osh_material const *m;
 
             if (!z->material_name) {
                 if (err) {

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 
 /* Forward declaration: full definition is in common/osh_ray.h, included by
  * consumers that need struct ray fields.  The header only uses struct ray as a

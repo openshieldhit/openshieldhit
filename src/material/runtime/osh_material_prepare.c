@@ -38,6 +38,7 @@
 #include "common/osh_logger.h"
 #include "material/osh_material.h"
 #include "material/osh_material_atomic_data.h"
+#include "material/osh_material_icru.h"
 #include "material/osh_material_loaddedx.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
@@ -105,7 +106,7 @@ static void integrate_range(float const *sp, float *range, double a_proj, struct
  * Compounds with only a material-level mean excitation energy remain on the
  * effective-medium path instead.
  */
-static int material_has_complete_element_mee(struct material const *mat) {
+static int material_has_complete_element_mee(struct osh_material const *mat) {
     size_t i;
 
     if (!mat || mat->nelements == 0u) {
@@ -130,7 +131,7 @@ static int material_has_complete_element_mee(struct material const *mat) {
  * components we therefore use the correct isotope mass in Z/A, but still pass
  * one effective target descriptor into the pure Bethe evaluator.
  */
-static void build_bethe_target(struct material const *mat, struct osh_physics_bethe_target *tgt) {
+static void build_bethe_target(struct osh_material const *mat, struct osh_physics_bethe_target *tgt) {
     size_t i;
     double sum_wz_over_a;
     double sum_wz;
@@ -141,7 +142,7 @@ static void build_bethe_target(struct material const *mat, struct osh_physics_be
     mee_ln_sum = 0.0;
 
     for (i = 0; i < mat->nelements; ++i) {
-        struct material_element const *el;
+        struct osh_material_element const *el;
         double a_i;
         double z_i;
         double w_i;
@@ -209,7 +210,7 @@ static void build_bethe_target(struct material const *mat, struct osh_physics_be
  * Returns 0 for all three on invalid input (zero atoms or missing mass data).
  */
 static void
-compute_material_atomic(struct material const *mat, float *z_mean_out, float *z_over_a_out, float *x0_gcm2_out) {
+compute_material_atomic(struct osh_material const *mat, float *z_mean_out, float *z_over_a_out, float *x0_gcm2_out) {
     size_t i;
     double sum_wz;
     double sum_wz_over_a;
@@ -266,7 +267,7 @@ compute_material_atomic(struct material const *mat, float *z_mean_out, float *z_
  * density, and mean excitation energy, and the final mass stopping power is
  * summed by material mass fraction.
  */
-static void build_element_bethe_target(struct material_element const *el, struct osh_physics_bethe_target *tgt) {
+static void build_element_bethe_target(struct osh_material_element const *el, struct osh_physics_bethe_target *tgt) {
     struct osh_material_icru_entry entry;
     double mass_da;
 
@@ -343,8 +344,11 @@ static enum osh_status fill_bethe_projectile_column(struct osh_material_runtime 
  * where w_i is the element mass fraction and S_i is the pure-element mass
  * stopping power evaluated with that element's own Z, A, density and I.
  */
-static enum osh_status fill_bethe_compound_projectile_column(
-    struct osh_material_runtime const *t, size_t mat_idx, size_t proj_idx, double dlog, struct material const *mat) {
+static enum osh_status fill_bethe_compound_projectile_column(struct osh_material_runtime const *t,
+                                                             size_t mat_idx,
+                                                             size_t proj_idx,
+                                                             double dlog,
+                                                             struct osh_material const *mat) {
     struct osh_physics_bethe_projectile proj;
     struct osh_physics_bethe_target *elt_tgts;
     struct osh_physics_bethe_sewn *elt_sewns;
@@ -479,7 +483,7 @@ osh_material_prepare(struct osh_material_workspace const *wm, unsigned int z_max
     double dlog, log_e, e_val;
     double mass_mev;
     struct osh_material_runtime t;
-    struct material const *mat;
+    struct osh_material const *mat;
     struct osh_material_loaddedx_table src;
     struct osh_physics_bethe_target tgt;
     float *sp_col, *rng_col;

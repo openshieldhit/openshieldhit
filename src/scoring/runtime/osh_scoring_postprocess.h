@@ -1,7 +1,7 @@
 #ifndef OSH_SCORING_POSTPROCESS_H
 #define OSH_SCORING_POSTPROCESS_H
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 
 #ifdef __cplusplus

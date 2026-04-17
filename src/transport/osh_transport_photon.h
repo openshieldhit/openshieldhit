@@ -1,7 +1,7 @@
 #ifndef OSH_TRANSPORT_PHOTON_H
 #define OSH_TRANSPORT_PHOTON_H
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {

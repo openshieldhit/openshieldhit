@@ -5,9 +5,9 @@
 
 #include "common/osh_coord.h"
 #include "common/osh_ray.h"
-#include "common/osh_rc.h"
 #include "common/osh_step.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {

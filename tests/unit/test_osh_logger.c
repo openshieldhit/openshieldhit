@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "common/osh_logger.h"
+#include "test_assert.h"
 
 static int file_contains(char const *path, char const *needle) {
     char line[1024];

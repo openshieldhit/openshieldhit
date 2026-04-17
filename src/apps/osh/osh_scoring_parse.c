@@ -41,7 +41,7 @@
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
-#include "scoring/osh_scoring.h"
+#include "openshieldhit/scoring.h"
 
 /* ---- Internal section enum ----------------------------------------------- */
 

@@ -5,6 +5,7 @@
 
 #include "openshieldhit/file.h"
 #include "openshieldhit/readline.h"
+#include "test_assert.h"
 
 #ifndef OSH_TEST_FIXTURES_DIR
 #error "OSH_TEST_FIXTURES_DIR must be defined by the build system"

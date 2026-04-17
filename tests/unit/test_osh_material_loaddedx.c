@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_rc.h"
 #include "material/osh_material_loaddedx.h"
+#include "openshieldhit/status.h"
 
 #define FTOL 1e-5
 

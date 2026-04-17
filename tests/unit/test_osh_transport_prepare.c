@@ -4,11 +4,11 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "common/osh_rc.h"
-#include "material/osh_material.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
 #include "material/runtime/osh_material_prepare.h"
+#include "openshieldhit/material.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
@@ -35,7 +35,7 @@ static void write_temp_file(char *path, size_t path_cap, char const *content) {
     ASSERT_TRUE(fclose(fp) == 0);
 }
 
-static double test_material_element_mass_da(struct material_element const *el) {
+static double test_material_element_mass_da(struct osh_material_element const *el) {
     struct isotope iso;
     double mass_da;
 
@@ -54,7 +54,7 @@ static double test_material_element_mass_da(struct material_element const *el) {
     return 2.0 * (double) el->z;
 }
 
-static void build_effective_target(struct material const *mat, struct osh_physics_bethe_target *tgt) {
+static void build_effective_target(struct osh_material const *mat, struct osh_physics_bethe_target *tgt) {
     size_t i;
     double sum_wz_over_a;
     double sum_wz;
@@ -65,7 +65,7 @@ static void build_effective_target(struct material const *mat, struct osh_physic
     mee_ln_sum = 0.0;
 
     for (i = 0; i < mat->nelements; ++i) {
-        struct material_element const *el;
+        struct osh_material_element const *el;
         double a_i;
         double z_i;
         double w_i;
@@ -106,7 +106,7 @@ static void build_effective_target(struct material const *mat, struct osh_physic
     }
 }
 
-static void build_element_target(struct material_element const *el, struct osh_physics_bethe_target *tgt) {
+static void build_element_target(struct osh_material_element const *el, struct osh_physics_bethe_target *tgt) {
     struct osh_material_icru_entry entry;
     double mass_da;
 
@@ -123,8 +123,10 @@ static void build_element_target(struct material_element const *el, struct osh_p
     }
 }
 
-static double
-eval_effective_bethe(struct material const *mat, unsigned int proj_z, unsigned int proj_a, double energy_mev_per_u) {
+static double eval_effective_bethe(struct osh_material const *mat,
+                                   unsigned int proj_z,
+                                   unsigned int proj_a,
+                                   double energy_mev_per_u) {
     struct osh_physics_bethe_target tgt;
     struct osh_physics_bethe_projectile proj;
     struct osh_physics_bethe_sewn sewn;
@@ -140,8 +142,10 @@ eval_effective_bethe(struct material const *mat, unsigned int proj_z, unsigned i
     return osh_physics_bethe_eval(energy_mev_per_u, &proj, &tgt, &sewn);
 }
 
-static double
-eval_element_sum_bethe(struct material const *mat, unsigned int proj_z, unsigned int proj_a, double energy_mev_per_u) {
+static double eval_element_sum_bethe(struct osh_material const *mat,
+                                     unsigned int proj_z,
+                                     unsigned int proj_a,
+                                     double energy_mev_per_u) {
     struct osh_physics_bethe_projectile proj;
     size_t i;
     double sp_sum;
@@ -273,8 +277,8 @@ static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(
     char mat_text[4096];
     struct osh_material_workspace *wm;
     struct osh_material_runtime tables;
-    struct material const *mat_elements;
-    struct material const *mat_effective;
+    struct osh_material const *mat_elements;
+    struct osh_material const *mat_effective;
     double expected_elements;
     double expected_effective;
     double got_elements;

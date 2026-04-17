@@ -9,28 +9,28 @@
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
 
-static void material_defaults(struct material *mat);
-static void material_set_rgba(struct material *mat, float r, float g, float b, float a);
+static void material_defaults(struct osh_material *mat);
+static void material_set_rgba(struct osh_material *mat, float r, float g, float b, float a);
 static enum osh_status material_workspace_init_reserved(struct osh_material_workspace *wm);
-static enum osh_status material_set_name(struct material *mat, char const *name);
+static enum osh_status material_set_name(struct osh_material *mat, char const *name);
 static enum osh_status material_workspace_complete(struct osh_material_workspace *wm);
 static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm);
 static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm);
-static enum osh_status material_complete(struct material *mat);
-static enum osh_status material_complete_composition(struct material *mat);
-static enum osh_status material_complete_icru(struct material *mat);
-static enum osh_status material_derive_atom_counts_from_mass_fractions(struct material *mat);
-static enum osh_status material_derive_mass_fractions_from_atom_counts(struct material *mat);
-static void material_default_state_if_unset(struct material *mat);
-static enum osh_status material_set_elements_from_icru(struct material *mat,
+static enum osh_status material_complete(struct osh_material *mat);
+static enum osh_status material_complete_composition(struct osh_material *mat);
+static enum osh_status material_complete_icru(struct osh_material *mat);
+static enum osh_status material_derive_atom_counts_from_mass_fractions(struct osh_material *mat);
+static enum osh_status material_derive_mass_fractions_from_atom_counts(struct osh_material *mat);
+static void material_default_state_if_unset(struct osh_material *mat);
+static enum osh_status material_set_elements_from_icru(struct osh_material *mat,
                                                        struct osh_material_icru_entry const *entry);
-static enum osh_status material_complete_mean_excitation_energy(struct material *mat);
-static enum osh_status material_fill_element_mee_defaults(struct material *mat);
-static enum osh_status material_derive_compound_mee(struct material *mat);
-static enum osh_status material_match_element_mee_to_material(struct material *mat);
-static void material_free_fields(struct material *mat);
+static enum osh_status material_complete_mean_excitation_energy(struct osh_material *mat);
+static enum osh_status material_fill_element_mee_defaults(struct osh_material *mat);
+static enum osh_status material_derive_compound_mee(struct osh_material *mat);
+static enum osh_status material_match_element_mee_to_material(struct osh_material *mat);
+static void material_free_fields(struct osh_material *mat);
 static char const *material_state_name(int state);
-static int material_has_any_element_mee(struct material const *mat);
+static int material_has_any_element_mee(struct osh_material const *mat);
 
 enum osh_status osh_material_workspace_create(struct osh_material_workspace **wm_out) {
     enum osh_status rc;
@@ -106,7 +106,7 @@ enum osh_status osh_material_workspace_free(struct osh_material_workspace *wm) {
     return OSH_OK;
 }
 
-struct material const *osh_material_by_index(struct osh_material_workspace const *wm, size_t index) {
+struct osh_material const *osh_material_by_index(struct osh_material_workspace const *wm, size_t index) {
     if (!wm || index >= wm->nmaterials) {
         return NULL;
     }
@@ -114,7 +114,7 @@ struct material const *osh_material_by_index(struct osh_material_workspace const
     return &wm->materials[index];
 }
 
-struct material const *osh_material_by_name(struct osh_material_workspace const *wm, char const *name) {
+struct osh_material const *osh_material_by_name(struct osh_material_workspace const *wm, char const *name) {
     size_t i;
 
     if (!wm || !name) {
@@ -135,8 +135,8 @@ struct material const *osh_material_by_name(struct osh_material_workspace const 
 void osh_material_print(struct osh_material_workspace const *wm) {
     size_t i;
     size_t j;
-    struct material const *mat;
-    struct material_element const *elem;
+    struct osh_material const *mat;
+    struct osh_material_element const *elem;
 
     if (!wm) {
         return;
@@ -198,7 +198,7 @@ void osh_material_print(struct osh_material_workspace const *wm) {
     }
 }
 
-static void material_defaults(struct material *mat) {
+static void material_defaults(struct osh_material *mat) {
     mat->elements = NULL;
     mat->name = NULL;
     mat->dedx_table_path = NULL;
@@ -212,7 +212,7 @@ static void material_defaults(struct material *mat) {
     mat->state = OSH_MATERIAL_STATE_UNSET;
 }
 
-static void material_set_rgba(struct material *mat, float r, float g, float b, float a) {
+static void material_set_rgba(struct osh_material *mat, float r, float g, float b, float a) {
     mat->rgba[0] = r;
     mat->rgba[1] = g;
     mat->rgba[2] = b;
@@ -232,10 +232,10 @@ static void material_set_rgba(struct material *mat, float r, float g, float b, f
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
 static enum osh_status material_workspace_init_reserved(struct osh_material_workspace *wm) {
-    struct material *materials;
+    struct osh_material *materials;
     enum osh_status rc;
 
-    materials = (struct material *) calloc(OSH_MATERIAL_INDEX_FIRST_USER, sizeof(*materials));
+    materials = (struct osh_material *) calloc(OSH_MATERIAL_INDEX_FIRST_USER, sizeof(*materials));
     if (!materials) {
         return OSH_ENOMEM;
     }
@@ -271,7 +271,7 @@ static enum osh_status material_workspace_init_reserved(struct osh_material_work
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-static enum osh_status material_set_name(struct material *mat, char const *name) {
+static enum osh_status material_set_name(struct osh_material *mat, char const *name) {
     char *copy;
     size_t len;
 
@@ -326,8 +326,8 @@ static enum osh_status material_workspace_complete(struct osh_material_workspace
 static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm) {
     size_t i;
     size_t j;
-    struct material const *mat;
-    struct material_element const *elem;
+    struct osh_material const *mat;
+    struct osh_material_element const *elem;
 
     if (!wm) {
         return OSH_EINVAL;
@@ -409,8 +409,8 @@ static enum osh_status material_workspace_validate_raw(struct osh_material_works
 static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm) {
     size_t i;
     size_t j;
-    struct material const *mat;
-    struct material_element const *elem;
+    struct osh_material const *mat;
+    struct osh_material_element const *elem;
     double mass_fraction_sum; /* dimensionless, must sum to 1 */
 
     if (!wm) {
@@ -495,7 +495,7 @@ static enum osh_status material_workspace_validate_completed(struct osh_material
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-static enum osh_status material_complete(struct material *mat) {
+static enum osh_status material_complete(struct osh_material *mat) {
     enum osh_status rc;
 
     if (!mat) {
@@ -520,7 +520,7 @@ static enum osh_status material_complete(struct material *mat) {
 /**
  * @brief Default user-defined materials to condensed matter.
  */
-static void material_default_state_if_unset(struct material *mat) {
+static void material_default_state_if_unset(struct osh_material *mat) {
     if (mat->state == OSH_MATERIAL_STATE_UNSET) {
         mat->state = OSH_MATERIAL_STATE_CONDENSED;
     }
@@ -529,7 +529,7 @@ static void material_default_state_if_unset(struct material *mat) {
 /**
  * @brief Expand an ICRU material while preserving explicit scalar overrides.
  */
-static enum osh_status material_complete_icru(struct material *mat) {
+static enum osh_status material_complete_icru(struct osh_material *mat) {
     enum osh_status rc;
     struct osh_material_icru_entry entry;
 
@@ -559,7 +559,7 @@ static enum osh_status material_complete_icru(struct material *mat) {
 /**
  * @brief Fill missing complementary composition fields.
  */
-static enum osh_status material_complete_composition(struct material *mat) {
+static enum osh_status material_complete_composition(struct osh_material *mat) {
     if (mat->nelements == 0u) {
         return OSH_OK;
     }
@@ -577,16 +577,16 @@ static enum osh_status material_complete_composition(struct material *mat) {
 /**
  * @brief Replace material element composition from an ICRU entry.
  */
-static enum osh_status material_set_elements_from_icru(struct material *mat,
+static enum osh_status material_set_elements_from_icru(struct osh_material *mat,
                                                        struct osh_material_icru_entry const *entry) {
-    struct material_element *elements;
+    struct osh_material_element *elements;
     size_t i;
 
     if (mat->nelements != 0u) {
         return OSH_ESTATE;
     }
 
-    elements = (struct material_element *) calloc(entry->nelements, sizeof(*elements));
+    elements = (struct osh_material_element *) calloc(entry->nelements, sizeof(*elements));
     if (!elements) {
         return OSH_ENOMEM;
     }
@@ -634,7 +634,7 @@ static enum osh_status material_set_elements_from_icru(struct material *mat,
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-static enum osh_status material_complete_mean_excitation_energy(struct material *mat) {
+static enum osh_status material_complete_mean_excitation_energy(struct osh_material *mat) {
     enum osh_status rc;
     size_t i;
 
@@ -683,7 +683,7 @@ static enum osh_status material_complete_mean_excitation_energy(struct material 
  *
  * @returns OSH_OK on success.
  */
-static enum osh_status material_fill_element_mee_defaults(struct material *mat) {
+static enum osh_status material_fill_element_mee_defaults(struct osh_material *mat) {
     struct osh_material_icru_entry entry;
     size_t i;
 
@@ -727,7 +727,7 @@ static enum osh_status material_fill_element_mee_defaults(struct material *mat) 
  *
  * @returns OSH_OK on success, or an error code from the atomic-mass lookup.
  */
-static enum osh_status material_derive_compound_mee(struct material *mat) {
+static enum osh_status material_derive_compound_mee(struct osh_material *mat) {
     enum osh_status rc;
     double numerator;
     double denominator;
@@ -785,7 +785,7 @@ static enum osh_status material_derive_compound_mee(struct material *mat) {
  *
  * @returns OSH_OK on success, or an error code from the atomic-mass lookup.
  */
-static enum osh_status material_match_element_mee_to_material(struct material *mat) {
+static enum osh_status material_match_element_mee_to_material(struct osh_material *mat) {
     enum osh_status rc;
     double numerator;
     double denominator;
@@ -847,7 +847,7 @@ static enum osh_status material_match_element_mee_to_material(struct material *m
  *
  * @returns OSH_OK on success, OSH_EINVAL/OSH_ESTATE on invalid element data.
  */
-static enum osh_status material_derive_atom_counts_from_mass_fractions(struct material *mat) {
+static enum osh_status material_derive_atom_counts_from_mass_fractions(struct osh_material *mat) {
     enum osh_status rc;
     double mass;      /* atomic mass of current element [Da] */
     double sum_moles; /* sum of mass_fraction/mass across all elements [1/Da] */
@@ -901,7 +901,7 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct ma
  *
  * @returns OSH_OK on success, OSH_EINVAL/OSH_ESTATE on invalid element data.
  */
-static enum osh_status material_derive_mass_fractions_from_atom_counts(struct material *mat) {
+static enum osh_status material_derive_mass_fractions_from_atom_counts(struct osh_material *mat) {
     enum osh_status rc;
     double mass;       /* atomic mass of current element [Da] */
     double total_mass; /* sum of atom_count * mass across all elements [Da] */
@@ -947,7 +947,7 @@ static enum osh_status material_derive_mass_fractions_from_atom_counts(struct ma
  *
  * @param[in,out] mat  Material whose fields are to be released.
  */
-static void material_free_fields(struct material *mat) {
+static void material_free_fields(struct osh_material *mat) {
     if (!mat) {
         return;
     }
@@ -974,7 +974,7 @@ static char const *material_state_name(int state) {
 /**
  * @brief Return 1 when any element has an explicit/raw mean excitation value.
  */
-static int material_has_any_element_mee(struct material const *mat) {
+static int material_has_any_element_mee(struct osh_material const *mat) {
     size_t i;
 
     if (!mat) {

@@ -5,7 +5,7 @@
 
 #include "beam/osh_beam.h"
 #include "common/osh_particle_pool.h"
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
 #include "random/osh_rng.h"
 

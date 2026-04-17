@@ -1,12 +1,14 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "particle/osh_isotope_db_generated.h"
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
+#include "test_assert.h"
 
 #define Z_OSMIUM 76
 #define EPS 1e-10

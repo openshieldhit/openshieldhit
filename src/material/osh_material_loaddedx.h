@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 
 /**
  * @brief External legacy dE/dx table loaded from a LOADDEDX text file.

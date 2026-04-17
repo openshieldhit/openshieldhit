@@ -1,7 +1,7 @@
 #ifndef OSH_SCORING_SAVE_H
 #define OSH_SCORING_SAVE_H
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 #include "scoring/osh_scoring.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 

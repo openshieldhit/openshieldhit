@@ -25,8 +25,8 @@ static enum osh_status parse_icru(struct osh_material_workspace *wm, struct oshf
 static enum osh_status parse_material_start(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_state(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args);
 
-static struct material *material_current(struct osh_material_workspace *wm);
-static void material_defaults(struct material *mat);
+static struct osh_material *material_current(struct osh_material_workspace *wm);
+static void material_defaults(struct osh_material *mat);
 static enum osh_status parse_mean_excitation_energy_value(double *mean_excitation_energy_out,
                                                           struct oshfile *oshf,
                                                           char const *args,
@@ -40,7 +40,7 @@ static enum osh_status parse_element_card_args(unsigned int *z_out,
 static enum osh_status parse_double_token(double *value_out, char const *token);
 static enum osh_status parse_uint_token(unsigned int *value_out, char const *token);
 static enum osh_status material_push(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args);
-static enum osh_status material_push_element(struct material *mat,
+static enum osh_status material_push_element(struct osh_material *mat,
                                              struct oshfile *oshf,
                                              unsigned int z,
                                              unsigned int a,
@@ -175,7 +175,7 @@ enum osh_status osh_material_parse(struct oshfile *oshf, struct osh_material_wor
  * @returns OSH_OK on success, OSH_EPARSE on invalid input.
  */
 static enum osh_status parse_density(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     double rho; /* [g/cm³] */
     char extra;
 
@@ -209,7 +209,7 @@ static enum osh_status parse_density(struct osh_material_workspace *wm, struct o
  * @returns OSH_OK on success, OSH_EPARSE on invalid input.
  */
 static enum osh_status parse_color(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     float rgba[4];
     char extra;
     int i;
@@ -253,7 +253,7 @@ static enum osh_status parse_color(struct osh_material_workspace *wm, struct osh
  */
 static enum osh_status
 parse_element_by_mass(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     unsigned int z;
     unsigned int a;
     double mass_fraction;
@@ -287,7 +287,7 @@ parse_element_by_mass(struct osh_material_workspace *wm, struct oshfile *oshf, c
  */
 static enum osh_status
 parse_element_by_number(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     unsigned int z;
     unsigned int a;
     double atom_count;
@@ -346,7 +346,7 @@ static enum osh_status parse_end(struct osh_material_workspace *wm, struct oshfi
  */
 static enum osh_status
 parse_element_mean_excitation_energy(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     double mean_excitation_energy;
     enum osh_status rc;
 
@@ -383,7 +383,7 @@ parse_element_mean_excitation_energy(struct osh_material_workspace *wm, struct o
  * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
  */
 static enum osh_status parse_loaddedx(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     char path[512];
     char extra;
     char *resolved_path;
@@ -424,7 +424,7 @@ static enum osh_status parse_loaddedx(struct osh_material_workspace *wm, struct 
  */
 static enum osh_status
 parse_material_mean_excitation_energy(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     double mean_excitation_energy;
     enum osh_status rc;
 
@@ -459,7 +459,7 @@ parse_material_mean_excitation_energy(struct osh_material_workspace *wm, struct 
  * @returns OSH_OK on success, OSH_EPARSE on invalid input.
  */
 static enum osh_status parse_icru(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *mat;
+    struct osh_material *mat;
     int icru_id;
     char extra;
 
@@ -501,7 +501,7 @@ static enum osh_status parse_material_start(struct osh_material_workspace *wm, s
  */
 static enum osh_status parse_state(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
     enum osh_status rc;
-    struct material *mat;
+    struct osh_material *mat;
     char state_token[32];
     char extra;
     int state;
@@ -540,7 +540,7 @@ static enum osh_status parse_state(struct osh_material_workspace *wm, struct osh
  *
  * @returns Pointer to the last material in the array, or NULL if none exist.
  */
-static struct material *material_current(struct osh_material_workspace *wm) {
+static struct osh_material *material_current(struct osh_material_workspace *wm) {
     if (!wm || wm->nmaterials == 0u) {
         return NULL;
     }
@@ -556,7 +556,7 @@ static struct material *material_current(struct osh_material_workspace *wm) {
  *
  * @param[out] mat  Material to reset. Must point to allocated storage.
  */
-static void material_defaults(struct material *mat) {
+static void material_defaults(struct osh_material *mat) {
     mat->elements = NULL;
     mat->name = NULL;
     mat->dedx_table_path = NULL;
@@ -721,8 +721,8 @@ static enum osh_status parse_uint_token(unsigned int *value_out, char const *tok
  * @returns OSH_OK on success, OSH_EPARSE on missing/duplicate name, OSH_ENOMEM on failure.
  */
 static enum osh_status material_push(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
-    struct material *materials;
-    struct material *mat;
+    struct osh_material *materials;
+    struct osh_material *mat;
     size_t nmaterials;
     char name[128];
     char extra;
@@ -738,7 +738,7 @@ static enum osh_status material_push(struct osh_material_workspace *wm, struct o
     }
 
     nmaterials = wm->nmaterials + 1u;
-    materials = (struct material *) realloc(wm->materials, nmaterials * sizeof(*materials));
+    materials = (struct osh_material *) realloc(wm->materials, nmaterials * sizeof(*materials));
     if (!materials) {
         return OSH_ENOMEM;
     }
@@ -770,14 +770,14 @@ static enum osh_status material_push(struct osh_material_workspace *wm, struct o
  *
  * @returns OSH_OK on success, OSH_EPARSE on invalid input, OSH_ENOMEM on failure.
  */
-static enum osh_status material_push_element(struct material *mat,
+static enum osh_status material_push_element(struct osh_material *mat,
                                              struct oshfile *oshf,
                                              unsigned int z,
                                              unsigned int a,
                                              double atom_count,
                                              double mass_fraction) {
-    struct material_element *elements;
-    struct material_element *elem;
+    struct osh_material_element *elements;
+    struct osh_material_element *elem;
     size_t nelements;
     size_t i;
 
@@ -801,7 +801,7 @@ static enum osh_status material_push_element(struct material *mat,
     }
 
     nelements = mat->nelements + 1u;
-    elements = (struct material_element *) realloc(mat->elements, nelements * sizeof(*elements));
+    elements = (struct osh_material_element *) realloc(mat->elements, nelements * sizeof(*elements));
     if (!elements) {
         return OSH_ENOMEM;
     }

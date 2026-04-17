@@ -1,3 +1,19 @@
+/**
+ * @file osh_scoring_parse_geometry.c
+ *
+ * @brief Parse one tokenized line inside a scoring `Geometry` section.
+ *
+ * @details
+ * Recognized keys:
+ * - `Name <string>`
+ * - axis lines: `x|y|z|r <lo> <hi> <nbins>`
+ * - `Rotation <theta_deg> <phi_deg>` (and legacy alias `rot`)
+ * - `Zones <start> <stop>`
+ *
+ * The section parser stores values in raw parsed form; consistency checks
+ * against geometry type happen in later validation/finalization stages.
+ */
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +51,9 @@ static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name
                                                  {OSH_SCORING_KEY_GEO_ZONES, geo_zones},
                                                  {NULL, NULL}};
 
+/**
+ * @brief Dispatch one tokenized line into the active geometry definition.
+ */
 enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def *geo,
                                                 char **words,
                                                 int nwords,
@@ -55,15 +74,23 @@ enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def 
     return OSH_OK;
 }
 
+/**
+ * @brief Append one axis specification to the geometry.
+ */
 static enum osh_status
 append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, double hi, int nbins) {
+    size_t len;
     struct osh_scoring_axis_def *tmp =
         (struct osh_scoring_axis_def *) realloc(geo->axes, (geo->naxes + 1u) * sizeof(*tmp));
     if (!tmp)
         return OSH_ENOMEM;
     geo->axes = tmp;
     memset(&geo->axes[geo->naxes], 0, sizeof(*tmp));
-    strncpy(geo->axes[geo->naxes].label, label, sizeof(geo->axes[0].label) - 1u);
+    len = strlen(label);
+    if (len >= sizeof(geo->axes[0].label))
+        len = sizeof(geo->axes[0].label) - 1u;
+    memcpy(geo->axes[geo->naxes].label, label, len);
+    geo->axes[geo->naxes].label[len] = '\0';
     geo->axes[geo->naxes].lo = lo;
     geo->axes[geo->naxes].hi = hi;
     geo->axes[geo->naxes].nbins = nbins;
@@ -71,6 +98,9 @@ append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, 
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `Name <value>` for a geometry section.
+ */
 static enum osh_status
 geo_name(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -82,6 +112,9 @@ geo_name(struct osh_scoring_geometry_def *geo, char **words, int nwords, char co
     return geo->name ? OSH_OK : OSH_ENOMEM;
 }
 
+/**
+ * @brief Parse one axis line (`x|y|z|r lo hi nbins`).
+ */
 static enum osh_status
 geo_axis(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
     char label[2];
@@ -95,6 +128,9 @@ geo_axis(struct osh_scoring_geometry_def *geo, char **words, int nwords, char co
     return append_axis(geo, label, atof(words[1]), atof(words[2]), atoi(words[3]));
 }
 
+/**
+ * @brief Parse optional geometry rotation (`theta phi` in degrees).
+ */
 static enum osh_status
 geo_rotation(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 3) {
@@ -107,6 +143,9 @@ geo_rotation(struct osh_scoring_geometry_def *geo, char **words, int nwords, cha
     return OSH_OK;
 }
 
+/**
+ * @brief Parse zone-range form used by `zone` scoring geometries.
+ */
 static enum osh_status
 geo_zones(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 3) {

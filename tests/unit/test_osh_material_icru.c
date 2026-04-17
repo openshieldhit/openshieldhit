@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_rc.h"
 #include "material/osh_material_icru.h"
+#include "openshieldhit/status.h"
 
 /* Tolerance for density/mean-excitation comparisons.
  * The embedded tables are stored as float (~6 significant digits). */

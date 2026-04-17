@@ -1,9 +1,9 @@
 #ifndef OSH_MATERIAL_PREPARE_H
 #define OSH_MATERIAL_PREPARE_H
 
-#include "common/osh_rc.h"
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {

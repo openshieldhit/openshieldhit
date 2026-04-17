@@ -5,11 +5,11 @@
 
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_const.h"
-#include "common/osh_rc.h"
-#include "material/osh_material.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
 #include "material/runtime/osh_material_prepare.h"
+#include "openshieldhit/material.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
@@ -32,7 +32,7 @@ static void write_temp_file(char *path, size_t path_cap, char const *content) {
     ASSERT_TRUE(fclose(fp) == 0);
 }
 
-static double test_material_element_mass_da(struct material_element const *el) {
+static double test_material_element_mass_da(struct osh_material_element const *el) {
     struct isotope iso;
     double mass_da;
 
@@ -51,7 +51,7 @@ static double test_material_element_mass_da(struct material_element const *el) {
     return 2.0 * (double) el->z;
 }
 
-static void build_element_target(struct material_element const *el, struct osh_physics_bethe_target *tgt) {
+static void build_element_target(struct osh_material_element const *el, struct osh_physics_bethe_target *tgt) {
     struct osh_material_icru_entry entry;
     double mass_da;
 
@@ -68,8 +68,10 @@ static void build_element_target(struct material_element const *el, struct osh_p
     }
 }
 
-static double
-eval_element_sum_bethe(struct material const *mat, unsigned int proj_z, unsigned int proj_a, double energy_mev_per_u) {
+static double eval_element_sum_bethe(struct osh_material const *mat,
+                                     unsigned int proj_z,
+                                     unsigned int proj_a,
+                                     double energy_mev_per_u) {
     struct osh_physics_bethe_projectile proj;
     size_t i;
     double sp_sum;
@@ -159,7 +161,7 @@ static void print_projectile_slice_with_diff(struct osh_material_runtime const *
 }
 
 static void print_projectile_direct_bethe_with_diff(struct osh_material_runtime const *tables,
-                                                    struct material const *mat,
+                                                    struct osh_material const *mat,
                                                     size_t ref_mat_idx,
                                                     size_t proj_idx,
                                                     char const *label,
@@ -196,8 +198,8 @@ int main(void) {
     char mat_text[4096];
     struct osh_material_workspace *wm;
     struct osh_material_runtime tables;
-    struct material const *water_loaded;
-    struct material const *water_bethe;
+    struct osh_material const *water_loaded;
+    struct osh_material const *water_bethe;
     enum osh_status rc;
     double const energies[] = {0.03, 0.10, 1.0, 10.0, 100.0, 400.0};
 

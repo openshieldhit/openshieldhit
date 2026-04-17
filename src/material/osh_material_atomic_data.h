@@ -1,7 +1,7 @@
 #ifndef OSH_MATERIAL_ATOMIC_DATA_H
 #define OSH_MATERIAL_ATOMIC_DATA_H
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {

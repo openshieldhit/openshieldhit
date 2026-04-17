@@ -1,4 +1,4 @@
-#include "osh_rc.h"
+#include "openshieldhit/status.h"
 
 char const *osh_strerr(int c) {
     switch (c) {
