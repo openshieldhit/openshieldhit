@@ -14,3 +14,6 @@ Rules:
 - Parsed scoring definitions stay separate from runtime scoring buffers.
 - Save/output code should consume the scoring workspace plus scoring runtime, not transport internals.
 - Other modules may call into scoring runtime APIs, but should not own scorer compilation.
+- Scoring runtime compilation (`osh_scoring_prepare`), postprocessing, and saving
+  are invoked by `src/simulation/` as part of `osh_simulation_create` and
+  `osh_simulation_run`.  App code never calls them directly.

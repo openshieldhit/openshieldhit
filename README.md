@@ -24,58 +24,89 @@ It is not intended to become a large, monolithic framework like Geant4. Instead,
 
 ## Pedagogical Goal
 
-OpenShieldHIT also serves as a pedagogical project.
+OpenShieldHIT also serves as a pedagogical project, particularly aimed at
+physicists and students who want to understand what happens under the hood of a
+Monte Carlo transport code.
 
-It is particularly aimed at physicists and students who want to understand what happens under the hood of a Monte Carlo transport code.
+The project emphasizes hardware-aware programming with explicit attention to
+memory layout, cache behavior, branching patterns, and CPU efficiency.  The
+goal is that the full transport chain — from input parsing through geometry
+traversal, energy-loss stepping, and scoring — can be traced through a small
+number of readable files.
 
-The project emphasizes hardware-aware programming, with explicit attention to:
-- Memory layout
-- Cache behavior
-- Branching patterns
-- CPU efficiency
-- Minimal hidden abstractions
-The intention is to keep the physics and computational structure inspectable in
-the implementation, rather than burying it behind heavy object hierarchies.
-The public C API still uses an opaque context handle to preserve a stable
-boundary for applications.
-
+Opaque handles exist at API boundaries to keep the public interface stable, but
+they hide only plumbing, not physics.  The stepping logic, geometry compiler,
+and scoring accumulation are all open and traceable, without navigating millions
+of lines of framework infrastructure.
 
 ## Requirements
 [SDL2](https://www.libsdl.org/) is required for building examples (optional): `sudo apt-get install libsdl2-dev`
 
 ## How to build
 
-Try:
 ```bash
-cmake -S . -B build && cmake --build build
+cmake --preset release && cmake --build --preset release   # optimised (-O3)
+cmake --preset debug   && cmake --build --preset debug     # debug symbols, -Og
 ```
 
-or for debugging:
+Available presets: `debug`, `release`, `relwithdebinfo`, `prof`.
+Requires CMake ≥ 3.21.  Binaries land in `build_rel/bin/` (release) or `build/bin/` (debug).
+
+> **Note:** There is no `cmake --install` target yet — the project is still under
+> heavy development.  Run the binaries directly from the build tree.
+
+## Run a Minimal Example
+```bash
+build_rel/bin/openshieldhit tests/cases/00_minimal/
+```
+Produces a `.bdo` and `.txt` output file with scored dose vs. depth — a Bragg peak for a proton beam in water.
+
+## The `openshieldhit` application
+
+The main deliverable is the `openshieldhit` (or `openshieldhit.exe` on Windows)
+executable built from `src/apps/osh/`.  It reads four plain-text input files from
+a working directory and produces scored output:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
+openshieldhit path/to/case/          # reads geo.dat, beam.dat, mat.dat, detect.dat
+openshieldhit --validate path/to/case/   # parse and validate without running
+openshieldhit --help
 ```
 
-# Run a Minimal Example
-```bash
-build/bin/openshieldhit tests/cases/00_minimal/
+## Public C API
+
+The library API lives under `include/openshieldhit/`.  Input descriptions are
+held in plain, caller-owned structs (cold workspaces); the library compiles them
+into an opaque simulation handle at run time:
+
+```c
+#include "openshieldhit/simulation.h"
+
+// 1. Fill cold workspaces (via parsers or programmatically)
+struct osh_beam_workspace     *beam    = /* ... */;
+struct osh_geometry_workspace *geo     = /* ... */;
+struct osh_material_workspace *mat     = /* ... */;
+struct osh_scoring_workspace  *scoring = /* ... */;
+
+// 2. Compile into a simulation (zone→material wiring, runtime tables, etc.)
+struct osh_simulation *sim;
+osh_simulation_create(beam, geo, mat, scoring, &sim);
+
+// 3. Run transport and save outputs
+osh_simulation_run(sim, "/path/to/output/");
+
+// 4. Release — cold workspaces are NOT freed here, caller owns them
+osh_simulation_free(sim);
+osh_beam_workspace_free(beam);
+// ...
 ```
-Which should produce a `.bdo` and `.txt` output file with scored dose vs. depth, showing a Bragg peak for a proton beam in water.
 
-## Command-line and public API
+The runtime representations are private to `src/simulation/` and never visible
+to calling code.
 
-OpenShieldHIT has a small public C API in `include/openshieldhit/openshieldhit.h`.
-The public API is context-based: callers create an opaque
-`openshieldhit_context_t`, configure it with `openshieldhit_config_t`, call
-`openshieldhit_run()`, and then destroy the context.
-
-The command-line parser in `src/cli/` is an internal front-end. It translates CLI
-options into the same public configuration structure, but CLI-specific types are
-not part of the public API.
-
-# Try out the examples
+## Try out the examples
 ```bash
-build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
+build_rel/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 ```
 
 ## Status

@@ -16,8 +16,8 @@ installed public API and should not be re-exported through `include/`.
 ## Current layout
 
 - `src/apps/osh/`
-  OpenShieldHIT-style parser/input handling plus the current `openshieldhit`
-  executable `main()`.
+  OpenShieldHIT-style parser/input handling plus the `openshieldhit` executable
+  `main()`.
 
   The app layer provides one `setup_from_path` entry point per input file,
   each with a consistent signature:
@@ -29,9 +29,21 @@ installed public API and should not be re-exported through `include/`.
   enum osh_status osh_scoring_setup_from_path (path, lg, &scoring_ws);
   ```
 
-  Each function parses its input file and validates/prepares the cold workspace.
+  Each function opens a file, parses it, and prepares the cold workspace.
   Ownership stays with the caller; workspaces are freed independently via the
   corresponding `osh_X_workspace_free()` from the core library.
+
+  `osh_run.c` orchestrates the top-level run: it resolves paths, calls the four
+  `setup_from_path` functions, then delegates to the library via three calls:
+
+  ```c
+  osh_simulation_create(beam, geo, mat, scoring, &sim);
+  osh_simulation_run(sim, out_dir);
+  osh_simulation_free(sim);
+  ```
+
+  All runtime compilation, zone-to-material wiring, and transport execution are
+  private to `src/simulation/`.  The app layer never touches runtime headers.
 
 ## Expected future layout
 
