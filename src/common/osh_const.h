@@ -2,6 +2,6 @@
 #define OSH_CONST_H
 
 /* Compatibility bridge: constants are now public in include/openshieldhit/const.h. */
-#include "../../include/openshieldhit/const.h"
+#include "openshieldhit/const.h"
 
 #endif /* OSH_CONST_H */

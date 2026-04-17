@@ -42,9 +42,7 @@ git diff --name-only -- '*.c' '*.h' | sort > "${after}"
 
 echo
 echo "Files changed by this clang-format run:"
-if comm -13 "${before}" "${after}"; then
-    :
-fi | sed '/^$/d'
+comm -13 "${before}" "${after}" | sed '/^$/d'
 
 if [[ "$(comm -13 "${before}" "${after}" | wc -l | tr -d ' ')" -eq 0 ]]; then
     echo "(none)"

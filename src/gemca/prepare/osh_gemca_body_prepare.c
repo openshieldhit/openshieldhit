@@ -16,10 +16,16 @@
  *
  * @param[out] body Receives the newly allocated internal body.
  *
- * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ * @returns OSH_OK on success, OSH_EINVAL when @p body is NULL,
+ *          OSH_ENOMEM on allocation failure.
  */
 enum osh_status osh_gemca_body_init(struct body **body) {
+    if (body == NULL) {
+        osh_error("osh_gemca_body_init() called with NULL output pointer");
+        return OSH_EINVAL;
+    }
 
+    *body = NULL;
     *body = calloc(1, sizeof(struct body));
     if (*body == NULL) {
         osh_error("osh_gemca_body_init() cannot allocate memory");
