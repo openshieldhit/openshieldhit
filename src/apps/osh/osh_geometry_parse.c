@@ -20,40 +20,57 @@ static int _rewind_oshfile(struct oshfile *shf);
  * Values are identical to the internal OSH_GEMCA_BODY_* constants so that
  * osh_geometry_workspace_prepare() can use them without conversion. */
 static int _body_type_from_key(char const *key) {
-    if (strcasecmp(key, "sph") == 0)
+    if (strcasecmp(key, "sph") == 0) {
         return OSH_GEOMETRY_BODY_SPH;
-    if (strcasecmp(key, "wed") == 0)
+    }
+    if (strcasecmp(key, "wed") == 0) {
         return OSH_GEOMETRY_BODY_WED;
-    if (strcasecmp(key, "arb") == 0)
+    }
+    if (strcasecmp(key, "arb") == 0) {
         return OSH_GEOMETRY_BODY_ARB;
-    if (strcasecmp(key, "box") == 0)
+    }
+    if (strcasecmp(key, "box") == 0) {
         return OSH_GEOMETRY_BODY_BOX;
-    if (strcasecmp(key, "vox") == 0)
+    }
+    if (strcasecmp(key, "vox") == 0) {
         return OSH_GEOMETRY_BODY_VOX;
-    if (strcasecmp(key, "rpp") == 0)
+    }
+    if (strcasecmp(key, "rpp") == 0) {
         return OSH_GEOMETRY_BODY_RPP;
-    if (strcasecmp(key, "rcc") == 0)
+    }
+    if (strcasecmp(key, "rcc") == 0) {
         return OSH_GEOMETRY_BODY_RCC;
-    if (strcasecmp(key, "rec") == 0)
+    }
+    if (strcasecmp(key, "rec") == 0) {
         return OSH_GEOMETRY_BODY_REC;
-    if (strcasecmp(key, "trc") == 0)
+    }
+    if (strcasecmp(key, "trc") == 0) {
         return OSH_GEOMETRY_BODY_TRC;
-    if (strcasecmp(key, "ell") == 0)
+    }
+    if (strcasecmp(key, "ell") == 0) {
         return OSH_GEOMETRY_BODY_ELL;
-    if (strcasecmp(key, "yzp") == 0)
+    }
+    if (strcasecmp(key, "yzp") == 0) {
         return OSH_GEOMETRY_BODY_YZP;
-    if (strcasecmp(key, "xzp") == 0)
+    }
+    if (strcasecmp(key, "xzp") == 0) {
         return OSH_GEOMETRY_BODY_XZP;
-    if (strcasecmp(key, "xyp") == 0)
+    }
+    if (strcasecmp(key, "xyp") == 0) {
         return OSH_GEOMETRY_BODY_XYP;
-    if (strcasecmp(key, "pla") == 0)
+    }
+    if (strcasecmp(key, "pla") == 0) {
         return OSH_GEOMETRY_BODY_PLA;
-    if (strcasecmp(key, "rot") == 0)
+    }
+    if (strcasecmp(key, "rot") == 0) {
         return OSH_GEOMETRY_BODY_ROT;
-    if (strcasecmp(key, "cpy") == 0)
+    }
+    if (strcasecmp(key, "cpy") == 0) {
         return OSH_GEOMETRY_BODY_CPY;
-    if (strcasecmp(key, "mov") == 0)
+    }
+    if (strcasecmp(key, "mov") == 0) {
         return OSH_GEOMETRY_BODY_MOV;
+    }
     return OSH_GEOMETRY_BODY_NONE;
 }
 

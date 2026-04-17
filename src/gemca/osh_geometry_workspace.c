@@ -52,6 +52,7 @@ enum osh_status osh_geometry_workspace_create(struct osh_geometry_workspace **ws
 enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
     size_t i;
     struct osh_gemca_prepared *gemca = NULL;
+    enum osh_status rc = OSH_ENOMEM;
 
     if (!ws) {
         return OSH_EINVAL;
@@ -83,7 +84,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         struct osh_geometry_body const *cb = &ws->bodies[i];
         struct body *b;
 
-        if (osh_gemca_body_init(&b) != OSH_OK) {
+        if ((rc = osh_gemca_body_init(&b)) != OSH_OK) {
             goto fail;
         }
         gemca->bodies[i] = b;
@@ -95,6 +96,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         if (cb->name) {
             b->name = strdup(cb->name);
             if (!b->name) {
+                rc = OSH_ENOMEM;
                 goto fail;
             }
         }
@@ -109,7 +111,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
     }
 
     /* Compute surfaces and transformation matrices for all bodies. */
-    if (osh_gemca_body_setup(gemca) != OSH_OK) {
+    if ((rc = osh_gemca_body_setup(gemca)) != OSH_OK) {
         goto fail;
     }
 
@@ -128,7 +130,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         struct osh_geometry_zone const *cz = &ws->zones[i];
         struct zone *z;
 
-        if (osh_gemca_zone_init(&z) != OSH_OK) {
+        if ((rc = osh_gemca_zone_init(&z)) != OSH_OK) {
             goto fail;
         }
         gemca->zones[i] = z;
@@ -136,6 +138,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         if (cz->name) {
             z->name = strdup(cz->name);
             if (!z->name) {
+                rc = OSH_ENOMEM;
                 goto fail;
             }
         }
@@ -143,6 +146,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         if (cz->material_name) {
             z->material_name = strdup(cz->material_name);
             if (!z->material_name) {
+                rc = OSH_ENOMEM;
                 goto fail;
             }
         }
@@ -151,7 +155,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
          * set up already (step 2 above) because the tokeniser resolves body
          * names to pointers at this stage. */
         if (cz->expr && cz->expr[0]) {
-            if (osh_gemca_zone_compile_expr(z, cz->expr, gemca) != OSH_OK) {
+            if ((rc = osh_gemca_zone_compile_expr(z, cz->expr, gemca)) != OSH_OK) {
                 goto fail;
             }
         }
@@ -162,7 +166,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
 
 fail:
     osh_gemca_prepared_free(gemca);
-    return OSH_ENOMEM;
+    return rc;
 }
 
 enum osh_status osh_geometry_workspace_free(struct osh_geometry_workspace *ws) {

@@ -87,8 +87,9 @@ append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, 
     geo->axes = tmp;
     memset(&geo->axes[geo->naxes], 0, sizeof(*tmp));
     len = strlen(label);
-    if (len >= sizeof(geo->axes[0].label))
+    if (len >= sizeof(geo->axes[0].label)) {
         len = sizeof(geo->axes[0].label) - 1u;
+    }
     memcpy(geo->axes[geo->naxes].label, label, len);
     geo->axes[geo->naxes].label[len] = '\0';
     geo->axes[geo->naxes].lo = lo;

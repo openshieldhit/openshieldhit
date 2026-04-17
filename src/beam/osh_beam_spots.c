@@ -249,6 +249,7 @@ int osh_beam_spotlist_load(struct beam_workspace *beam, char const *spotlist_pat
     template_spot = beam->spots[0];
 
     if (fseek(fp, 0L, SEEK_SET) != 0) {
+        free(spots_new);
         return OSH_EIO;
     }
     clearerr(fp);

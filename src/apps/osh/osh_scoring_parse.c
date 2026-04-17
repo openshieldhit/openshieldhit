@@ -64,8 +64,9 @@ enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_works
     int lineno;
     enum osh_status rc;
 
-    if (!oshf || !ws)
+    if (!oshf || !ws) {
         return OSH_EINVAL;
+    }
 
     path = oshf->filename;
     section = SECTION_NONE;
