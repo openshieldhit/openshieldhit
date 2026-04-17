@@ -9,6 +9,7 @@ add_library(osh_material
 target_include_directories(osh_material
     PUBLIC
         ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/include
 )
 
 target_link_libraries(osh_material

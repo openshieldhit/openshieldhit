@@ -4,8 +4,8 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "common/osh_rc.h"
-#include "material/osh_material.h"
+#include "openshieldhit/material.h"
+#include "openshieldhit/status.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -36,7 +36,7 @@ load_workspace_from_fixture(char const *rel, enum osh_status expected_rc, struct
     *wm_out = wm;
 }
 
-static double test_material_element_mass_da(struct material_element const *elem) {
+static double test_material_element_mass_da(struct osh_material_element const *elem) {
     if (elem->a == 0u && elem->z == 1u) {
         return 1.00794;
     }
@@ -48,7 +48,7 @@ static double test_material_element_mass_da(struct material_element const *elem)
     return 0.0;
 }
 
-static double test_material_bragg_mean_excitation_energy(struct material const *mat) {
+static double test_material_bragg_mean_excitation_energy(struct osh_material const *mat) {
     double numerator;
     double denominator;
     double mass;
@@ -73,7 +73,7 @@ static double test_material_bragg_mean_excitation_energy(struct material const *
 
 static void test_valid_icru_override(void) {
     struct osh_material_workspace *wm = NULL;
-    struct material const *mat;
+    struct osh_material const *mat;
 
     load_workspace_from_fixture("valid/water_icru_override.dat", OSH_OK, &wm);
 
@@ -107,7 +107,7 @@ static void test_valid_icru_override(void) {
 
 static void test_valid_explicit_composition(void) {
     struct osh_material_workspace *wm = NULL;
-    struct material const *mat;
+    struct osh_material const *mat;
 
     load_workspace_from_fixture("valid/water_explicit.dat", OSH_OK, &wm);
 
@@ -131,7 +131,7 @@ static void test_valid_explicit_composition(void) {
 static void test_valid_case_and_loaddedx(void) {
     char expected_dedx_path[1024];
     struct osh_material_workspace *wm = NULL;
-    struct material const *mat;
+    struct osh_material const *mat;
 
     load_workspace_from_fixture("valid/case_and_loaddedx.dat", OSH_OK, &wm);
 
@@ -153,7 +153,7 @@ static void test_valid_case_and_loaddedx(void) {
 
 static void test_valid_mass_fraction_and_isotope(void) {
     struct osh_material_workspace *wm = NULL;
-    struct material const *mat;
+    struct osh_material const *mat;
 
     load_workspace_from_fixture("valid/water_by_mass.dat", OSH_OK, &wm);
     mat = osh_material_by_name(wm, "WaterByMass");
@@ -178,8 +178,8 @@ static void test_valid_mass_fraction_and_isotope(void) {
 
 static void test_valid_end_handling(void) {
     struct osh_material_workspace *wm = NULL;
-    struct material const *mat_a;
-    struct material const *mat_b;
+    struct osh_material const *mat_a;
+    struct osh_material const *mat_b;
 
     load_workspace_from_fixture("valid/end_outside.dat", OSH_OK, &wm);
     ASSERT_TRUE(wm->nmaterials == 2u);

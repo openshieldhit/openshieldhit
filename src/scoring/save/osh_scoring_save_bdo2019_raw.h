@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {

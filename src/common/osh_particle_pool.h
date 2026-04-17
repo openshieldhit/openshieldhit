@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
 
 #ifdef __cplusplus

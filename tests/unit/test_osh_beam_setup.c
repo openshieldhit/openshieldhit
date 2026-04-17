@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_particle_pdg.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \

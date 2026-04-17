@@ -6,7 +6,7 @@
 
 #include "common/osh_coord.h"
 #include "common/osh_ray.h" /* struct ray, struct ray_v, struct ray_c */
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 
 /** @defgroup gemca Geometry Engine (GEMCA)
  *

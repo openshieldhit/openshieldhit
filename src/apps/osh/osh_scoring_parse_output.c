@@ -1,3 +1,19 @@
+/**
+ * @file osh_scoring_parse_output.c
+ *
+ * @brief Parse one tokenized line inside a scoring `Output` section.
+ *
+ * @details
+ * Recognized keys:
+ * - `Filename <path>`
+ * - `Geo <name>`
+ * - `Fileformat|Format <name>`
+ * - `Quantity <name> [filter_name ...]`
+ *
+ * Each `Quantity` line creates one page entry and records optional filter-name
+ * references for late resolution.
+ */
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -31,6 +47,9 @@ static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_f
                                              {OSH_SCORING_KEY_QUANTITY, output_quantity},
                                              {NULL, NULL}};
 
+/**
+ * @brief Dispatch one tokenized line into the active output definition.
+ */
 enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out,
                                               char **words,
                                               int nwords,
@@ -51,6 +70,9 @@ enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out
     return OSH_OK;
 }
 
+/**
+ * @brief Append one scoring page entry to an output.
+ */
 static enum osh_status append_page(struct osh_scoring_output_def *out) {
     struct osh_scoring_page_def *tmp =
         (struct osh_scoring_page_def *) realloc(out->pages, (out->npages + 1u) * sizeof(*tmp));
@@ -62,6 +84,9 @@ static enum osh_status append_page(struct osh_scoring_output_def *out) {
     return OSH_OK;
 }
 
+/**
+ * @brief Append one filter name reference to a page.
+ */
 static enum osh_status append_page_filter(struct osh_scoring_page_def *page, char const *name) {
     char **tmp = (char **) realloc(page->filter_names, (page->nfilter_names + 1u) * sizeof(*tmp));
     if (!tmp)
@@ -74,6 +99,9 @@ static enum osh_status append_page_filter(struct osh_scoring_page_def *page, cha
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `Filename <value>`.
+ */
 static enum osh_status
 output_filename(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -85,6 +113,9 @@ output_filename(struct osh_scoring_output_def *out, char **words, int nwords, ch
     return out->filename ? OSH_OK : OSH_ENOMEM;
 }
 
+/**
+ * @brief Parse `Geo <geometry_name>`.
+ */
 static enum osh_status
 output_geo(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -96,6 +127,9 @@ output_geo(struct osh_scoring_output_def *out, char **words, int nwords, char co
     return out->geometry_name ? OSH_OK : OSH_ENOMEM;
 }
 
+/**
+ * @brief Parse `Fileformat <name>` (and alias `Format <name>`).
+ */
 static enum osh_status
 output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -108,6 +142,9 @@ output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, 
     return out->fileformat ? OSH_OK : OSH_ENOMEM;
 }
 
+/**
+ * @brief Parse one `Quantity` line and append the corresponding page.
+ */
 static enum osh_status
 output_quantity(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
     enum osh_status rc;

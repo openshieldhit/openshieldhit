@@ -4,10 +4,10 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "common/osh_rc.h"
 #include "common/osh_step.h"
+#include "openshieldhit/scoring.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
-#include "scoring/osh_scoring.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_prepare.h"
 #include "scoring/runtime/osh_scoring_step.h"

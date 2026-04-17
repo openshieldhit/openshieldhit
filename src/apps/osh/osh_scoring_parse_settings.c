@@ -1,3 +1,15 @@
+/**
+ * @file osh_scoring_parse_settings.c
+ *
+ * @brief Parse one tokenized line inside a scoring `Settings` section.
+ *
+ * @details
+ * The settings parser accepts canonical keywords plus a few legacy aliases
+ * (`sitediam`, `rho`, `npart`) and stores values in the active settings block.
+ * Presence flags (`has_*`) are set per field so later stages can distinguish
+ * explicit user input from defaults.
+ */
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -43,6 +55,9 @@ static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings
                                                  {"npart", settings_maxcount},
                                                  {NULL, NULL}};
 
+/**
+ * @brief Dispatch one tokenized line into the active settings definition.
+ */
 enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def *set,
                                                 char **words,
                                                 int nwords,
@@ -63,6 +78,9 @@ enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def 
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `Name <value>`.
+ */
 static enum osh_status
 settings_name(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -74,6 +92,9 @@ settings_name(struct osh_scoring_settings_def *set, char **words, int nwords, ch
     return set->name ? OSH_OK : OSH_ENOMEM;
 }
 
+/**
+ * @brief Parse `Rescale <value>`.
+ */
 static enum osh_status settings_rescale(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -85,6 +106,9 @@ static enum osh_status settings_rescale(
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `Offset <value>`.
+ */
 static enum osh_status
 settings_offset(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -96,6 +120,9 @@ settings_offset(struct osh_scoring_settings_def *set, char **words, int nwords, 
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `Medium <id>`.
+ */
 static enum osh_status
 settings_medium(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -107,6 +134,9 @@ settings_medium(struct osh_scoring_settings_def *set, char **words, int nwords, 
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `NKMedium <id>`.
+ */
 static enum osh_status settings_nkmedium(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -118,6 +148,9 @@ static enum osh_status settings_nkmedium(
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `SiteDiameter <value_um>` (and alias `sitediam`).
+ */
 static enum osh_status settings_sitediam(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -129,6 +162,9 @@ static enum osh_status settings_sitediam(
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `Density <value_g_cm3>` (and alias `rho`).
+ */
 static enum osh_status settings_density(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -140,6 +176,9 @@ static enum osh_status settings_density(
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `MaxCount <n>` (and alias `npart`).
+ */
 static enum osh_status settings_maxcount(
     struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {

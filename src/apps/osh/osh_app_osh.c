@@ -8,9 +8,9 @@
 #include "apps/osh/osh_material_parse.h"
 #include "apps/osh/osh_scoring_parse.h"
 #include "beam/osh_beam_spots.h"
-#include "material/osh_material.h"
 #include "openshieldhit/file.h"
 #include "openshieldhit/logger.h"
+#include "openshieldhit/material.h"
 #include "openshieldhit/status.h"
 
 enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct osh_beam_workspace **wb_out) {

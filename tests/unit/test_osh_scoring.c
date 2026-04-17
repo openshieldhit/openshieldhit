@@ -3,8 +3,8 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "common/osh_rc.h"
-#include "scoring/osh_scoring.h"
+#include "openshieldhit/scoring.h"
+#include "openshieldhit/status.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \

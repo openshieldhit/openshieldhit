@@ -2,8 +2,8 @@
 #define OSH_FRONTEND_OPENSHIELDHIT_MATERIAL_PARSE_H
 
 #include "common/osh_file.h"
-#include "common/osh_rc.h"
-#include "material/osh_material.h"
+#include "openshieldhit/material.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {

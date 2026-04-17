@@ -5,7 +5,8 @@
 #include <stdio.h>
 
 /* Internal CLI parser — not part of the public library API.
- * Used only by src/main.c and the test_osh_cli test suite. */
+ * This module is the project's cross-platform getopt/getopt_long replacement.
+ * Used by src/apps/osh/main.c and the test_osh_cli test suite. */
 
 /** Actions the CLI parser may request the caller to perform. */
 enum osh_cli_action { OSH_CLI_ACTION_RUN = 0, OSH_CLI_ACTION_HELP = 1, OSH_CLI_ACTION_VERSION = 2 };

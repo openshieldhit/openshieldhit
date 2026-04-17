@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "common/osh_logger.h"
+#include "test_assert.h"
 
 #if defined(_WIN32)
 #include <windows.h>

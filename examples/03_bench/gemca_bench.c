@@ -20,10 +20,10 @@
 
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_logger.h"
-#include "common/osh_rc.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
 #include "openshieldhit/geometry.h"
+#include "openshieldhit/status.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 

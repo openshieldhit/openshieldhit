@@ -1,7 +1,7 @@
 #ifndef OSH_SCORING_SAVE_ASCII_H
 #define OSH_SCORING_SAVE_ASCII_H
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 #include "scoring/save/osh_scoring_save.h"
 
 #ifdef __cplusplus

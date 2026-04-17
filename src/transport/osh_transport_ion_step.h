@@ -8,7 +8,7 @@
 
 #include <stddef.h> /* size_t */
 
-#include "common/osh_rc.h"
+#include "openshieldhit/status.h"
 
 struct osh_particle_pool;
 struct osh_gemca_runtime;

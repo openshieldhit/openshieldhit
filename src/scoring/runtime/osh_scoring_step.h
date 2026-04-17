@@ -1,8 +1,8 @@
 #ifndef OSH_SCORING_STEP_H
 #define OSH_SCORING_STEP_H
 
-#include "common/osh_rc.h"
 #include "common/osh_step.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 

@@ -9,8 +9,8 @@
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_physics.h"
-#include "common/osh_rc.h"
 #include "common/osh_vect.h"
+#include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
 
 static void _wb_defaults(struct beam_workspace *wb);

@@ -1,7 +1,7 @@
 #ifndef OSH_SCORING_PARSE_INTERNAL_H
 #define OSH_SCORING_PARSE_INTERNAL_H
 
-#include "scoring/osh_scoring.h"
+#include "openshieldhit/scoring.h"
 
 #ifdef __cplusplus
 extern "C" {

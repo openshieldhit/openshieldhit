@@ -1,3 +1,18 @@
+/**
+ * @file osh_scoring_parse_filter.c
+ *
+ * @brief Parse one tokenized line inside a scoring `Filter` section.
+ *
+ * @details
+ * Recognized keys:
+ * - `Name <string>`
+ * - `z|a|e|gen|id <op> <value>`
+ *
+ * Rule keys are normalized to uppercase field names and appended to the
+ * current filter as raw text/number rules. Semantic validation of operators
+ * and field/value compatibility is done later during scoring finalize.
+ */
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +43,9 @@ static struct filter_entry filter_table[] = {{OSH_SCORING_KEY_NAME, filter_name}
                                              {OSH_SCORING_KEY_FILTER_ID, filter_rule},
                                              {NULL, NULL}};
 
+/**
+ * @brief Dispatch one tokenized line into the active filter definition.
+ */
 enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil,
                                               char **words,
                                               int nwords,
@@ -48,21 +66,36 @@ enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil
     return OSH_OK;
 }
 
+/**
+ * @brief Append one parsed rule to the filter's dynamic rule array.
+ */
 static enum osh_status
 append_filter_rule(struct osh_scoring_filter_def *fil, char const *field, char const *op, double value) {
+    size_t len;
     struct osh_scoring_filter_rule *tmp =
         (struct osh_scoring_filter_rule *) realloc(fil->rules, (fil->nrules + 1u) * sizeof(*tmp));
     if (!tmp)
         return OSH_ENOMEM;
     fil->rules = tmp;
     memset(&fil->rules[fil->nrules], 0, sizeof(*tmp));
-    strncpy(fil->rules[fil->nrules].field, field, sizeof(fil->rules[0].field) - 1u);
-    strncpy(fil->rules[fil->nrules].op, op, sizeof(fil->rules[0].op) - 1u);
+    len = strlen(field);
+    if (len >= sizeof(fil->rules[0].field))
+        len = sizeof(fil->rules[0].field) - 1u;
+    memcpy(fil->rules[fil->nrules].field, field, len);
+    fil->rules[fil->nrules].field[len] = '\0';
+    len = strlen(op);
+    if (len >= sizeof(fil->rules[0].op))
+        len = sizeof(fil->rules[0].op) - 1u;
+    memcpy(fil->rules[fil->nrules].op, op, len);
+    fil->rules[fil->nrules].op[len] = '\0';
     fil->rules[fil->nrules].value = value;
     fil->nrules++;
     return OSH_OK;
 }
 
+/**
+ * @brief Parse `Name <value>` for a filter.
+ */
 static enum osh_status
 filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno) {
     if (nwords < 2) {
@@ -74,6 +107,9 @@ filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char c
     return fil->name ? OSH_OK : OSH_ENOMEM;
 }
 
+/**
+ * @brief Parse `<field> <op> <value>` and append one filter rule.
+ */
 static enum osh_status
 filter_rule(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno) {
     char field[16];

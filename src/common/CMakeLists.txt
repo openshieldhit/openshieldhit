@@ -4,7 +4,7 @@ add_subdirectory(raytrace)
 # Cmake cannot track changes *.c glob files, so we list them explicitly
 add_library(osh_common
     osh_logger.c
-    osh_rc.c
+    osh_status.c
     osh_version.c
     osh_vect.c
     osh_interpolate.c
