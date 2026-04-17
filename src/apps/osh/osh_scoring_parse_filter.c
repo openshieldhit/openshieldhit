@@ -79,13 +79,15 @@ append_filter_rule(struct osh_scoring_filter_def *fil, char const *field, char c
     fil->rules = tmp;
     memset(&fil->rules[fil->nrules], 0, sizeof(*tmp));
     len = strlen(field);
-    if (len >= sizeof(fil->rules[0].field))
+    if (len >= sizeof(fil->rules[0].field)) {
         len = sizeof(fil->rules[0].field) - 1u;
+    }
     memcpy(fil->rules[fil->nrules].field, field, len);
     fil->rules[fil->nrules].field[len] = '\0';
     len = strlen(op);
-    if (len >= sizeof(fil->rules[0].op))
+    if (len >= sizeof(fil->rules[0].op)) {
         len = sizeof(fil->rules[0].op) - 1u;
+    }
     memcpy(fil->rules[fil->nrules].op, op, len);
     fil->rules[fil->nrules].op[len] = '\0';
     fil->rules[fil->nrules].value = value;
