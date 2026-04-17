@@ -25,6 +25,7 @@
 #include "openshieldhit/material.h"
 #include "openshieldhit/readline.h"
 #include "openshieldhit/scoring.h"
+#include "openshieldhit/simulation.h"
 #include "openshieldhit/status.h"
 #include "openshieldhit/version.h"
 

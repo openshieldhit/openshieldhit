@@ -24,13 +24,11 @@ target_link_libraries(osh_app_osh
         osh_common
     PRIVATE
         osh_beam
-        osh_beam_runtime
         osh_gemca2
-        osh_gemca_runtime
         osh_material
         osh_particle
         osh_scoring
-        osh_transport
+        osh_simulation
 )
 
 if(UNIX)

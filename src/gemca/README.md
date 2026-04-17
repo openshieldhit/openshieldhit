@@ -29,7 +29,7 @@ This directory now has three distinct responsibilities:
 
 The important boundary is:
 
-`app parser -> cold geometry -> prepare/compile -> runtime`
+`app parser -> cold geometry -> prepare/compile -> runtime -> simulation`
 
 Two consequences follow from that:
 
