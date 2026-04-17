@@ -1,5 +1,5 @@
-#ifndef OSH_SIMULATION_H
-#define OSH_SIMULATION_H
+#ifndef OPENSHIELDHIT_SIMULATION_H
+#define OPENSHIELDHIT_SIMULATION_H
 
 #include "openshieldhit/beam.h"
 #include "openshieldhit/geometry.h"
@@ -73,4 +73,4 @@ enum osh_status osh_simulation_free(struct osh_simulation *sim);
 }
 #endif
 
-#endif /* OSH_SIMULATION_H */
+#endif /* OPENSHIELDHIT_SIMULATION_H */
