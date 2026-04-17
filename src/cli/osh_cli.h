@@ -19,17 +19,17 @@ enum osh_cli_action { OSH_CLI_ACTION_RUN = 0, OSH_CLI_ACTION_HELP = 1, OSH_CLI_A
  * argv array and are valid only for its lifetime.
  */
 struct osh_cli_options {
-    enum osh_cli_action action; /**< Requested action (run / help / version). */
-    int dry_run;                /**< Non-zero: load inputs but skip transport. */
-    int verbose;                /**< Verbosity level; incremented per -v flag. */
-    char const *workdir;        /**< Working directory for default file resolution. */
-    char const *geo_path;       /**< Override path for the geometry input file. */
-    char const *beam_path;      /**< Override path for the beam input file. */
-    char const *mat_path;       /**< Override path for the material input file. */
-    char const *detect_path;    /**< Override path for the scoring input file. */
-    char const *out_dir;        /**< Override path for the output directory. */
-    unsigned long long nstat;   /**< Requested number of primary histories. */
-    int has_nstat;              /**< Non-zero if --nstat/-n was explicitly given. */
+    enum osh_cli_action action;     /**< Requested action (run / help / version). */
+    int dry_run;                    /**< Non-zero: load inputs but skip transport. */
+    int verbose;                    /**< Verbosity level; incremented per -v flag. */
+    char const *workdir;            /**< Working directory for default file resolution. */
+    char const *geo_path;           /**< Override path for the geometry input file. */
+    char const *beam_path;          /**< Override path for the beam input file. */
+    char const *mat_path;           /**< Override path for the material input file. */
+    char const *detect_path;        /**< Override path for the scoring input file. */
+    char const *out_dir;            /**< Override path for the output directory. */
+    unsigned long long nstat;       /**< Requested number of primary histories. */
+    int has_nstat;                  /**< Non-zero if --nstat/-n was explicitly given. */
     unsigned long long seed_offset; /**< Random-seed stream offset override. */
     int has_seed_offset;            /**< Non-zero if --seedoffset/-N was explicitly given. */
 };
