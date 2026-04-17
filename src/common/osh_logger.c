@@ -43,21 +43,21 @@ void osh_logger_flush(struct osh_logger *lg);
 
 /* default logger (public; declared in .h, but fine to list here too) */
 struct osh_logger *osh_log_default(void);
-int osh_log_init(int level, unsigned flags);
+enum osh_status osh_log_init(int level, unsigned flags);
 void osh_log_close(void);
-int osh_log_set_level(int level);
+enum osh_status osh_log_set_level(int level);
 int osh_log_get_level(void);
 void osh_log_set_flags(unsigned flags);
 unsigned osh_log_get_flags(void);
 void osh_log_flush(void);
 
 /* sinks / callbacks (public) */
-int osh_log_add_file(char const *path, int append);
-int osh_log_enable_stdout(int enable);
+enum osh_status osh_log_add_file(char const *path, int append);
+enum osh_status osh_log_enable_stdout(int enable);
 
-int osh_logger_add_file(struct osh_logger *lg, char const *path, int append);
-int osh_logger_enable_stdout(struct osh_logger *lg, int enable);
-int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user);
+enum osh_status osh_logger_add_file(struct osh_logger *lg, char const *path, int append);
+enum osh_status osh_logger_enable_stdout(struct osh_logger *lg, int enable);
+enum osh_status osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user);
 
 /* wrappers / convenience (public) */
 char const *osh_log_level_name(int level);
@@ -276,16 +276,16 @@ struct osh_logger *osh_log_default(void) {
     return g_default_logger;
 }
 
-int osh_log_init(int level, unsigned flags) {
+enum osh_status osh_log_init(int level, unsigned flags) {
     if (g_default_logger) {
         /* already initialized: just update config */
         osh_logger_set_level(g_default_logger, level);
         osh_logger_set_flags(g_default_logger, flags);
-        return 0;
+        return OSH_OK;
     }
 
     g_default_logger = osh_logger_create(level, flags);
-    return g_default_logger ? 0 : -1;
+    return g_default_logger ? OSH_OK : OSH_ENOMEM;
 }
 
 void osh_log_close(void) {
@@ -297,13 +297,13 @@ void osh_log_close(void) {
     g_default_logger = NULL;
 }
 
-int osh_log_set_level(int level) {
+enum osh_status osh_log_set_level(int level) {
     if (!g_default_logger) {
-        return -1;
+        return OSH_ESTATE;
     }
 
     osh_logger_set_level(g_default_logger, level);
-    return 0;
+    return OSH_OK;
 }
 
 int osh_log_get_level(void) {
@@ -662,14 +662,14 @@ static FILE *_open_log_file(char const *path, int append) {
     return fopen(path, append ? "a" : "w");
 }
 
-int osh_logger_add_file(struct osh_logger *lg, char const *path, int append) {
+enum osh_status osh_logger_add_file(struct osh_logger *lg, char const *path, int append) {
     if (!lg) {
-        return -1;
+        return OSH_EINVAL;
     }
 
     FILE *fp = _open_log_file(path, append);
     if (!fp) {
-        return -1;
+        return OSH_EIO;
     }
 
     _mutex_lock(&lg->lock);
@@ -679,32 +679,38 @@ int osh_logger_add_file(struct osh_logger *lg, char const *path, int append) {
     lg->fp_file = fp;
     _mutex_unlock(&lg->lock);
 
-    return 0;
+    return OSH_OK;
 }
 
-int osh_log_add_file(char const *path, int append) {
-    return osh_logger_add_file(osh_log_default(), path, append);
+enum osh_status osh_log_add_file(char const *path, int append) {
+    if (!g_default_logger) {
+        return OSH_ESTATE;
+    }
+    return osh_logger_add_file(g_default_logger, path, append);
 }
 
-int osh_logger_enable_stdout(struct osh_logger *lg, int enable) {
+enum osh_status osh_logger_enable_stdout(struct osh_logger *lg, int enable) {
     if (!lg) {
-        return -1;
+        return OSH_EINVAL;
     }
 
     _mutex_lock(&lg->lock);
     lg->use_stdout = enable ? 1 : 0;
     _mutex_unlock(&lg->lock);
 
-    return 0;
+    return OSH_OK;
 }
 
-int osh_log_enable_stdout(int enable) {
-    return osh_logger_enable_stdout(osh_log_default(), enable);
+enum osh_status osh_log_enable_stdout(int enable) {
+    if (!g_default_logger) {
+        return OSH_ESTATE;
+    }
+    return osh_logger_enable_stdout(g_default_logger, enable);
 }
 
-int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user) {
+enum osh_status osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user) {
     if (!lg) {
-        return -1;
+        return OSH_EINVAL;
     }
 
     _mutex_lock(&lg->lock);
@@ -712,7 +718,7 @@ int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *us
     lg->cb_user = user;
     _mutex_unlock(&lg->lock);
 
-    return 0;
+    return OSH_OK;
 }
 
 /* -----------------------------

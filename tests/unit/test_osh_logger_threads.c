@@ -85,9 +85,9 @@ static void test_logger_threads(void) {
     remove(logfile);
 
     /* Init + file sink; keep console quiet */
-    assert(osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE) == 0);
-    assert(osh_log_add_file(logfile, /*append=*/0) == 0);
-    (void) osh_log_enable_stdout(0);
+    assert(osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE) == OSH_OK);
+    assert(osh_log_add_file(logfile, /*append=*/0) == OSH_OK);
+    assert(osh_log_enable_stdout(0) == OSH_OK);
 
 #if defined(_WIN32)
     HANDLE th[THREADS];
