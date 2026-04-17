@@ -29,7 +29,9 @@ struct osh_cli_options {
     char const *detect_path;    /**< Override path for the scoring input file. */
     char const *out_dir;        /**< Override path for the output directory. */
     unsigned long long nstat;   /**< Requested number of primary histories. */
-    int has_nstat;              /**< Non-zero if --nstat/-N was explicitly given. */
+    int has_nstat;              /**< Non-zero if --nstat/-n was explicitly given. */
+    unsigned long long seed_offset; /**< Random-seed stream offset override. */
+    int has_seed_offset;            /**< Non-zero if --seedoffset/-N was explicitly given. */
 };
 
 /**

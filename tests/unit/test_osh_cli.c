@@ -41,7 +41,7 @@ static void test_nstat_and_overrides(void) {
     char err[256];
     struct osh_cli_options opt;
     char *argv[] = {
-        "openshieldhit", "-v", "-N", "1000", "--geo=/shared/geo.dat", "--beam=beam_override.dat", "run_17", NULL};
+        "openshieldhit", "-v", "-n", "1000", "--geo=/shared/geo.dat", "--beam=beam_override.dat", "run_17", NULL};
 
     int rc = osh_cli_parse(7, argv, &opt, err, sizeof(err));
     ASSERT_TRUE(rc == 0);
@@ -52,6 +52,17 @@ static void test_nstat_and_overrides(void) {
     ASSERT_TRUE(opt.workdir != NULL && strcmp(opt.workdir, "run_17") == 0);
     ASSERT_TRUE(opt.geo_path != NULL && strcmp(opt.geo_path, "/shared/geo.dat") == 0);
     ASSERT_TRUE(opt.beam_path != NULL && strcmp(opt.beam_path, "beam_override.dat") == 0);
+}
+
+static void test_seedoffset_override(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "-N", "123", "--seedoffset=456", NULL};
+
+    int rc = osh_cli_parse(4, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_seed_offset == 1);
+    ASSERT_TRUE(opt.seed_offset == 456ULL);
 }
 
 static void test_nstat_rejects_leading_whitespace(void) {
@@ -68,6 +79,21 @@ static void test_nstat_rejects_sign_prefix(void) {
     char err[256];
     struct osh_cli_options opt;
     char *argv_plus[] = {"openshieldhit", "--nstat=+5", NULL};
+    char *argv_minus[] = {"openshieldhit", "-n", "-1", NULL};
+
+    int rc = osh_cli_parse(2, argv_plus, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
+
+    rc = osh_cli_parse(3, argv_minus, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
+}
+
+static void test_seedoffset_rejects_sign_prefix(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv_plus[] = {"openshieldhit", "--seedoffset=+5", NULL};
     char *argv_minus[] = {"openshieldhit", "-N", "-1", NULL};
 
     int rc = osh_cli_parse(2, argv_plus, &opt, err, sizeof(err));
@@ -75,6 +101,16 @@ static void test_nstat_rejects_sign_prefix(void) {
     ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
 
     rc = osh_cli_parse(3, argv_minus, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
+}
+
+static void test_seedoffset_rejects_above_9999(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--seedoffset=10000", NULL};
+
+    int rc = osh_cli_parse(2, argv, &opt, err, sizeof(err));
     ASSERT_TRUE(rc != 0);
     ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
 }
@@ -102,12 +138,24 @@ static int run_named_test(char const *name) {
         test_nstat_and_overrides();
         return 0;
     }
+    if (strcmp(name, "seedoffset_override") == 0) {
+        test_seedoffset_override();
+        return 0;
+    }
     if (strcmp(name, "nstat_rejects_leading_whitespace") == 0) {
         test_nstat_rejects_leading_whitespace();
         return 0;
     }
     if (strcmp(name, "nstat_rejects_sign_prefix") == 0) {
         test_nstat_rejects_sign_prefix();
+        return 0;
+    }
+    if (strcmp(name, "seedoffset_rejects_sign_prefix") == 0) {
+        test_seedoffset_rejects_sign_prefix();
+        return 0;
+    }
+    if (strcmp(name, "seedoffset_rejects_above_9999") == 0) {
+        test_seedoffset_rejects_above_9999();
         return 0;
     }
     if (strcmp(name, "rejects_extra_positional_argument") == 0) {
@@ -125,8 +173,11 @@ int main(int argc, char *argv[]) {
     test_version_short_flag();
     test_verbose_and_dir_options();
     test_nstat_and_overrides();
+    test_seedoffset_override();
     test_nstat_rejects_leading_whitespace();
     test_nstat_rejects_sign_prefix();
+    test_seedoffset_rejects_sign_prefix();
+    test_seedoffset_rejects_above_9999();
     test_rejects_extra_positional_argument();
     return 0;
 }

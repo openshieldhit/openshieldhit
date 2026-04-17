@@ -81,6 +81,9 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         if (opt->has_nstat) {
             fprintf(out, "  Requested nstat  : %llu\n", opt->nstat);
         }
+        if (opt->has_seed_offset) {
+            fprintf(out, "  Requested seed offset: %llu\n", opt->seed_offset);
+        }
         fprintf(out, "  Working directory: %s\n", workdir);
         fprintf(out, "  Output directory : %s\n", outdir);
         fprintf(out, "  Geometry input   : %s\n", geo_path);
@@ -118,10 +121,23 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     if (opt->has_nstat) {
         beam->nstat = (size_t) opt->nstat;
     }
+    if (opt->has_seed_offset) {
+        if (opt->seed_offset > 9999ull) {
+            if (err) {
+                fprintf(err, "Error: seed offset must be <= 9999 (got %llu)\n", opt->seed_offset);
+            }
+            rc = OSH_EINVAL;
+            goto cleanup;
+        }
+        beam->rndoffset = (int) opt->seed_offset;
+    }
     if (out) {
         fprintf(out, "Loaded beam: %s\n", beam_path);
         if (opt->has_nstat) {
             fprintf(out, "Applied nstat override: %llu\n", opt->nstat);
+        }
+        if (opt->has_seed_offset) {
+            fprintf(out, "Applied seed offset override: %llu\n", opt->seed_offset);
         }
     }
 

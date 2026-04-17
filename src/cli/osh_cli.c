@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Keep CLI-compatible behavior with original SHIELD-HIT seed offset bounds. */
+#define OSH_CLI_MAX_SEED_OFFSET 9999ull
+
 /* This parser intentionally does not use getopt/getopt_long because MSVC
  * does not provide <getopt.h> in its standard C runtime. Keeping the option
  * handling local avoids an extra compatibility dependency on Windows. */
@@ -35,6 +38,8 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
     opt->out_dir = NULL;
     opt->nstat = 0;
     opt->has_nstat = 0;
+    opt->seed_offset = 0;
+    opt->has_seed_offset = 0;
 
     if (argc <= 1) {
         opt->action = OSH_CLI_ACTION_HELP;
@@ -85,7 +90,8 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "  -h, --help            Show this help message\n");
     fprintf(out, "  -V, --version         Print version information\n");
     fprintf(out, "  -v, --verbose         Increase verbosity\n");
-    fprintf(out, "  -N, --nstat <n>       Number of requested primary histories\n");
+    fprintf(out, "  -n, --nstat <n>       Number of requested primary histories\n");
+    fprintf(out, "  -N, --seedoffset <n>  Random seed offset override (max 9999)\n");
     fprintf(out, "      --dry-run         Parse/load inputs only, do not run transport\n");
     fprintf(out, "      --workdir <dir>   Working directory for default input/output files\n");
     fprintf(out, "      --geo <file>      Override geometry input file\n");
@@ -210,9 +216,20 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
             return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
         }
         if (!parse_u64(value, &opt->nstat)) {
-            return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--nstat");
+            return set_err(err, err_cap, "invalid integer value for option '%s'", "-n/--nstat");
         }
         opt->has_nstat = 1;
+        return 0;
+    }
+    if (((name_len == 10) && (strncmp(name, "seedoffset", name_len) == 0))
+        || ((name_len == 11) && (strncmp(name, "seed-offset", name_len) == 0))) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        if (!parse_u64(value, &opt->seed_offset) || (opt->seed_offset > OSH_CLI_MAX_SEED_OFFSET)) {
+            return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--seedoffset");
+        }
+        opt->has_seed_offset = 1;
         return 0;
     }
     if ((name_len == 7) && (strncmp(name, "workdir", name_len) == 0)) {
@@ -264,11 +281,11 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
 }
 
 /**
- * @brief Parse all short options packed in argv[*idx] (e.g. `-vvN 1000`).
+ * @brief Parse all short options packed in argv[*idx] (e.g. `-vvn 1000`).
  *
  * @details
  * Iterates over each character in the flag cluster. Flags that take a value
- * (-N, -o) consume either the remainder of the current token or the next
+ * (-n, -N, -o) consume either the remainder of the current token or the next
  * argv token, then return immediately since no further flags can follow.
  *
  * @param[in]     argc     Total argument count.
@@ -299,7 +316,7 @@ parse_short_options(int argc, char *argv[], int *idx, struct osh_cli_options *op
         case 'v':
             opt->verbose += 1;
             break;
-        case 'N':
+        case 'n':
             value = &arg[pos + 1];
             if (*value == '\0') {
                 if (!consume_option_arg(argc, argv, idx, arg, &value)) {
@@ -307,9 +324,21 @@ parse_short_options(int argc, char *argv[], int *idx, struct osh_cli_options *op
                 }
             }
             if (!parse_u64(value, &opt->nstat)) {
-                return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--nstat");
+                return set_err(err, err_cap, "invalid integer value for option '%s'", "-n/--nstat");
             }
             opt->has_nstat = 1;
+            return 0;
+        case 'N':
+            value = &arg[pos + 1];
+            if (*value == '\0') {
+                if (!consume_option_arg(argc, argv, idx, arg, &value)) {
+                    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+                }
+            }
+            if (!parse_u64(value, &opt->seed_offset) || (opt->seed_offset > OSH_CLI_MAX_SEED_OFFSET)) {
+                return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--seedoffset");
+            }
+            opt->has_seed_offset = 1;
             return 0;
         case 'o':
             value = &arg[pos + 1];
