@@ -43,9 +43,18 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     if (!beam || !geo || !mat || !scoring || !sim_out) {
         return OSH_EINVAL;
     }
+    *sim_out = NULL;
     if (!geo->prepared) {
         osh_error("%s", "simulation: geometry workspace has not been prepared");
         return OSH_ESTATE;
+    }
+    if (!beam->prepared) {
+        osh_error("%s", "simulation: beam workspace has not been prepared");
+        return OSH_ESTATE;
+    }
+    if (!beam->has_primary) {
+        osh_error("%s", "simulation: beam workspace has no primary particle defined");
+        return OSH_EINVAL;
     }
 
     sim = (struct osh_simulation *) calloc(1, sizeof(*sim));

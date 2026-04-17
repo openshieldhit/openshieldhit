@@ -51,6 +51,7 @@ foreach(test_src ${UNIT_SOURCES})
         osh_scoring
         osh_physics
         osh_transport
+        osh_simulation
     )
 
     # Pass the fixtures directory so tests can locate input files without
