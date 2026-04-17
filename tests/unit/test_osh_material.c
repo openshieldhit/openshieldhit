@@ -19,9 +19,8 @@ static void fixture_path(char *path, size_t cap, char const *rel) {
     snprintf(path, cap, "%s/material/%s", OSH_TEST_FIXTURES_DIR, rel);
 }
 
-static void load_workspace_from_fixture(char const *rel,
-                                        enum osh_status expected_rc,
-                                        struct osh_material_workspace **wm_out) {
+static void
+load_workspace_from_fixture(char const *rel, enum osh_status expected_rc, struct osh_material_workspace **wm_out) {
     char path[1024];
     struct osh_material_workspace *wm = NULL;
     enum osh_status rc;

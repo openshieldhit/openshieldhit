@@ -33,16 +33,15 @@
  * bounds, filter rules, etc.) that would need re-tokenising from a string.
  */
 
-#include "scoring/parse/osh_scoring_parse.h"
+#include "apps/osh/osh_scoring_parse.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_file.h"
+#include "apps/osh/osh_scoring_parse_internal.h"
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
 #include "scoring/osh_scoring.h"
-#include "scoring/parse/osh_scoring_parse_internal.h"
 
 /* ---- Internal section enum ----------------------------------------------- */
 
@@ -58,37 +57,17 @@ static enum osh_status validate(struct osh_scoring_workspace const *ws);
 
 /* ---- Public entry point -------------------------------------------------- */
 
-enum osh_status osh_scoring_parse_file(char const *path, struct osh_scoring_workspace **ws_out) {
-    struct oshfile *oshf;
-    struct osh_scoring_workspace *ws;
+enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_workspace *ws) {
+    char const *path;
     enum scoring_section section;
     char *line;
     int lineno;
     enum osh_status rc;
 
-    if (!path || !ws_out)
+    if (!oshf || !ws)
         return OSH_EINVAL;
-    *ws_out = NULL;
 
-    oshf = osh_fopen(path);
-    if (!oshf) {
-        osh_error("scoring: cannot open '%s'", path);
-        return OSH_EIO;
-    }
-
-    ws = (struct osh_scoring_workspace *) calloc(1, sizeof(*ws));
-    if (!ws) {
-        osh_fclose(oshf);
-        return OSH_ENOMEM;
-    }
-
-    ws->fname = strdup(path);
-    if (!ws->fname) {
-        osh_fclose(oshf);
-        osh_scoring_workspace_free(ws);
-        return OSH_ENOMEM;
-    }
-
+    path = oshf->filename;
     section = SECTION_NONE;
     line = NULL;
 
@@ -181,21 +160,11 @@ enum osh_status osh_scoring_parse_file(char const *path, struct osh_scoring_work
     }
 
     free(line);
-    osh_fclose(oshf);
 
-    rc = validate(ws);
-    if (rc != OSH_OK) {
-        osh_scoring_workspace_free(ws);
-        return rc;
-    }
-
-    *ws_out = ws;
-    return OSH_OK;
+    return validate(ws);
 
 fail:
     free(line);
-    osh_fclose(oshf);
-    osh_scoring_workspace_free(ws);
     return rc;
 }
 

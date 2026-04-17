@@ -1,6 +1,6 @@
-#include "openshieldhit/version.h"
-
 #include "common/osh_version.h"
+
+#include "openshieldhit/version.h"
 
 char const *osh_version_string(void) {
     return OSH_VERSION;

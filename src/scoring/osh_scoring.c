@@ -3,18 +3,26 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "scoring/parse/osh_scoring_parse.h"
+enum osh_status osh_scoring_workspace_create(struct osh_scoring_workspace **ws_out) {
+    struct osh_scoring_workspace *ws;
 
-enum osh_status osh_scoring_setup_from_path(char const *path, struct osh_scoring_workspace **ws_out) {
-    return osh_scoring_parse_file(path, ws_out);
+    if (!ws_out) {
+        return OSH_EINVAL;
+    }
+    ws = (struct osh_scoring_workspace *) calloc(1, sizeof(*ws));
+    if (!ws) {
+        return OSH_ENOMEM;
+    }
+    *ws_out = ws;
+    return OSH_OK;
 }
 
-void osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
+enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
     size_t i;
     size_t j;
 
     if (!ws) {
-        return;
+        return OSH_OK;
     }
 
     free(ws->fname);
@@ -55,6 +63,7 @@ void osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
     free(ws->outputs);
 
     free(ws);
+    return OSH_OK;
 }
 
 struct osh_scoring_filter_def const *osh_scoring_filter_by_name(struct osh_scoring_workspace const *ws,

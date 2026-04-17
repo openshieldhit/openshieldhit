@@ -23,19 +23,22 @@ struct osh_scoring_filter_rule;
 /* ---- Public API ---------------------------------------------------------- */
 
 /**
- * @brief Parse a `detect.dat` file into a raw scoring workspace.
+ * @brief Allocate an empty scoring workspace.
  *
- * @param[in]  path    Path to `detect.dat`.
- * @param[out] ws_out  Receives a newly allocated workspace on success.
+ * @param[out] ws_out  Receives the allocated workspace on success.
  *
- * @returns OSH_OK on success, or a parse/allocation error code.
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-enum osh_status osh_scoring_setup_from_path(char const *path, struct osh_scoring_workspace **ws_out);
+enum osh_status osh_scoring_workspace_create(struct osh_scoring_workspace **ws_out);
 
 /**
- * @brief Free a scoring workspace allocated by osh_scoring_setup_from_path().
+ * @brief Free a scoring workspace and all owned parsed scoring definitions.
+ *
+ * @param[in] ws  Workspace to release. Safe to call with NULL.
+ *
+ * @returns OSH_OK.
  */
-void osh_scoring_workspace_free(struct osh_scoring_workspace *ws);
+enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws);
 
 /**
  * @brief Find a parsed filter by name.  Returns NULL if not found.

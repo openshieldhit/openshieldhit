@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_rc.h"
 #include "scoring/osh_scoring.h"
 #include "scoring/runtime/osh_scoring_prepare.h"
@@ -35,7 +36,7 @@ static void test_compile_fixture_test01_detect(void) {
 
     snprintf(path, sizeof(path), "%s/tests/fixtures/test01/detect.dat", OSH_PROJECT_SOURCE_DIR);
 
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
 
@@ -141,7 +142,7 @@ static void test_prepare_rejects_dose_without_crashing(void) {
 
     write_temp_file(path, sizeof(path), text);
 
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
 
