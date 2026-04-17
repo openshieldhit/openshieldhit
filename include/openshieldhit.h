@@ -17,6 +17,7 @@
 
 #include "openshieldhit/beam.h"
 #include "openshieldhit/beam_defs.h"
+#include "openshieldhit/const.h"
 #include "openshieldhit/file.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"

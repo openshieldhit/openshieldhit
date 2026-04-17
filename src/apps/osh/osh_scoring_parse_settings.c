@@ -15,7 +15,7 @@
 
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
-#include "common/osh_logger.h"
+#include "openshieldhit/logger.h"
 
 typedef enum osh_status (*settings_handler_fn)(
     struct osh_scoring_settings_def *, char **, int, char const *, unsigned int);
