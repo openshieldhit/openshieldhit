@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "apps/osh/osh_geometry_parse.h"
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_coord.h"
 #include "common/osh_logger.h"
 #include "common/osh_ray.h"
@@ -144,13 +144,8 @@ int main(int argc, char *argv[]) {
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
     fflush(stdout);
-    if (osh_geometry_parse_file(argv[1], &geom) != OSH_OK) {
-        fprintf(stderr, "bnct_sdl: osh_geometry_parse_file() failed for '%s'\n", argv[1]);
-        return EXIT_FAILURE;
-    }
-    if (osh_geometry_workspace_prepare(geom) != 0) {
-        fprintf(stderr, "bnct_sdl: osh_geometry_workspace_prepare() failed\n");
-        osh_geometry_workspace_free(geom);
+    if (osh_geometry_setup_from_path(argv[1], NULL, &geom) != OSH_OK) {
+        fprintf(stderr, "bnct_sdl: osh_geometry_setup_from_path() failed for '%s'\n", argv[1]);
         return EXIT_FAILURE;
     }
     g = geom->prepared;

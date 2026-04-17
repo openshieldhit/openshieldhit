@@ -19,6 +19,19 @@ installed public API and should not be re-exported through `include/`.
   OpenShieldHIT-style parser/input handling plus the current `openshieldhit`
   executable `main()`.
 
+  The app layer provides one `setup_from_path` entry point per input file,
+  each with a consistent signature:
+
+  ```c
+  enum osh_status osh_beam_setup_from_path    (path, lg, &beam_ws);
+  enum osh_status osh_geometry_setup_from_path(path, lg, &geo_ws);
+  enum osh_status osh_material_setup_from_path(path, lg, &mat_ws);
+  ```
+
+  Each function parses its input file and validates/prepares the cold workspace.
+  Ownership stays with the caller; workspaces are freed independently via the
+  corresponding `osh_X_workspace_free()` from the core library.
+
 ## Expected future layout
 
 - `src/apps/osh_topas/`

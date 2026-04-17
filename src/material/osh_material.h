@@ -42,7 +42,7 @@ struct material {
     int state;   /* enum osh_material_state value. */
 };
 
-struct material_workspace {
+struct osh_material_workspace {
     struct material *materials;
     char *wdir;
     char *fname;
@@ -64,7 +64,7 @@ struct material_workspace {
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_material_workspace_create(struct material_workspace **wm_out);
+enum osh_status osh_material_workspace_create(struct osh_material_workspace **wm_out);
 
 /**
  * @brief Validate and complete a parsed material workspace in place.
@@ -83,7 +83,7 @@ enum osh_status osh_material_workspace_create(struct material_workspace **wm_out
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_material_workspace_finalize(struct material_workspace *wm);
+enum osh_status osh_material_workspace_finalize(struct osh_material_workspace *wm);
 
 /**
  * @brief Release a material workspace and all owned resources.
@@ -92,7 +92,7 @@ enum osh_status osh_material_workspace_finalize(struct material_workspace *wm);
  *
  * @returns OSH_OK.
  */
-enum osh_status osh_material_workspace_free(struct material_workspace *wm);
+enum osh_status osh_material_workspace_free(struct osh_material_workspace *wm);
 
 /**
  * @brief Look up a material by internal dense index.
@@ -102,7 +102,7 @@ enum osh_status osh_material_workspace_free(struct material_workspace *wm);
  *
  * @returns Pointer to the matching material, or NULL if no match exists.
  */
-struct material const *osh_material_by_index(struct material_workspace const *wm, size_t index);
+struct material const *osh_material_by_index(struct osh_material_workspace const *wm, size_t index);
 
 /**
  * @brief Look up a material by user-facing MATERIAL name.
@@ -112,14 +112,14 @@ struct material const *osh_material_by_index(struct material_workspace const *wm
  *
  * @returns Pointer to the matching material, or NULL if no match exists.
  */
-struct material const *osh_material_by_name(struct material_workspace const *wm, char const *name);
+struct material const *osh_material_by_name(struct osh_material_workspace const *wm, char const *name);
 
 /**
  * @brief Print a concise material workspace summary through the logger.
  *
  * @param[in] wm  Workspace to print.
  */
-void osh_material_print(struct material_workspace const *wm);
+void osh_material_print(struct osh_material_workspace const *wm);
 
 #ifdef __cplusplus
 }

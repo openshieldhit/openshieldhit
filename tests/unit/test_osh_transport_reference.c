@@ -194,7 +194,7 @@ int main(void) {
     char mat_path[512];
     char water_path[512];
     char mat_text[4096];
-    struct material_workspace *wm;
+    struct osh_material_workspace *wm;
     struct osh_material_runtime tables;
     struct material const *water_loaded;
     struct material const *water_bethe;

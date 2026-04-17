@@ -6,7 +6,6 @@
 
 #include "apps/osh/osh_geometry_parse_keys.h"
 #include "gemca/osh_gemca2_defines.h"
-#include "openshieldhit/file.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/logger.h"
@@ -21,23 +20,40 @@ static int _rewind_oshfile(struct oshfile *shf);
  * Values are identical to the internal OSH_GEMCA_BODY_* constants so that
  * osh_geometry_workspace_prepare() can use them without conversion. */
 static int _body_type_from_key(char const *key) {
-    if (strcasecmp(key, "sph") == 0) return OSH_GEOMETRY_BODY_SPH;
-    if (strcasecmp(key, "wed") == 0) return OSH_GEOMETRY_BODY_WED;
-    if (strcasecmp(key, "arb") == 0) return OSH_GEOMETRY_BODY_ARB;
-    if (strcasecmp(key, "box") == 0) return OSH_GEOMETRY_BODY_BOX;
-    if (strcasecmp(key, "vox") == 0) return OSH_GEOMETRY_BODY_VOX;
-    if (strcasecmp(key, "rpp") == 0) return OSH_GEOMETRY_BODY_RPP;
-    if (strcasecmp(key, "rcc") == 0) return OSH_GEOMETRY_BODY_RCC;
-    if (strcasecmp(key, "rec") == 0) return OSH_GEOMETRY_BODY_REC;
-    if (strcasecmp(key, "trc") == 0) return OSH_GEOMETRY_BODY_TRC;
-    if (strcasecmp(key, "ell") == 0) return OSH_GEOMETRY_BODY_ELL;
-    if (strcasecmp(key, "yzp") == 0) return OSH_GEOMETRY_BODY_YZP;
-    if (strcasecmp(key, "xzp") == 0) return OSH_GEOMETRY_BODY_XZP;
-    if (strcasecmp(key, "xyp") == 0) return OSH_GEOMETRY_BODY_XYP;
-    if (strcasecmp(key, "pla") == 0) return OSH_GEOMETRY_BODY_PLA;
-    if (strcasecmp(key, "rot") == 0) return OSH_GEOMETRY_BODY_ROT;
-    if (strcasecmp(key, "cpy") == 0) return OSH_GEOMETRY_BODY_CPY;
-    if (strcasecmp(key, "mov") == 0) return OSH_GEOMETRY_BODY_MOV;
+    if (strcasecmp(key, "sph") == 0)
+        return OSH_GEOMETRY_BODY_SPH;
+    if (strcasecmp(key, "wed") == 0)
+        return OSH_GEOMETRY_BODY_WED;
+    if (strcasecmp(key, "arb") == 0)
+        return OSH_GEOMETRY_BODY_ARB;
+    if (strcasecmp(key, "box") == 0)
+        return OSH_GEOMETRY_BODY_BOX;
+    if (strcasecmp(key, "vox") == 0)
+        return OSH_GEOMETRY_BODY_VOX;
+    if (strcasecmp(key, "rpp") == 0)
+        return OSH_GEOMETRY_BODY_RPP;
+    if (strcasecmp(key, "rcc") == 0)
+        return OSH_GEOMETRY_BODY_RCC;
+    if (strcasecmp(key, "rec") == 0)
+        return OSH_GEOMETRY_BODY_REC;
+    if (strcasecmp(key, "trc") == 0)
+        return OSH_GEOMETRY_BODY_TRC;
+    if (strcasecmp(key, "ell") == 0)
+        return OSH_GEOMETRY_BODY_ELL;
+    if (strcasecmp(key, "yzp") == 0)
+        return OSH_GEOMETRY_BODY_YZP;
+    if (strcasecmp(key, "xzp") == 0)
+        return OSH_GEOMETRY_BODY_XZP;
+    if (strcasecmp(key, "xyp") == 0)
+        return OSH_GEOMETRY_BODY_XYP;
+    if (strcasecmp(key, "pla") == 0)
+        return OSH_GEOMETRY_BODY_PLA;
+    if (strcasecmp(key, "rot") == 0)
+        return OSH_GEOMETRY_BODY_ROT;
+    if (strcasecmp(key, "cpy") == 0)
+        return OSH_GEOMETRY_BODY_CPY;
+    if (strcasecmp(key, "mov") == 0)
+        return OSH_GEOMETRY_BODY_MOV;
     return OSH_GEOMETRY_BODY_NONE;
 }
 
@@ -125,11 +141,8 @@ static enum osh_status _str_append(char **a, char const *b) {
 
 /* Find a zone by exact name in the flat cold-zone array.
  * Returns 1 on success (fills *idx_out), 0 if not found. */
-static int _zone_index_from_name(
-    char const *name,
-    struct osh_geometry_zone const *zones,
-    size_t nzones,
-    size_t *idx_out) {
+static int
+_zone_index_from_name(char const *name, struct osh_geometry_zone const *zones, size_t nzones, size_t *idx_out) {
     size_t i;
     for (i = 0u; i < nzones; ++i) {
         if (zones[i].name && strcmp(zones[i].name, name) == 0) {
@@ -173,26 +186,19 @@ static char *_next_token(char **cursor) {
  * "0" → "blackhole", "1000" → "vacuum", all others pass through unchanged. */
 static char const *_normalize_material_name(char const *raw, char const *filename, int lineno) {
     if (strcmp(raw, "0") == 0) {
-        osh_warn("%s line %d: legacy material '0' mapped to 'blackhole'; use 'blackhole' explicitly",
-                 filename,
-                 lineno);
+        osh_warn("%s line %d: legacy material '0' mapped to 'blackhole'; use 'blackhole' explicitly", filename, lineno);
         return "blackhole";
     }
     if (strcmp(raw, "1000") == 0) {
-        osh_warn("%s line %d: legacy material '1000' mapped to 'vacuum'; use 'vacuum' explicitly",
-                 filename,
-                 lineno);
+        osh_warn("%s line %d: legacy material '1000' mapped to 'vacuum'; use 'vacuum' explicitly", filename, lineno);
         return "vacuum";
     }
     return raw;
 }
 
 /* Duplicate a normalized material name into z->material_name. */
-static enum osh_status _assign_material(
-    struct osh_geometry_zone *z,
-    char const *raw_name,
-    char const *filename,
-    int lineno) {
+static enum osh_status
+_assign_material(struct osh_geometry_zone *z, char const *raw_name, char const *filename, int lineno) {
     char const *name = _normalize_material_name(raw_name, filename, lineno);
     char *copy = strdup(name);
     if (!copy) {
@@ -302,15 +308,7 @@ static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_wo
                 goto done;
             }
             /* First six values: name + up to 5 floats on the same line. */
-            nt = sscanf(args,
-                        "%s %lf %lf %lf %lf %lf %lf",
-                        nstr,
-                        &par[0],
-                        &par[1],
-                        &par[2],
-                        &par[3],
-                        &par[4],
-                        &par[5]);
+            nt = sscanf(args, "%s %lf %lf %lf %lf %lf %lf", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
             npar = nt - 1;
             off = 6;
 
@@ -458,11 +456,8 @@ done:
 /* ---- Phase 3: material section ------------------------------------------- */
 
 /* Handle one ASSIGNMAT / ASSIGNMA card: assign material to a zone range. */
-static enum osh_status _parse_assignmat(
-    struct osh_geometry_workspace *ws,
-    char *args,
-    char const *filename,
-    int lineno) {
+static enum osh_status
+_parse_assignmat(struct osh_geometry_workspace *ws, char *args, char const *filename, int lineno) {
     char *cursor = args;
     char *mat_name;
     char *zname_start;
@@ -573,8 +568,7 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
      */
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
-        if ((strcasecmp(key, OSH_GEO_KEY_ASSIGNMAT) == 0)
-            || (strcasecmp(key, OSH_GEO_KEY_ASSIGNMA) == 0)) {
+        if ((strcasecmp(key, OSH_GEO_KEY_ASSIGNMAT) == 0) || (strcasecmp(key, OSH_GEO_KEY_ASSIGNMA) == 0)) {
             rc = _parse_assignmat(ws, args, shf->filename, lineno);
             if (rc != OSH_OK) {
                 free(line);
@@ -588,10 +582,7 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
         /* Legacy: count tokens and assign materials when in the media half. */
         izone++;
         if (izone > ws->nzones) {
-            osh_error("%s line %d: too many entries in material section (max=%zu)",
-                      shf->filename,
-                      lineno,
-                      ws->nzones);
+            osh_error("%s line %d: too many entries in material section (max=%zu)", shf->filename, lineno, ws->nzones);
             free(line);
             return OSH_EPARSE;
         }
@@ -613,10 +604,8 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
         while (tok != NULL) {
             izone++;
             if (izone > ws->nzones) {
-                osh_error("%s line %d: too many entries in material section (max=%zu)",
-                          shf->filename,
-                          lineno,
-                          ws->nzones);
+                osh_error(
+                    "%s line %d: too many entries in material section (max=%zu)", shf->filename, lineno, ws->nzones);
                 free(line);
                 return OSH_EPARSE;
             }
@@ -647,82 +636,57 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
 
 /* ---- Public entry point -------------------------------------------------- */
 
-enum osh_status osh_geometry_parse_file(char const *path, struct osh_geometry_workspace **ws_out) {
-    struct oshfile *shf = NULL;
-    struct osh_geometry_workspace *ws = NULL;
+enum osh_status osh_geometry_parse(struct oshfile *oshf, struct osh_geometry_workspace *ws) {
     size_t nbodies;
     size_t nzones;
     enum osh_status rc;
 
-    if (!path || !ws_out) {
+    if (!oshf || !ws) {
         return OSH_EINVAL;
-    }
-    *ws_out = NULL;
-
-    shf = osh_fopen(path);
-    if (!shf) {
-        osh_error("geometry: cannot open '%s'", path);
-        return OSH_EIO;
     }
 
     /* Count bodies and zones without retaining any state. */
-    nbodies = _count_bodies(shf);
-    nzones  = _count_zones(shf);
+    nbodies = _count_bodies(oshf);
+    nzones = _count_zones(oshf);
 
     if (nbodies == 0u || nzones == 0u) {
-        osh_error("geometry: '%s' has no bodies or no zones", path);
-        osh_fclose(shf);
+        osh_error("geometry: '%s' has no bodies or no zones", oshf->filename);
         return OSH_EPARSE;
     }
 
-    /* Allocate the cold workspace. */
-    if (osh_geometry_workspace_create(&ws) != 0) {
-        osh_fclose(shf);
+    ws->nbodies = nbodies;
+    ws->bodies = (struct osh_geometry_body *) calloc(nbodies, sizeof(struct osh_geometry_body));
+    if (!ws->bodies) {
         return OSH_ENOMEM;
     }
 
-    ws->nbodies = nbodies;
-    ws->bodies  = (struct osh_geometry_body *) calloc(nbodies, sizeof(struct osh_geometry_body));
-    if (!ws->bodies) {
-        rc = OSH_ENOMEM;
-        goto fail;
-    }
-
     ws->nzones = nzones;
-    ws->zones  = (struct osh_geometry_zone *) calloc(nzones, sizeof(struct osh_geometry_zone));
+    ws->zones = (struct osh_geometry_zone *) calloc(nzones, sizeof(struct osh_geometry_zone));
     if (!ws->zones) {
-        rc = OSH_ENOMEM;
-        goto fail;
+        return OSH_ENOMEM;
     }
 
     /* Phase 1: parse bodies.
      * Rewinds internally; leaves file positioned after the first END card. */
-    rc = _parse_bodies(shf, ws);
+    rc = _parse_bodies(oshf, ws);
     if (rc != OSH_OK) {
-        goto fail;
+        return rc;
     }
 
     /* Phase 2: parse zones.
      * Continues from where _parse_bodies stopped;
      * leaves file positioned after the second END card. */
-    rc = _parse_zones(shf, ws);
+    rc = _parse_zones(oshf, ws);
     if (rc != OSH_OK) {
-        goto fail;
+        return rc;
     }
 
     /* Phase 3: parse material assignments.
      * Rewinds internally; skips past both END cards. */
-    rc = _parse_media(shf, ws);
+    rc = _parse_media(oshf, ws);
     if (rc != OSH_OK) {
-        goto fail;
+        return rc;
     }
 
-    osh_fclose(shf);
-    *ws_out = ws;
     return OSH_OK;
-
-fail:
-    osh_fclose(shf);
-    osh_geometry_workspace_free(ws);
-    return rc;
 }

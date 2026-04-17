@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "apps/osh/osh_geometry_parse.h"
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_coord.h"
 #include "common/osh_ray.h"
 #include "gemca/osh_gemca2.h"
@@ -96,9 +96,7 @@ static void test_zone_batch_matches_scalar(void) {
 
     snprintf(geo_path, sizeof(geo_path), "%s/examples/01_sdl_viewer/geo_RCC03.dat", OSH_PROJECT_SOURCE_DIR);
 
-    ASSERT_TRUE(osh_geometry_parse_file(geo_path, &geom) == OSH_OK);
-    ASSERT_TRUE(geom != NULL);
-    ASSERT_TRUE(osh_geometry_workspace_prepare(geom) == 0);
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geom) == OSH_OK);
     g = geom->prepared;
     ASSERT_TRUE(osh_gemca_runtime_setup(g, &rt) == OSH_OK);
 

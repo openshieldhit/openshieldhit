@@ -27,6 +27,6 @@
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-int osh_beam_parse(struct oshfile *oshf, struct osh_beam_workspace *beam, char **spotlist_path_out);
+enum osh_status osh_beam_parse(struct oshfile *oshf, struct osh_beam_workspace *beam, char **spotlist_path_out);
 
 #endif /* OSH_FRONTEND_OPENSHIELDHIT_BEAM_PARSE_H */

@@ -35,37 +35,37 @@ static void geometry_zone_free_fields(struct osh_geometry_zone *z) {
 
 /* ---- Lifecycle ----------------------------------------------------------- */
 
-int osh_geometry_workspace_create(struct osh_geometry_workspace **ws_out) {
+enum osh_status osh_geometry_workspace_create(struct osh_geometry_workspace **ws_out) {
     struct osh_geometry_workspace *ws;
 
     if (!ws_out) {
-        return -1;
+        return OSH_EINVAL;
     }
     ws = (struct osh_geometry_workspace *) calloc(1, sizeof(*ws));
     if (!ws) {
-        return -1;
+        return OSH_ENOMEM;
     }
     *ws_out = ws;
-    return 0;
+    return OSH_OK;
 }
 
-int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
+enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
     size_t i;
     struct osh_gemca_prepared *gemca = NULL;
 
     if (!ws) {
-        return -1;
+        return OSH_EINVAL;
     }
     if (ws->prepared) {
         osh_error("%s", "geometry: osh_geometry_workspace_prepare called on an already-prepared workspace");
-        return -1;
+        return OSH_ESTATE;
     }
 
     /* ---- 1. Allocate internal gemca workspace -------------------------------- */
 
     gemca = (struct osh_gemca_prepared *) calloc(1, sizeof(*gemca));
     if (!gemca) {
-        return -1;
+        return OSH_ENOMEM;
     }
 
     /* ---- 2. Build internal body objects from cold data ----------------------- */
@@ -158,18 +158,18 @@ int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
     }
 
     ws->prepared = gemca;
-    return 0;
+    return OSH_OK;
 
 fail:
     osh_gemca_prepared_free(gemca);
-    return -1;
+    return OSH_ENOMEM;
 }
 
-void osh_geometry_workspace_free(struct osh_geometry_workspace *ws) {
+enum osh_status osh_geometry_workspace_free(struct osh_geometry_workspace *ws) {
     size_t i;
 
     if (!ws) {
-        return;
+        return OSH_OK;
     }
 
     if (ws->bodies) {
@@ -191,4 +191,5 @@ void osh_geometry_workspace_free(struct osh_geometry_workspace *ws) {
     }
 
     free(ws);
+    return OSH_OK;
 }

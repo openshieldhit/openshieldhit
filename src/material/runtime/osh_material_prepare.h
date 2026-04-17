@@ -39,7 +39,7 @@ extern "C" {
  * @returns OSH_OK on success, or an error code on failure.
  */
 enum osh_status
-osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables);
+osh_material_prepare(struct osh_material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables);
 
 /**
  * @brief Release a runtime tables struct and all owned memory.

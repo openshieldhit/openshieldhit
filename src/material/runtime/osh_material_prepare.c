@@ -471,7 +471,7 @@ static void log_runtime_column_summary(char const *material_name,
 /* ---- Public API ------------------------------------------------------------ */
 
 enum osh_status
-osh_material_prepare(struct material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables) {
+osh_material_prepare(struct osh_material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables) {
     size_t nmat, nproj, ne, nbytes_sp, nbytes_range;
     size_t mat_idx, proj_idx, e_idx, base;
     size_t i;

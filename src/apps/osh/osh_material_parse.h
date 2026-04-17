@@ -30,7 +30,7 @@ extern "C" {
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspace *wm);
+enum osh_status osh_material_parse(struct oshfile *oshf, struct osh_material_workspace *wm);
 
 #ifdef __cplusplus
 }

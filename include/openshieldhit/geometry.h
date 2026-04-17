@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "openshieldhit/geometry_defs.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,7 @@ extern "C" {
 
 /** @cond PRIVATE */
 struct osh_gemca_prepared; /* defined in src/gemca/osh_gemca2.h */
+
 /** @endcond */
 
 /**
@@ -47,11 +49,11 @@ struct osh_gemca_prepared; /* defined in src/gemca/osh_gemca2.h */
  * @ref osh_geometry_workspace_free().
  */
 struct osh_geometry_body {
-    char   *name; /**< User-given body name (null-terminated, unique within the workspace). */
-    double *a;    /**< Raw argument list as given in the geometry input; length is @p na. */
-    int     na;   /**< Number of entries in @p a[]. */
-    int     type; /**< Body type: one of the @ref OSH_GEOMETRY_BODY_* codes. */
-    char    coord; /**< Coordinate system of body parameters: one of the @ref OSH_GEOMETRY_COORD_* codes. */
+    char *name; /**< User-given body name (null-terminated, unique within the workspace). */
+    double *a;  /**< Raw argument list as given in the geometry input; length is @p na. */
+    int na;     /**< Number of entries in @p a[]. */
+    int type;   /**< Body type: one of the @ref OSH_GEOMETRY_BODY_* codes. */
+    char coord; /**< Coordinate system of body parameters: one of the @ref OSH_GEOMETRY_COORD_* codes. */
 };
 
 /**
@@ -90,10 +92,10 @@ struct osh_geometry_zone {
  * @ref osh_geometry_workspace_prepare() succeeds.
  */
 struct osh_geometry_workspace {
-    struct osh_geometry_body *bodies;      /**< Flat array of body descriptions; length is @p nbodies. */
-    struct osh_geometry_zone *zones;       /**< Flat array of zone descriptions; length is @p nzones. */
-    size_t                    nbodies;     /**< Number of entries in @p bodies[]. */
-    size_t                    nzones;      /**< Number of entries in @p zones[]. */
+    struct osh_geometry_body *bodies;    /**< Flat array of body descriptions; length is @p nbodies. */
+    struct osh_geometry_zone *zones;     /**< Flat array of zone descriptions; length is @p nzones. */
+    size_t nbodies;                      /**< Number of entries in @p bodies[]. */
+    size_t nzones;                       /**< Number of entries in @p zones[]. */
     struct osh_gemca_prepared *prepared; /**< Internal prepared state; owned by core. */
 };
 
@@ -105,7 +107,7 @@ struct osh_geometry_workspace {
  *
  * @returns 0 on success, non-zero on allocation failure.
  */
-int osh_geometry_workspace_create(struct osh_geometry_workspace **ws_out);
+enum osh_status osh_geometry_workspace_create(struct osh_geometry_workspace **ws_out);
 
 /**
  * @brief Build internal prepared state from a cold geometry workspace.
@@ -124,7 +126,7 @@ int osh_geometry_workspace_create(struct osh_geometry_workspace **ws_out);
  *
  * @returns 0 on success, non-zero on validation or compilation failure.
  */
-int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws);
+enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws);
 
 /**
  * @brief Free a geometry workspace and all geometry it owns.
@@ -135,7 +137,7 @@ int osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws);
  *
  * @param[in] ws  Workspace to free.
  */
-void osh_geometry_workspace_free(struct osh_geometry_workspace *ws);
+enum osh_status osh_geometry_workspace_free(struct osh_geometry_workspace *ws);
 
 #ifdef __cplusplus
 }

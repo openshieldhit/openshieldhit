@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "openshieldhit/beam_defs.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -143,7 +144,7 @@ struct osh_beam_workspace {
 /**
  * @brief Allocate a beam workspace with core defaults.
  */
-int osh_beam_workspace_create(struct osh_beam_workspace **wb_out);
+enum osh_status osh_beam_workspace_create(struct osh_beam_workspace **wb_out);
 /**
  * @brief Build or rebuild internal prepared state from a cold beam workspace.
  *
@@ -153,12 +154,12 @@ int osh_beam_workspace_create(struct osh_beam_workspace **wb_out);
  * state. Repeated calls are allowed after cold-data edits; the previous
  * prepared state is released and rebuilt in place.
  */
-int osh_beam_workspace_prepare(struct osh_beam_workspace *wb);
+enum osh_status osh_beam_workspace_prepare(struct osh_beam_workspace *wb);
 /**
  * @brief Free a beam workspace allocated by @ref osh_beam_workspace_create.
  */
-int osh_beam_workspace_free(struct osh_beam_workspace *wb);
-int osh_beam_phsp_free(struct osh_beam_phsp *phsp);
+enum osh_status osh_beam_workspace_free(struct osh_beam_workspace *wb);
+enum osh_status osh_beam_phsp_free(struct osh_beam_phsp *phsp);
 void osh_beam_print(struct osh_beam_workspace const *wb);
 void osh_beam_print_spot(struct osh_beam_spot const *spot);
 

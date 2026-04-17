@@ -107,7 +107,7 @@ static struct _beam_dispatch_entry _dispatch_table[] = {
 
 /* ---- Main parser entry point --------------------------------------------- */
 
-int osh_beam_parse(struct oshfile *oshf, struct osh_beam_workspace *beam, char **spotlist_path_out) {
+enum osh_status osh_beam_parse(struct oshfile *oshf, struct osh_beam_workspace *beam, char **spotlist_path_out) {
     char *lline = NULL;
     char *key = NULL;
     char *args = NULL;
