@@ -26,6 +26,7 @@ installed public API and should not be re-exported through `include/`.
   enum osh_status osh_beam_setup_from_path    (path, lg, &beam_ws);
   enum osh_status osh_geometry_setup_from_path(path, lg, &geo_ws);
   enum osh_status osh_material_setup_from_path(path, lg, &mat_ws);
+  enum osh_status osh_scoring_setup_from_path (path, lg, &scoring_ws);
   ```
 
   Each function parses its input file and validates/prepares the cold workspace.

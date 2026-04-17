@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_scoring_parse_internal.h"
+#include "apps/osh/osh_scoring_parse_keys.h"
 #include "common/osh_logger.h"
-#include "scoring/parse/osh_scoring_parse_internal.h"
-#include "scoring/parse/osh_scoring_parse_keys.h"
 
 typedef enum osh_status (*geometry_handler_fn)(
     struct osh_scoring_geometry_def *, char **, int, char const *, unsigned int);

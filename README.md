@@ -97,8 +97,8 @@ distributions.
 - [x] straight-line CSDA transport (no scattering)
 - [x] stopping power / CSDA range tables
 - [x] dose, fluence, LET scoring
-- [ ] multiple Coulomb scattering
-- [ ] energy straggling (Vavilov/Gaussian)
+- [x] multiple Coulomb scattering
+- [x] energy straggling (Simple Gaussian)
 - [ ] nuclear interactions / secondaries
 - [ ] ...
 

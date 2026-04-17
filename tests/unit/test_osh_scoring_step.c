@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_rc.h"
 #include "common/osh_step.h"
 #include "particle/osh_particle.h"
@@ -38,7 +39,7 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
 
     snprintf(path, sizeof(path), "%s/tests/fixtures/test01/detect.dat", OSH_PROJECT_SOURCE_DIR);
 
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
 
@@ -152,7 +153,7 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
 
     snprintf(path, sizeof(path), "%s/tests/fixtures/test01/detect.dat", OSH_PROJECT_SOURCE_DIR);
 
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
 

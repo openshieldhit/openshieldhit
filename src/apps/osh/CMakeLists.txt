@@ -1,6 +1,11 @@
 add_library(osh_app_osh
     osh_beam_parse.c
     osh_material_parse.c
+    osh_scoring_parse.c
+    osh_scoring_parse_filter.c
+    osh_scoring_parse_settings.c
+    osh_scoring_parse_geometry.c
+    osh_scoring_parse_output.c
     osh_geometry_parse.c
     osh_app_osh.c
     osh_run.c

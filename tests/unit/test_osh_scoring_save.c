@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_rc.h"
 #include "scoring/osh_scoring.h"
 #include "scoring/runtime/osh_scoring_prepare.h"
@@ -52,7 +53,7 @@ int main(void) {
 
     ws = NULL;
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_setup_from_path(DETECT_PATH, &ws);
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
     rc = osh_scoring_prepare(ws, &rt);

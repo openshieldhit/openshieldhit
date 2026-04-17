@@ -218,7 +218,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    if (osh_scoring_setup_from_path(detect_path, &scoring) != OSH_OK) {
+    if (osh_scoring_setup_from_path(detect_path, NULL, &scoring) != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to load scoring/detect input: %s\n", detect_path);
         }

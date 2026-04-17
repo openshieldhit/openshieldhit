@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_rc.h"
 #include "scoring/osh_scoring.h"
 
@@ -36,7 +37,7 @@ static void test_parse_fixture_test01_detect(void) {
     snprintf(path, sizeof(path), "%s/tests/fixtures/test01/detect.dat", OSH_PROJECT_SOURCE_DIR);
 
     ws = NULL;
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
 
@@ -99,7 +100,7 @@ static void test_parse_settings_section(void) {
     write_temp_file(path, sizeof(path), text);
 
     ws = NULL;
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
     ASSERT_TRUE(ws->nsettings == 1u);
@@ -139,7 +140,7 @@ static void test_reject_output_missing_filename(void) {
     write_temp_file(path, sizeof(path), text);
 
     ws = NULL;
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_EPARSE);
     ASSERT_TRUE(ws == NULL);
     remove(path);
@@ -166,7 +167,7 @@ static void test_parse_filter_rules(void) {
 
     write_temp_file(path, sizeof(path), text);
     ws = NULL;
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
 
@@ -215,7 +216,7 @@ static void test_parse_geometry_axes(void) {
 
     write_temp_file(path, sizeof(path), text);
     ws = NULL;
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
     ASSERT_TRUE(ws->ngeometries == 2u);
@@ -252,7 +253,7 @@ static void test_fixture_test01_filter_rules(void) {
 
     snprintf(path, sizeof(path), "%s/tests/fixtures/test01/detect.dat", OSH_PROJECT_SOURCE_DIR);
     ws = NULL;
-    rc = osh_scoring_setup_from_path(path, &ws);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
 
     mf = osh_scoring_filter_by_name(ws, "MyFilter");

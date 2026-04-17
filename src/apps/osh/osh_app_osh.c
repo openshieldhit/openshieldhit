@@ -6,6 +6,7 @@
 #include "apps/osh/osh_beam_parse.h"
 #include "apps/osh/osh_geometry_parse.h"
 #include "apps/osh/osh_material_parse.h"
+#include "apps/osh/osh_scoring_parse.h"
 #include "beam/osh_beam_spots.h"
 #include "material/osh_material.h"
 #include "openshieldhit/file.h"
@@ -158,5 +159,48 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh
     }
 
     *wm_out = wm;
+    return OSH_OK;
+}
+
+enum osh_status
+osh_scoring_setup_from_path(char const *path, struct osh_logger *lg, struct osh_scoring_workspace **ws_out) {
+    enum osh_status rc = OSH_OK;
+    struct oshfile *sf = NULL;
+    struct osh_scoring_workspace *ws = NULL;
+
+    (void) lg;
+
+    if (!path || !ws_out) {
+        return OSH_EINVAL;
+    }
+    *ws_out = NULL;
+
+    sf = osh_fopen(path);
+    if (!sf) {
+        return OSH_EIO;
+    }
+
+    rc = osh_scoring_workspace_create(&ws);
+    if (rc != OSH_OK) {
+        osh_fclose(sf);
+        return rc;
+    }
+
+    ws->fname = strdup(path);
+    if (!ws->fname) {
+        osh_fclose(sf);
+        osh_scoring_workspace_free(ws);
+        return OSH_ENOMEM;
+    }
+
+    rc = osh_scoring_parse(sf, ws);
+    osh_fclose(sf);
+    sf = NULL;
+    if (rc != OSH_OK) {
+        osh_scoring_workspace_free(ws);
+        return rc;
+    }
+
+    *ws_out = ws;
     return OSH_OK;
 }

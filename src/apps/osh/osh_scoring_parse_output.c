@@ -1,10 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_scoring_parse_internal.h"
+#include "apps/osh/osh_scoring_parse_keys.h"
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
-#include "scoring/parse/osh_scoring_parse_internal.h"
-#include "scoring/parse/osh_scoring_parse_keys.h"
 
 typedef enum osh_status (*output_handler_fn)(struct osh_scoring_output_def *, char **, int, char const *, unsigned int);
 
