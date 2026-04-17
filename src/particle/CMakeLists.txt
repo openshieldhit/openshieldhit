@@ -9,4 +9,5 @@ add_library(osh_particle
 target_include_directories(osh_particle
     PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
 )

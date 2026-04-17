@@ -105,7 +105,7 @@ struct osh_geometry_workspace {
  * @param[out] ws_out  Receives a pointer to the newly allocated workspace.
  *                     The workspace is zero-initialised; @p prepared is NULL.
  *
- * @returns 0 on success, non-zero on allocation failure.
+ * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
 enum osh_status osh_geometry_workspace_create(struct osh_geometry_workspace **ws_out);
 
@@ -120,11 +120,11 @@ enum osh_status osh_geometry_workspace_create(struct osh_geometry_workspace **ws
  *
  * Must be called before passing the workspace to the geometry runtime.
  * Calling it a second time on an already-prepared workspace is an error
- * (returns non-zero without modifying state).
+ * (returns an OSH_E* code without modifying state).
  *
  * @param[in,out] ws  Workspace to prepare.
  *
- * @returns 0 on success, non-zero on validation or compilation failure.
+ * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
 enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws);
 

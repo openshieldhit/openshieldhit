@@ -8,6 +8,7 @@ add_library(osh_random
 target_include_directories(osh_random
     PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
 )
 
 # Link math library (Unix/Linux only - Windows has it in the C runtime)

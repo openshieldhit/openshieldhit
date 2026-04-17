@@ -10,7 +10,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-#include "status.h"
+#include "openshieldhit/status.h"
 
 #ifdef __cplusplus
 extern "C" {

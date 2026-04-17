@@ -7,6 +7,7 @@ add_library(osh_physics
 target_include_directories(osh_physics
     PUBLIC
         ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/include
 )
 
 target_link_libraries(osh_physics
