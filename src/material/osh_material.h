@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 
-#include "common/osh_logger.h"
 #include "common/osh_rc.h"
 #include "material/osh_material_icru.h" /* enum osh_material_state */
 
@@ -51,41 +50,40 @@ struct material_workspace {
 };
 
 /**
- * @brief Allocate, parse, and validate a material workspace from a mat.dat path.
+ * @brief Allocate an empty material workspace and initialize reserved entries.
  *
  * @details
- * This loader parses raw material definitions and performs the setup-time
- * assembly needed before transport-table generation: ICRU convenience
- * definitions are expanded, scalar user overrides are preserved, and explicit
- * element compositions are completed with mass fractions or relative atom
- * counts. It does not calculate stopping-power tables or derive optical depths.
- * Relative paths used by future material cards are resolved against the parsed
- * file's directory, which is retained in material_workspace::wdir.
+ * Initializes the built-in reserved materials:
+ * - index 0: blackhole
+ * - index 1: vacuum
  *
- * User materials are defined either by explicit element composition cards or by
- * an ICRU material reference. ICRU/default tables fill unset scalar properties,
- * while explicit user overrides such as RHO, STATE, MATERIALI/MIVALUE/MIAV, and
- * LOADDEDX remain authoritative.
+ * Application-layer parsers may then append user materials before calling
+ * @ref osh_material_workspace_finalize().
  *
- * Mean excitation energy (MEE) precedence is:
- *  - single-element material: material-level and element-level MEE are
- *    equivalent; a known material MEE is copied to the sole element
- *  - compound with explicit element MEE values only: element MEE values are
- *    authoritative, and material MEE is derived by Bragg additivity
- *  - compound with only material-level MEE: material MEE is authoritative;
- *    element MEE defaults are filled from ICRU data and uniformly rescaled so
- *    their Bragg average matches the known material MEE
- *  - compound with both material-level MEE and explicit element-level MEE:
- *    invalid input and rejected during raw validation
- *
- * @param[in]  path    Path to the material input file.
- * @param[in]  lg      Logger for diagnostics; NULL uses the global default logger.
  * @param[out] wm_out  Receives the allocated workspace on success.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status
-osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct material_workspace **wm_out);
+enum osh_status osh_material_workspace_create(struct material_workspace **wm_out);
+
+/**
+ * @brief Validate and complete a parsed material workspace in place.
+ *
+ * @details
+ * Runs the setup-time material assembly needed before transport-table
+ * generation:
+ * - validates raw parsed cards
+ * - expands ICRU convenience definitions
+ * - derives complementary composition fields
+ * - resolves and validates mean excitation energies
+ *
+ * This function does not parse files and does not build transport tables.
+ *
+ * @param[in,out] wm  Workspace to validate and complete.
+ *
+ * @returns OSH_OK on success, or an OSH_E* code on failure.
+ */
+enum osh_status osh_material_workspace_finalize(struct material_workspace *wm);
 
 /**
  * @brief Release a material workspace and all owned resources.

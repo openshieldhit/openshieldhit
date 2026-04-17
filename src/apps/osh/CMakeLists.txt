@@ -1,5 +1,6 @@
 add_library(osh_app_osh
     osh_beam_parse.c
+    osh_material_parse.c
     osh_geometry_parse.c
     osh_app_osh.c
     osh_run.c

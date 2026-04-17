@@ -5,11 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_file.h"
 #include "common/osh_logger.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
-#include "material/osh_material_parse.h"
 
 static void material_defaults(struct material *mat);
 static void material_set_rgba(struct material *mat, float r, float g, float b, float a);
@@ -34,73 +32,49 @@ static void material_free_fields(struct material *mat);
 static char const *material_state_name(int state);
 static int material_has_any_element_mee(struct material const *mat);
 
-enum osh_status
-osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct material_workspace **wm_out) {
+enum osh_status osh_material_workspace_create(struct material_workspace **wm_out) {
     enum osh_status rc;
-    struct oshfile *sf;
     struct material_workspace *wm;
-    char *wdir;
 
-    (void) lg;
-
-    if (!path || !wm_out) {
+    if (!wm_out) {
         return OSH_EINVAL;
     }
     *wm_out = NULL;
 
-    wdir = osh_path_dirname(path);
-    sf = osh_fopen(path);
-    if (!sf) {
-        free(wdir);
-        return OSH_EIO;
-    }
-
     wm = (struct material_workspace *) calloc(1, sizeof(*wm));
     if (!wm) {
-        free(wdir);
-        osh_fclose(sf);
-        return OSH_ENOMEM;
-    }
-
-    wm->wdir = wdir;
-    wdir = NULL;
-    wm->fname = strdup(path);
-    if (!wm->fname) {
-        osh_material_workspace_free(wm);
-        osh_fclose(sf);
         return OSH_ENOMEM;
     }
 
     rc = material_workspace_init_reserved(wm);
     if (rc != OSH_OK) {
         osh_material_workspace_free(wm);
-        osh_fclose(sf);
         return rc;
     }
 
-    rc = osh_material_parse(sf, wm);
-    osh_fclose(sf);
-    sf = NULL;
-    if (rc != OSH_OK) {
-        osh_material_workspace_free(wm);
-        return rc;
+    *wm_out = wm;
+    return OSH_OK;
+}
+
+enum osh_status osh_material_workspace_finalize(struct material_workspace *wm) {
+    enum osh_status rc;
+
+    if (!wm) {
+        return OSH_EINVAL;
     }
 
     rc = material_workspace_validate_raw(wm);
     if (rc != OSH_OK) {
-        osh_material_workspace_free(wm);
         return rc;
     }
 
     rc = material_workspace_complete(wm);
     if (rc != OSH_OK) {
-        osh_material_workspace_free(wm);
         return rc;
     }
 
     rc = material_workspace_validate_completed(wm);
     if (rc != OSH_OK) {
-        osh_material_workspace_free(wm);
         return rc;
     }
 
@@ -108,7 +82,6 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct mat
         osh_material_print(wm);
     }
 
-    *wm_out = wm;
     return OSH_OK;
 }
 

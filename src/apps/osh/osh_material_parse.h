@@ -1,5 +1,5 @@
-#ifndef OSH_MATERIAL_PARSE_H
-#define OSH_MATERIAL_PARSE_H
+#ifndef OSH_FRONTEND_OPENSHIELDHIT_MATERIAL_PARSE_H
+#define OSH_FRONTEND_OPENSHIELDHIT_MATERIAL_PARSE_H
 
 #include "common/osh_file.h"
 #include "common/osh_rc.h"
@@ -36,4 +36,4 @@ enum osh_status osh_material_parse(struct oshfile *oshf, struct material_workspa
 }
 #endif
 
-#endif /* OSH_MATERIAL_PARSE_H */
+#endif /* OSH_FRONTEND_OPENSHIELDHIT_MATERIAL_PARSE_H */
