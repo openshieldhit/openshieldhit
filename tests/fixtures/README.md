@@ -17,3 +17,8 @@ What does not belong here:
 Use fixtures when a unit test needs controlled sample input without depending
 on a full case directory from `../cases/`.
 
+Current fixture groups:
+
+- `test01/`: shared end-to-end style parser inputs.
+- `material/valid/`: material parser acceptance inputs.
+- `material/invalid/`: material parser rejection inputs.

@@ -4,7 +4,9 @@
 #include <string.h>
 
 #include "apps/osh/osh_beam_parse.h"
+#include "apps/osh/osh_material_parse.h"
 #include "beam/osh_beam_spots.h"
+#include "material/osh_material.h"
 #include "openshieldhit/file.h"
 #include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
@@ -60,5 +62,58 @@ int osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct osh
     }
 
     *wb_out = wb;
+    return OSH_OK;
+}
+
+enum osh_status
+osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct material_workspace **wm_out) {
+    enum osh_status rc = OSH_OK;
+    struct oshfile *sf = NULL;
+    struct material_workspace *wm = NULL;
+    char *wdir = NULL;
+
+    (void) lg;
+
+    if (!path || !wm_out) {
+        return OSH_EINVAL;
+    }
+    *wm_out = NULL;
+
+    sf = osh_fopen(path);
+    if (!sf) {
+        return OSH_EIO;
+    }
+
+    rc = osh_material_workspace_create(&wm);
+    if (rc != OSH_OK) {
+        osh_fclose(sf);
+        return rc;
+    }
+
+    wdir = osh_path_dirname(path);
+    wm->wdir = wdir;
+    wdir = NULL;
+    wm->fname = strdup(path);
+    if (!wm->fname) {
+        osh_material_workspace_free(wm);
+        osh_fclose(sf);
+        return OSH_ENOMEM;
+    }
+
+    rc = osh_material_parse(sf, wm);
+    osh_fclose(sf);
+    sf = NULL;
+    if (rc != OSH_OK) {
+        osh_material_workspace_free(wm);
+        return rc;
+    }
+
+    rc = osh_material_workspace_finalize(wm);
+    if (rc != OSH_OK) {
+        osh_material_workspace_free(wm);
+        return rc;
+    }
+
+    *wm_out = wm;
     return OSH_OK;
 }

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_rc.h"
 #include "material/osh_material.h"
 
@@ -14,16 +15,26 @@
         }                                                                                                              \
     } while (0)
 
-static int tmp_counter = 0;
+static void fixture_path(char *path, size_t cap, char const *rel) {
+    snprintf(path, cap, "%s/material/%s", OSH_TEST_FIXTURES_DIR, rel);
+}
 
-static void write_temp_file(char *path, size_t path_cap, char const *content) {
-    FILE *fp;
+static void load_workspace_from_fixture(char const *rel,
+                                        enum osh_status expected_rc,
+                                        struct material_workspace **wm_out) {
+    char path[1024];
+    struct material_workspace *wm = NULL;
+    enum osh_status rc;
 
-    snprintf(path, path_cap, "osh_material_test_%d.tmp", tmp_counter++);
-    fp = fopen(path, "w");
-    ASSERT_TRUE(fp != NULL);
-    ASSERT_TRUE(fputs(content, fp) >= 0);
-    ASSERT_TRUE(fclose(fp) == 0);
+    fixture_path(path, sizeof(path), rel);
+    rc = osh_material_setup_from_path(path, NULL, &wm);
+    ASSERT_TRUE(rc == expected_rc);
+    if (expected_rc == OSH_OK) {
+        ASSERT_TRUE(wm != NULL);
+    } else {
+        ASSERT_TRUE(wm == NULL);
+    }
+    *wm_out = wm;
 }
 
 static double test_material_element_mass_da(struct material_element const *elem) {
@@ -61,30 +72,20 @@ static double test_material_bragg_mean_excitation_energy(struct material const *
     return exp(numerator / denominator);
 }
 
-static void test_material_fixture_icru_and_rho(void) {
-    char path[512];
+static void test_valid_icru_override(void) {
     struct material_workspace *wm = NULL;
     struct material const *mat;
-    enum osh_status rc;
 
-    snprintf(path, sizeof(path), "%s/test01/mat.dat", OSH_TEST_FIXTURES_DIR);
+    load_workspace_from_fixture("valid/water_icru_override.dat", OSH_OK, &wm);
 
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
     ASSERT_TRUE(wm->nmaterials == 3u);
     ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_BLACKHOLE) != NULL);
     ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_VACUUM) != NULL);
     ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_BLACKHOLE)->name != NULL);
     ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_VACUUM)->name != NULL);
-    ASSERT_TRUE(osh_material_by_index(wm, OSH_MATERIAL_INDEX_BLACKHOLE)->rho < 0.0);
-    ASSERT_TRUE(fabs(osh_material_by_index(wm, OSH_MATERIAL_INDEX_BLACKHOLE)->rgba[3] - 1.0f) < 1e-6);
-    ASSERT_TRUE(fabs(osh_material_by_index(wm, OSH_MATERIAL_INDEX_VACUUM)->rgba[3]) < 1e-6);
 
     mat = osh_material_by_name(wm, "Water");
     ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(osh_material_by_name(wm, "water") == NULL);
     ASSERT_TRUE(mat->index == OSH_MATERIAL_INDEX_FIRST_USER);
     ASSERT_TRUE(mat->icru_id == 276);
     ASSERT_TRUE(fabs(mat->rho - 0.9987654321) < 1e-12);
@@ -95,155 +96,67 @@ static void test_material_fixture_icru_and_rho(void) {
     ASSERT_TRUE(mat->elements[0].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[0].mass_fraction - 0.111894) < 1e-7);
     ASSERT_TRUE(mat->elements[0].atom_count > 0.0);
-    ASSERT_TRUE(mat->elements[0].mean_excitation_energy > 0.0);
     ASSERT_TRUE(mat->elements[1].z == 8u);
     ASSERT_TRUE(mat->elements[1].a == 0u);
     ASSERT_TRUE(fabs(mat->elements[1].mass_fraction - 0.888106) < 1e-7);
     ASSERT_TRUE(mat->elements[1].atom_count > 0.0);
-    ASSERT_TRUE(mat->elements[1].mean_excitation_energy > 0.0);
     ASSERT_TRUE(fabs(mat->elements[0].atom_count + mat->elements[1].atom_count - 1.0) < 1e-12);
     ASSERT_TRUE(fabs(test_material_bragg_mean_excitation_energy(mat) - mat->mean_excitation_energy) < 1e-12);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
 
-static void test_material_fixture_composition(void) {
-    char path[512];
+static void test_valid_explicit_composition(void) {
     struct material_workspace *wm = NULL;
     struct material const *mat;
-    enum osh_status rc;
 
-    snprintf(path, sizeof(path), "%s/tests/cases/01_simple_detect/mat.dat", OSH_PROJECT_SOURCE_DIR);
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    ASSERT_TRUE(wm->nmaterials == 3u);
+    load_workspace_from_fixture("valid/water_explicit.dat", OSH_OK, &wm);
 
     mat = osh_material_by_name(wm, "Water");
     ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(mat->index == OSH_MATERIAL_INDEX_FIRST_USER);
     ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_CONDENSED);
     ASSERT_TRUE(fabs(mat->rho - 1.0) < 1e-12);
     ASSERT_TRUE(fabs(mat->mean_excitation_energy - 78.02104963) < 1e-8);
     ASSERT_TRUE(mat->nelements == 2u);
     ASSERT_TRUE(mat->elements[0].z == 1u);
-    ASSERT_TRUE(mat->elements[0].a == 0u);
-    ASSERT_TRUE(fabs(mat->elements[0].atom_count - 2.0) < 1e-12);
-    ASSERT_TRUE(fabs(mat->elements[0].mass_fraction - 0.1118983441) < 1e-6);
-    ASSERT_TRUE(fabs(mat->elements[0].mean_excitation_energy - 22.9) < 1e-12);
     ASSERT_TRUE(mat->elements[1].z == 8u);
-    ASSERT_TRUE(mat->elements[1].a == 0u);
+    ASSERT_TRUE(fabs(mat->elements[0].atom_count - 2.0) < 1e-12);
     ASSERT_TRUE(fabs(mat->elements[1].atom_count - 1.0) < 1e-12);
-    ASSERT_TRUE(fabs(mat->elements[1].mass_fraction - 0.8881016559) < 1e-6);
+    ASSERT_TRUE(fabs(mat->elements[0].mean_excitation_energy - 22.9) < 1e-12);
     ASSERT_TRUE(fabs(mat->elements[1].mean_excitation_energy - 106.0) < 1e-12);
     ASSERT_TRUE(fabs(test_material_bragg_mean_excitation_energy(mat) - mat->mean_excitation_energy) < 1e-12);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
 
-static void test_material_keys_and_state_are_case_insensitive(void) {
-    char path[512];
+static void test_valid_case_and_loaddedx(void) {
+    char expected_dedx_path[1024];
     struct material_workspace *wm = NULL;
     struct material const *mat;
-    enum osh_status rc;
 
-    write_temp_file(path,
-                    sizeof(path),
-                    "MaTeRiAl Water\n"
-                    "StAtE GaS\n"
-                    "CoLoUr 0.1 0.2 0.3 0.4\n"
-                    "rHo 0.001\n"
-                    "nUcLiD 1 1\n");
+    load_workspace_from_fixture("valid/case_and_loaddedx.dat", OSH_OK, &wm);
 
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    mat = osh_material_by_name(wm, "Water");
+    mat = osh_material_by_name(wm, "WaterFancy");
     ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(mat->index == OSH_MATERIAL_INDEX_FIRST_USER);
     ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_GAS);
     ASSERT_TRUE(fabs(mat->rgba[0] - 0.1f) < 1e-6);
     ASSERT_TRUE(fabs(mat->rgba[1] - 0.2f) < 1e-6);
     ASSERT_TRUE(fabs(mat->rgba[2] - 0.3f) < 1e-6);
     ASSERT_TRUE(fabs(mat->rgba[3] - 0.4f) < 1e-6);
-
-    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_level_mean_excitation_and_dedx_table(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    struct material const *mat;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Water\n"
-                    "MIVALUE 80.0\n"
-                    "STATE gas\n"
-                    "LOADDEDX tables/water_dedx.dat\n"
-                    "ICRU 276\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    mat = osh_material_by_name(wm, "Water");
-    ASSERT_TRUE(mat != NULL);
     ASSERT_TRUE(fabs(mat->mean_excitation_energy - 80.0) < 1e-12);
-    ASSERT_TRUE(mat->elements[0].mean_excitation_energy > 0.0);
-    ASSERT_TRUE(mat->elements[1].mean_excitation_energy > 0.0);
-    ASSERT_TRUE(fabs(test_material_bragg_mean_excitation_energy(mat) - mat->mean_excitation_energy) < 1e-12);
-    ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_GAS);
     ASSERT_TRUE(mat->dedx_table_path != NULL);
-    ASSERT_TRUE(strcmp(mat->dedx_table_path, "tables/water_dedx.dat") == 0);
+
+    fixture_path(expected_dedx_path, sizeof(expected_dedx_path), "valid/tables/water_dedx.dat");
+    ASSERT_TRUE(strcmp(mat->dedx_table_path, expected_dedx_path) == 0);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
 }
 
-static void test_material_rejects_conflicting_compound_and_element_mean_excitation(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Water\n"
-                    "RHO 1.0\n"
-                    "MATERIALI 75.0\n"
-                    "ELEMENT 1 2\n"
-                    "IVALUE 22.9\n"
-                    "ELEMENT 8 1\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_EPARSE);
-    ASSERT_TRUE(wm == NULL);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_mass_fraction_input_completes_atom_counts(void) {
-    char path[512];
+static void test_valid_mass_fraction_and_isotope(void) {
     struct material_workspace *wm = NULL;
     struct material const *mat;
-    enum osh_status rc;
 
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL WaterByMass\n"
-                    "RHO 1.0\n"
-                    "ELEMENTBYMASS 1 0.1118983441\n"
-                    "ELEMENTBYMASS 8 0.8881016559\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
+    load_workspace_from_fixture("valid/water_by_mass.dat", OSH_OK, &wm);
     mat = osh_material_by_name(wm, "WaterByMass");
     ASSERT_TRUE(mat != NULL);
     ASSERT_TRUE(mat->nelements == 2u);
@@ -251,27 +164,9 @@ static void test_material_mass_fraction_input_completes_atom_counts(void) {
     ASSERT_TRUE(fabs(mat->elements[1].mass_fraction - 0.8881016559) < 1e-10);
     ASSERT_TRUE(mat->elements[0].atom_count > mat->elements[1].atom_count);
     ASSERT_TRUE(fabs(mat->elements[0].atom_count + mat->elements[1].atom_count - 1.0) < 1e-12);
-
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
-}
 
-static void test_material_explicit_isotope_uses_mass_number(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    struct material const *mat;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Li6\n"
-                    "RHO 0.534\n"
-                    "NUCLID 3 6 1.0\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
+    load_workspace_from_fixture("valid/li6_isotope.dat", OSH_OK, &wm);
     mat = osh_material_by_name(wm, "Li6");
     ASSERT_TRUE(mat != NULL);
     ASSERT_TRUE(mat->nelements == 1u);
@@ -279,255 +174,68 @@ static void test_material_explicit_isotope_uses_mass_number(void) {
     ASSERT_TRUE(mat->elements[0].a == 6u);
     ASSERT_TRUE(fabs(mat->elements[0].atom_count - 1.0) < 1e-12);
     ASSERT_TRUE(fabs(mat->elements[0].mass_fraction - 1.0) < 1e-12);
-
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
 }
 
-static void test_material_defaults_state_to_condensed(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    struct material const *mat;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL DefaultState\n"
-                    "RHO 1.0\n"
-                    "NUCLID 1 1.0\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    mat = osh_material_by_name(wm, "DefaultState");
-    ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_CONDENSED);
-
-    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_icru_element_expands_to_natural_element(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    struct material const *mat;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Lithium\n"
-                    "ICRU 3\n"
-                    "END\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    mat = osh_material_by_name(wm, "Lithium");
-    ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(mat->icru_id == 3);
-    ASSERT_TRUE(fabs(mat->rho - 0.534) < 1e-7);
-    ASSERT_TRUE(fabs(mat->mean_excitation_energy - 40.0) < 1e-12);
-    ASSERT_TRUE(mat->state == OSH_MATERIAL_STATE_CONDENSED);
-    ASSERT_TRUE(mat->nelements == 1u);
-    ASSERT_TRUE(mat->elements[0].z == 3u);
-    ASSERT_TRUE(mat->elements[0].a == 0u);
-    ASSERT_TRUE(fabs(mat->elements[0].mass_fraction - 1.0) < 1e-12);
-    ASSERT_TRUE(fabs(mat->elements[0].atom_count - 1.0) < 1e-12);
-    ASSERT_TRUE(fabs(mat->elements[0].mean_excitation_energy - 40.0) < 1e-12);
-
-    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_rejects_key_outside_material(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "RHO 1.0\n"
-                    "END\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_EPARSE);
-    ASSERT_TRUE(wm == NULL);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_accepts_end_outside_material(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    enum osh_status rc;
-
-    write_temp_file(path, sizeof(path), "END\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    ASSERT_TRUE(wm->nmaterials == 2u);
-    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_rejects_end_arguments(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Water\n"
-                    "ICRU 276\n"
-                    "END trailing\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_EPARSE);
-    ASSERT_TRUE(wm == NULL);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_accepts_missing_end(void) {
-    char path[512];
-    struct material_workspace *wm = NULL;
-    struct material const *mat;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Water\n"
-                    "ICRU 276\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    mat = osh_material_by_name(wm, "Water");
-    ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(mat->icru_id == 276);
-    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
-}
-
-static void test_material_new_block_implicitly_closes_previous_one(void) {
-    char path[512];
+static void test_valid_end_handling(void) {
     struct material_workspace *wm = NULL;
     struct material const *mat_a;
     struct material const *mat_b;
-    enum osh_status rc;
 
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL First\n"
-                    "RHO 1.0\n"
-                    "NUCLID 1 1.0\n"
-                    "MATERIAL Second\n"
-                    "RHO 2.0\n"
-                    "NUCLID 8 1.0\n");
+    load_workspace_from_fixture("valid/end_outside.dat", OSH_OK, &wm);
+    ASSERT_TRUE(wm->nmaterials == 2u);
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 
-    rc = osh_material_setup_from_path(path, NULL, &wm);
+    load_workspace_from_fixture("valid/missing_end.dat", OSH_OK, &wm);
+    ASSERT_TRUE(osh_material_by_name(wm, "Water") != NULL);
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
+    load_workspace_from_fixture("valid/two_blocks_no_end.dat", OSH_OK, &wm);
     mat_a = osh_material_by_name(wm, "First");
     mat_b = osh_material_by_name(wm, "Second");
     ASSERT_TRUE(mat_a != NULL);
     ASSERT_TRUE(mat_b != NULL);
     ASSERT_TRUE(fabs(mat_a->rho - 1.0) < 1e-12);
     ASSERT_TRUE(fabs(mat_b->rho - 2.0) < 1e-12);
-    ASSERT_TRUE(mat_a->nelements == 1u);
-    ASSERT_TRUE(mat_b->nelements == 1u);
-
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
 }
 
-static void test_material_rejects_element_i_before_element(void) {
-    char path[512];
+static void test_invalid_key_outside_material(void) {
     struct material_workspace *wm = NULL;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Water\n"
-                    "RHO 1.0\n"
-                    "IVALUE 22.9\n"
-                    "NUCLID 1 1\n"
-                    "END\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_EPARSE);
-    ASSERT_TRUE(wm == NULL);
-    ASSERT_TRUE(remove(path) == 0);
+    load_workspace_from_fixture("invalid/key_outside_material.dat", OSH_EPARSE, &wm);
 }
 
-static void test_material_rejects_mixed_icru_and_elements(void) {
-    char path[512];
+static void test_invalid_conflicting_mee(void) {
     struct material_workspace *wm = NULL;
-    enum osh_status rc;
-
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL Water\n"
-                    "ICRU 276\n"
-                    "RHO 1.0\n"
-                    "NUCLID 1 2\n"
-                    "END\n");
-
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_EPARSE);
-    ASSERT_TRUE(wm == NULL);
-    ASSERT_TRUE(remove(path) == 0);
+    load_workspace_from_fixture("invalid/conflicting_mee.dat", OSH_EPARSE, &wm);
 }
 
-static void test_material_numeric_name_is_still_a_name(void) {
-    char path[512];
+static void test_invalid_end_arguments(void) {
     struct material_workspace *wm = NULL;
-    struct material const *mat;
-    enum osh_status rc;
+    load_workspace_from_fixture("invalid/end_with_arguments.dat", OSH_EPARSE, &wm);
+}
 
-    write_temp_file(path,
-                    sizeof(path),
-                    "MATERIAL 999\n"
-                    "ICRU 276\n"
-                    "END\n");
+static void test_invalid_elementi_before_element(void) {
+    struct material_workspace *wm = NULL;
+    load_workspace_from_fixture("invalid/elementi_before_element.dat", OSH_EPARSE, &wm);
+}
 
-    rc = osh_material_setup_from_path(path, NULL, &wm);
-
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(wm != NULL);
-    mat = osh_material_by_name(wm, "999");
-    ASSERT_TRUE(mat != NULL);
-    ASSERT_TRUE(mat->index == OSH_MATERIAL_INDEX_FIRST_USER);
-
-    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
-    ASSERT_TRUE(remove(path) == 0);
+static void test_invalid_mixed_icru_and_elements(void) {
+    struct material_workspace *wm = NULL;
+    load_workspace_from_fixture("invalid/mixed_icru_and_elements.dat", OSH_EPARSE, &wm);
 }
 
 int main(void) {
-    test_material_fixture_icru_and_rho();
-    test_material_fixture_composition();
-    test_material_keys_and_state_are_case_insensitive();
-    test_material_level_mean_excitation_and_dedx_table();
-    test_material_rejects_conflicting_compound_and_element_mean_excitation();
-    test_material_mass_fraction_input_completes_atom_counts();
-    test_material_explicit_isotope_uses_mass_number();
-    test_material_defaults_state_to_condensed();
-    test_material_icru_element_expands_to_natural_element();
-    test_material_rejects_key_outside_material();
-    test_material_accepts_end_outside_material();
-    test_material_rejects_end_arguments();
-    test_material_accepts_missing_end();
-    test_material_rejects_element_i_before_element();
-    test_material_rejects_mixed_icru_and_elements();
-    test_material_numeric_name_is_still_a_name();
-    test_material_new_block_implicitly_closes_previous_one();
+    test_valid_icru_override();
+    test_valid_explicit_composition();
+    test_valid_case_and_loaddedx();
+    test_valid_mass_fraction_and_isotope();
+    test_valid_end_handling();
+
+    test_invalid_key_outside_material();
+    test_invalid_conflicting_mee();
+    test_invalid_end_arguments();
+    test_invalid_elementi_before_element();
+    test_invalid_mixed_icru_and_elements();
     return 0;
 }

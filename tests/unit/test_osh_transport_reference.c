@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_app_osh.h"
 #include "common/osh_const.h"
 #include "common/osh_rc.h"
 #include "material/osh_material.h"

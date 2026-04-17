@@ -1,0 +1,7 @@
+mAtErIaL WaterFancy
+StAtE GaS
+CoLoUr 0.1 0.2 0.3 0.4
+mIvAlUe 80.0
+lOaDdEdX tables/water_dedx.dat
+iCrU 276
+END

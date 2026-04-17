@@ -1,4 +1,4 @@
-#include "material/osh_material_parse.h"
+#include "apps/osh/osh_material_parse.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -8,7 +8,7 @@
 #include "common/osh_file.h"
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
-#include "material/osh_material_parse_keys.h"
+#include "apps/osh/osh_material_parse_keys.h"
 
 static enum osh_status parse_density(struct material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_color(struct material_workspace *wm, struct oshfile *oshf, char const *args);
