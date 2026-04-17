@@ -34,14 +34,14 @@ void test_logger_basic(void) {
     remove(logfile);
 
     /* Init default logger */
-    assert(osh_log_init(OSH_LOG_INFO, OSH_LOG_F_TIMESTAMP | OSH_LOG_F_FILELINE) == 0);
+    assert(osh_log_init(OSH_LOG_INFO, OSH_LOG_F_TIMESTAMP | OSH_LOG_F_FILELINE) == OSH_OK);
 
     /* Add file sink */
-    assert(osh_log_add_file(logfile, /*append=*/0) == 0);
+    assert(osh_log_add_file(logfile, /*append=*/0) == OSH_OK);
 
     /* Level getters/setters */
     assert(osh_log_get_level() == OSH_LOG_INFO);
-    assert(osh_log_set_level(OSH_LOG_WARN) == 0);
+    assert(osh_log_set_level(OSH_LOG_WARN) == OSH_OK);
     assert(osh_log_get_level() == OSH_LOG_WARN);
 
     /* With level WARN: INFO should be suppressed, WARN should appear */
@@ -49,7 +49,7 @@ void test_logger_basic(void) {
     osh_warn("Warning message A: %s", "be careful");
 
     /* Lower threshold to INFO so INFO appears */
-    assert(osh_log_set_level(OSH_LOG_INFO) == 0);
+    assert(osh_log_set_level(OSH_LOG_INFO) == OSH_OK);
     osh_info("Info message (should appear): %d", 43);
     osh_warn("Warning message B: %s", "still careful");
 

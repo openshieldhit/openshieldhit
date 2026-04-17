@@ -10,6 +10,8 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#include "status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,11 +38,11 @@ enum osh_log_flag {
 
 struct osh_logger;
 
-int osh_log_init(int level, unsigned flags);
+enum osh_status osh_log_init(int level, unsigned flags);
 void osh_log_close(void);
-int osh_log_add_file(char const *path, int append);
-int osh_log_enable_stdout(int enable);
-int osh_log_set_level(int level);
+enum osh_status osh_log_add_file(char const *path, int append);
+enum osh_status osh_log_enable_stdout(int enable);
+enum osh_status osh_log_set_level(int level);
 int osh_log_get_level(void);
 void osh_log_set_flags(unsigned flags);
 unsigned osh_log_get_flags(void);
@@ -48,8 +50,8 @@ void osh_log_flush(void);
 
 struct osh_logger *osh_logger_create(int level, unsigned flags);
 void osh_logger_destroy(struct osh_logger *lg);
-int osh_logger_add_file(struct osh_logger *lg, char const *path, int append);
-int osh_logger_enable_stdout(struct osh_logger *lg, int enable);
+enum osh_status osh_logger_add_file(struct osh_logger *lg, char const *path, int append);
+enum osh_status osh_logger_enable_stdout(struct osh_logger *lg, int enable);
 void osh_logger_set_level(struct osh_logger *lg, int level);
 int osh_logger_get_level(struct osh_logger const *lg);
 void osh_logger_set_flags(struct osh_logger *lg, unsigned flags);
@@ -57,7 +59,7 @@ unsigned osh_logger_get_flags(struct osh_logger const *lg);
 void osh_logger_flush(struct osh_logger *lg);
 
 typedef void (*osh_log_write_cb)(void *user, char const *msg, size_t len);
-int osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user);
+enum osh_status osh_logger_set_callback(struct osh_logger *lg, osh_log_write_cb cb, void *user);
 
 void osh_logger_logv_ex(struct osh_logger *lg,
                         int level,

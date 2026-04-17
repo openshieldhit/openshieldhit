@@ -40,8 +40,15 @@ int main(int argc, char *argv[]) {
      * Stdout is disabled by default; enable it here for the CLI. */
     {
         int log_level = (opt.verbose == 0) ? OSH_LOG_WARN : (opt.verbose == 1) ? OSH_LOG_INFO : OSH_LOG_DEBUG;
-        osh_log_init(log_level, OSH_LOG_F_NONE);
-        osh_log_enable_stdout(1);
+        if (osh_log_init(log_level, OSH_LOG_F_NONE) != OSH_OK) {
+            fprintf(stderr, "Error: failed to initialize logger\n");
+            return EX_OSERR;
+        }
+        if (osh_log_enable_stdout(1) != OSH_OK) {
+            fprintf(stderr, "Error: failed to configure logger stdout sink\n");
+            osh_log_close();
+            return EX_OSERR;
+        }
     }
 
     /* Normalize path separators once here so all library code can assume '/'
