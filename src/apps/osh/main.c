@@ -9,6 +9,14 @@
 #include "openshieldhit/status.h"
 #include "openshieldhit/version.h"
 
+/**
+ * @brief Map library status codes to conventional process exit codes.
+ *
+ * @details
+ * This keeps CLI-facing shell behavior stable even if the internal status enum
+ * grows. Only a small subset currently gets dedicated sysexits mappings; all
+ * other failures fall back to a generic non-zero exit status.
+ */
 static int exit_code_for_status(enum osh_status status);
 
 int main(int argc, char *argv[]) {

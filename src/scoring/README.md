@@ -33,5 +33,6 @@ osh_scoring_workspace_free()        release cold workspace
 - Save/output code consumes the scoring workspace plus scoring runtime, not transport internals.
 - Other modules may call into scoring runtime APIs, but should not own scorer compilation.
 - `osh_scoring_compile`, `osh_scoring_postprocess`, and `osh_scoring_save` are
-  invoked by `src/simulation/` as part of `osh_simulation_create` and
-  `osh_simulation_run`. App code never calls them directly.
+  invoked by `src/simulation/` as part of `osh_simulation_create`,
+  `osh_simulation_run`, and `osh_simulation_save`. App code
+  never calls them directly.

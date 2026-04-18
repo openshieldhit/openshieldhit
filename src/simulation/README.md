@@ -31,7 +31,17 @@ enum osh_status osh_simulation_create(
     struct osh_scoring_workspace  *scoring,
     struct osh_simulation        **sim_out);
 
-enum osh_status osh_simulation_run(struct osh_simulation *sim, char const *out_dir);
+enum osh_status osh_simulation_run(struct osh_simulation *sim);
+
+enum osh_status osh_simulation_get_results(
+    struct osh_simulation const *sim,
+    struct osh_results const   **out);
+
+unsigned long long osh_results_requested_nstat(struct osh_results const *results);
+unsigned long long osh_results_completed_nstat(struct osh_results const *results);
+int osh_results_has_completed_run(struct osh_results const *results);
+
+enum osh_status osh_simulation_save(struct osh_simulation const *sim);
 
 enum osh_status osh_simulation_free(struct osh_simulation *sim);
 ```
@@ -71,7 +81,39 @@ In order:
 
 1. **Transport** — drives `osh_transport_run_minimal` to completion.
 2. **Postprocess** — calls `osh_scoring_postprocess` to finalise accumulators.
-3. **Save** — calls `osh_scoring_save` to write output files to `out_dir`.
+
+After a successful run, the simulation records both:
+
+- the requested number of primaries
+- the completed number of primaries actually represented by the current results
+
+Today those values are typically equal, but keeping both counters distinct
+prepares the API for future chunked, time-limited, or partially completed runs.
+
+Saving is a separate explicit step. `osh_simulation_save` iterates the parsed
+scoring outputs and selects the concrete writer for each output block based on
+its configured format. The output paths themselves are expected to be fully
+resolved by the application before save is called.
+
+Calling `osh_simulation_save` before a completed run is invalid and returns
+`OSH_ESTATE`.
+
+## What Simulation Does Not Decide
+
+This module deliberately does not own save cadence or chunk orchestration.
+Those choices belong to the application layer.
+
+Examples of app-owned policy:
+
+1. Save every completed chunk of primaries.
+2. Save every N seconds of wall-clock time.
+3. Run one simulation serially or several simulations in parallel threads.
+4. Merge partial results before saving.
+
+The simulation layer exposes explicit `run` and `save_*` entry points, but it
+does not currently prescribe when save calls should happen relative to run
+beyond the obvious requirement that saving meaningful results implies a
+completed run or run chunk. Format dispatch itself is owned by the library.
 
 ## Design rationale
 
@@ -100,11 +142,13 @@ osh_X_workspace_create()   ← caller
 osh_X_workspace_prepare()  ← caller
                            ← cold workspace alive
 osh_simulation_create()    ← compiles runtimes, borrows cold workspaces
-osh_simulation_run()       ← uses both cold and runtime state
+osh_simulation_run()       ← transport + scoring postprocess
+osh_simulation_get_results() ← borrowed read-only handle to compiled results
+osh_results_*_nstat()      ← inspect requested vs completed primaries
+osh_simulation_save()      ← writes all configured output formats
 osh_simulation_free()      ← frees runtime state only
 osh_X_workspace_free()     ← caller
 ```
 
 The cold workspaces must remain alive for the full lifetime of the simulation
-object because `osh_simulation_run` (specifically `osh_scoring_save`) reads
-workspace metadata to annotate output files.
+object because result saving reads workspace metadata to annotate output files.

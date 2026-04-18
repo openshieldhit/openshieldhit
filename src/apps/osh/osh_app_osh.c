@@ -13,6 +13,16 @@
 #include "openshieldhit/material.h"
 #include "openshieldhit/status.h"
 
+/**
+ * @brief Load and finalize a beam workspace from a legacy OpenShieldHIT beam file.
+ *
+ * @details
+ * The app layer owns all file I/O and format-specific policy. This function
+ * parses `beam.dat`, accumulates one template spot from inline beam cards,
+ * optionally imports an external spotlist referenced by `USECBEAM`, then
+ * populates the public beam workspace exclusively through `osh_beam_spots_set`
+ * before calling `osh_beam_workspace_prepare()`.
+ */
 enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct osh_beam_workspace **wb_out) {
     enum osh_status rc = OSH_OK;
     struct oshfile *sf = NULL;
@@ -86,6 +96,13 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
     return OSH_OK;
 }
 
+/**
+ * @brief Load and finalize a geometry workspace from a legacy OpenShieldHIT geometry file.
+ *
+ * @details
+ * This is the file-oriented wrapper around `osh_geometry_parse()` plus the
+ * required geometry workspace preparation step.
+ */
 enum osh_status
 osh_geometry_setup_from_path(char const *path, struct osh_logger *lg, struct osh_geometry_workspace **ws_out) {
     enum osh_status rc = OSH_OK;
@@ -128,6 +145,15 @@ osh_geometry_setup_from_path(char const *path, struct osh_logger *lg, struct osh
     return OSH_OK;
 }
 
+/**
+ * @brief Load and finalize a material workspace from a legacy OpenShieldHIT material file.
+ *
+ * @details
+ * The app wrapper still records the source path and base directory on the
+ * material workspace because `LOADDEDX` path resolution remains file-relative
+ * during parsing. The parser itself owns file I/O for imported tables and
+ * converts them into material-owned in-memory overrides.
+ */
 enum osh_status
 osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh_material_workspace **wm_out) {
     enum osh_status rc = OSH_OK;
@@ -181,6 +207,14 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh
     return OSH_OK;
 }
 
+/**
+ * @brief Load a scoring workspace from a legacy OpenShieldHIT detect file.
+ *
+ * @details
+ * Scoring has no separate workspace prepare step at present, so this wrapper
+ * only allocates the workspace, records the source filename, and parses the
+ * cold scoring definitions from `detect.dat`.
+ */
 enum osh_status
 osh_scoring_setup_from_path(char const *path, struct osh_logger *lg, struct osh_scoring_workspace **ws_out) {
     enum osh_status rc = OSH_OK;

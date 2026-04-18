@@ -43,7 +43,6 @@ int main(void) {
                               "    Quantity ENERGY\n";
     struct osh_scoring_workspace *ws;
     struct osh_scoring_runtime rt;
-    struct osh_scoring_save_request req;
     unsigned char bdo_head[8];
     FILE *fp;
     char line[512];
@@ -70,14 +69,7 @@ int main(void) {
     rt.pages[1].data[2] = 30.0;
     rt.pages[1].data[3] = 40.0;
 
-    memset(&req, 0, sizeof(req));
-    req.out_dir = ".";
-    req.ws = ws;
-    req.rt = &rt;
-    req.nstat = 5u;
-    req.has_nstat = 1;
-
-    rc = osh_scoring_save(&req);
+    rc = osh_scoring_save(ws, &rt, 5u);
     ASSERT_TRUE(rc == OSH_OK);
 
     fp = fopen(ASCII_PATH, "r");
@@ -85,7 +77,8 @@ int main(void) {
     ASSERT_TRUE(fgets(line, sizeof(line), fp) != NULL);
     ASSERT_TRUE(strstr(line, "OpenShieldHIT version") != NULL);
     while (fgets(line, sizeof(line), fp) != NULL) {
-        if (strstr(line, "5.000000000000e-01 5.000000000000e-01 5.000000000000e-01 1.000000000000e+00") != NULL) {
+        /* data[0]=1.0 / nstat=5 = 0.2 */
+        if (strstr(line, "5.000000000000e-01 5.000000000000e-01 5.000000000000e-01 2.000000000000e-01") != NULL) {
             break;
         }
     }

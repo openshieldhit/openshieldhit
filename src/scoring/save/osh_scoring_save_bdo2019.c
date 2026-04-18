@@ -8,22 +8,24 @@
 #include "common/osh_version.h"
 #include "scoring/save/osh_scoring_save_bdo2019_raw.h"
 
-static enum osh_status build_output_path(char **path_out, char const *out_dir, char const *filename);
 static char const *geometry_type_name(struct osh_scoring_geometry_runtime const *geo);
 static char const *page_data_unit(struct osh_scoring_page_runtime const *page);
-static enum osh_status validate_request(struct osh_scoring_save_request const *req,
-                                        size_t output_idx,
-                                        struct osh_scoring_output_runtime const **out_out,
-                                        struct osh_scoring_geometry_runtime const **geo_out);
+static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
+                                       struct osh_scoring_runtime const *rt,
+                                       size_t output_idx,
+                                       struct osh_scoring_output_runtime const **out_out,
+                                       struct osh_scoring_geometry_runtime const **geo_out);
 static void geometry_mesh_arrays(struct osh_scoring_geometry_runtime const *geo, double p[3], double q[3], int n[3]);
 static void format_now_rfc2822(char *buf, size_t cap);
 static int legacy_geo_kind(struct osh_scoring_geometry_runtime const *geo);
 static int legacy_score_kind(struct osh_scoring_page_runtime const *page);
 
-enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_save_request const *req, size_t output_idx) {
+enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace const *ws,
+                                                struct osh_scoring_runtime const *rt,
+                                                unsigned long long nstat,
+                                                size_t output_idx) {
     enum osh_status rc;
     FILE *fp;
-    char *path;
     char datestr[128];
     struct osh_scoring_output_runtime const *out;
     struct osh_scoring_geometry_runtime const *geo;
@@ -36,18 +38,12 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_save_request 
     double est_rescale_nstat;
     size_t ip;
 
-    rc = validate_request(req, output_idx, &out, &geo);
+    rc = validate_output(ws, rt, output_idx, &out, &geo);
     if (rc != OSH_OK) {
         return rc;
     }
 
-    rc = build_output_path(&path, req->out_dir, out->filename);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-
-    fp = fopen(path, "wb");
-    free(path);
+    fp = fopen(out->filename, "wb");
     if (!fp) {
         return OSH_EIO;
     }
@@ -72,9 +68,9 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_save_request 
     if (rc == OSH_OK) {
         rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_FILEDATE, datestr);
     }
-    if (rc == OSH_OK && req->has_nstat) {
-        long long int nstat = (long long int) req->nstat;
-        rc = osh_scoring_bdo2019_write_token_llint(fp, OSHBDO_RT_NSTAT, &nstat, 1u);
+    if (rc == OSH_OK) {
+        long long int nstat_ll = (long long int) nstat;
+        rc = osh_scoring_bdo2019_write_token_llint(fp, OSHBDO_RT_NSTAT, &nstat_ll, 1u);
     }
     if (rc == OSH_OK) {
         rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_GEO_TYPE, geometry_type_name(geo));
@@ -110,7 +106,7 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_save_request 
         int page_norm;
         double page_rescale;
         double page_offset;
-        struct osh_scoring_page_runtime const *page = &req->rt->pages[out->page_indices[ip]];
+        struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
 
         page_type = legacy_score_kind(page);
         page_count = (int) ip;
@@ -148,31 +144,6 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_save_request 
     return rc;
 }
 
-static enum osh_status build_output_path(char **path_out, char const *out_dir, char const *filename) {
-    char const *dir;
-    char *path;
-    size_t dlen;
-    size_t flen;
-
-    if (!path_out || !filename) {
-        return OSH_EINVAL;
-    }
-
-    dir = (out_dir && out_dir[0] != '\0') ? out_dir : ".";
-    dlen = strlen(dir);
-    flen = strlen(filename);
-    path = (char *) malloc(dlen + 1u + flen + 1u);
-    if (!path) {
-        return OSH_ENOMEM;
-    }
-
-    memcpy(path, dir, dlen);
-    path[dlen] = '/';
-    memcpy(path + dlen + 1u, filename, flen + 1u);
-    *path_out = path;
-    return OSH_OK;
-}
-
 static char const *geometry_type_name(struct osh_scoring_geometry_runtime const *geo) {
     switch (legacy_geo_kind(geo)) {
     case 1:
@@ -201,31 +172,32 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
     }
 }
 
-static enum osh_status validate_request(struct osh_scoring_save_request const *req,
-                                        size_t output_idx,
-                                        struct osh_scoring_output_runtime const **out_out,
-                                        struct osh_scoring_geometry_runtime const **geo_out) {
+static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
+                                       struct osh_scoring_runtime const *rt,
+                                       size_t output_idx,
+                                       struct osh_scoring_output_runtime const **out_out,
+                                       struct osh_scoring_geometry_runtime const **geo_out) {
     struct osh_scoring_output_runtime const *out;
     struct osh_scoring_geometry_runtime const *geo;
     size_t ip;
 
-    if (!req || !req->ws || !req->rt || !out_out || !geo_out) {
+    if (!ws || !rt || !out_out || !geo_out) {
         return OSH_EINVAL;
     }
-    if (output_idx >= req->ws->noutputs || output_idx >= req->rt->noutputs) {
+    if (output_idx >= ws->noutputs || output_idx >= rt->noutputs) {
         return OSH_EINVAL;
     }
 
-    out = &req->rt->outputs[output_idx];
-    if (out->geometry_idx >= req->rt->ngeometries) {
+    out = &rt->outputs[output_idx];
+    if (out->geometry_idx >= rt->ngeometries) {
         return OSH_ESTATE;
     }
-    geo = &req->rt->geometries[out->geometry_idx];
+    geo = &rt->geometries[out->geometry_idx];
     if (geo->geo_kind != OSH_SCORING_GEO_MESH || geo->has_rotation) {
         return OSH_ENOTSUP;
     }
     for (ip = 0; ip < out->npages; ++ip) {
-        struct osh_scoring_page_runtime const *page = &req->rt->pages[out->page_indices[ip]];
+        struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
         if (!page->data || page->variance || page->has_data2 || page->divide) {
             return OSH_ENOTSUP;
         }
