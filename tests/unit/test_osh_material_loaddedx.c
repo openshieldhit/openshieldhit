@@ -40,7 +40,7 @@ static void test_load_lucite_numeric_only(void) {
     memset(&table, 0, sizeof(table));
     fixture_path(path, sizeof(path), "Lucite.txt");
 
-    ASSERT_TRUE(osh_material_loaddedx_table_load(path, &table) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_table_load(path, NULL, &table) == OSH_OK);
     ASSERT_TRUE(table.nprojectiles == 18u);
     ASSERT_TRUE(table.nenergy == 53u);
     ASSERT_NEAR(table.energy_grid[0], 0.025, 1e-12);
@@ -61,7 +61,7 @@ static void test_load_water_with_comment_header(void) {
     memset(&table, 0, sizeof(table));
     fixture_path(path, sizeof(path), "Water.txt");
 
-    ASSERT_TRUE(osh_material_loaddedx_table_load(path, &table) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_table_load(path, NULL, &table) == OSH_OK);
     ASSERT_TRUE(table.nprojectiles == 18u);
     ASSERT_TRUE(table.nenergy == 53u);
     ASSERT_NEAR(osh_material_loaddedx_mass_stopping_power(&table, 0u, 0u), 619.82, 1e-3);
@@ -85,13 +85,13 @@ static void test_all_fixture_grids_match(void) {
     memset(&alanine, 0, sizeof(alanine));
 
     fixture_path(path, sizeof(path), "Water.txt");
-    ASSERT_TRUE(osh_material_loaddedx_table_load(path, &water) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_table_load(path, NULL, &water) == OSH_OK);
     fixture_path(path, sizeof(path), "Lucite.txt");
-    ASSERT_TRUE(osh_material_loaddedx_table_load(path, &lucite) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_table_load(path, NULL, &lucite) == OSH_OK);
     fixture_path(path, sizeof(path), "Air.txt");
-    ASSERT_TRUE(osh_material_loaddedx_table_load(path, &air) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_table_load(path, NULL, &air) == OSH_OK);
     fixture_path(path, sizeof(path), "Alanine.txt");
-    ASSERT_TRUE(osh_material_loaddedx_table_load(path, &alanine) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_table_load(path, NULL, &alanine) == OSH_OK);
 
     ASSERT_TRUE(water.nenergy == lucite.nenergy);
     ASSERT_TRUE(water.nenergy == air.nenergy);
@@ -117,7 +117,7 @@ static void test_load_extended_contiguous_columns(void) {
     memset(&table, 0, sizeof(table));
     project_fixture_path(path, sizeof(path), "loaddedx_extended.txt");
 
-    ASSERT_TRUE(osh_material_loaddedx_table_load(path, &table) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_table_load(path, NULL, &table) == OSH_OK);
     ASSERT_TRUE(table.nprojectiles == 20u);
     ASSERT_TRUE(table.nenergy == 2u);
     ASSERT_TRUE(osh_material_loaddedx_projectile_z(&table, 18u, &z) == OSH_OK);
