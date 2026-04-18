@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus
@@ -121,11 +122,12 @@ enum osh_status osh_material_workspace_create(struct osh_material_workspace **wm
  *
  * This function does not parse files and does not build transport tables.
  *
- * @param[in,out] wm  Workspace to validate and complete.
+ * @param[in,out] wm    Workspace to validate and complete.
+ * @param[in]     diag  Borrowed diagnostics sink for setup messages, or NULL.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm);
+enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm, struct osh_diag_sink const *diag);
 
 /**
  * @brief Set or replace one material-owned dE/dx override curve.
@@ -188,11 +190,12 @@ struct osh_material const *osh_material_by_index(struct osh_material_workspace c
 struct osh_material const *osh_material_by_name(struct osh_material_workspace const *wm, char const *name);
 
 /**
- * @brief Print a concise material workspace summary through the logger.
+ * @brief Print a concise material workspace summary through a diagnostics sink.
  *
- * @param[in] wm  Workspace to print.
+ * @param[in] wm    Workspace to print.
+ * @param[in] diag  Borrowed diagnostics sink for summary output, or NULL.
  */
-void osh_material_print(struct osh_material_workspace const *wm);
+void osh_material_print(struct osh_material_workspace const *wm, struct osh_diag_sink const *diag);
 
 #ifdef __cplusplus
 }

@@ -31,6 +31,9 @@ osh_material_workspace_free()       release cold workspace
 - This directory does not own file-format parsing or path-based setup.
 - It defines and validates the cold material model used by the rest of the
   library.
+- Setup-time validation/assembly diagnostics from
+  `osh_material_workspace_prepare()` are emitted through a borrowed
+  diagnostics sink supplied by the caller.
 - Runtime transport tables are built here, then consumed elsewhere.
 - Compile-time diagnostics for runtime table construction are emitted through
   a borrowed diagnostics sink supplied by the caller of
