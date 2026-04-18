@@ -9,6 +9,11 @@
 
 enum { OSH_MATERIAL_LOADDEDX_MINPROJECTILES = 18 };
 
+/**
+ * @brief Reset all pointer and count fields of @p table to zero/NULL.
+ *
+ * @param[out] table  Table to reset. No-op if NULL.
+ */
 static void table_reset(struct osh_material_loaddedx_table *table) {
     if (!table) {
         return;
@@ -20,6 +25,21 @@ static void table_reset(struct osh_material_loaddedx_table *table) {
     table->nenergy = 0u;
 }
 
+/**
+ * @brief Parse a single line of the dE/dx table into an energy and stopping-power values.
+ *
+ * @details The first number on the line is the energy; subsequent numbers are
+ * per-projectile mass stopping powers. Returns OSH_EPARSE if fewer than
+ * OSH_MATERIAL_LOADDEDX_MINPROJECTILES stopping-power columns are present.
+ *
+ * @param[in]  line        NUL-terminated input line.
+ * @param[out] energy_out  Receives the energy value (first column).
+ * @param[out] values_out  Receives a newly allocated array of stopping-power values.
+ * @param[out] nvalues_out Receives the number of stopping-power values.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL on NULL arguments, OSH_EPARSE on format
+ *          error, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status
 parse_numeric_row(char const *line, double *energy_out, double **values_out, size_t *nvalues_out) {
     char *cursor;
@@ -82,6 +102,21 @@ parse_numeric_row(char const *line, double *energy_out, double **values_out, siz
     return OSH_OK;
 }
 
+/**
+ * @brief Append one energy row to the growing energy and value arrays.
+ *
+ * @details Both arrays are grown via realloc. Values are stored in row-major
+ * order: row index varies slowest, projectile index varies fastest.
+ *
+ * @param[in,out] energy_rows   Pointer to the energy array; reallocated as needed.
+ * @param[in,out] value_rows    Pointer to the row-major value array; reallocated as needed.
+ * @param[in]     nprojectiles  Number of projectile columns per row.
+ * @param[in,out] nrows         Current row count; incremented on success.
+ * @param[in]     energy        Energy value for this row.
+ * @param[in]     values        Array of @p nprojectiles stopping-power values.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status append_row(
     double **energy_rows, float **value_rows, size_t nprojectiles, size_t *nrows, double energy, double const *values) {
     double *new_energy_rows;
@@ -109,6 +144,17 @@ static enum osh_status append_row(
     return OSH_OK;
 }
 
+/**
+ * @brief Allocate and initialize the projectile Z-number map.
+ *
+ * @details Assigns consecutive atomic numbers starting at 1 (Z = index + 1),
+ * covering proton through the heaviest projectile in the table.
+ *
+ * @param[in,out] table         Table to initialize; projectile_z is allocated here.
+ * @param[in]     nprojectiles  Number of projectile columns.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status init_projectile_map(struct osh_material_loaddedx_table *table, size_t nprojectiles) {
     size_t i;
 

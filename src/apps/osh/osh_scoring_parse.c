@@ -171,6 +171,13 @@ fail:
 
 /* ---- Append helpers ------------------------------------------------------ */
 
+/**
+ * @brief Append a zero-initialized filter slot to the workspace.
+ *
+ * @param[in,out] ws  Scoring workspace; filters array is grown by one.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status append_filter(struct osh_scoring_workspace *ws) {
     struct osh_scoring_filter_def *tmp =
         (struct osh_scoring_filter_def *) realloc(ws->filters, (ws->nfilters + 1u) * sizeof(*tmp));
@@ -182,6 +189,15 @@ static enum osh_status append_filter(struct osh_scoring_workspace *ws) {
     return OSH_OK;
 }
 
+/**
+ * @brief Append a default-initialized settings slot to the workspace.
+ *
+ * @details Sets medium and nkmedium sentinel values to -1.
+ *
+ * @param[in,out] ws  Scoring workspace; settings array is grown by one.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status append_settings(struct osh_scoring_workspace *ws) {
     struct osh_scoring_settings_def *tmp =
         (struct osh_scoring_settings_def *) realloc(ws->settings, (ws->nsettings + 1u) * sizeof(*tmp));
@@ -195,6 +211,13 @@ static enum osh_status append_settings(struct osh_scoring_workspace *ws) {
     return OSH_OK;
 }
 
+/**
+ * @brief Append a zero-initialized geometry slot to the workspace.
+ *
+ * @param[in,out] ws  Scoring workspace; geometries array is grown by one.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status append_geometry(struct osh_scoring_workspace *ws) {
     struct osh_scoring_geometry_def *tmp =
         (struct osh_scoring_geometry_def *) realloc(ws->geometries, (ws->ngeometries + 1u) * sizeof(*tmp));
@@ -206,6 +229,13 @@ static enum osh_status append_geometry(struct osh_scoring_workspace *ws) {
     return OSH_OK;
 }
 
+/**
+ * @brief Append a zero-initialized output slot to the workspace.
+ *
+ * @param[in,out] ws  Scoring workspace; outputs array is grown by one.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status append_output(struct osh_scoring_workspace *ws) {
     struct osh_scoring_output_def *tmp =
         (struct osh_scoring_output_def *) realloc(ws->outputs, (ws->noutputs + 1u) * sizeof(*tmp));
@@ -219,6 +249,17 @@ static enum osh_status append_output(struct osh_scoring_workspace *ws) {
 
 /* ---- Post-parse validation ----------------------------------------------- */
 
+/**
+ * @brief Validate the fully parsed scoring workspace for required fields.
+ *
+ * @details Checks that every filter has a Name, every settings block has a
+ * Name, every geometry has both a type keyword and a Name, and every output
+ * has a Filename, a Geo reference, and at least one Quantity page.
+ *
+ * @param[in] ws  Completed scoring workspace to validate.
+ *
+ * @returns OSH_OK if all required fields are present, OSH_EPARSE otherwise.
+ */
 static enum osh_status validate(struct osh_scoring_workspace const *ws) {
     size_t i, j;
 
