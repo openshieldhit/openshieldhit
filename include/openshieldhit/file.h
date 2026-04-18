@@ -33,8 +33,11 @@ int osh_file_lineno(struct oshfile const *oshf);
  *
  * @details
  * If `rel_path` is already absolute it is copied as-is. Otherwise it is
- * resolved relative to `base_dir`. The returned string is heap-allocated and
- * owned by the caller.
+ * resolved relative to `base_dir`. On Windows builds, drive-absolute paths
+ * such as `C:/...` and `C:\\...` are recognized as absolute; bare
+ * drive-relative paths such as `C:foo` are not.
+ *
+ * The returned string is heap-allocated and owned by the caller.
  *
  * @returns 0 on success, -1 on allocation or argument failure.
  */
@@ -51,6 +54,10 @@ void osh_path_normalize(char *path);
 
 /**
  * @brief Return the directory portion of a path as a new string.
+ *
+ * @details
+ * Accepts both '/' and '\\' as separators so callers remain robust when a
+ * Windows-style path reaches this helper before normalization.
  *
  * @returns Newly allocated directory string, or NULL on missing separator or
  * allocation failure.

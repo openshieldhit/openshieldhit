@@ -3,24 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "openshieldhit/status.h"
 #include "osh_logger.h"
 
-/**
- * @brief Creates a byte-map for a given file *oshf.
- *
- * @details This function reads the file line by line, counts the number of
- * newlines, and creates a map of byte offsets for each line in the file. The
- * file pointer is rewound after this function is called.
- *
- * @param[in,out] oshf Pointer to struct oshfile struct.
- *
- * @returns 1 on success, or exits with an error if the file pointer is NULL or
- * memory allocation fails.
- *
- * @author Niels Bassler
- */
-static int _mapfile(struct oshfile *oshf);
-static int _rewind_file(struct oshfile *oshf);
+static enum osh_status _mapfile(struct oshfile *oshf);
+static enum osh_status _rewind_file(struct oshfile *oshf);
+static int _is_sep(char c);
+#if defined(_WIN32)
+static int _is_drive_letter(char c);
+#endif
+static int _path_is_absolute(char const *path);
 
 struct oshfile *osh_fopen(char const *filename) {
     FILE *fp;
@@ -44,7 +36,7 @@ struct oshfile *osh_fopen(char const *filename) {
     oshf->map = NULL;
     oshf->map_len = 0; /* number of lines (entries) of the map */
 
-    if (!_mapfile(oshf)) {
+    if (_mapfile(oshf) != OSH_OK) {
         osh_fclose(oshf);
         return NULL;
     }
@@ -99,19 +91,31 @@ int osh_file_lineno(const struct oshfile *oshf) {
     return low + 1; /* Line numbers are 1-based */
 }
 
-static int _mapfile(struct oshfile *oshf) {
+/**
+ * @brief Build the newline offset map used for line-number queries.
+ *
+ * @details
+ * Scans the file twice: first to count newline characters, then to record the
+ * byte offset immediately after each newline. The file is rewound before and
+ * after the scan so callers can continue reading from the beginning.
+ *
+ * @param[in,out] oshf  File wrapper whose `map` and `map_len` fields are filled.
+ *
+ * @returns OSH_OK on success, or an OSH_E* code on failure.
+ */
+static enum osh_status _mapfile(struct oshfile *oshf) {
     int c;
     long int i;
     size_t map_slots;
 
     if (!oshf || !oshf->fp) {
         osh_error("osh_mapfile: null file pointer");
-        return 0;
+        return OSH_EINVAL;
     }
 
     /* Rewind and count newlines */
-    if (!_rewind_file(oshf)) {
-        return 0;
+    if (_rewind_file(oshf) != OSH_OK) {
+        return OSH_EIO;
     }
     oshf->map_len = 0;
 
@@ -122,7 +126,7 @@ static int _mapfile(struct oshfile *oshf) {
     }
     if (ferror(oshf->fp)) {
         osh_error("osh_mapfile: failed while scanning file '%s'", oshf->filename);
-        return 0;
+        return OSH_EIO;
     }
 
     if (oshf->map_len < 1) {
@@ -136,8 +140,8 @@ static int _mapfile(struct oshfile *oshf) {
         osh_alloc_failed("osh_mapfile: failed to allocate memory for line map");
     }
 
-    if (!_rewind_file(oshf)) {
-        return 0;
+    if (_rewind_file(oshf) != OSH_OK) {
+        return OSH_EIO;
     }
 
     i = 0;
@@ -149,24 +153,74 @@ static int _mapfile(struct oshfile *oshf) {
     }
     if (ferror(oshf->fp)) {
         osh_error("osh_mapfile: failed while building line map for '%s'", oshf->filename);
-        return 0;
+        return OSH_EIO;
     }
 
-    if (!_rewind_file(oshf)) {
-        return 0;
+    if (_rewind_file(oshf) != OSH_OK) {
+        return OSH_EIO;
     }
 
-    return 1; /* Success */
+    return OSH_OK;
 }
 
-static int _rewind_file(struct oshfile *oshf) {
+static enum osh_status _rewind_file(struct oshfile *oshf) {
+    if (!oshf || !oshf->fp) {
+        return OSH_EINVAL;
+    }
     if (fseek(oshf->fp, 0L, SEEK_SET) != 0) {
         osh_error("osh_mapfile: failed to rewind file '%s'", oshf->filename);
-        return 0;
+        return OSH_EIO;
     }
     clearerr(oshf->fp);
     oshf->lineno = 0;
-    return 1;
+    return OSH_OK;
+}
+
+/**
+ * @brief Return whether @p c is a recognized path separator.
+ *
+ * @details
+ * Accept both '/' and '\\' so helpers remain robust even when a caller forgot
+ * to normalize Windows-style paths first.
+ */
+static int _is_sep(char c) {
+    return (c == '/') || (c == '\\');
+}
+
+#if defined(_WIN32)
+/**
+ * @brief Return whether @p c is an ASCII drive letter.
+ */
+static int _is_drive_letter(char c) {
+    return ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z'));
+}
+#endif
+
+/**
+ * @brief Return whether @p path is already absolute for the current platform.
+ *
+ * @details
+ * On all platforms, a leading separator denotes an absolute/rooted path.
+ * On Windows, also recognize drive-absolute paths (`C:/...`, `C:\\...`) and
+ * UNC paths (`\\\\server\\share`, `//server/share`). A bare drive-relative
+ * path like `C:foo` is intentionally not treated as absolute.
+ */
+static int _path_is_absolute(char const *path) {
+    if (!path || !path[0]) {
+        return 0;
+    }
+
+    if (_is_sep(path[0])) {
+        return 1;
+    }
+
+#if defined(_WIN32)
+    if (_is_drive_letter(path[0]) && path[1] == ':' && _is_sep(path[2])) {
+        return 1;
+    }
+#endif
+
+    return 0;
 }
 
 int osh_relative_path_to_file(char **out, char const *base_dir, char const *rel_path) {
@@ -178,7 +232,7 @@ int osh_relative_path_to_file(char **out, char const *base_dir, char const *rel_
         return -1;
     }
 
-    if (rel_path[0] == '/') {
+    if (_path_is_absolute(rel_path)) {
         /* already absolute — copy as-is */
         rlen = strlen(rel_path);
         result = (char *) malloc(rlen + 1);
@@ -223,6 +277,7 @@ void osh_path_normalize(char *path) {
 }
 
 char *osh_path_dirname(char const *path) {
+    char const *p;
     char const *sep;
     size_t len;
     char *dir;
@@ -230,7 +285,12 @@ char *osh_path_dirname(char const *path) {
     if (!path) {
         return NULL;
     }
-    sep = strrchr(path, '/');
+    sep = NULL;
+    for (p = path; *p; ++p) {
+        if (_is_sep(*p)) {
+            sep = p;
+        }
+    }
     if (!sep || sep == path) {
         return NULL;
     }
