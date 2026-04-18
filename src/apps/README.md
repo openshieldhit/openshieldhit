@@ -38,11 +38,16 @@ installed public API and should not be re-exported through `include/`.
   delegates to the library via explicit run/save calls:
 
   ```c
-  osh_simulation_create(beam, geo, mat, scoring, &sim);
+  osh_simulation_create(beam, geo, mat, scoring, diag, &sim);
   osh_simulation_run(sim);
   osh_simulation_save(sim);
   osh_simulation_free(sim);
   ```
+
+  On the current branch, the app layer may also provide a borrowed
+  `struct osh_diag_sink` to the simulation/runtime path.  This lets the app
+  decide whether runtime diagnostics go to stderr, a file, a GUI widget, a
+  test buffer, or nowhere at all.
 
   All runtime compilation, zone-to-material wiring, and transport execution are
   private to `src/simulation/`.  The app layer never touches runtime headers.
@@ -52,6 +57,10 @@ installed public API and should not be re-exported through `include/`.
   results, and what constitutes one completed chunk of work. The library
   itself selects the concrete writer per output block based on the parsed
   scoring format.
+
+  The diagnostics-sink migration is intentionally narrow at present: app,
+  simulation, and transport use the explicit sink, while older untouched
+  modules may still rely on the legacy global logger.
 
 ## Expected future layout
 

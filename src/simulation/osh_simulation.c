@@ -3,11 +3,11 @@
 
 #include "beam/osh_beam.h"
 #include "beam/runtime/osh_beam_runtime.h"
+#include "common/osh_logger.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/runtime/osh_material_compile.h"
 #include "openshieldhit/beam_defs.h"
-#include "openshieldhit/logger.h"
 #include "openshieldhit/simulation.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
@@ -26,6 +26,7 @@ struct osh_results {
 struct osh_simulation {
     struct osh_beam_workspace const *beam;
     struct osh_scoring_workspace const *scoring;
+    struct osh_diag_sink const *diag;
 
     struct osh_beam_runtime *beam_rt;
     struct osh_gemca_runtime geom_rt;
@@ -44,6 +45,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
                                       struct osh_geometry_workspace *geo,
                                       struct osh_material_workspace *mat,
                                       struct osh_scoring_workspace *scoring,
+                                      struct osh_diag_sink const *diag,
                                       struct osh_simulation **sim_out) {
     struct osh_simulation *sim;
     struct osh_gemca_prepared *gemca;
@@ -56,15 +58,15 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     }
     *sim_out = NULL;
     if (!geo->prepared) {
-        osh_error("%s", "simulation: geometry workspace has not been prepared");
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: geometry workspace has not been prepared");
         return OSH_ESTATE;
     }
     if (!beam->prepared) {
-        osh_error("%s", "simulation: beam workspace has not been prepared");
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: beam workspace has not been prepared");
         return OSH_ESTATE;
     }
     if (!beam->has_primary) {
-        osh_error("%s", "simulation: beam workspace has no primary particle defined");
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: beam workspace has no primary particle defined");
         return OSH_EINVAL;
     }
 
@@ -74,6 +76,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     }
     sim->beam = beam;
     sim->scoring = scoring;
+    sim->diag = diag;
     sim->requested_nstat = (unsigned long long) beam->nstat;
     sim->results.requested_nstat = sim->requested_nstat;
     sim->results.completed_nstat = 0ull;
@@ -88,14 +91,16 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
         struct osh_material const *m;
 
         if (!z->material_name) {
-            osh_error("simulation: zone '%s' has no material assigned", z->name ? z->name : "(unnamed)");
+            OSH_DIAG_ERRORF(diag, "simulation: zone '%s' has no material assigned", z->name ? z->name : "(unnamed)");
             rc = OSH_EPARSE;
             goto fail;
         }
         m = osh_material_by_name(mat, z->material_name);
         if (!m) {
-            osh_error(
-                "simulation: zone '%s': unknown material '%s'", z->name ? z->name : "(unnamed)", z->material_name);
+            OSH_DIAG_ERRORF(diag,
+                            "simulation: zone '%s': unknown material '%s'",
+                            z->name ? z->name : "(unnamed)",
+                            z->material_name);
             rc = OSH_EPARSE;
             goto fail;
         }
@@ -106,7 +111,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     rc = osh_gemca_compile(gemca, &sim->geom_rt);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: failed to compile geometry runtime");
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile geometry runtime");
         goto fail;
     }
 
@@ -115,7 +120,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     z_max = (beam->primary.z > 0u) ? (unsigned int) beam->primary.z : 1u;
     rc = osh_material_compile(mat, z_max, &sim->transport_tables);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: failed to compile transport tables");
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile transport tables");
         goto fail;
     }
 
@@ -123,7 +128,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     rc = osh_scoring_compile(scoring, &sim->scoring_runtime);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: failed to compile scoring runtime");
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile scoring runtime");
         goto fail;
     }
 
@@ -158,12 +163,13 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
         sim->transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_OFF;
         break;
     }
+    sim->transport_ctx.diag = diag;
 
     /* ---- 6. Beam runtime ------------------------------------------------- */
 
     rc = osh_beam_compile(beam, &sim->beam_rt);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: failed to initialise beam runtime");
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to initialise beam runtime");
         goto fail;
     }
 
@@ -185,7 +191,7 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
     rc = osh_transport_run_minimal(
         &sim->transport_ctx, sim->beam_rt, &sim->geom_rt, &sim->transport_tables, &sim->scoring_runtime);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: transport failed");
+        OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: transport failed");
         return rc;
     }
 
@@ -193,7 +199,7 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
 
     rc = osh_scoring_postprocess(&sim->scoring_runtime);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: scoring postprocess failed");
+        OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: scoring postprocess failed");
         return rc;
     }
 
@@ -242,13 +248,13 @@ enum osh_status osh_simulation_save(struct osh_simulation const *sim) {
         return OSH_EINVAL;
     }
     if (!sim->results.has_completed_run) {
-        osh_error("%s", "simulation: save requested before a completed run");
+        OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: save requested before a completed run");
         return OSH_ESTATE;
     }
 
     rc = osh_scoring_save(sim->scoring, &sim->scoring_runtime, sim->completed_nstat);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: scoring save failed");
+        OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: scoring save failed");
     }
     return rc;
 }

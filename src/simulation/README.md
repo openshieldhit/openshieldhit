@@ -29,6 +29,7 @@ enum osh_status osh_simulation_create(
     struct osh_geometry_workspace *geo,
     struct osh_material_workspace *mat,
     struct osh_scoring_workspace  *scoring,
+    struct osh_diag_sink const    *diag,
     struct osh_simulation        **sim_out);
 
 enum osh_status osh_simulation_run(struct osh_simulation *sim);
@@ -49,6 +50,10 @@ enum osh_status osh_simulation_free(struct osh_simulation *sim);
 The cold workspaces are **borrowed**: the caller creates and owns them; the
 simulation holds non-owning pointers.  `osh_simulation_free` releases only the
 runtime resources compiled by `osh_simulation_create`.
+
+The diagnostics sink is also borrowed.  On the current branch, this explicit
+sink is the preferred path for runtime-facing diagnostics from simulation and
+transport.  Passing `NULL` makes that path silent.
 
 ## What `osh_simulation_create` does
 
@@ -76,6 +81,10 @@ In order:
 
 6. **Beam runtime** — calls `osh_beam_compile` to initialise the primary
    source machinery.
+
+The borrowed diagnostics sink is stored on the simulation and forwarded into
+the transport context.  This keeps the main runtime path free of process-global
+logger ownership.
 
 ## What `osh_simulation_run` does
 
@@ -152,3 +161,19 @@ osh_X_workspace_free()     ← caller
 
 The cold workspaces must remain alive for the full lifetime of the simulation
 object because result saving reads workspace metadata to annotate output files.
+
+The same borrowed-lifetime rule applies to the diagnostics sink passed to
+`osh_simulation_create()`.
+
+## Transitional Note
+
+The diagnostics sink currently covers the main runtime path:
+
+- `osh_simulation_create`
+- `osh_simulation_run`
+- `osh_simulation_save`
+- `transport/`
+
+Older modules that have not yet been migrated may still emit through the
+legacy global logger API.  That coexistence is intentional for now to keep the
+migration branch narrow.

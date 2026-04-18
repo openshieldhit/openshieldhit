@@ -212,7 +212,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    rc = osh_simulation_create(beam, geom, mat, scoring, &sim);
+    rc = osh_simulation_create(beam, geom, mat, scoring, opt->diag, &sim);
     if (rc != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to compile simulation\n");

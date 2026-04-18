@@ -41,7 +41,8 @@
 
 static double monotonic_seconds(void);
 static size_t transport_progress_chunk_size(size_t total);
-static void report_transport_progress(size_t completed, size_t total, double elapsed_s);
+static void
+report_transport_progress(struct osh_diag_sink const *diag, size_t completed, size_t total, double elapsed_s);
 static enum osh_status validate_transport_modes(struct osh_transport_context const *transport_ctx);
 
 /* ---- Wavefront loop ------------------------------------------------------ */
@@ -127,7 +128,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     t_start = monotonic_seconds();
     t_last_report = t_start;
 
-    report_transport_progress(0u, params->nstat, 0.0);
+    report_transport_progress(transport_ctx->diag, 0u, params->nstat, 0.0);
 
     while (primaries_done < params->nstat || pool->n > 0u) {
         /* Fill the pool when it is empty and primaries remain */
@@ -152,38 +153,40 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         /* Advance every live particle by one step */
         for (i = 0u; i < pool->n; ++i) {
             if (steps_taken >= step_budget) {
-                osh_error("transport: step budget exceeded after %zu steps (pool slot %zu, primaries_done=%zu, "
-                          "zone=%zu, e=%.17g, pos=(%.17g, %.17g, %.17g), dir=(%.17g, %.17g, %.17g))",
-                          steps_taken,
-                          i,
-                          primaries_done,
-                          zone_batch[i],
-                          pool->e[i],
-                          pool->x[i],
-                          pool->y[i],
-                          pool->z[i],
-                          pool->ux[i],
-                          pool->uy[i],
-                          pool->uz[i]);
+                OSH_DIAG_ERRORF(transport_ctx->diag,
+                                "transport: step budget exceeded after %zu steps (pool slot %zu, primaries_done=%zu, "
+                                "zone=%zu, e=%.17g, pos=(%.17g, %.17g, %.17g), dir=(%.17g, %.17g, %.17g))",
+                                steps_taken,
+                                i,
+                                primaries_done,
+                                zone_batch[i],
+                                pool->e[i],
+                                pool->x[i],
+                                pool->y[i],
+                                pool->z[i],
+                                pool->ux[i],
+                                pool->uy[i],
+                                pool->uz[i]);
                 rc = OSH_ESTATE;
                 goto cleanup;
             }
             rc = osh_transport_ion_step_one(
                 pool, i, zone_batch[i], dist_batch[i], geom_rt, transport_ctx, tables, scoring, &rng);
             if (rc != OSH_OK) {
-                osh_error("transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, %.17g, "
-                          "%.17g) dir=(%.17g, %.17g, %.17g)",
-                          i,
-                          (int) rc,
-                          zone_batch[i],
-                          dist_batch[i],
-                          pool->e[i],
-                          pool->x[i],
-                          pool->y[i],
-                          pool->z[i],
-                          pool->ux[i],
-                          pool->uy[i],
-                          pool->uz[i]);
+                OSH_DIAG_ERRORF(transport_ctx->diag,
+                                "transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, "
+                                "%.17g, %.17g) dir=(%.17g, %.17g, %.17g)",
+                                i,
+                                (int) rc,
+                                zone_batch[i],
+                                dist_batch[i],
+                                pool->e[i],
+                                pool->x[i],
+                                pool->y[i],
+                                pool->z[i],
+                                pool->ux[i],
+                                pool->uy[i],
+                                pool->uz[i]);
                 goto cleanup;
             }
             ++steps_taken;
@@ -199,7 +202,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             int const max_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MAX_INTERVAL_S);
             if (primaries_completed == params->nstat || (chunk_reached && min_interval_elapsed)
                 || max_interval_elapsed) {
-                report_transport_progress(primaries_completed, params->nstat, t_now - t_start);
+                report_transport_progress(transport_ctx->diag, primaries_completed, params->nstat, t_now - t_start);
                 last_report_completed = primaries_completed;
                 t_last_report = t_now;
                 while (next_report_completed <= primaries_completed && next_report_completed < params->nstat) {
@@ -214,7 +217,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
 
     if (last_report_completed < params->nstat) {
         double const t_now = monotonic_seconds();
-        report_transport_progress(params->nstat, params->nstat, t_now - t_start);
+        report_transport_progress(transport_ctx->diag, params->nstat, params->nstat, t_now - t_start);
     }
 
 cleanup:
@@ -262,17 +265,19 @@ static size_t transport_progress_chunk_size(size_t total) {
     return chunk;
 }
 
-static void report_transport_progress(size_t completed, size_t total, double elapsed_s) {
+static void
+report_transport_progress(struct osh_diag_sink const *diag, size_t completed, size_t total, double elapsed_s) {
     double primaries_per_second;
     size_t remaining;
 
     remaining = (completed < total) ? (total - completed) : 0u;
     primaries_per_second = (elapsed_s > 0.0) ? ((double) completed / elapsed_s) : 0.0;
-    osh_info("Transport progress: %zu/%zu completed, %zu left, %.1f primaries/s",
-             completed,
-             total,
-             remaining,
-             primaries_per_second);
+    OSH_DIAG_INFOF(diag,
+                   "Transport progress: %zu/%zu completed, %zu left, %.1f primaries/s",
+                   completed,
+                   total,
+                   remaining,
+                   primaries_per_second);
 }
 
 static enum osh_status validate_transport_modes(struct osh_transport_context const *transport_ctx) {
@@ -281,10 +286,11 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
     case OSH_TRANSPORT_MCS_MOLIERE:
         break;
     case OSH_TRANSPORT_MCS_GAUSSIAN:
-        osh_error("%s", "transport: Gaussian MCS is not implemented");
+        OSH_DIAG_ERRORF(transport_ctx->diag, "%s", "transport: Gaussian MCS is not implemented");
         return OSH_ENOTSUP;
     default:
-        osh_error("transport: unsupported MCS mode value %d", (int) transport_ctx->params.mcs_mode);
+        OSH_DIAG_ERRORF(
+            transport_ctx->diag, "transport: unsupported MCS mode value %d", (int) transport_ctx->params.mcs_mode);
         return OSH_EINVAL;
     }
 
@@ -293,10 +299,12 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
     case OSH_TRANSPORT_STRAGGLING_GAUSSIAN:
         break;
     case OSH_TRANSPORT_STRAGGLING_VAVILOV:
-        osh_error("%s", "transport: Vavilov straggling is not implemented");
+        OSH_DIAG_ERRORF(transport_ctx->diag, "%s", "transport: Vavilov straggling is not implemented");
         return OSH_ENOTSUP;
     default:
-        osh_error("transport: unsupported straggling mode value %d", (int) transport_ctx->params.straggling_mode);
+        OSH_DIAG_ERRORF(transport_ctx->diag,
+                        "transport: unsupported straggling mode value %d",
+                        (int) transport_ctx->params.straggling_mode);
         return OSH_EINVAL;
     }
 

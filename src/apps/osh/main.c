@@ -18,10 +18,12 @@
  * other failures fall back to a generic non-zero exit status.
  */
 static int exit_code_for_status(enum osh_status status);
+static void cli_diag_emit(void *user, int level, char const *file, int line, char const *function, char const *message);
 
 int main(int argc, char *argv[]) {
     struct osh_cli_options opt;
     struct osh_run_options run_opt;
+    struct osh_diag_sink diag;
     char err[256];
     enum osh_status rc;
 
@@ -59,6 +61,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    diag.emit = cli_diag_emit;
+    diag.user = stdout;
+    diag.min_level = (opt.verbose == 0)   ? OSH_DIAG_LEVEL_WARN
+                     : (opt.verbose == 1) ? OSH_DIAG_LEVEL_INFO
+                                          : OSH_DIAG_LEVEL_DEBUG;
+
     /* Normalize path separators once here so all library code can assume '/'
      * without per-subsystem #ifdef _WIN32 blocks. No-op on non-Windows. */
     osh_path_normalize((char *) opt.workdir);
@@ -79,6 +87,7 @@ int main(int argc, char *argv[]) {
     run_opt.seed_offset = opt.seed_offset;
     run_opt.has_seed_offset = opt.has_seed_offset;
     run_opt.validate_only = opt.dry_run ? 1 : 0;
+    run_opt.diag = &diag;
 
     rc = osh_run(&run_opt, stdout, stderr);
     osh_log_close();
@@ -99,4 +108,18 @@ static int exit_code_for_status(enum osh_status status) {
     default:
         return 1;
     }
+}
+
+static void
+cli_diag_emit(void *user, int level, char const *file, int line, char const *function, char const *message) {
+    FILE *fp = (FILE *) user;
+    (void) file;
+    (void) line;
+    (void) function;
+
+    if (!fp || !message) {
+        return;
+    }
+    fprintf(fp, "[%s] %s\n", osh_diag_level_name(level), message);
+    fflush(fp);
 }

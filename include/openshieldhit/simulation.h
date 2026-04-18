@@ -33,6 +33,7 @@ struct osh_results;
  * @param[in]  geo      Prepared geometry workspace.
  * @param[in]  mat      Finalized material workspace.
  * @param[in]  scoring  Parsed scoring workspace.
+ * @param[in]  diag     Borrowed diagnostics sink for run/save messages; NULL for silent.
  * @param[out] sim_out  Receives the new simulation handle on success.
  *
  * @returns OSH_OK on success, or an error code.
@@ -41,6 +42,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
                                       struct osh_geometry_workspace *geo,
                                       struct osh_material_workspace *mat,
                                       struct osh_scoring_workspace *scoring,
+                                      struct osh_diag_sink const *diag,
                                       struct osh_simulation **sim_out);
 
 /**
