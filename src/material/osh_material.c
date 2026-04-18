@@ -13,14 +13,18 @@ static void material_defaults(struct osh_material *mat);
 static void material_set_rgba(struct osh_material *mat, float r, float g, float b, float a);
 static enum osh_status material_workspace_init_reserved(struct osh_material_workspace *wm);
 static enum osh_status material_set_name(struct osh_material *mat, char const *name);
-static enum osh_status material_workspace_complete(struct osh_material_workspace *wm);
-static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm);
-static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm);
-static enum osh_status material_complete(struct osh_material *mat);
-static enum osh_status material_complete_composition(struct osh_material *mat);
-static enum osh_status material_complete_icru(struct osh_material *mat);
-static enum osh_status material_derive_atom_counts_from_mass_fractions(struct osh_material *mat);
-static enum osh_status material_derive_mass_fractions_from_atom_counts(struct osh_material *mat);
+static enum osh_status material_workspace_complete(struct osh_material_workspace *wm, struct osh_diag_sink const *diag);
+static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm,
+                                                             struct osh_diag_sink const *diag);
+static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm,
+                                                       struct osh_diag_sink const *diag);
+static enum osh_status material_complete(struct osh_material *mat, struct osh_diag_sink const *diag);
+static enum osh_status material_complete_composition(struct osh_material *mat, struct osh_diag_sink const *diag);
+static enum osh_status material_complete_icru(struct osh_material *mat, struct osh_diag_sink const *diag);
+static enum osh_status material_derive_atom_counts_from_mass_fractions(struct osh_material *mat,
+                                                                       struct osh_diag_sink const *diag);
+static enum osh_status material_derive_mass_fractions_from_atom_counts(struct osh_material *mat,
+                                                                       struct osh_diag_sink const *diag);
 static void material_default_state_if_unset(struct osh_material *mat);
 static enum osh_status material_set_elements_from_icru(struct osh_material *mat,
                                                        struct osh_material_icru_entry const *entry);
@@ -58,30 +62,32 @@ enum osh_status osh_material_workspace_create(struct osh_material_workspace **wm
     return OSH_OK;
 }
 
-enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm) {
+enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm, struct osh_diag_sink const *diag) {
     enum osh_status rc;
 
     if (!wm) {
         return OSH_EINVAL;
     }
 
-    rc = material_workspace_validate_raw(wm);
+    rc = material_workspace_validate_raw(wm, diag);
     if (rc != OSH_OK) {
         return rc;
     }
 
-    rc = material_workspace_complete(wm);
+    rc = material_workspace_complete(wm, diag);
     if (rc != OSH_OK) {
         return rc;
     }
 
-    rc = material_workspace_validate_completed(wm);
+    rc = material_workspace_validate_completed(wm, diag);
     if (rc != OSH_OK) {
         return rc;
     }
 
-    if (osh_log_get_level() <= OSH_LOG_INFO) {
-        osh_material_print(wm);
+    if (diag && diag->emit && diag->min_level <= OSH_DIAG_LEVEL_INFO) {
+        osh_material_print(wm, diag);
+    } else if (!diag && osh_log_get_level() <= OSH_LOG_INFO) {
+        osh_material_print(wm, NULL);
     }
 
     return OSH_OK;
@@ -222,7 +228,7 @@ struct osh_material const *osh_material_by_name(struct osh_material_workspace co
     return NULL;
 }
 
-void osh_material_print(struct osh_material_workspace const *wm) {
+void osh_material_print(struct osh_material_workspace const *wm, struct osh_diag_sink const *diag) {
     size_t i;
     size_t j;
     size_t k;
@@ -233,70 +239,140 @@ void osh_material_print(struct osh_material_workspace const *wm) {
         return;
     }
 
-    osh_info("%s", "");
-    osh_info("Material configuration:");
-    osh_info(OSH_LOG_HLINE);
-    osh_info("%-24s : %zu", "Number of materials", wm->nmaterials);
+    if (diag && diag->emit) {
+        OSH_DIAG_INFOF(diag, "%s", "");
+        OSH_DIAG_INFOF(diag, "Material configuration:");
+        OSH_DIAG_INFOF(diag, "%s", OSH_LOG_HLINE);
+        OSH_DIAG_INFOF(diag, "%-24s : %zu", "Number of materials", wm->nmaterials);
+    } else {
+        osh_info("%s", "");
+        osh_info("Material configuration:");
+        osh_info(OSH_LOG_HLINE);
+        osh_info("%-24s : %zu", "Number of materials", wm->nmaterials);
+    }
 
     i = 0;
     while (i < wm->nmaterials) {
         mat = &wm->materials[i];
-        osh_info("%s", "");
-        osh_info("Material[%zu]: index=%zu name=%s", i, mat->index, mat->name ? mat->name : "(unset)");
-        if (mat->icru_id == 0) {
-            osh_info("%-24s : %s", "ICRU id", "(unset)");
-        } else {
-            osh_info("%-24s : %i", "ICRU id", mat->icru_id);
-        }
-        if (mat->rho < 0.0) {
-            osh_info("%-24s : %s", "Density RHO", "(N/A)");
-        } else {
-            osh_info("%-24s : %.6f g/cm^3", "Density RHO", mat->rho);
-        }
-        if (mat->mean_excitation_energy < 0.0) {
-            osh_info("%-24s : %s", "Mean excitation energy", "(N/A)");
-        } else {
-            osh_info("%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
-        }
-        osh_info("%-24s : %zu", "dE/dx overrides", mat->ndedx_overrides);
-        osh_info("%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
-        osh_info("%-24s : %s", "State", material_state_name(mat->state));
-        osh_info("%-24s : %zu", "Elements", mat->nelements);
-
-        j = 0;
-        while (j < mat->nelements) {
-            elem = &mat->elements[j];
-            if (elem->mean_excitation_energy < 0.0) {
-                osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=(N/A)",
-                         j,
-                         elem->z,
-                         elem->a,
-                         elem->atom_count,
-                         elem->mass_fraction);
+        if (diag && diag->emit) {
+            OSH_DIAG_INFOF(diag, "%s", "");
+            OSH_DIAG_INFOF(diag, "Material[%zu]: index=%zu name=%s", i, mat->index, mat->name ? mat->name : "(unset)");
+            if (mat->icru_id == 0) {
+                OSH_DIAG_INFOF(diag, "%-24s : %s", "ICRU id", "(unset)");
             } else {
-                osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.4f eV",
-                         j,
-                         elem->z,
-                         elem->a,
-                         elem->atom_count,
-                         elem->mass_fraction,
-                         elem->mean_excitation_energy);
+                OSH_DIAG_INFOF(diag, "%-24s : %i", "ICRU id", mat->icru_id);
             }
-            j++;
-        }
-        k = 0u;
-        while (k < mat->ndedx_overrides) {
-            osh_info("    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
-                     k,
-                     mat->dedx_overrides[k].projectile_z,
-                     mat->dedx_overrides[k].npoints,
-                     mat->dedx_overrides[k].energy_mev_per_u[0],
-                     mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
-                     mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
-                     mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
-            k++;
-        }
+            if (mat->rho < 0.0) {
+                OSH_DIAG_INFOF(diag, "%-24s : %s", "Density RHO", "(N/A)");
+            } else {
+                OSH_DIAG_INFOF(diag, "%-24s : %.6f g/cm^3", "Density RHO", mat->rho);
+            }
+            if (mat->mean_excitation_energy < 0.0) {
+                OSH_DIAG_INFOF(diag, "%-24s : %s", "Mean excitation energy", "(N/A)");
+            } else {
+                OSH_DIAG_INFOF(diag, "%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
+            }
+            OSH_DIAG_INFOF(diag, "%-24s : %zu", "dE/dx overrides", mat->ndedx_overrides);
+            OSH_DIAG_INFOF(
+                diag, "%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
+            OSH_DIAG_INFOF(diag, "%-24s : %s", "State", material_state_name(mat->state));
+            OSH_DIAG_INFOF(diag, "%-24s : %zu", "Elements", mat->nelements);
 
+            j = 0;
+            while (j < mat->nelements) {
+                elem = &mat->elements[j];
+                if (elem->mean_excitation_energy < 0.0) {
+                    OSH_DIAG_INFOF(
+                        diag,
+                        "    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=(N/A)",
+                        j,
+                        elem->z,
+                        elem->a,
+                        elem->atom_count,
+                        elem->mass_fraction);
+                } else {
+                    OSH_DIAG_INFOF(
+                        diag,
+                        "    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.4f eV",
+                        j,
+                        elem->z,
+                        elem->a,
+                        elem->atom_count,
+                        elem->mass_fraction,
+                        elem->mean_excitation_energy);
+                }
+                j++;
+            }
+            k = 0u;
+            while (k < mat->ndedx_overrides) {
+                OSH_DIAG_INFOF(diag,
+                               "    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
+                               k,
+                               mat->dedx_overrides[k].projectile_z,
+                               mat->dedx_overrides[k].npoints,
+                               mat->dedx_overrides[k].energy_mev_per_u[0],
+                               mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
+                               mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
+                               mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
+                k++;
+            }
+        } else {
+            osh_info("%s", "");
+            osh_info("Material[%zu]: index=%zu name=%s", i, mat->index, mat->name ? mat->name : "(unset)");
+            if (mat->icru_id == 0) {
+                osh_info("%-24s : %s", "ICRU id", "(unset)");
+            } else {
+                osh_info("%-24s : %i", "ICRU id", mat->icru_id);
+            }
+            if (mat->rho < 0.0) {
+                osh_info("%-24s : %s", "Density RHO", "(N/A)");
+            } else {
+                osh_info("%-24s : %.6f g/cm^3", "Density RHO", mat->rho);
+            }
+            if (mat->mean_excitation_energy < 0.0) {
+                osh_info("%-24s : %s", "Mean excitation energy", "(N/A)");
+            } else {
+                osh_info("%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
+            }
+            osh_info("%-24s : %zu", "dE/dx overrides", mat->ndedx_overrides);
+            osh_info("%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
+            osh_info("%-24s : %s", "State", material_state_name(mat->state));
+            osh_info("%-24s : %zu", "Elements", mat->nelements);
+
+            j = 0;
+            while (j < mat->nelements) {
+                elem = &mat->elements[j];
+                if (elem->mean_excitation_energy < 0.0) {
+                    osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=(N/A)",
+                             j,
+                             elem->z,
+                             elem->a,
+                             elem->atom_count,
+                             elem->mass_fraction);
+                } else {
+                    osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.4f eV",
+                             j,
+                             elem->z,
+                             elem->a,
+                             elem->atom_count,
+                             elem->mass_fraction,
+                             elem->mean_excitation_energy);
+                }
+                j++;
+            }
+            k = 0u;
+            while (k < mat->ndedx_overrides) {
+                osh_info("    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
+                         k,
+                         mat->dedx_overrides[k].projectile_z,
+                         mat->dedx_overrides[k].npoints,
+                         mat->dedx_overrides[k].energy_mev_per_u[0],
+                         mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
+                         mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
+                         mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
+                k++;
+            }
+        }
         i++;
     }
 }
@@ -400,7 +476,8 @@ static enum osh_status material_set_name(struct osh_material *mat, char const *n
  * complementary atom-count or mass-fraction fields. Explicit scalar cards such
  * as RHO, STATE, and MATERIALI remain user overrides and are not overwritten.
  */
-static enum osh_status material_workspace_complete(struct osh_material_workspace *wm) {
+static enum osh_status material_workspace_complete(struct osh_material_workspace *wm,
+                                                   struct osh_diag_sink const *diag) {
     enum osh_status rc;
     size_t i;
 
@@ -410,7 +487,7 @@ static enum osh_status material_workspace_complete(struct osh_material_workspace
 
     i = OSH_MATERIAL_INDEX_FIRST_USER;
     while (i < wm->nmaterials) {
-        rc = material_complete(&wm->materials[i]);
+        rc = material_complete(&wm->materials[i], diag);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -427,7 +504,8 @@ static enum osh_status material_workspace_complete(struct osh_material_workspace
  * Raw validation catches user inputs that would become ambiguous after
  * assembly, especially mixing ICRU with explicit element cards in one material.
  */
-static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm) {
+static enum osh_status material_workspace_validate_raw(struct osh_material_workspace const *wm,
+                                                       struct osh_diag_sink const *diag) {
     size_t i;
     size_t j;
     struct osh_material const *mat;
@@ -437,7 +515,7 @@ static enum osh_status material_workspace_validate_raw(struct osh_material_works
         return OSH_EINVAL;
     }
     if (wm->nmaterials == 0u) {
-        osh_error("material: no materials found");
+        OSH_DIAG_ERRORF(diag, "material: no materials found");
         return OSH_EPARSE;
     }
 
@@ -445,11 +523,11 @@ static enum osh_status material_workspace_validate_raw(struct osh_material_works
     while (i < wm->nmaterials) {
         mat = &wm->materials[i];
         if (mat->index != i) {
-            osh_error("material: material at array slot %zu has inconsistent index %zu", i, mat->index);
+            OSH_DIAG_ERRORF(diag, "material: material at array slot %zu has inconsistent index %zu", i, mat->index);
             return OSH_ESTATE;
         }
         if (!mat->name) {
-            osh_error("material: material index %zu has no name", mat->index);
+            OSH_DIAG_ERRORF(diag, "material: material index %zu has no name", mat->index);
             return OSH_EPARSE;
         }
         if (mat->index < OSH_MATERIAL_INDEX_FIRST_USER) {
@@ -457,33 +535,35 @@ static enum osh_status material_workspace_validate_raw(struct osh_material_works
             continue;
         }
         if (mat->icru_id == 0 && mat->nelements == 0u) {
-            osh_error("material: material '%s' defines neither ICRU nor elemental composition", mat->name);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' defines neither ICRU nor elemental composition", mat->name);
             return OSH_EPARSE;
         }
         if (mat->icru_id != 0 && mat->nelements > 0u) {
-            osh_error("material: material '%s' mixes ICRU and explicit elemental composition", mat->name);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' mixes ICRU and explicit elemental composition", mat->name);
             return OSH_EPARSE;
         }
         if (mat->icru_id == 0 && mat->nelements > 0u && mat->rho < 0.0) {
-            osh_error("material: material '%s' requires RHO for elemental composition", mat->name);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' requires RHO for elemental composition", mat->name);
             return OSH_EPARSE;
         }
         if (mat->nelements > 1u && mat->mean_excitation_energy >= 0.0 && material_has_any_element_mee(mat)) {
-            osh_error("material: compound material '%s' cannot define both material and element mean excitation energy",
-                      mat->name);
+            OSH_DIAG_ERRORF(
+                diag,
+                "material: compound material '%s' cannot define both material and element mean excitation energy",
+                mat->name);
             return OSH_EPARSE;
         }
         if (mat->rho == 0.0) {
-            osh_error("material: material '%s' has invalid RHO %.8g", mat->name, mat->rho);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' has invalid RHO %.8g", mat->name, mat->rho);
             return OSH_EPARSE;
         }
         if (mat->icru_id < 0) {
-            osh_error("material: material '%s' has invalid ICRU id %i", mat->name, mat->icru_id);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' has invalid ICRU id %i", mat->name, mat->icru_id);
             return OSH_EPARSE;
         }
         if (mat->state != OSH_MATERIAL_STATE_UNSET && mat->state != OSH_MATERIAL_STATE_CONDENSED
             && mat->state != OSH_MATERIAL_STATE_GAS) {
-            osh_error("material: material '%s' has invalid STATE %i", mat->name, mat->state);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' has invalid STATE %i", mat->name, mat->state);
             return OSH_EPARSE;
         }
 
@@ -491,11 +571,12 @@ static enum osh_status material_workspace_validate_raw(struct osh_material_works
         while (j < mat->nelements) {
             elem = &mat->elements[j];
             if (elem->z == 0u) {
-                osh_error("material: material '%s' element %zu has invalid Z=0", mat->name, j);
+                OSH_DIAG_ERRORF(diag, "material: material '%s' element %zu has invalid Z=0", mat->name, j);
                 return OSH_EPARSE;
             }
             if (elem->atom_count <= 0.0 && elem->mass_fraction <= 0.0) {
-                osh_error("material: material '%s' element %zu has neither atom count nor mass fraction", mat->name, j);
+                OSH_DIAG_ERRORF(
+                    diag, "material: material '%s' element %zu has neither atom count nor mass fraction", mat->name, j);
                 return OSH_EPARSE;
             }
             j++;
@@ -510,7 +591,8 @@ static enum osh_status material_workspace_validate_raw(struct osh_material_works
 /**
  * @brief Validate assembled material definitions.
  */
-static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm) {
+static enum osh_status material_workspace_validate_completed(struct osh_material_workspace const *wm,
+                                                             struct osh_diag_sink const *diag) {
     size_t i;
     size_t j;
     struct osh_material const *mat;
@@ -525,11 +607,11 @@ static enum osh_status material_workspace_validate_completed(struct osh_material
     while (i < wm->nmaterials) {
         mat = &wm->materials[i];
         if (mat->index != i) {
-            osh_error("material: material at array slot %zu has inconsistent index %zu", i, mat->index);
+            OSH_DIAG_ERRORF(diag, "material: material at array slot %zu has inconsistent index %zu", i, mat->index);
             return OSH_ESTATE;
         }
         if (!mat->name) {
-            osh_error("material: material index %zu has no name", mat->index);
+            OSH_DIAG_ERRORF(diag, "material: material index %zu has no name", mat->index);
             return OSH_EPARSE;
         }
         if (mat->index < OSH_MATERIAL_INDEX_FIRST_USER) {
@@ -537,20 +619,20 @@ static enum osh_status material_workspace_validate_completed(struct osh_material
             continue;
         }
         if (mat->rho <= 0.0) {
-            osh_error("material: material '%s' has invalid completed RHO %.8g", mat->name, mat->rho);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' has invalid completed RHO %.8g", mat->name, mat->rho);
             return OSH_EPARSE;
         }
         if (mat->nelements == 0u) {
-            osh_error("material: material '%s' has no completed elemental composition", mat->name);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' has no completed elemental composition", mat->name);
             return OSH_EPARSE;
         }
         if (mat->icru_id < 0) {
-            osh_error("material: material '%s' has invalid ICRU id %i", mat->name, mat->icru_id);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' has invalid ICRU id %i", mat->name, mat->icru_id);
             return OSH_EPARSE;
         }
         if (mat->state != OSH_MATERIAL_STATE_UNSET && mat->state != OSH_MATERIAL_STATE_CONDENSED
             && mat->state != OSH_MATERIAL_STATE_GAS) {
-            osh_error("material: material '%s' has invalid STATE %i", mat->name, mat->state);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' has invalid STATE %i", mat->name, mat->state);
             return OSH_EPARSE;
         }
 
@@ -559,18 +641,19 @@ static enum osh_status material_workspace_validate_completed(struct osh_material
         while (j < mat->nelements) {
             elem = &mat->elements[j];
             if (elem->z == 0u) {
-                osh_error("material: material '%s' element %zu has invalid Z=0", mat->name, j);
+                OSH_DIAG_ERRORF(diag, "material: material '%s' element %zu has invalid Z=0", mat->name, j);
                 return OSH_EPARSE;
             }
             if (elem->atom_count <= 0.0 || elem->mass_fraction <= 0.0) {
-                osh_error("material: material '%s' element %zu has incomplete assembled composition", mat->name, j);
+                OSH_DIAG_ERRORF(
+                    diag, "material: material '%s' element %zu has incomplete assembled composition", mat->name, j);
                 return OSH_EPARSE;
             }
             mass_fraction_sum += elem->mass_fraction;
             j++;
         }
         if (mass_fraction_sum < 0.999999 || mass_fraction_sum > 1.000001) {
-            osh_error("material: material '%s' mass fractions sum to %.8g", mat->name, mass_fraction_sum);
+            OSH_DIAG_ERRORF(diag, "material: material '%s' mass fractions sum to %.8g", mat->name, mass_fraction_sum);
             return OSH_EPARSE;
         }
 
@@ -599,19 +682,19 @@ static enum osh_status material_workspace_validate_completed(struct osh_material
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-static enum osh_status material_complete(struct osh_material *mat) {
+static enum osh_status material_complete(struct osh_material *mat, struct osh_diag_sink const *diag) {
     enum osh_status rc;
 
     if (!mat) {
         return OSH_EINVAL;
     }
 
-    rc = material_complete_icru(mat);
+    rc = material_complete_icru(mat, diag);
     if (rc != OSH_OK) {
         return rc;
     }
 
-    rc = material_complete_composition(mat);
+    rc = material_complete_composition(mat, diag);
     if (rc != OSH_OK) {
         return rc;
     }
@@ -633,7 +716,7 @@ static void material_default_state_if_unset(struct osh_material *mat) {
 /**
  * @brief Expand an ICRU material while preserving explicit scalar overrides.
  */
-static enum osh_status material_complete_icru(struct osh_material *mat) {
+static enum osh_status material_complete_icru(struct osh_material *mat, struct osh_diag_sink const *diag) {
     enum osh_status rc;
     struct osh_material_icru_entry entry;
 
@@ -643,7 +726,7 @@ static enum osh_status material_complete_icru(struct osh_material *mat) {
 
     rc = osh_material_icru_lookup(mat->icru_id, &entry);
     if (rc != OSH_OK) {
-        osh_error("material: material '%s' references unavailable ICRU id %i", mat->name, mat->icru_id);
+        OSH_DIAG_ERRORF(diag, "material: material '%s' references unavailable ICRU id %i", mat->name, mat->icru_id);
         return rc;
     }
 
@@ -663,16 +746,16 @@ static enum osh_status material_complete_icru(struct osh_material *mat) {
 /**
  * @brief Fill missing complementary composition fields.
  */
-static enum osh_status material_complete_composition(struct osh_material *mat) {
+static enum osh_status material_complete_composition(struct osh_material *mat, struct osh_diag_sink const *diag) {
     if (mat->nelements == 0u) {
         return OSH_OK;
     }
 
     if (mat->elements[0].mass_fraction > 0.0 && mat->elements[0].atom_count < 0.0) {
-        return material_derive_atom_counts_from_mass_fractions(mat);
+        return material_derive_atom_counts_from_mass_fractions(mat, diag);
     }
     if (mat->elements[0].atom_count > 0.0 && mat->elements[0].mass_fraction < 0.0) {
-        return material_derive_mass_fractions_from_atom_counts(mat);
+        return material_derive_mass_fractions_from_atom_counts(mat, diag);
     }
 
     return OSH_OK;
@@ -951,7 +1034,8 @@ static enum osh_status material_match_element_mee_to_material(struct osh_materia
  *
  * @returns OSH_OK on success, OSH_EINVAL/OSH_ESTATE on invalid element data.
  */
-static enum osh_status material_derive_atom_counts_from_mass_fractions(struct osh_material *mat) {
+static enum osh_status material_derive_atom_counts_from_mass_fractions(struct osh_material *mat,
+                                                                       struct osh_diag_sink const *diag) {
     enum osh_status rc;
     double mass;      /* atomic mass of current element [Da] */
     double sum_moles; /* sum of mass_fraction/mass across all elements [1/Da] */
@@ -962,11 +1046,12 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct os
     while (i < mat->nelements) {
         rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
-            osh_error("material: material '%s' element %zu uses unsupported Z=%u A=%u",
-                      mat->name,
-                      i,
-                      mat->elements[i].z,
-                      mat->elements[i].a);
+            OSH_DIAG_ERRORF(diag,
+                            "material: material '%s' element %zu uses unsupported Z=%u A=%u",
+                            mat->name,
+                            i,
+                            mat->elements[i].z,
+                            mat->elements[i].a);
             return rc;
         }
         sum_moles += mat->elements[i].mass_fraction / mass;
@@ -1005,7 +1090,8 @@ static enum osh_status material_derive_atom_counts_from_mass_fractions(struct os
  *
  * @returns OSH_OK on success, OSH_EINVAL/OSH_ESTATE on invalid element data.
  */
-static enum osh_status material_derive_mass_fractions_from_atom_counts(struct osh_material *mat) {
+static enum osh_status material_derive_mass_fractions_from_atom_counts(struct osh_material *mat,
+                                                                       struct osh_diag_sink const *diag) {
     enum osh_status rc;
     double mass;       /* atomic mass of current element [Da] */
     double total_mass; /* sum of atom_count * mass across all elements [Da] */
@@ -1016,11 +1102,12 @@ static enum osh_status material_derive_mass_fractions_from_atom_counts(struct os
     while (i < mat->nelements) {
         rc = osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &mass);
         if (rc != OSH_OK) {
-            osh_error("material: material '%s' element %zu uses unsupported Z=%u A=%u",
-                      mat->name,
-                      i,
-                      mat->elements[i].z,
-                      mat->elements[i].a);
+            OSH_DIAG_ERRORF(diag,
+                            "material: material '%s' element %zu uses unsupported Z=%u A=%u",
+                            mat->name,
+                            i,
+                            mat->elements[i].z,
+                            mat->elements[i].a);
             return rc;
         }
         total_mass += mat->elements[i].atom_count * mass;
