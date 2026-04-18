@@ -16,6 +16,8 @@
 static void _wb_defaults(struct beam_workspace *wb);
 static int _wb_validate(const struct beam_workspace *wb);
 static int _wb_postparse(struct beam_workspace *wb);
+static int _spot_shape_valid(char shape);
+static int _spot_has_finite_values(struct beam_spot const *spot);
 static int _resolve_primary_particle(struct beam_workspace const *wb, struct particle *part_out);
 static void _postparse_spot_energy(struct beam_spot *spot, struct particle const *part);
 static void _build_spot_tm(struct beam_spot const *spot, struct beam_shared const *sh, double tm_out[16]);
@@ -68,6 +70,49 @@ enum osh_status osh_beam_workspace_prepare(struct beam_workspace *wb) {
 
     if (osh_log_get_level() <= OSH_LOG_INFO) {
         osh_beam_print(wb);
+    }
+
+    return OSH_OK;
+}
+
+enum osh_status osh_beam_spots_set(struct beam_workspace *wb, struct osh_beam_spot const *spots, size_t nspots) {
+    struct beam_spot *spots_copy;
+    size_t i;
+    enum osh_status rc;
+
+    if (!wb || !spots || nspots == 0u) {
+        return OSH_EINVAL;
+    }
+
+    rc = osh_beam_spots_init(&spots_copy, nspots);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    for (i = 0u; i < nspots; ++i) {
+        if (!_spot_shape_valid(spots[i].shape) || !_spot_has_finite_values(&spots[i]) || spots[i].size[0] < 0.0
+            || spots[i].size[1] < 0.0 || spots[i].t0 < 0.0 || spots[i].tsigma < 0.0 || spots[i].p0 < 0.0
+            || spots[i].psigma < 0.0 || spots[i].wt < 0.0) {
+            osh_beam_spots_free(spots_copy);
+            return OSH_EINVAL;
+        }
+        spots_copy[i] = spots[i];
+        if (spots_copy[i].spot_id == 0u) {
+            spots_copy[i].spot_id = (unsigned int) (i + 1u);
+        }
+    }
+
+    if (wb->spots) {
+        osh_beam_spots_free(wb->spots);
+    }
+    wb->spots = spots_copy;
+    wb->nspots = nspots;
+    wb->shared.use_div = 0;
+    for (i = 0u; i < wb->nspots; ++i) {
+        if (fabs(wb->spots[i].div[0]) > 0.0 || fabs(wb->spots[i].div[1]) > 0.0) {
+            wb->shared.use_div = 1;
+            break;
+        }
     }
 
     return OSH_OK;
@@ -161,6 +206,40 @@ static void _wb_defaults(struct beam_workspace *wb) {
     wb->beam_mode = 0;
     wb->makeln = 0;
     wb->neutrfast = 0;
+}
+
+static int _spot_shape_valid(char shape) {
+    switch (shape) {
+    case OSH_BEAM_SHAPE_PENCIL:
+    case OSH_BEAM_SHAPE_GAUSSIAN:
+    case OSH_BEAM_SHAPE_SQUARE:
+    case OSH_BEAM_SHAPE_CIRCULAR:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int _spot_has_finite_values(struct beam_spot const *spot) {
+    int i;
+
+    if (!spot) {
+        return 0;
+    }
+
+    for (i = 0; i < 3; ++i) {
+        if (!isfinite(spot->p[i])) {
+            return 0;
+        }
+    }
+    for (i = 0; i < 2; ++i) {
+        if (!isfinite(spot->size[i]) || !isfinite(spot->div[i]) || !isfinite(spot->cor[i])) {
+            return 0;
+        }
+    }
+
+    return isfinite(spot->t0) && isfinite(spot->tsigma) && isfinite(spot->p0) && isfinite(spot->psigma)
+           && isfinite(spot->wt);
 }
 
 /**

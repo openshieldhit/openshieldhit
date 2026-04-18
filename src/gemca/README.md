@@ -1,55 +1,33 @@
-# gemca — Layering Notes
+# GEMCA Module
 
-This directory now has three distinct responsibilities:
+This directory owns the geometry-compatibility layer that bridges the public
+cold geometry model to the hot geometry runtime used by transport.
 
-1. `include/openshieldhit/geometry.h`
-   The public cold geometry model exposed by `osh_core`.
-   Callers and app adapters fill flat `osh_geometry_body[]` and
-   `osh_geometry_zone[]` arrays without knowing anything about GEMCA internals.
+## Structure
 
-2. `src/apps/osh/osh_geometry_parse.c`
-   The current OpenShieldHIT `geo.dat` file parser.
-   This is app-side code: it opens files, understands input-card syntax, and
-   fills the public cold geometry structs.
-   `osh_geometry_setup_from_path()` (in `osh_app_osh`) wraps file loading,
-   parsing, and `osh_geometry_workspace_prepare()` into one call, matching the
-   pattern used by beam and material.
-
-3. `src/gemca/prepare/`
-   Core-internal preparation and compilation helpers.
-   This layer turns the cold geometry model into the internal compatibility
-   workspace `osh_gemca_prepared` by:
-   - allocating internal body/zone objects
-   - building body surfaces and transforms
-   - compiling raw zone expressions into pointer-linked CSG trees
-
-4. `src/gemca/runtime/`
-   The hot runtime representation used by transport.
-   It compiles the internal compatibility workspace into flat arrays that are
-   cache-friendly and SIMD-friendly.
-
-The important boundary is:
-
-`app parser → cold geometry → workspace_prepare → gemca_compile → runtime → simulation`
+- `osh_geometry_workspace.c` — geometry workspace preparation entry point.
+- `osh_gemca2.*` — internal prepared geometry representation
+  (`struct osh_gemca_prepared`) and related helpers.
+- `prepare/` — conversion from cold geometry definitions into prepared GEMCA
+  bodies, surfaces, transforms, and compiled CSG trees.
+- `runtime/` — compilation from `osh_gemca_prepared` into flat runtime arrays
+  used during transport.
 
 ## Lifecycle
 
 ```
 osh_geometry_workspace_create()     allocate cold workspace
-osh_geometry_workspace_prepare()    validate, build surfaces and CSG trees  [osh_geometry_setup_from_path]
-osh_gemca_compile()                 compile runtime arrays  [osh_simulation_create]
+osh_geometry_workspace_prepare()    validate, build surfaces and CSG trees
+osh_gemca_compile()                 compile runtime arrays
 osh_geometry_workspace_free()       release cold workspace
 ```
 
-Two consequences follow from that:
+## Rules
 
-- File parsing belongs in `src/apps/`, not in GEMCA core.
-- Expression compilation still belongs in GEMCA core, because library users may
-  construct cold geometry programmatically and still need the same prepare step
-  before runtime compilation.
-
-The current `osh_gemca_prepared` remains an internal compatibility type during the
-migration. It is no longer the public geometry API.
+- This directory does not own file-format parsing or path-based setup.
+- It owns the geometry preparation and compilation steps that turn cold
+  geometry data into simulation-ready runtime arrays.
+- `struct osh_gemca_prepared` is an internal compatibility type, not public API.
 
 ## Cold structs and compiled state coexist intentionally
 

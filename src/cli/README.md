@@ -13,7 +13,7 @@ not part of the standard C runtime.
 
 - Parses CLI flags into `struct osh_cli_options`
 - Provides `osh_cli_print_help()`
-- Does not parse input files (that lives in `src/apps/osh`)
+- Does not interpret simulation input-file formats
 - Is not part of the public installed API (`include/openshieldhit/...`)
 
 ## Main entry points

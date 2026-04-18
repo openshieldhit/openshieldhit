@@ -27,6 +27,57 @@ static void _write_temp_file(char *path, size_t path_cap, char const *content) {
     ASSERT_TRUE(fclose(fp) == 0);
 }
 
+static void test_beam_spots_set_replace_and_validate(void) {
+    struct osh_beam_workspace *wb = NULL;
+    struct osh_beam_spot spots_a[2];
+    struct osh_beam_spot spots_b[1];
+    struct osh_beam_spot invalid[1];
+    int rc;
+
+    memset(spots_a, 0, sizeof(spots_a));
+    memset(spots_b, 0, sizeof(spots_b));
+    memset(invalid, 0, sizeof(invalid));
+
+    rc = osh_beam_workspace_create(&wb);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+
+    spots_a[0].shape = OSH_BEAM_SHAPE_PENCIL;
+    spots_a[0].div[0] = 0.001;
+    spots_a[0].t0 = 100.0;
+    spots_a[0].wt = 1.0;
+    spots_a[1].shape = OSH_BEAM_SHAPE_GAUSSIAN;
+    spots_a[1].size[0] = 0.2;
+    spots_a[1].size[1] = 0.3;
+    spots_a[1].t0 = 120.0;
+    spots_a[1].wt = 2.0;
+
+    ASSERT_TRUE(osh_beam_spots_set(wb, spots_a, 2u) == OSH_OK);
+    ASSERT_TRUE(wb->nspots == 2u);
+    ASSERT_TRUE(wb->spots != NULL);
+    ASSERT_TRUE(wb->spots[0].spot_id == 1u);
+    ASSERT_TRUE(wb->spots[1].spot_id == 2u);
+    ASSERT_TRUE(wb->shared.use_div == 1);
+    ASSERT_TRUE(fabs(wb->spots[1].size[1] - 0.3) < 1e-12);
+
+    spots_b[0].shape = OSH_BEAM_SHAPE_PENCIL;
+    spots_b[0].p[2] = -25.0;
+    spots_b[0].t0 = 80.0;
+    spots_b[0].wt = 4.0;
+
+    ASSERT_TRUE(osh_beam_spots_set(wb, spots_b, 1u) == OSH_OK);
+    ASSERT_TRUE(wb->nspots == 1u);
+    ASSERT_TRUE(wb->shared.use_div == 0);
+    ASSERT_TRUE(wb->spots[0].spot_id == 1u);
+    ASSERT_TRUE(fabs(wb->spots[0].p[2] + 25.0) < 1e-12);
+
+    invalid[0].shape = (char) 99;
+    invalid[0].wt = 1.0;
+    ASSERT_TRUE(osh_beam_spots_set(wb, invalid, 1u) == OSH_EINVAL);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+}
+
 static void test_setup_single_spot_from_beamdat(void) {
     char beam_path[512];
     char beam_text[512];
@@ -393,6 +444,7 @@ static void test_setup_nstat_negative_save_disables_nsave(void) {
 }
 
 int main(void) {
+    test_beam_spots_set_replace_and_validate();
     test_setup_single_spot_from_beamdat();
     test_setup_beamdiv_without_focus_defaults_to_zero();
     test_setup_spotlist_replaces_template_and_inherits_defaults();

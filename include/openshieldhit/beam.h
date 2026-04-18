@@ -145,6 +145,7 @@ struct osh_beam_workspace {
  * @brief Allocate a beam workspace with core defaults.
  */
 enum osh_status osh_beam_workspace_create(struct osh_beam_workspace **wb_out);
+
 /**
  * @brief Build or rebuild internal prepared state from a cold beam workspace.
  *
@@ -155,11 +156,35 @@ enum osh_status osh_beam_workspace_create(struct osh_beam_workspace **wb_out);
  * prepared state is released and rebuilt in place.
  */
 enum osh_status osh_beam_workspace_prepare(struct osh_beam_workspace *wb);
+
+/**
+ * @brief Replace the owned beam spot array with caller-provided cold spot data.
+ *
+ * @details
+ * The input array is deep-copied into the workspace. Existing workspace spots
+ * are released and replaced on success. This function performs only lightweight
+ * structural checks; heavier physics-derived validation remains part of
+ * @ref osh_beam_workspace_prepare().
+ *
+ * Callers typically use this after parsing a beam source description from any
+ * frontend format. Both single-spot beams and external spot lists should enter
+ * the workspace through this function.
+ *
+ * @param[in,out] wb      Beam workspace to update.
+ * @param[in]     spots   Spot array to copy, length @p nspots.
+ * @param[in]     nspots  Number of spots; must be >= 1.
+ *
+ * @returns OSH_OK on success, or an error code on invalid input or allocation
+ *          failure.
+ */
+enum osh_status osh_beam_spots_set(struct osh_beam_workspace *wb, struct osh_beam_spot const *spots, size_t nspots);
+
 /**
  * @brief Free a beam workspace allocated by @ref osh_beam_workspace_create.
  */
 enum osh_status osh_beam_workspace_free(struct osh_beam_workspace *wb);
 enum osh_status osh_beam_phsp_free(struct osh_beam_phsp *phsp);
+
 void osh_beam_print(struct osh_beam_workspace const *wb);
 void osh_beam_print_spot(struct osh_beam_spot const *spot);
 

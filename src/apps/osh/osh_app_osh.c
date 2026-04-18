@@ -4,10 +4,10 @@
 #include <string.h>
 
 #include "apps/osh/osh_beam_parse.h"
+#include "apps/osh/osh_beam_spotlist.h"
 #include "apps/osh/osh_geometry_parse.h"
 #include "apps/osh/osh_material_parse.h"
 #include "apps/osh/osh_scoring_parse.h"
-#include "beam/osh_beam_spots.h"
 #include "openshieldhit/file.h"
 #include "openshieldhit/logger.h"
 #include "openshieldhit/material.h"
@@ -17,6 +17,9 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
     enum osh_status rc = OSH_OK;
     struct oshfile *sf = NULL;
     struct osh_beam_workspace *wb = NULL;
+    struct osh_beam_spot template_spot;
+    struct osh_beam_spot *spots = NULL;
+    size_t nspots = 0u;
     char *spotlist_path = NULL;
 
     (void) lg;
@@ -37,7 +40,10 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
         return rc;
     }
 
-    rc = osh_beam_parse(sf, wb, &spotlist_path);
+    memset(&template_spot, 0, sizeof(template_spot));
+    template_spot.shape = OSH_BEAM_SHAPE_PENCIL;
+
+    rc = osh_beam_parse(sf, wb, &template_spot, &spotlist_path);
     osh_fclose(sf);
     sf = NULL;
     if (rc != OSH_OK) {
@@ -48,9 +54,22 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
 
     if (spotlist_path) {
         osh_info("Loading spotlist before beam post-parse");
-        rc = osh_beam_spotlist_load(wb, spotlist_path);
+        rc = osh_beam_spotlist_import(spotlist_path, &template_spot, &spots, &nspots);
         if (rc != OSH_OK) {
             free(spotlist_path);
+            osh_beam_workspace_free(wb);
+            return rc;
+        }
+        rc = osh_beam_spots_set(wb, spots, nspots);
+        free(spots);
+        if (rc != OSH_OK) {
+            free(spotlist_path);
+            osh_beam_workspace_free(wb);
+            return rc;
+        }
+    } else {
+        rc = osh_beam_spots_set(wb, &template_spot, 1u);
+        if (rc != OSH_OK) {
             osh_beam_workspace_free(wb);
             return rc;
         }

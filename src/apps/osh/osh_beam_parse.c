@@ -17,6 +17,7 @@
 #include "particle/osh_particle_pdg.h"
 
 struct beam_parse_state {
+    struct osh_beam_spot *spot_out;
     char **spotlist_path_out;
 };
 
@@ -32,7 +33,8 @@ struct beam_parse_state {
 
 /* ---- Parse-phase handlers ------------------------------------------------
  *
- * Each handler fills raw values from the file into the beam workspace.
+ * Each handler fills raw values from the file into the beam workspace or the
+ * parser-owned template spot.
  * No derived quantities (p0 from t0, _tm matrix, emax) are computed here —
  * that is the job of the post-parse step in osh_beam_setup_from_path().
  *
@@ -41,6 +43,7 @@ struct beam_parse_state {
  * "what the simulation needs". */
 
 static int _resolve_input_relative_path(struct oshfile *oshf, char const *input_path, char **resolved_path_out);
+static struct osh_beam_spot *spot_from_state(struct beam_parse_state *state);
 static int _parse_apcorr(PARSE_HANDLER_ARGS);
 static int _parse_beamdir(PARSE_HANDLER_ARGS);
 static int _parse_beamdiv(PARSE_HANDLER_ARGS);
@@ -107,11 +110,14 @@ static struct _beam_dispatch_entry _dispatch_table[] = {
 
 /* ---- Main parser entry point --------------------------------------------- */
 
-enum osh_status osh_beam_parse(struct oshfile *oshf, struct osh_beam_workspace *beam, char **spotlist_path_out) {
+enum osh_status osh_beam_parse(struct oshfile *oshf,
+                               struct osh_beam_workspace *beam,
+                               struct osh_beam_spot *spot_out,
+                               char **spotlist_path_out) {
     char *lline = NULL;
     char *key = NULL;
     char *args = NULL;
-    struct beam_parse_state state = {spotlist_path_out};
+    struct beam_parse_state state = {spot_out, spotlist_path_out};
     int lineno;
     int i;
 
@@ -166,6 +172,13 @@ static int _resolve_input_relative_path(struct oshfile *oshf, char const *input_
     }
 
     return OSH_OK;
+}
+
+static struct osh_beam_spot *spot_from_state(struct beam_parse_state *state) {
+    if (!state) {
+        return NULL;
+    }
+    return state->spot_out;
 }
 
 /* ---- Handler implementations --------------------------------------------- */
@@ -234,31 +247,32 @@ static int _parse_beamdir(PARSE_HANDLER_ARGS) {
  * stored internally in radians. focus is the optional distance from the beam
  * source to the beam waist [cm], stored as-is; when omitted it defaults to 0.
  *
- * use_div is set only when at least one divergence component is non-zero,
- * so the sampling path can skip the divergence rotation for pencil beams.
+ * use_div is derived later by osh_beam_spots_set() from the final spot array.
  *
- * @param[in,out] beam  Writes spots[0].div[0,1] [rad], shared.focus, shared.use_div.
+ * @param[in,out] beam  Writes shared.focus.
  * @param[in]     oshf  Used for error diagnostics.
  * @param[in]     args  Two or three whitespace-separated floats: divX divY [focus].
  *
  * @returns OSH_OK on success.
  */
 static int _parse_beamdiv(PARSE_HANDLER_ARGS) {
+    struct osh_beam_spot *spot;
     float _f[3] = {0.0f, 0.0f, 0.0f};
     int nread;
 
+    spot = spot_from_state(state);
+    if (!spot) {
+        return OSH_ESTATE;
+    }
     nread = sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]);
     if (nread < 2 || nread > 3) {
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     /* divergence is given in mrad in the file — convert to rad */
-    beam->spots[0].div[0] = (double) _f[0] * 0.001;
-    beam->spots[0].div[1] = (double) _f[1] * 0.001;
+    spot->div[0] = (double) _f[0] * 0.001;
+    spot->div[1] = (double) _f[1] * 0.001;
     beam->shared.focus = (double) _f[2];
-    if (fabs(_f[0]) > 0.0 || fabs(_f[1]) > 0.0) {
-        beam->shared.use_div = 1;
-    }
     return OSH_OK;
 }
 
@@ -268,21 +282,28 @@ static int _parse_beamdiv(PARSE_HANDLER_ARGS) {
  * @details
  * Syntax: BEAMPOS \<X\> \<Y\> \<Z\>  [cm]
  *
- * @param[in,out] beam  Writes spots[0].p[0..2].
+ * @param[in,out] beam  Unused.
  * @param[in]     oshf  Used for error diagnostics.
  * @param[in]     args  Three whitespace-separated floats: X Y Z.
  *
  * @returns OSH_OK on success.
  */
 static int _parse_beampos(PARSE_HANDLER_ARGS) {
+    struct osh_beam_spot *spot;
     float _f[3];
     int i;
+
+    (void) beam;
+    spot = spot_from_state(state);
+    if (!spot) {
+        return OSH_ESTATE;
+    }
     if (sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]) != 3) {
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     for (i = 0; i < 3; i++) {
-        beam->spots[0].p[i] = (double) _f[i];
+        spot->p[i] = (double) _f[i];
     }
     return OSH_OK;
 }
@@ -351,16 +372,22 @@ static int _parse_beamsad(PARSE_HANDLER_ARGS) {
  * separate shape keyword.  The size is stored as a positive magnitude;
  * the shape enum carries the interpretation used by the sampler.
  *
- * @param[in,out] beam  Writes spots[0].shape and spots[0].size[0,1].
+ * @param[in,out] beam  Unused.
  * @param[in]     oshf  Used for error diagnostics.
  * @param[in]     args  One or two whitespace-separated floats: sx [sy].
  *
  * @returns OSH_OK on success.
  */
 static int _parse_beamsigma(PARSE_HANDLER_ARGS) {
+    struct osh_beam_spot *spot;
     float _f[2] = {0.0f, 0.0f};
     int nread;
 
+    (void) beam;
+    spot = spot_from_state(state);
+    if (!spot) {
+        return OSH_ESTATE;
+    }
     nread = sscanf(args, "%f %f", &_f[0], &_f[1]);
     if (nread < 1 || nread > 2) {
         osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
@@ -370,21 +397,21 @@ static int _parse_beamsigma(PARSE_HANDLER_ARGS) {
         _f[1] = _f[0];
     }
     if (_f[0] < 0.0f && _f[1] < 0.0f) {
-        beam->spots[0].shape = OSH_BEAM_SHAPE_SQUARE;
-        beam->spots[0].size[0] = fabs(_f[0]);
-        beam->spots[0].size[1] = fabs(_f[1]);
+        spot->shape = OSH_BEAM_SHAPE_SQUARE;
+        spot->size[0] = fabs(_f[0]);
+        spot->size[1] = fabs(_f[1]);
     } else if (_f[0] >= 0.0f && _f[1] < 0.0f) {
-        beam->spots[0].shape = OSH_BEAM_SHAPE_CIRCULAR;
-        beam->spots[0].size[0] = fabs(_f[1]);
-        beam->spots[0].size[1] = 0.0;
+        spot->shape = OSH_BEAM_SHAPE_CIRCULAR;
+        spot->size[0] = fabs(_f[1]);
+        spot->size[1] = 0.0;
     } else if (_f[0] > 0.0f || _f[1] > 0.0f) {
-        beam->spots[0].shape = OSH_BEAM_SHAPE_GAUSSIAN;
-        beam->spots[0].size[0] = _f[0];
-        beam->spots[0].size[1] = _f[1];
+        spot->shape = OSH_BEAM_SHAPE_GAUSSIAN;
+        spot->size[0] = _f[0];
+        spot->size[1] = _f[1];
     } else {
-        beam->spots[0].shape = OSH_BEAM_SHAPE_PENCIL;
-        beam->spots[0].size[0] = 0.0;
-        beam->spots[0].size[1] = 0.0;
+        spot->shape = OSH_BEAM_SHAPE_PENCIL;
+        spot->size[0] = 0.0;
+        spot->size[1] = 0.0;
     }
     return OSH_OK;
 }
@@ -847,14 +874,21 @@ static int _parse_stragg(PARSE_HANDLER_ARGS) {
  * complementary quantity using the particle mass, and checks which was given
  * by testing which field is non-zero.
  *
- * @param[in,out] beam  Writes spots[0].t0 or p0, and tsigma or psigma.
+ * @param[in,out] beam  Unused.
  * @param[in]     oshf  Used for error diagnostics.
  * @param[in]     args  One or two floats: value [spread].
  *
  * @returns OSH_OK on success.
  */
 static int _parse_tmax0(PARSE_HANDLER_ARGS) {
+    struct osh_beam_spot *spot;
     float _f[2];
+
+    (void) beam;
+    spot = spot_from_state(state);
+    if (!spot) {
+        return OSH_ESTATE;
+    }
     _f[0] = 0.0f;
     _f[1] = 0.0f;
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) < 1) {
@@ -863,13 +897,13 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
     }
 
     if (_f[0] < 0.0f) {
-        beam->spots[0].p0 = fabs((double) _f[0]); /* momentum given */
-        beam->spots[0].t0 = 0.0;
-        beam->spots[0].t0_per_nucleon = 0;
+        spot->p0 = fabs((double) _f[0]); /* momentum given */
+        spot->t0 = 0.0;
+        spot->t0_per_nucleon = 0;
     } else {
-        beam->spots[0].t0 = (double) _f[0]; /* energy per nucleon until post-parse for ions */
-        beam->spots[0].p0 = 0.0;
-        beam->spots[0].t0_per_nucleon = 1;
+        spot->t0 = (double) _f[0]; /* energy per nucleon until post-parse for ions */
+        spot->p0 = 0.0;
+        spot->t0_per_nucleon = 1;
         if (_f[0] < OSH_BEAM_TMIN) {
             osh_error("in %s line %i: TMAX0 %.4f MeV/nucleon is below transport threshold %.4f MeV/nucleon",
                       oshf->filename,
@@ -881,13 +915,13 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
     }
 
     if (_f[1] < 0.0f) {
-        beam->spots[0].psigma = fabs((double) _f[1]); /* momentum spread given */
-        beam->spots[0].tsigma = 0.0;
-        beam->spots[0].tsigma_per_nucleon = 0;
+        spot->psigma = fabs((double) _f[1]); /* momentum spread given */
+        spot->tsigma = 0.0;
+        spot->tsigma_per_nucleon = 0;
     } else {
-        beam->spots[0].tsigma = (double) _f[1]; /* energy spread per nucleon until post-parse for ions */
-        beam->spots[0].psigma = 0.0;
-        beam->spots[0].tsigma_per_nucleon = 1;
+        spot->tsigma = (double) _f[1]; /* energy spread per nucleon until post-parse for ions */
+        spot->psigma = 0.0;
+        spot->tsigma_per_nucleon = 1;
     }
 
     return OSH_OK;
@@ -965,9 +999,9 @@ static int _parse_usebmod(PARSE_HANDLER_ARGS) {
  * Syntax: USECBEAM \<filename\>
  *
  * The spot list file defines one beam spot per line (energy, position,
- * size, weight).  When present, it replaces the single spot defined by
- * TMAX0/BEAMPOS/BEAMSIGMA, which then serve as fallback defaults for
- * columns not specified in the spot file.
+ * size, weight). When present, app-layer import later replaces the
+ * single parsed template spot, which then serves as the fallback default
+ * source for columns not specified in the spot file.
  *
  * The path is resolved relative to the directory containing beam.dat,
  * so clinical plans can reference files by relative path without
