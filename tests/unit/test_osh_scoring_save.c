@@ -55,7 +55,7 @@ int main(void) {
     rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
-    rc = osh_scoring_compile(ws, &rt);
+    rc = osh_scoring_compile(ws, NULL, &rt);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(rt.noutputs == 2u);
     ASSERT_TRUE(rt.npages == 2u);
