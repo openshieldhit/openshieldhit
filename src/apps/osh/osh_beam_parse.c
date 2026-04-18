@@ -7,19 +7,27 @@
 
 #include "apps/osh/osh_beam_parse_keys.h"
 #include "common/osh_file.h"
+#include "common/osh_logger.h"
 #include "common/osh_readline.h"
 #include "openshieldhit/beam.h"
 #include "openshieldhit/const.h"
-#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_pdg.h"
 
 struct beam_parse_state {
+    struct osh_diag_sink const *diag;
     struct osh_beam_spot *spot_out;
     char **spotlist_path_out;
 };
+
+#define BEAM_PARSE_ERRORF(...) OSH_DIAG_ERRORF(state->diag, __VA_ARGS__)
+#define BEAM_PARSE_WARNF(...) OSH_DIAG_WARNF(state->diag, __VA_ARGS__)
+#define BEAM_PARSE_INFOF(...) OSH_DIAG_INFOF(state->diag, __VA_ARGS__)
+#define osh_error(...) BEAM_PARSE_ERRORF(__VA_ARGS__)
+#define osh_warn(...) BEAM_PARSE_WARNF(__VA_ARGS__)
+#define osh_info(...) BEAM_PARSE_INFOF(__VA_ARGS__)
 
 #if defined(__GNUC__) || defined(__clang__)
 #define OSH_PARSE_UNUSED __attribute__((unused))
@@ -111,13 +119,14 @@ static struct _beam_dispatch_entry _dispatch_table[] = {
 /* ---- Main parser entry point --------------------------------------------- */
 
 enum osh_status osh_beam_parse(struct oshfile *oshf,
+                               struct osh_diag_sink const *diag,
                                struct osh_beam_workspace *beam,
                                struct osh_beam_spot *spot_out,
                                char **spotlist_path_out) {
     char *lline = NULL;
     char *key = NULL;
     char *args = NULL;
-    struct beam_parse_state state = {spot_out, spotlist_path_out};
+    struct beam_parse_state state = {diag, spot_out, spotlist_path_out};
     int lineno;
     int i;
 
@@ -142,7 +151,7 @@ enum osh_status osh_beam_parse(struct oshfile *oshf,
             }
         }
         if (!found) {
-            osh_error("in %s line %d: unknown key '%s'", oshf->filename, lineno, key);
+            OSH_DIAG_ERRORF(diag, "in %s line %d: unknown key '%s'", oshf->filename, lineno, key);
             free(lline);
             return OSH_EPARSE;
         }
@@ -221,15 +230,15 @@ static int _parse_apcorr(PARSE_HANDLER_ARGS) {
 static int _parse_beamdir(PARSE_HANDLER_ARGS) {
     float _f[2];
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) != 2) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        BEAM_PARSE_ERRORF("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (_f[0] < 0.0f || _f[0] > 180.0f) {
-        osh_error("in %s line %i: theta must be within [0:180] deg", oshf->filename, oshf->lineno);
+        BEAM_PARSE_ERRORF("in %s line %i: theta must be within [0:180] deg", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (_f[1] < 0.0f || _f[1] > 360.0f) {
-        osh_error("in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
+        BEAM_PARSE_ERRORF("in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     beam->shared.theta = (double) _f[0] * OSH_M_PI_180;

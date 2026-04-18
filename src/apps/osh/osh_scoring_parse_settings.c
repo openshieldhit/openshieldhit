@@ -15,32 +15,64 @@
 
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
-#include "openshieldhit/logger.h"
+#include "common/osh_logger.h"
 
 typedef enum osh_status (*settings_handler_fn)(
-    struct osh_scoring_settings_def *, char **, int, char const *, unsigned int);
+    struct osh_scoring_settings_def *, struct osh_diag_sink const *, char **, int, char const *, unsigned int);
 
 struct settings_entry {
     char const *key;
     settings_handler_fn handler;
 };
 
-static enum osh_status
-settings_name(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-settings_rescale(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-settings_offset(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-settings_medium(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status settings_nkmedium(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status settings_sitediam(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-settings_density(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status settings_maxcount(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status settings_name(struct osh_scoring_settings_def *set,
+                                     struct osh_diag_sink const *diag,
+                                     char **words,
+                                     int nwords,
+                                     char const *path,
+                                     unsigned int lineno);
+static enum osh_status settings_rescale(struct osh_scoring_settings_def *set,
+                                        struct osh_diag_sink const *diag,
+                                        char **words,
+                                        int nwords,
+                                        char const *path,
+                                        unsigned int lineno);
+static enum osh_status settings_offset(struct osh_scoring_settings_def *set,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno);
+static enum osh_status settings_medium(struct osh_scoring_settings_def *set,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno);
+static enum osh_status settings_nkmedium(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno);
+static enum osh_status settings_sitediam(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno);
+static enum osh_status settings_density(struct osh_scoring_settings_def *set,
+                                        struct osh_diag_sink const *diag,
+                                        char **words,
+                                        int nwords,
+                                        char const *path,
+                                        unsigned int lineno);
+static enum osh_status settings_maxcount(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno);
 
 static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings_name},
                                                  {OSH_SCORING_KEY_RESCALE, settings_rescale},
@@ -59,6 +91,7 @@ static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings
  * @brief Dispatch one tokenized line into the active settings definition.
  */
 enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def *set,
+                                                struct osh_diag_sink const *diag,
                                                 char **words,
                                                 int nwords,
                                                 char const *path,
@@ -72,7 +105,7 @@ enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def 
         if (strcmp(settings_table[i].key, words[0]) == 0) {
             if (found_out)
                 *found_out = 1;
-            return settings_table[i].handler(set, words, nwords, path, lineno);
+            return settings_table[i].handler(set, diag, words, nwords, path, lineno);
         }
     }
     return OSH_OK;
@@ -81,10 +114,14 @@ enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def 
 /**
  * @brief Parse `Name <value>`.
  */
-static enum osh_status
-settings_name(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_name(struct osh_scoring_settings_def *set,
+                                     struct osh_diag_sink const *diag,
+                                     char **words,
+                                     int nwords,
+                                     char const *path,
+                                     unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Settings Name requires an argument", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Settings Name requires an argument", path, lineno);
         return OSH_EPARSE;
     }
     free(set->name);
@@ -95,10 +132,14 @@ settings_name(struct osh_scoring_settings_def *set, char **words, int nwords, ch
 /**
  * @brief Parse `Rescale <value>`.
  */
-static enum osh_status settings_rescale(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_rescale(struct osh_scoring_settings_def *set,
+                                        struct osh_diag_sink const *diag,
+                                        char **words,
+                                        int nwords,
+                                        char const *path,
+                                        unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Rescale requires a value", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Rescale requires a value", path, lineno);
         return OSH_EPARSE;
     }
     set->rescale = atof(words[1]);
@@ -109,10 +150,14 @@ static enum osh_status settings_rescale(
 /**
  * @brief Parse `Offset <value>`.
  */
-static enum osh_status
-settings_offset(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_offset(struct osh_scoring_settings_def *set,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Offset requires a value", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Offset requires a value", path, lineno);
         return OSH_EPARSE;
     }
     set->offset = atof(words[1]);
@@ -123,10 +168,14 @@ settings_offset(struct osh_scoring_settings_def *set, char **words, int nwords, 
 /**
  * @brief Parse `Medium <id>`.
  */
-static enum osh_status
-settings_medium(struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_medium(struct osh_scoring_settings_def *set,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Medium requires a value", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Medium requires a value", path, lineno);
         return OSH_EPARSE;
     }
     set->medium = atoi(words[1]);
@@ -137,10 +186,14 @@ settings_medium(struct osh_scoring_settings_def *set, char **words, int nwords, 
 /**
  * @brief Parse `NKMedium <id>`.
  */
-static enum osh_status settings_nkmedium(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_nkmedium(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: NKMedium requires a value", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: NKMedium requires a value", path, lineno);
         return OSH_EPARSE;
     }
     set->nkmedium = atoi(words[1]);
@@ -151,10 +204,14 @@ static enum osh_status settings_nkmedium(
 /**
  * @brief Parse `SiteDiameter <value_um>` (and alias `sitediam`).
  */
-static enum osh_status settings_sitediam(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_sitediam(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: SiteDiameter requires a value", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: SiteDiameter requires a value", path, lineno);
         return OSH_EPARSE;
     }
     set->site_diameter_um = atof(words[1]);
@@ -165,10 +222,14 @@ static enum osh_status settings_sitediam(
 /**
  * @brief Parse `Density <value_g_cm3>` (and alias `rho`).
  */
-static enum osh_status settings_density(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_density(struct osh_scoring_settings_def *set,
+                                        struct osh_diag_sink const *diag,
+                                        char **words,
+                                        int nwords,
+                                        char const *path,
+                                        unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Density requires a value", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Density requires a value", path, lineno);
         return OSH_EPARSE;
     }
     set->density_g_cm3 = atof(words[1]);
@@ -179,10 +240,14 @@ static enum osh_status settings_density(
 /**
  * @brief Parse `MaxCount <n>` (and alias `npart`).
  */
-static enum osh_status settings_maxcount(
-    struct osh_scoring_settings_def *set, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status settings_maxcount(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: MaxCount requires a value", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: MaxCount requires a value", path, lineno);
         return OSH_EPARSE;
     }
     set->npart = (size_t) strtoull(words[1], NULL, 10);

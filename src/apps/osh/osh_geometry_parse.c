@@ -5,16 +5,20 @@
 #include <string.h>
 
 #include "apps/osh/osh_geometry_parse_keys.h"
+#include "common/osh_logger.h"
 #include "common/osh_readline.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
-#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
+
+#define osh_error(...) OSH_DIAG_ERRORF(diag, __VA_ARGS__)
+#define osh_warn(...) OSH_DIAG_WARNF(diag, __VA_ARGS__)
+#define osh_info(...) OSH_DIAG_INFOF(diag, __VA_ARGS__)
 
 /* ---- Internal helpers ---------------------------------------------------- */
 
-static int _rewind_oshfile(struct oshfile *shf);
+static int _rewind_oshfile(struct oshfile *shf, struct osh_diag_sink const *diag);
 
 /**
  * @brief Map a body-type key string to an OSH_GEOMETRY_BODY_* code.
@@ -100,14 +104,14 @@ static int _is_zone_continuation(char const *key) {
  *
  * @returns Number of body cards found, or 0 on I/O error.
  */
-static size_t _count_bodies(struct oshfile *shf) {
+static size_t _count_bodies(struct oshfile *shf, struct osh_diag_sink const *diag) {
     int lineno;
     char *line = NULL;
     char *key = NULL;
     char *args = NULL;
     size_t nbody = 0u;
 
-    if (!_rewind_oshfile(shf)) {
+    if (!_rewind_oshfile(shf, diag)) {
         return 0u;
     }
 
@@ -130,7 +134,7 @@ static size_t _count_bodies(struct oshfile *shf) {
  *
  * @returns Number of zone header cards found, or 0 on I/O error.
  */
-static size_t _count_zones(struct oshfile *shf) {
+static size_t _count_zones(struct oshfile *shf, struct osh_diag_sink const *diag) {
     int lineno;
     char *line = NULL;
     char *key = NULL;
@@ -138,7 +142,7 @@ static size_t _count_zones(struct oshfile *shf) {
     size_t nzone = 0u;
     int in_block = 0;
 
-    if (!_rewind_oshfile(shf)) {
+    if (!_rewind_oshfile(shf, diag)) {
         return 0u;
     }
 
@@ -160,7 +164,7 @@ static size_t _count_zones(struct oshfile *shf) {
     }
 
     free(line);
-    osh_info("Found %zu zones in geo.dat file", nzone);
+    OSH_DIAG_INFOF(diag, "Found %zu zones in geo.dat file", nzone);
     return nzone;
 }
 
@@ -255,13 +259,18 @@ static char *_next_token(char **cursor) {
  *
  * @returns Normalized name string (either @p raw or a literal constant).
  */
-static char const *_normalize_material_name(char const *raw, char const *filename, int lineno) {
+static char const *
+_normalize_material_name(char const *raw, char const *filename, int lineno, struct osh_diag_sink const *diag) {
     if (strcmp(raw, "0") == 0) {
-        osh_warn("%s line %d: legacy material '0' mapped to 'blackhole'; use 'blackhole' explicitly", filename, lineno);
+        OSH_DIAG_WARNF(diag,
+                       "%s line %d: legacy material '0' mapped to 'blackhole'; use 'blackhole' explicitly",
+                       filename,
+                       lineno);
         return "blackhole";
     }
     if (strcmp(raw, "1000") == 0) {
-        osh_warn("%s line %d: legacy material '1000' mapped to 'vacuum'; use 'vacuum' explicitly", filename, lineno);
+        OSH_DIAG_WARNF(
+            diag, "%s line %d: legacy material '1000' mapped to 'vacuum'; use 'vacuum' explicitly", filename, lineno);
         return "vacuum";
     }
     return raw;
@@ -277,9 +286,12 @@ static char const *_normalize_material_name(char const *raw, char const *filenam
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-static enum osh_status
-_assign_material(struct osh_geometry_zone *z, char const *raw_name, char const *filename, int lineno) {
-    char const *name = _normalize_material_name(raw_name, filename, lineno);
+static enum osh_status _assign_material(struct osh_geometry_zone *z,
+                                        char const *raw_name,
+                                        char const *filename,
+                                        int lineno,
+                                        struct osh_diag_sink const *diag) {
+    char const *name = _normalize_material_name(raw_name, filename, lineno, diag);
     char *copy = strdup(name);
     if (!copy) {
         return OSH_ENOMEM;
@@ -296,9 +308,9 @@ _assign_material(struct osh_geometry_zone *z, char const *raw_name, char const *
  *
  * @returns 1 on success, 0 on I/O error.
  */
-static int _rewind_oshfile(struct oshfile *shf) {
+static int _rewind_oshfile(struct oshfile *shf, struct osh_diag_sink const *diag) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
-        osh_error("Failed to rewind geometry file '%s'", shf->filename);
+        OSH_DIAG_ERRORF(diag, "Failed to rewind geometry file '%s'", shf->filename);
         return 0;
     }
     shf->lineno = 0;
@@ -318,7 +330,8 @@ static int _rewind_oshfile(struct oshfile *shf) {
  *
  * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
  */
-static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_workspace *ws) {
+static enum osh_status
+_parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_geometry_workspace *ws) {
     char *line = NULL;
     char *key = NULL;
     char *args = NULL;
@@ -334,7 +347,7 @@ static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_wo
     int body_active = 0;
     enum osh_status rc = OSH_OK;
 
-    if (!_rewind_oshfile(shf)) {
+    if (!_rewind_oshfile(shf, diag)) {
         return OSH_EIO;
     }
 
@@ -387,7 +400,7 @@ static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_wo
             }
 
             if (ibody >= ws->nbodies) {
-                osh_error("%s line %d: too many bodies (max=%zu)", shf->filename, lineno, ws->nbodies);
+                OSH_DIAG_ERRORF(diag, "%s line %d: too many bodies (max=%zu)", shf->filename, lineno, ws->nbodies);
                 rc = OSH_EPARSE;
                 goto done;
             }
@@ -396,7 +409,7 @@ static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_wo
             body_active = 1;
 
             if (!args) {
-                osh_error("%s line %d: missing body name or parameters", shf->filename, lineno);
+                OSH_DIAG_ERRORF(diag, "%s line %d: missing body name or parameters", shf->filename, lineno);
                 rc = OSH_EPARSE;
                 goto done;
             }
@@ -415,7 +428,7 @@ static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_wo
             }
 
             if ((off + 5) >= OSH_GEMCA_NARGS_MAX) {
-                osh_error("%s line %d: too many body arguments", shf->filename, lineno);
+                OSH_DIAG_ERRORF(diag, "%s line %d: too many body arguments", shf->filename, lineno);
                 rc = OSH_EPARSE;
                 goto done;
             }
@@ -462,7 +475,8 @@ done:
  *
  * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
  */
-static enum osh_status _parse_zones(struct oshfile *shf, struct osh_geometry_workspace *ws) {
+static enum osh_status
+_parse_zones(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_geometry_workspace *ws) {
     char *line = NULL;
     char *key = NULL;
     char *args = NULL;
@@ -483,7 +497,7 @@ static enum osh_status _parse_zones(struct oshfile *shf, struct osh_geometry_wor
 
         if (_is_zone_continuation(key)) {
             if (!zone_active) {
-                osh_error("%s line %d: zone continuation before any zone header", shf->filename, lineno);
+                OSH_DIAG_ERRORF(diag, "%s line %d: zone continuation before any zone header", shf->filename, lineno);
                 rc = OSH_EPARSE;
                 goto done;
             }
@@ -497,7 +511,7 @@ static enum osh_status _parse_zones(struct oshfile *shf, struct osh_geometry_wor
              * In both cases, finalize the expression for the current zone first. */
             if (zone_active && expr[0] != '\0') {
                 if (izone >= ws->nzones) {
-                    osh_error("%s line %d: too many zones (max=%zu)", shf->filename, lineno, ws->nzones);
+                    OSH_DIAG_ERRORF(diag, "%s line %d: too many zones (max=%zu)", shf->filename, lineno, ws->nzones);
                     rc = OSH_EPARSE;
                     goto done;
                 }
@@ -524,7 +538,7 @@ static enum osh_status _parse_zones(struct oshfile *shf, struct osh_geometry_wor
             }
 
             if (izone >= ws->nzones) {
-                osh_error("%s line %d: too many zones (max=%zu)", shf->filename, lineno, ws->nzones);
+                OSH_DIAG_ERRORF(diag, "%s line %d: too many zones (max=%zu)", shf->filename, lineno, ws->nzones);
                 rc = OSH_EPARSE;
                 goto done;
             }
@@ -569,8 +583,8 @@ done:
  *
  * @returns OSH_OK on success, OSH_EPARSE on invalid arguments, OSH_ENOMEM on failure.
  */
-static enum osh_status
-_parse_assignmat(struct osh_geometry_workspace *ws, char *args, char const *filename, int lineno) {
+static enum osh_status _parse_assignmat(
+    struct osh_geometry_workspace *ws, char *args, char const *filename, int lineno, struct osh_diag_sink const *diag) {
     char *cursor = args;
     char *mat_name;
     char *zname_start;
@@ -584,24 +598,24 @@ _parse_assignmat(struct osh_geometry_workspace *ws, char *args, char const *file
 
     mat_name = _next_token(&cursor);
     if (!mat_name) {
-        osh_error("%s line %d: ASSIGNMAT: missing material name", filename, lineno);
+        OSH_DIAG_ERRORF(diag, "%s line %d: ASSIGNMAT: missing material name", filename, lineno);
         return OSH_EPARSE;
     }
 
     zname_start = _next_token(&cursor);
     if (!zname_start) {
-        osh_error("%s line %d: ASSIGNMAT: missing zone name", filename, lineno);
+        OSH_DIAG_ERRORF(diag, "%s line %d: ASSIGNMAT: missing zone name", filename, lineno);
         return OSH_EPARSE;
     }
     if (!_zone_index_from_name(zname_start, ws->zones, ws->nzones, &iz_start)) {
-        osh_error("%s line %d: ASSIGNMAT: unknown zone '%s'", filename, lineno, zname_start);
+        OSH_DIAG_ERRORF(diag, "%s line %d: ASSIGNMAT: unknown zone '%s'", filename, lineno, zname_start);
         return OSH_EPARSE;
     }
 
     zname_end = _next_token(&cursor);
     if (zname_end) {
         if (!_zone_index_from_name(zname_end, ws->zones, ws->nzones, &iz_end)) {
-            osh_error("%s line %d: ASSIGNMAT: unknown zone '%s'", filename, lineno, zname_end);
+            OSH_DIAG_ERRORF(diag, "%s line %d: ASSIGNMAT: unknown zone '%s'", filename, lineno, zname_end);
             return OSH_EPARSE;
         }
     } else {
@@ -611,17 +625,17 @@ _parse_assignmat(struct osh_geometry_workspace *ws, char *args, char const *file
     stride_str = _next_token(&cursor);
     stride = stride_str ? (size_t) atoi(stride_str) : 1u;
     if (stride == 0u) {
-        osh_error("%s line %d: ASSIGNMAT: invalid stride 0", filename, lineno);
+        OSH_DIAG_ERRORF(diag, "%s line %d: ASSIGNMAT: invalid stride 0", filename, lineno);
         return OSH_EPARSE;
     }
 
     if (iz_end < iz_start) {
-        osh_error("%s line %d: ASSIGNMAT: zone range ends before it starts", filename, lineno);
+        OSH_DIAG_ERRORF(diag, "%s line %d: ASSIGNMAT: zone range ends before it starts", filename, lineno);
         return OSH_EPARSE;
     }
 
     for (iz = iz_start; iz <= iz_end; iz += stride) {
-        rc = _assign_material(&ws->zones[iz], mat_name, filename, lineno);
+        rc = _assign_material(&ws->zones[iz], mat_name, filename, lineno, diag);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -640,7 +654,8 @@ _parse_assignmat(struct osh_geometry_workspace *ws, char *args, char const *file
  *
  * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
  */
-static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_workspace *ws) {
+static enum osh_status
+_parse_media(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_geometry_workspace *ws) {
     char *line = NULL;
     char *key = NULL;
     char *args = NULL;
@@ -653,7 +668,7 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
     char *tok;
     enum osh_status rc = OSH_OK;
 
-    if (!_rewind_oshfile(shf)) {
+    if (!_rewind_oshfile(shf, diag)) {
         return OSH_EIO;
     }
 
@@ -690,7 +705,7 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
     while (osh_readline_key(shf, &line, &key, &args, &lineno) > 0) {
 
         if ((strcasecmp(key, OSH_GEO_KEY_ASSIGNMAT) == 0) || (strcasecmp(key, OSH_GEO_KEY_ASSIGNMA) == 0)) {
-            rc = _parse_assignmat(ws, args, shf->filename, lineno);
+            rc = _parse_assignmat(ws, args, shf->filename, lineno, diag);
             if (rc != OSH_OK) {
                 free(line);
                 return rc;
@@ -703,17 +718,18 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
         /* Legacy: count tokens and assign materials when in the media half. */
         izone++;
         if (izone > ws->nzones) {
-            osh_error("%s line %d: too many entries in material section (max=%zu)", shf->filename, lineno, ws->nzones);
+            OSH_DIAG_ERRORF(
+                diag, "%s line %d: too many entries in material section (max=%zu)", shf->filename, lineno, ws->nzones);
             free(line);
             return OSH_EPARSE;
         }
 
         if (in_media) {
             if (!warned_legacy) {
-                osh_warn("Implicit geo.dat material lists are legacy; use ASSIGNMAT instead");
+                OSH_DIAG_WARNF(diag, "Implicit geo.dat material lists are legacy; use ASSIGNMAT instead");
                 warned_legacy = 1;
             }
-            rc = _assign_material(&ws->zones[izone - 1u], key, shf->filename, lineno);
+            rc = _assign_material(&ws->zones[izone - 1u], key, shf->filename, lineno, diag);
             if (rc != OSH_OK) {
                 free(line);
                 return rc;
@@ -725,13 +741,16 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
         while (tok != NULL) {
             izone++;
             if (izone > ws->nzones) {
-                osh_error(
-                    "%s line %d: too many entries in material section (max=%zu)", shf->filename, lineno, ws->nzones);
+                OSH_DIAG_ERRORF(diag,
+                                "%s line %d: too many entries in material section (max=%zu)",
+                                shf->filename,
+                                lineno,
+                                ws->nzones);
                 free(line);
                 return OSH_EPARSE;
             }
             if (in_media) {
-                rc = _assign_material(&ws->zones[izone - 1u], tok, shf->filename, lineno);
+                rc = _assign_material(&ws->zones[izone - 1u], tok, shf->filename, lineno, diag);
                 if (rc != OSH_OK) {
                     free(line);
                     return rc;
@@ -757,7 +776,8 @@ static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_wor
 
 /* ---- Public entry point -------------------------------------------------- */
 
-enum osh_status osh_geometry_parse(struct oshfile *oshf, struct osh_geometry_workspace *ws) {
+enum osh_status
+osh_geometry_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struct osh_geometry_workspace *ws) {
     size_t nbodies;
     size_t nzones;
     enum osh_status rc;
@@ -767,11 +787,11 @@ enum osh_status osh_geometry_parse(struct oshfile *oshf, struct osh_geometry_wor
     }
 
     /* Count bodies and zones without retaining any state. */
-    nbodies = _count_bodies(oshf);
-    nzones = _count_zones(oshf);
+    nbodies = _count_bodies(oshf, diag);
+    nzones = _count_zones(oshf, diag);
 
     if (nbodies == 0u || nzones == 0u) {
-        osh_error("geometry: '%s' has no bodies or no zones", oshf->filename);
+        OSH_DIAG_ERRORF(diag, "geometry: '%s' has no bodies or no zones", oshf->filename);
         return OSH_EPARSE;
     }
 
@@ -789,7 +809,7 @@ enum osh_status osh_geometry_parse(struct oshfile *oshf, struct osh_geometry_wor
 
     /* Phase 1: parse bodies.
      * Rewinds internally; leaves file positioned after the first END card. */
-    rc = _parse_bodies(oshf, ws);
+    rc = _parse_bodies(oshf, diag, ws);
     if (rc != OSH_OK) {
         return rc;
     }
@@ -797,14 +817,14 @@ enum osh_status osh_geometry_parse(struct oshfile *oshf, struct osh_geometry_wor
     /* Phase 2: parse zones.
      * Continues from where _parse_bodies stopped;
      * leaves file positioned after the second END card. */
-    rc = _parse_zones(oshf, ws);
+    rc = _parse_zones(oshf, diag, ws);
     if (rc != OSH_OK) {
         return rc;
     }
 
     /* Phase 3: parse material assignments.
      * Rewinds internally; skips past both END cards. */
-    rc = _parse_media(oshf, ws);
+    rc = _parse_media(oshf, diag, ws);
     if (rc != OSH_OK) {
         return rc;
     }

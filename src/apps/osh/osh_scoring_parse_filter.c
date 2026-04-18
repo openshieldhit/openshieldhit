@@ -19,9 +19,10 @@
 
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
-#include "openshieldhit/logger.h"
+#include "common/osh_logger.h"
 
-typedef enum osh_status (*filter_handler_fn)(struct osh_scoring_filter_def *, char **, int, char const *, unsigned int);
+typedef enum osh_status (*filter_handler_fn)(
+    struct osh_scoring_filter_def *, struct osh_diag_sink const *, char **, int, char const *, unsigned int);
 
 struct filter_entry {
     char const *key;
@@ -30,10 +31,18 @@ struct filter_entry {
 
 static enum osh_status
 append_filter_rule(struct osh_scoring_filter_def *fil, char const *field, char const *op, double value);
-static enum osh_status
-filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-filter_rule(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status filter_name(struct osh_scoring_filter_def *fil,
+                                   struct osh_diag_sink const *diag,
+                                   char **words,
+                                   int nwords,
+                                   char const *path,
+                                   unsigned int lineno);
+static enum osh_status filter_rule(struct osh_scoring_filter_def *fil,
+                                   struct osh_diag_sink const *diag,
+                                   char **words,
+                                   int nwords,
+                                   char const *path,
+                                   unsigned int lineno);
 
 static struct filter_entry filter_table[] = {{OSH_SCORING_KEY_NAME, filter_name},
                                              {OSH_SCORING_KEY_FILTER_Z, filter_rule},
@@ -47,6 +56,7 @@ static struct filter_entry filter_table[] = {{OSH_SCORING_KEY_NAME, filter_name}
  * @brief Dispatch one tokenized line into the active filter definition.
  */
 enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil,
+                                              struct osh_diag_sink const *diag,
                                               char **words,
                                               int nwords,
                                               char const *path,
@@ -60,7 +70,7 @@ enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil
         if (strcmp(filter_table[i].key, words[0]) == 0) {
             if (found_out)
                 *found_out = 1;
-            return filter_table[i].handler(fil, words, nwords, path, lineno);
+            return filter_table[i].handler(fil, diag, words, nwords, path, lineno);
         }
     }
     return OSH_OK;
@@ -98,10 +108,14 @@ append_filter_rule(struct osh_scoring_filter_def *fil, char const *field, char c
 /**
  * @brief Parse `Name <value>` for a filter.
  */
-static enum osh_status
-filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status filter_name(struct osh_scoring_filter_def *fil,
+                                   struct osh_diag_sink const *diag,
+                                   char **words,
+                                   int nwords,
+                                   char const *path,
+                                   unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Filter Name requires an argument", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Filter Name requires an argument", path, lineno);
         return OSH_EPARSE;
     }
     free(fil->name);
@@ -112,20 +126,24 @@ filter_name(struct osh_scoring_filter_def *fil, char **words, int nwords, char c
 /**
  * @brief Parse `<field> <op> <value>` and append one filter rule.
  */
-static enum osh_status
-filter_rule(struct osh_scoring_filter_def *fil, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status filter_rule(struct osh_scoring_filter_def *fil,
+                                   struct osh_diag_sink const *diag,
+                                   char **words,
+                                   int nwords,
+                                   char const *path,
+                                   unsigned int lineno) {
     char field[16];
     char *endptr;
     double value;
     size_t i;
 
     if (nwords < 3) {
-        osh_error("%s:%u: filter rule requires: <field> <op> <value>", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: filter rule requires: <field> <op> <value>", path, lineno);
         return OSH_EPARSE;
     }
     value = strtod(words[2], &endptr);
     if (endptr == words[2]) {
-        osh_error("%s:%u: filter rule value '%s' is not a number", path, lineno, words[2]);
+        OSH_DIAG_ERRORF(diag, "%s:%u: filter rule value '%s' is not a number", path, lineno, words[2]);
         return OSH_EPARSE;
     }
     for (i = 0; i < sizeof(field) - 1u && words[0][i]; ++i)
