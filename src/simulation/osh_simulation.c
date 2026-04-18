@@ -99,7 +99,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     z_max = (beam->primary.z > 0u) ? (unsigned int) beam->primary.z : 1u;
     rc = osh_material_compile(mat, z_max, &sim->transport_tables);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: failed to prepare transport tables");
+        osh_error("%s", "simulation: failed to compile transport tables");
         goto fail;
     }
 
@@ -107,7 +107,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     rc = osh_scoring_compile(scoring, &sim->scoring_runtime);
     if (rc != OSH_OK) {
-        osh_error("%s", "simulation: failed to prepare scoring runtime");
+        osh_error("%s", "simulation: failed to compile scoring runtime");
         goto fail;
     }
 

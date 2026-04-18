@@ -28,6 +28,17 @@ struct osh_material_element {
     unsigned int a;                /* Mass number A; 0 means natural element, >0 means explicit isotope. */
 };
 
+/**
+ * @brief Tabulated stopping-power override stored inside one material.
+ *
+ * @details
+ * The arrays referenced by this struct are owned by the containing
+ * @ref osh_material and, transitively, by the owning
+ * @ref osh_material_workspace. They remain valid only while that workspace
+ * remains alive and unchanged by the library. Callers may read these arrays
+ * but must not free, reallocate, or retain them beyond the owning workspace
+ * lifetime.
+ */
 struct osh_material_dedx_override {
     double *energy_mev_per_u;   /* [npoints], strictly increasing kinetic energy per nucleon [MeV/u]. */
     double *dedx_mev_cm2_per_g; /* [npoints], mass stopping power [MeV cm^2/g]. */
@@ -35,6 +46,15 @@ struct osh_material_dedx_override {
     size_t npoints;
 };
 
+/**
+ * @brief Material definition stored inside a material workspace.
+ *
+ * @details
+ * All pointer members of this struct are owned by the containing
+ * @ref osh_material_workspace. Their contents remain valid only while that
+ * workspace remains alive and unchanged by the library. API consumers may
+ * read these fields but must not free or reallocate them individually.
+ */
 struct osh_material {
     struct osh_material_element *elements;
     struct osh_material_dedx_override *dedx_overrides;
@@ -54,6 +74,16 @@ struct osh_material {
     int state;   /* enum osh_material_state value. */
 };
 
+/**
+ * @brief Heap-allocated container for all cold material definitions.
+ *
+ * @details
+ * This workspace owns the storage referenced by its pointer members and by the
+ * nested pointer members of each contained @ref osh_material. Callers must
+ * release the workspace as a whole via @ref osh_material_workspace_free()
+ * rather than freeing individual fields such as @ref materials, @ref wdir,
+ * @ref fname, or nested arrays/strings.
+ */
 struct osh_material_workspace {
     struct osh_material *materials;
     char *wdir;
@@ -102,9 +132,9 @@ enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm
  *
  * @details
  * The curve is keyed by projectile atomic number `Z` and is deep-copied into
- * the material. Repeated calls with the same projectile replace the
- * existing curve. The runtime material prepare step uses these overrides where
- * present and falls back to Bethe elsewhere.
+ * the material. Repeated calls with the same projectile replace the existing
+ * curve. The runtime material compile step uses these overrides where present
+ * and falls back to Bethe elsewhere.
  *
  * @param[in,out] mat                  Material to update.
  * @param[in]     z_projectile         Projectile atomic number `Z` (> 0).
