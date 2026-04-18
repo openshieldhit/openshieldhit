@@ -43,24 +43,6 @@ int main(int argc, char *argv[]) {
         return EX_OK;
     }
 
-    /* Initialise the logger before any library calls.
-     *   no -v  → OSH_LOG_WARN  (silent; only warnings and errors)
-     *      -v  → OSH_LOG_INFO  (normal informational output)
-     *     -vv  → OSH_LOG_DEBUG (verbose debug output)
-     * Stdout is disabled by default; enable it here for the CLI. */
-    {
-        int log_level = (opt.verbose == 0) ? OSH_LOG_WARN : (opt.verbose == 1) ? OSH_LOG_INFO : OSH_LOG_DEBUG;
-        if (osh_log_init(log_level, OSH_LOG_F_NONE) != OSH_OK) {
-            fprintf(stderr, "Error: failed to initialize logger\n");
-            return EX_OSERR;
-        }
-        if (osh_log_enable_stdout(1) != OSH_OK) {
-            fprintf(stderr, "Error: failed to configure logger stdout sink\n");
-            osh_log_close();
-            return EX_OSERR;
-        }
-    }
-
     diag.emit = cli_diag_emit;
     diag.user = stdout;
     diag.min_level = (opt.verbose == 0)   ? OSH_DIAG_LEVEL_WARN
@@ -90,7 +72,6 @@ int main(int argc, char *argv[]) {
     run_opt.diag = &diag;
 
     rc = osh_run(&run_opt, stdout, stderr);
-    osh_log_close();
     return exit_code_for_status(rc);
 }
 
