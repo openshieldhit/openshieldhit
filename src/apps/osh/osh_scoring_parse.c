@@ -39,8 +39,8 @@
 #include <string.h>
 
 #include "apps/osh/osh_scoring_parse_internal.h"
+#include "common/osh_readline.h"
 #include "openshieldhit/logger.h"
-#include "openshieldhit/readline.h"
 #include "openshieldhit/scoring.h"
 
 /* ---- Internal section enum ----------------------------------------------- */

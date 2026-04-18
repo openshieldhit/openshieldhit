@@ -6,11 +6,11 @@
 #include <string.h>
 
 #include "apps/osh/osh_beam_parse_keys.h"
+#include "common/osh_file.h"
+#include "common/osh_readline.h"
 #include "openshieldhit/beam.h"
 #include "openshieldhit/const.h"
-#include "openshieldhit/file.h"
 #include "openshieldhit/logger.h"
-#include "openshieldhit/readline.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle.h"

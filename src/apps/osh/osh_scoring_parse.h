@@ -1,7 +1,7 @@
 #ifndef OSH_FRONTEND_OPENSHIELDHIT_SCORING_PARSE_H
 #define OSH_FRONTEND_OPENSHIELDHIT_SCORING_PARSE_H
 
-#include "openshieldhit/file.h"
+#include "common/osh_file.h"
 #include "openshieldhit/scoring.h"
 
 #ifdef __cplusplus

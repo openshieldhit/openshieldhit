@@ -4,7 +4,7 @@
 #include "apps/osh/osh_run.h"
 #include "cli/osh_cli.h"
 #include "common/osh_exit.h"
-#include "openshieldhit/file.h"
+#include "common/osh_file.h"
 #include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 #include "openshieldhit/version.h"

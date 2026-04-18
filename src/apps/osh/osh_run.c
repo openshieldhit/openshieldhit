@@ -12,7 +12,7 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "openshieldhit/file.h"
+#include "common/osh_file.h"
 #include "openshieldhit/simulation.h"
 
 /* ---- Default file names -------------------------------------------------- */
@@ -79,11 +79,18 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     detect_path = run_resolve_path(workdir, opt->detect_path, OSH_DETECT_FILENAME);
     abs_outdir = run_resolve_absolute_path(outdir);
 
-    if (!geo_path || !beam_path || !mat_path || !detect_path || !abs_outdir) {
+    if (!geo_path || !beam_path || !mat_path || !detect_path) {
         if (err) {
-            fprintf(err, "Error: failed to resolve input/output paths\n");
+            fprintf(err, "Error: out of memory resolving input paths\n");
         }
         rc = OSH_ENOMEM;
+        goto cleanup;
+    }
+    if (!abs_outdir) {
+        if (err) {
+            fprintf(err, "Error: failed to resolve output directory (getcwd failed or invalid path)\n");
+        }
+        rc = OSH_EIO;
         goto cleanup;
     }
 

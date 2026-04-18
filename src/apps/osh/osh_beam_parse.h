@@ -1,8 +1,8 @@
 #ifndef OSH_FRONTEND_OPENSHIELDHIT_BEAM_PARSE_H
 #define OSH_FRONTEND_OPENSHIELDHIT_BEAM_PARSE_H
 
+#include "common/osh_file.h"
 #include "openshieldhit/beam.h"
-#include "openshieldhit/file.h"
 #include "openshieldhit/status.h"
 
 /**

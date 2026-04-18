@@ -47,6 +47,9 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
     if (rc != OSH_OK) {
         return rc;
     }
+    if (nstat == 0ull) {
+        return OSH_EINVAL;
+    }
     rc = mesh_axis_index(geo, "X", &ix_axis);
     if (rc != OSH_OK) {
         return rc;
@@ -65,7 +68,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         return OSH_EIO;
     }
 
-    inv_nstat = (nstat > 0ull) ? 1.0 / (double) nstat : 1.0;
+    inv_nstat = 1.0 / (double) nstat;
 
     format_now_rfc2822(datestr, sizeof(datestr));
     fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);

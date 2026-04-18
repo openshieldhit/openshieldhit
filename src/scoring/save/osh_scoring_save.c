@@ -21,6 +21,9 @@ enum osh_status osh_scoring_save(struct osh_scoring_workspace const *ws,
     if (!ws || !rt) {
         return OSH_EINVAL;
     }
+    if (nstat == 0ull) {
+        return OSH_EINVAL;
+    }
     if (ws->noutputs != rt->noutputs) {
         return OSH_ESTATE;
     }
