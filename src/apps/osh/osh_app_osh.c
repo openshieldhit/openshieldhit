@@ -9,7 +9,7 @@
 #include "apps/osh/osh_material_parse.h"
 #include "apps/osh/osh_scoring_parse.h"
 #include "common/osh_file.h"
-#include "openshieldhit/logger.h"
+#include "common/osh_logger.h"
 #include "openshieldhit/material.h"
 #include "openshieldhit/status.h"
 
@@ -23,7 +23,8 @@
  * populates the public beam workspace exclusively through `osh_beam_spots_set`
  * before calling `osh_beam_workspace_prepare()`.
  */
-enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct osh_beam_workspace **wb_out) {
+enum osh_status
+osh_beam_setup_from_path(char const *path, struct osh_diag_sink const *diag, struct osh_beam_workspace **wb_out) {
     enum osh_status rc = OSH_OK;
     struct oshfile *sf = NULL;
     struct osh_beam_workspace *wb = NULL;
@@ -31,8 +32,6 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
     struct osh_beam_spot *spots = NULL;
     size_t nspots = 0u;
     char *spotlist_path = NULL;
-
-    (void) lg;
 
     if (!path || !wb_out) {
         return OSH_EINVAL;
@@ -53,7 +52,7 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
     memset(&template_spot, 0, sizeof(template_spot));
     template_spot.shape = OSH_BEAM_SHAPE_PENCIL;
 
-    rc = osh_beam_parse(sf, wb, &template_spot, &spotlist_path);
+    rc = osh_beam_parse(sf, diag, wb, &template_spot, &spotlist_path);
     osh_fclose(sf);
     sf = NULL;
     if (rc != OSH_OK) {
@@ -63,8 +62,8 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
     }
 
     if (spotlist_path) {
-        osh_info("Loading spotlist before beam post-parse");
-        rc = osh_beam_spotlist_import(spotlist_path, &template_spot, &spots, &nspots);
+        OSH_DIAG_INFOF(diag, "Loading spotlist before beam post-parse");
+        rc = osh_beam_spotlist_import(spotlist_path, diag, &template_spot, &spots, &nspots);
         if (rc != OSH_OK) {
             free(spotlist_path);
             osh_beam_workspace_free(wb);
@@ -103,13 +102,12 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
  * This is the file-oriented wrapper around `osh_geometry_parse()` plus the
  * required geometry workspace preparation step.
  */
-enum osh_status
-osh_geometry_setup_from_path(char const *path, struct osh_logger *lg, struct osh_geometry_workspace **ws_out) {
+enum osh_status osh_geometry_setup_from_path(char const *path,
+                                             struct osh_diag_sink const *diag,
+                                             struct osh_geometry_workspace **ws_out) {
     enum osh_status rc = OSH_OK;
     struct oshfile *sf = NULL;
     struct osh_geometry_workspace *ws = NULL;
-
-    (void) lg;
 
     if (!path || !ws_out) {
         return OSH_EINVAL;
@@ -127,7 +125,7 @@ osh_geometry_setup_from_path(char const *path, struct osh_logger *lg, struct osh
         return rc;
     }
 
-    rc = osh_geometry_parse(sf, ws);
+    rc = osh_geometry_parse(sf, diag, ws);
     osh_fclose(sf);
     sf = NULL;
     if (rc != OSH_OK) {
@@ -154,14 +152,13 @@ osh_geometry_setup_from_path(char const *path, struct osh_logger *lg, struct osh
  * during parsing. The parser itself owns file I/O for imported tables and
  * converts them into material-owned in-memory overrides.
  */
-enum osh_status
-osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh_material_workspace **wm_out) {
+enum osh_status osh_material_setup_from_path(char const *path,
+                                             struct osh_diag_sink const *diag,
+                                             struct osh_material_workspace **wm_out) {
     enum osh_status rc = OSH_OK;
     struct oshfile *sf = NULL;
     struct osh_material_workspace *wm = NULL;
     char *wdir = NULL;
-
-    (void) lg;
 
     if (!path || !wm_out) {
         return OSH_EINVAL;
@@ -189,7 +186,7 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh
         return OSH_ENOMEM;
     }
 
-    rc = osh_material_parse(sf, wm);
+    rc = osh_material_parse(sf, diag, wm);
     osh_fclose(sf);
     sf = NULL;
     if (rc != OSH_OK) {
@@ -216,12 +213,10 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh
  * cold scoring definitions from `detect.dat`.
  */
 enum osh_status
-osh_scoring_setup_from_path(char const *path, struct osh_logger *lg, struct osh_scoring_workspace **ws_out) {
+osh_scoring_setup_from_path(char const *path, struct osh_diag_sink const *diag, struct osh_scoring_workspace **ws_out) {
     enum osh_status rc = OSH_OK;
     struct oshfile *sf = NULL;
     struct osh_scoring_workspace *ws = NULL;
-
-    (void) lg;
 
     if (!path || !ws_out) {
         return OSH_EINVAL;
@@ -246,7 +241,7 @@ osh_scoring_setup_from_path(char const *path, struct osh_logger *lg, struct osh_
         return OSH_ENOMEM;
     }
 
-    rc = osh_scoring_parse(sf, ws);
+    rc = osh_scoring_parse(sf, diag, ws);
     osh_fclose(sf);
     sf = NULL;
     if (rc != OSH_OK) {

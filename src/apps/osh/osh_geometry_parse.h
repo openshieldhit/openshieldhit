@@ -3,6 +3,7 @@
 
 #include "common/osh_file.h"
 #include "openshieldhit/geometry.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 /**
@@ -31,11 +32,13 @@
  * @ref osh_geometry_workspace_free().
  *
  * @param[in]     oshf  Open geometry file positioned anywhere (rewound internally).
+ * @param[in]     diag  Borrowed diagnostics sink for parse messages, or NULL.
  * @param[in,out] ws    Pre-allocated workspace to fill.
  *
  * @returns OSH_OK on success, OSH_EPARSE on format errors, OSH_ENOMEM on
  *          allocation failure.
  */
-enum osh_status osh_geometry_parse(struct oshfile *oshf, struct osh_geometry_workspace *ws);
+enum osh_status
+osh_geometry_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struct osh_geometry_workspace *ws);
 
 #endif /* OSH_FRONTEND_OPENSHIELDHIT_GEOMETRY_PARSE_H */

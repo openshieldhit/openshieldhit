@@ -1,6 +1,7 @@
 #ifndef OSH_SCORING_PARSE_INTERNAL_H
 #define OSH_SCORING_PARSE_INTERNAL_H
 
+#include "openshieldhit/logger.h"
 #include "openshieldhit/scoring.h"
 
 #ifdef __cplusplus
@@ -20,6 +21,7 @@ extern "C" {
  * @brief Dispatch one tokenised line into a Filter section.
  */
 enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil,
+                                              struct osh_diag_sink const *diag,
                                               char **words,
                                               int nwords,
                                               char const *path,
@@ -30,6 +32,7 @@ enum osh_status osh_scoring_parse_filter_line(struct osh_scoring_filter_def *fil
  * @brief Dispatch one tokenised line into a Settings section.
  */
 enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def *set,
+                                                struct osh_diag_sink const *diag,
                                                 char **words,
                                                 int nwords,
                                                 char const *path,
@@ -40,6 +43,7 @@ enum osh_status osh_scoring_parse_settings_line(struct osh_scoring_settings_def 
  * @brief Dispatch one tokenised line into a Geometry section.
  */
 enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def *geo,
+                                                struct osh_diag_sink const *diag,
                                                 char **words,
                                                 int nwords,
                                                 char const *path,
@@ -50,6 +54,7 @@ enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def 
  * @brief Dispatch one tokenised line into an Output section.
  */
 enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out,
+                                              struct osh_diag_sink const *diag,
                                               char **words,
                                               int nwords,
                                               char const *path,

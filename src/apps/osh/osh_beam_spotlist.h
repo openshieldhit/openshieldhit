@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "openshieldhit/beam.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 /**
@@ -19,6 +20,7 @@
  * `free()` after it has been copied into a beam workspace.
  */
 enum osh_status osh_beam_spotlist_import(char const *path,
+                                         struct osh_diag_sink const *diag,
                                          struct osh_beam_spot const *template_spot,
                                          struct osh_beam_spot **spots_out,
                                          size_t *nspots_out);

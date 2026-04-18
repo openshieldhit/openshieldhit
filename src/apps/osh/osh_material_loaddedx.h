@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 /**
@@ -50,7 +51,9 @@ struct osh_material_loaddedx_table {
  * @returns OSH_OK on success, OSH_EIO on file errors, OSH_EPARSE on format
  *          errors, OSH_ENOMEM on allocation failure.
  */
-enum osh_status osh_material_loaddedx_table_load(char const *path, struct osh_material_loaddedx_table *table);
+enum osh_status osh_material_loaddedx_table_load(char const *path,
+                                                 struct osh_diag_sink const *diag,
+                                                 struct osh_material_loaddedx_table *table);
 
 /**
  * @brief Release all arrays owned by @p table and zero-reset the struct.

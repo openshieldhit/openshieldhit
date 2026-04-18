@@ -2,6 +2,7 @@
 #define OSH_FRONTEND_OPENSHIELDHIT_MATERIAL_PARSE_H
 
 #include "common/osh_file.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/material.h"
 #include "openshieldhit/status.h"
 
@@ -26,11 +27,13 @@ extern "C" {
  * level MEE values, but not both in the same material definition.
  *
  * @param[in,out] oshf  Open material file positioned at the start.
+ * @param[in]     diag  Borrowed diagnostics sink for parse messages, or NULL.
  * @param[in,out] wm    Workspace to populate.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_material_parse(struct oshfile *oshf, struct osh_material_workspace *wm);
+enum osh_status
+osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struct osh_material_workspace *wm);
 
 #ifdef __cplusplus
 }
