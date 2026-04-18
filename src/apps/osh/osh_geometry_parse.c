@@ -5,11 +5,11 @@
 #include <string.h>
 
 #include "apps/osh/osh_geometry_parse_keys.h"
+#include "common/osh_readline.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/logger.h"
-#include "openshieldhit/readline.h"
 #include "openshieldhit/status.h"
 
 /* ---- Internal helpers ---------------------------------------------------- */

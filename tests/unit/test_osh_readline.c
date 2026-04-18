@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "openshieldhit/file.h"
-#include "openshieldhit/readline.h"
+#include "common/osh_file.h"
+#include "common/osh_readline.h"
 #include "test_assert.h"
 
 #ifndef OSH_TEST_FIXTURES_DIR

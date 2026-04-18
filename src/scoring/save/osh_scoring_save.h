@@ -18,7 +18,7 @@ extern "C" {
  *
  * @param[in] ws     Scoring workspace with output metadata and file paths.
  * @param[in] rt     Compiled scoring runtime with postprocessed accumulators.
- * @param[in] nstat  Actual number of primary particles simulated.
+ * @param[in] nstat  Actual number of primary particles simulated; must be > 0.
  *
  * @returns OSH_OK on success, OSH_ENOTSUP for an unsupported format, or
  *          another OSH_E* on I/O error.

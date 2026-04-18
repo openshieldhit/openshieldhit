@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "openshieldhit/file.h"
+#include "common/osh_file.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \

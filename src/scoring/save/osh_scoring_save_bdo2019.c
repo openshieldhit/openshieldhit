@@ -1,5 +1,6 @@
 #include "scoring/save/osh_scoring_save_bdo2019.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +42,12 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
     rc = validate_output(ws, rt, output_idx, &out, &geo);
     if (rc != OSH_OK) {
         return rc;
+    }
+    if (nstat == 0ull) {
+        return OSH_EINVAL;
+    }
+    if (nstat > (unsigned long long) LLONG_MAX) {
+        return OSH_EINVAL;
     }
 
     fp = fopen(out->filename, "wb");

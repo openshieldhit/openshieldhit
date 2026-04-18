@@ -7,9 +7,9 @@
 
 #include "apps/osh/osh_material_loaddedx.h"
 #include "apps/osh/osh_material_parse_keys.h"
-#include "openshieldhit/file.h"
+#include "common/osh_file.h"
+#include "common/osh_readline.h"
 #include "openshieldhit/logger.h"
-#include "openshieldhit/readline.h"
 
 static enum osh_status parse_density(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args);
 static enum osh_status parse_color(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args);
