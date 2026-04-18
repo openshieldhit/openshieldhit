@@ -194,7 +194,7 @@ enum osh_status osh_material_setup_from_path(char const *path,
         return rc;
     }
 
-    rc = osh_material_workspace_prepare(wm);
+    rc = osh_material_workspace_prepare(wm, diag);
     if (rc != OSH_OK) {
         osh_material_workspace_free(wm);
         return rc;
