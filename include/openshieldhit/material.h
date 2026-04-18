@@ -28,10 +28,17 @@ struct osh_material_element {
     unsigned int a;                /* Mass number A; 0 means natural element, >0 means explicit isotope. */
 };
 
+struct osh_material_dedx_override {
+    double *energy_mev_per_u;   /* [npoints], strictly increasing kinetic energy per nucleon [MeV/u]. */
+    double *dedx_mev_cm2_per_g; /* [npoints], mass stopping power [MeV cm^2/g]. */
+    unsigned int projectile_z;  /* Projectile atomic number Z. */
+    size_t npoints;
+};
+
 struct osh_material {
     struct osh_material_element *elements;
+    struct osh_material_dedx_override *dedx_overrides;
     char *name;
-    char *dedx_table_path; /* External dE/dx table path, owned; NULL if unset. */
 
     double rho; /* Density [g/cm^3], < 0 if unset. */
     /* Material-level mean excitation energy [eV], < 0 if unset; fallback for uncovered dE/dx. */
@@ -39,6 +46,7 @@ struct osh_material {
     float rgba[4]; /* Rendering color [0,1]: red, green, blue, alpha. */
 
     size_t nelements;
+    size_t ndedx_overrides;
     size_t lineno; /* Input line where this material was defined. */
     size_t index;  /* Dense internal index: 0 blackhole, 1 vacuum, >=2 user-defined. */
 
@@ -62,7 +70,7 @@ struct osh_material_workspace {
  * - index 1: vacuum
  *
  * Application-layer parsers may then append user materials before calling
- * @ref osh_material_workspace_finalize().
+ * @ref osh_material_workspace_prepare().
  *
  * @param[out] wm_out  Receives the allocated workspace on success.
  *
@@ -87,7 +95,38 @@ enum osh_status osh_material_workspace_create(struct osh_material_workspace **wm
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_material_workspace_finalize(struct osh_material_workspace *wm);
+enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm);
+
+/**
+ * @brief Set or replace one material-owned dE/dx override curve.
+ *
+ * @details
+ * The curve is keyed by projectile atomic number `Z` and is deep-copied into
+ * the material. Repeated calls with the same projectile replace the
+ * existing curve. The runtime material prepare step uses these overrides where
+ * present and falls back to Bethe elsewhere.
+ *
+ * @param[in,out] mat                  Material to update.
+ * @param[in]     z_projectile         Projectile atomic number `Z` (> 0).
+ * @param[in]     energy_mev_per_u     Energy grid [MeV/u], length `n_points`.
+ * @param[in]     dedx_mev_cm2_per_g   Mass stopping powers [MeV cm^2/g], length `n_points`.
+ * @param[in]     n_points             Number of samples, must be >= 2.
+ *
+ * @returns OSH_OK on success, or an error code on invalid input or allocation
+ *          failure.
+ */
+enum osh_status osh_material_dedx_set(struct osh_material *mat,
+                                      unsigned int z_projectile,
+                                      double const *energy_mev_per_u,
+                                      double const *dedx_mev_cm2_per_g,
+                                      size_t n_points);
+
+/**
+ * @brief Remove all material-owned dE/dx overrides from one material.
+ *
+ * @param[in,out] mat  Material to clear. Safe to call with NULL.
+ */
+void osh_material_dedx_clear(struct osh_material *mat);
 
 /**
  * @brief Release a material workspace and all owned resources.

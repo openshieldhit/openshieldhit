@@ -2,18 +2,34 @@
 
 This module owns scoring-domain data and logic.
 
-Structure:
-- `src/scoring/` holds the public scoring API and cold workspace types.
-- `src/apps/osh/` holds the current `detect.dat` parser (`osh_scoring_parse.*`) and
-  path/file setup glue (`osh_scoring_setup_from_path`).
-- `src/scoring/runtime/` holds the compiled runtime representation used during simulation.
-- `src/scoring/save/` holds cold-path file writers consuming workspace plus runtime.
+## Structure
 
-Rules:
-- File-format parsing belongs to app code and fills the scoring workspace.
+- `osh_scoring.c/h` — cold scoring workspace API (`struct osh_scoring_workspace`),
+  public helpers for detector and filter definitions.
+- `runtime/osh_scoring_compile.*` — compilation from cold scoring definitions into
+  runtime accumulator buffers and geometry.
+- `runtime/osh_scoring_runtime.h` — runtime layout consumed by transport and simulation.
+- `runtime/osh_scoring_step.*` — per-step scoring accumulation called from transport.
+- `runtime/osh_scoring_postprocess.*` — post-run normalisation and derived quantity
+  computation.
+- `save/` — output writers that consume workspace metadata plus runtime accumulators
+  to produce scored result files.
+
+## Lifecycle
+
+```
+osh_scoring_workspace_create()      allocate cold workspace
+                                    (no workspace_prepare step — scoring has no derived fields)
+osh_scoring_compile()               allocate accumulators, compile scoring geometry  [osh_simulation_create]
+osh_scoring_workspace_free()        release cold workspace
+```
+
+## Rules
+
+- File-format parsing belongs to app code (`src/apps/osh/`) and fills the cold workspace.
 - Parsed scoring definitions stay separate from runtime scoring buffers.
-- Save/output code should consume the scoring workspace plus scoring runtime, not transport internals.
+- Save/output code consumes the scoring workspace plus scoring runtime, not transport internals.
 - Other modules may call into scoring runtime APIs, but should not own scorer compilation.
-- Scoring runtime compilation (`osh_scoring_prepare`), postprocessing, and saving
-  are invoked by `src/simulation/` as part of `osh_simulation_create` and
-  `osh_simulation_run`.  App code never calls them directly.
+- `osh_scoring_compile`, `osh_scoring_postprocess`, and `osh_scoring_save` are
+  invoked by `src/simulation/` as part of `osh_simulation_create` and
+  `osh_simulation_run`. App code never calls them directly.

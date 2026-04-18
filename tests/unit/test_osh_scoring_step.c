@@ -8,8 +8,8 @@
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
+#include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
-#include "scoring/runtime/osh_scoring_prepare.h"
 #include "scoring/runtime/osh_scoring_step.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
@@ -44,7 +44,7 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_prepare(ws, &rt);
+    rc = osh_scoring_compile(ws, &rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     memset(&part, 0, sizeof(part));
@@ -158,7 +158,7 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_prepare(ws, &rt);
+    rc = osh_scoring_compile(ws, &rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     memset(&part, 0, sizeof(part));

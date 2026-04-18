@@ -19,7 +19,7 @@ struct osh_scoring_runtime;
  *
  * @details
  * Resolved from the raw @ref osh_scoring_filter_rule string form during
- * @ref osh_scoring_prepare.  Integer codes replace string comparisons so
+ * @ref osh_scoring_compile.  Integer codes replace string comparisons so
  * the hot path can evaluate rules with a simple switch/if chain.
  */
 struct osh_scoring_filter_runtime_rule {

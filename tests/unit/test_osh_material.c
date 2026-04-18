@@ -129,7 +129,6 @@ static void test_valid_explicit_composition(void) {
 }
 
 static void test_valid_case_and_loaddedx(void) {
-    char expected_dedx_path[1024];
     struct osh_material_workspace *wm = NULL;
     struct osh_material const *mat;
 
@@ -143,10 +142,42 @@ static void test_valid_case_and_loaddedx(void) {
     ASSERT_TRUE(fabs(mat->rgba[2] - 0.3f) < 1e-6);
     ASSERT_TRUE(fabs(mat->rgba[3] - 0.4f) < 1e-6);
     ASSERT_TRUE(fabs(mat->mean_excitation_energy - 80.0) < 1e-12);
-    ASSERT_TRUE(mat->dedx_table_path != NULL);
+    ASSERT_TRUE(mat->ndedx_overrides == 18u);
+    ASSERT_TRUE(mat->dedx_overrides != NULL);
+    ASSERT_TRUE(mat->dedx_overrides[0].projectile_z == 1u);
+    ASSERT_TRUE(mat->dedx_overrides[0].npoints == 2u);
+    ASSERT_TRUE(fabs(mat->dedx_overrides[0].energy_mev_per_u[0] - 0.025) < 1e-12);
+    ASSERT_TRUE(fabs(mat->dedx_overrides[0].dedx_mev_cm2_per_g[0] - 100.0) < 1e-12);
+    ASSERT_TRUE(mat->dedx_overrides[17].projectile_z == 18u);
 
-    fixture_path(expected_dedx_path, sizeof(expected_dedx_path), "valid/tables/water_dedx.dat");
-    ASSERT_TRUE(strcmp(mat->dedx_table_path, expected_dedx_path) == 0);
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+}
+
+static void test_material_dedx_set_replace_and_clear(void) {
+    struct osh_material_workspace *wm = NULL;
+    struct osh_material *mat;
+    double e1[] = {0.025, 1.0, 10.0};
+    double sp1[] = {100.0, 10.0, 1.0};
+    double e2[] = {0.025, 2.0, 20.0};
+    double sp2[] = {200.0, 20.0, 2.0};
+
+    ASSERT_TRUE(osh_material_workspace_create(&wm) == OSH_OK);
+    ASSERT_TRUE(wm != NULL);
+
+    mat = &wm->materials[OSH_MATERIAL_INDEX_VACUUM];
+    ASSERT_TRUE(osh_material_dedx_set(mat, 6u, e1, sp1, 3u) == OSH_OK);
+    ASSERT_TRUE(mat->ndedx_overrides == 1u);
+    ASSERT_TRUE(mat->dedx_overrides[0].projectile_z == 6u);
+    ASSERT_TRUE(fabs(mat->dedx_overrides[0].dedx_mev_cm2_per_g[1] - 10.0) < 1e-12);
+
+    ASSERT_TRUE(osh_material_dedx_set(mat, 6u, e2, sp2, 3u) == OSH_OK);
+    ASSERT_TRUE(mat->ndedx_overrides == 1u);
+    ASSERT_TRUE(fabs(mat->dedx_overrides[0].energy_mev_per_u[1] - 2.0) < 1e-12);
+    ASSERT_TRUE(fabs(mat->dedx_overrides[0].dedx_mev_cm2_per_g[0] - 200.0) < 1e-12);
+
+    osh_material_dedx_clear(mat);
+    ASSERT_TRUE(mat->ndedx_overrides == 0u);
+    ASSERT_TRUE(mat->dedx_overrides == NULL);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
@@ -228,6 +259,7 @@ int main(void) {
     test_valid_icru_override();
     test_valid_explicit_composition();
     test_valid_case_and_loaddedx();
+    test_material_dedx_set_replace_and_clear();
     test_valid_mass_fraction_and_isotope();
     test_valid_end_handling();
 

@@ -75,7 +75,7 @@ The repo has moved past the original bootstrap phase. We now have:
 - [x] Filter rules (Z, A, E, GEN, ID, NPRIM) with compiled comparison operators
 - [x] Geometry types: Mesh, Cyl, Zone, Voxel, All
 - [x] Quantity types: ENERGY, FLUENCE, DOSE, LETFLU, DLET, TLET, COUNT, NORMCOUNT, NKERMA, ALANINE, MCPL
-- [x] Scoring runtime preparation (`src/scoring/runtime/osh_scoring_prepare.c`)
+- [x] Scoring runtime compilation (`src/scoring/runtime/osh_scoring_compile.c`)
 - [x] Per-step scoring wired to transport (`osh_scoring_score_step`)
 - [x] ASCII text output
 - [x] BDO2019 binary output

@@ -7,7 +7,7 @@
 #include "common/osh_const.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
-#include "material/runtime/osh_material_prepare.h"
+#include "material/runtime/osh_material_compile.h"
 #include "openshieldhit/material.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_isotope_db.h"
@@ -223,7 +223,7 @@ int main(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_material_prepare(wm, 6u, &tables);
+    rc = osh_material_compile(wm, 6u, &tables);
     ASSERT_TRUE(rc == OSH_OK);
 
     water_loaded = osh_material_by_name(wm, "WaterLoaded");

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_material_loaddedx.h"
 #include "apps/osh/osh_material_parse_keys.h"
 #include "openshieldhit/file.h"
 #include "openshieldhit/logger.h"
@@ -373,8 +374,12 @@ parse_element_mean_excitation_energy(struct osh_material_workspace *wm, struct o
 /**
  * @brief Handle the LOADDEDX card.
  *
- * @details Stores a path to an external dE/dx table for later loading. Relative
- * paths are resolved against the directory of the material input file.
+ * @details
+ * Relative paths are resolved against the directory of the material input
+ * file. The legacy LOADDEDX text table is read immediately by the app parser
+ * and translated into material-owned dE/dx overrides in the public cold model.
+ * Repeated LOADDEDX cards replace the earlier override set for the current
+ * material, matching the old "one path per material" behavior.
  *
  * @param[in,out] wm    Material workspace (wdir used for path resolution).
  * @param[in]     oshf  Open input file.
@@ -387,6 +392,12 @@ static enum osh_status parse_loaddedx(struct osh_material_workspace *wm, struct 
     char path[512];
     char extra;
     char *resolved_path;
+    struct osh_material_loaddedx_table table;
+    double *dedx_values;
+    unsigned int z;
+    size_t proj_idx;
+    size_t e_idx;
+    enum osh_status rc;
 
     mat = material_current(wm);
     if (!mat) {
@@ -398,14 +409,47 @@ static enum osh_status parse_loaddedx(struct osh_material_workspace *wm, struct 
         return OSH_EPARSE;
     }
 
-    /* Store the table path only. Table loading and projectile coverage are resolved during setup. */
     resolved_path = NULL;
     if (osh_relative_path_to_file(&resolved_path, wm->wdir, path) != 0) {
         return OSH_ENOMEM;
     }
 
-    free(mat->dedx_table_path);
-    mat->dedx_table_path = resolved_path;
+    memset(&table, 0, sizeof(table));
+    rc = osh_material_loaddedx_table_load(resolved_path, &table);
+    free(resolved_path);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    osh_material_dedx_clear(mat);
+
+    proj_idx = 0u;
+    while (proj_idx < table.nprojectiles) {
+        rc = osh_material_loaddedx_projectile_z(&table, proj_idx, &z);
+        if (rc != OSH_OK) {
+            osh_material_loaddedx_table_free(&table);
+            return rc;
+        }
+        dedx_values = (double *) malloc(table.nenergy * sizeof(*dedx_values));
+        if (!dedx_values) {
+            osh_material_loaddedx_table_free(&table);
+            return OSH_ENOMEM;
+        }
+        e_idx = 0u;
+        while (e_idx < table.nenergy) {
+            dedx_values[e_idx] = (double) osh_material_loaddedx_mass_stopping_power(&table, proj_idx, e_idx);
+            e_idx++;
+        }
+        rc = osh_material_dedx_set(mat, z, table.energy_grid, dedx_values, table.nenergy);
+        free(dedx_values);
+        if (rc != OSH_OK) {
+            osh_material_loaddedx_table_free(&table);
+            return rc;
+        }
+        proj_idx++;
+    }
+
+    osh_material_loaddedx_table_free(&table);
 
     return OSH_OK;
 }
@@ -558,8 +602,8 @@ static struct osh_material *material_current(struct osh_material_workspace *wm) 
  */
 static void material_defaults(struct osh_material *mat) {
     mat->elements = NULL;
+    mat->dedx_overrides = NULL;
     mat->name = NULL;
-    mat->dedx_table_path = NULL;
     mat->rho = -1.0;
     mat->mean_excitation_energy = -1.0;
     mat->rgba[0] = 0.8f;
@@ -567,6 +611,7 @@ static void material_defaults(struct osh_material *mat) {
     mat->rgba[2] = 0.8f;
     mat->rgba[3] = 1.0f;
     mat->nelements = 0u;
+    mat->ndedx_overrides = 0u;
     mat->lineno = 0u;
     mat->index = 0u;
     mat->icru_id = 0;

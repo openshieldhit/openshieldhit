@@ -1,28 +1,36 @@
 # Material Module
 
-This module owns material-domain data and logic.
+This directory owns material-domain data structures and setup logic used by the
+core library.
 
 ## Structure
 
-- `src/material/` — public material API and cold workspace type `struct osh_material_workspace`.
-- `src/material/runtime/` — compiled runtime tables used during simulation (`osh_material_prepare`).
-- `src/apps/osh/` — `mat.dat` parser (`osh_material_parse.*`) and
-  path/file setup glue (`osh_material_setup_from_path`).
+- `osh_material.c`, `osh_material.h` — cold material workspace API
+  (`struct osh_material_workspace`), material validation/finalization, and
+  public material helpers such as dE/dx overrides.
+- `osh_material_atomic_data.*` — element/isotope lookup data and derived atomic
+  helpers used during material setup.
+- `osh_material_icru.*` — built-in ICRU material definitions and expansion
+  helpers.
+- `runtime/osh_material_compile.*` — compilation from cold material definitions
+  into runtime stopping-power and range tables.
+- `runtime/osh_material_runtime.h` — runtime table layout consumed by transport
+  and simulation.
 
 ## Lifecycle
 
 ```
 osh_material_workspace_create()     allocate cold workspace
-osh_material_parse()                fill from mat.dat  [app layer]
-osh_material_workspace_finalize()   validate and derive composition fields
-osh_material_prepare()              compile runtime tables  [osh_simulation_create]
+osh_material_workspace_prepare()    validate and derive composition fields
+osh_material_compile()              compile runtime tables  [osh_simulation_create]
 osh_material_workspace_free()       release cold workspace
 ```
 
-`osh_material_setup_from_path()` (app layer) wraps parse + finalize into one call.
-
 ## Rules
 
-- File-format parsing belongs to app code; it fills `struct osh_material_workspace`.
-- Core owns workspace allocation/finalization and runtime-table preparation.
-- Other modules may consume `struct osh_material_runtime`, but should not construct it.
+- This directory does not parse files or own path-based setup.
+- It defines and validates the cold material model used by the rest of the
+  library.
+- Runtime transport tables are built here, then consumed elsewhere.
+- Other modules may consume `struct osh_material_runtime`, but should not
+  construct it directly.

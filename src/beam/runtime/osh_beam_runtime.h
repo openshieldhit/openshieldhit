@@ -105,7 +105,7 @@ struct osh_beam_runtime {
  *
  * @returns OSH_OK on success, OSH_E* on failure.
  */
-enum osh_status osh_beam_runtime_setup(struct beam_workspace const *workspace, struct osh_beam_runtime **rt_out);
+enum osh_status osh_beam_compile(struct beam_workspace const *workspace, struct osh_beam_runtime **rt_out);
 
 /**
  * @brief Free a beam runtime.

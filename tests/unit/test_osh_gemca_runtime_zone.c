@@ -98,7 +98,7 @@ static void test_zone_batch_matches_scalar(void) {
 
     ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geom) == OSH_OK);
     g = geom->prepared;
-    ASSERT_TRUE(osh_gemca_runtime_setup(g, &rt) == OSH_OK);
+    ASSERT_TRUE(osh_gemca_compile(g, &rt) == OSH_OK);
 
     fill_zone_cases(x, y, z, ux, uy, uz);
     osh_gemca_runtime_get_zone_batch(&rt, x, y, z, ux, uy, uz, N_ZONE_CASES, zones_batch);
