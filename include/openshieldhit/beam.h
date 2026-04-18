@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "openshieldhit/beam_defs.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus
@@ -154,8 +155,11 @@ enum osh_status osh_beam_workspace_create(struct osh_beam_workspace **wb_out);
  * function resolves derived quantities and allocates the internal prepared
  * state. Repeated calls are allowed after cold-data edits; the previous
  * prepared state is released and rebuilt in place.
+ *
+ * @param[in,out] wb    Beam workspace to validate and finalize.
+ * @param[in]     diag  Borrowed diagnostics sink for setup messages, or NULL.
  */
-enum osh_status osh_beam_workspace_prepare(struct osh_beam_workspace *wb);
+enum osh_status osh_beam_workspace_prepare(struct osh_beam_workspace *wb, struct osh_diag_sink const *diag);
 
 /**
  * @brief Replace the owned beam spot array with caller-provided cold spot data.
@@ -185,8 +189,21 @@ enum osh_status osh_beam_spots_set(struct osh_beam_workspace *wb, struct osh_bea
 enum osh_status osh_beam_workspace_free(struct osh_beam_workspace *wb);
 enum osh_status osh_beam_phsp_free(struct osh_beam_phsp *phsp);
 
-void osh_beam_print(struct osh_beam_workspace const *wb);
-void osh_beam_print_spot(struct osh_beam_spot const *spot);
+/**
+ * @brief Print a concise beam workspace summary through a diagnostics sink.
+ *
+ * @param[in] wb    Workspace to print.
+ * @param[in] diag  Borrowed diagnostics sink for summary output, or NULL.
+ */
+void osh_beam_print(struct osh_beam_workspace const *wb, struct osh_diag_sink const *diag);
+
+/**
+ * @brief Print one beam spot summary through a diagnostics sink.
+ *
+ * @param[in] spot  Spot to print.
+ * @param[in] diag  Borrowed diagnostics sink for summary output, or NULL.
+ */
+void osh_beam_print_spot(struct osh_beam_spot const *spot, struct osh_diag_sink const *diag);
 
 #ifdef __cplusplus
 }
