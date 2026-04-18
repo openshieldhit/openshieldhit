@@ -118,7 +118,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     /* ---- 3. Transport tables --------------------------------------------- */
 
     z_max = (beam->primary.z > 0u) ? (unsigned int) beam->primary.z : 1u;
-    rc = osh_material_compile(mat, z_max, &sim->transport_tables);
+    rc = osh_material_compile(mat, z_max, diag, &sim->transport_tables);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile transport tables");
         goto fail;

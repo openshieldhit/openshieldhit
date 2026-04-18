@@ -3,6 +3,7 @@
 
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus
@@ -32,12 +33,15 @@ extern "C" {
  *
  * @param[in]  wm       Completed material workspace.
  * @param[in]  z_max    Maximum projectile atomic number to include.
+ * @param[in]  diag     Borrowed diagnostics sink for compile messages, or NULL.
  * @param[out] tables   Receives the allocated runtime tables on success.
  *
  * @returns OSH_OK on success, or an error code on failure.
  */
-enum osh_status
-osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables);
+enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
+                                     unsigned int z_max,
+                                     struct osh_diag_sink const *diag,
+                                     struct osh_material_runtime *tables);
 
 /**
  * @brief Release a runtime tables struct and all owned memory.
