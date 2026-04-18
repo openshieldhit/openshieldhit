@@ -86,19 +86,18 @@ The opaque handle also makes it natural to change the internal layout — for
 example, to add thread-local scratch buffers, a secondary particle queue, or an
 event callback — without touching any code outside this module.
 
-### Why does the app layer still own workspace loading?
+### Why does simulation start from cold workspaces?
 
-Parsing is format-specific.  The library does not know about `.dat` files, TOML,
-JSON, or any other input format.  App adapters in `src/apps/osh/` call the
-per-format parsers and hand fully-prepared cold workspaces to the library.
-The boundary is explicit: everything above `osh_simulation_create` is I/O;
-everything inside is physics.
+This module assumes the four cold workspaces already exist and have been
+prepared where needed. `src/simulation/` does not load files or interpret input
+formats; it starts at the boundary where cold domain objects are available and
+compiles them into runtime state.
 
 ### Lifetime rules
 
 ```
 osh_X_workspace_create()   ← caller
-osh_X_workspace_prepare()  ← caller (or setup_from_path)
+osh_X_workspace_prepare()  ← caller
                            ← cold workspace alive
 osh_simulation_create()    ← compiles runtimes, borrows cold workspaces
 osh_simulation_run()       ← uses both cold and runtime state

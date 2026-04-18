@@ -22,13 +22,13 @@ core library.
 ```
 osh_material_workspace_create()     allocate cold workspace
 osh_material_workspace_prepare()    validate and derive composition fields
-osh_material_compile()              compile runtime tables  [osh_simulation_create]
+osh_material_compile()              compile runtime tables
 osh_material_workspace_free()       release cold workspace
 ```
 
 ## Rules
 
-- This directory does not parse files or own path-based setup.
+- This directory does not own file-format parsing or path-based setup.
 - It defines and validates the cold material model used by the rest of the
   library.
 - Runtime transport tables are built here, then consumed elsewhere.

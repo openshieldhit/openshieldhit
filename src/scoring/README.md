@@ -20,13 +20,15 @@ This module owns scoring-domain data and logic.
 ```
 osh_scoring_workspace_create()      allocate cold workspace
                                     (no workspace_prepare step — scoring has no derived fields)
-osh_scoring_compile()               allocate accumulators, compile scoring geometry  [osh_simulation_create]
+osh_scoring_compile()               allocate accumulators, compile scoring geometry
 osh_scoring_workspace_free()        release cold workspace
 ```
 
 ## Rules
 
-- File-format parsing belongs to app code (`src/apps/osh/`) and fills the cold workspace.
+- This directory owns cold scoring definitions, runtime compilation, postprocess,
+  and output support.
+- File-format loading happens outside this module.
 - Parsed scoring definitions stay separate from runtime scoring buffers.
 - Save/output code consumes the scoring workspace plus scoring runtime, not transport internals.
 - Other modules may call into scoring runtime APIs, but should not own scorer compilation.
