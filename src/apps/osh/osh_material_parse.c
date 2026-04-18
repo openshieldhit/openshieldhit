@@ -526,6 +526,15 @@ static enum osh_status parse_icru(struct osh_material_workspace *wm, struct oshf
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the MATERIAL card; push a new material slot onto the workspace.
+ *
+ * @param[in,out] wm    Material workspace to extend.
+ * @param[in]     oshf  Open input file (for error location).
+ * @param[in]     args  MATERIAL card argument: one name token.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on missing/duplicate name, OSH_ENOMEM on failure.
+ */
 static enum osh_status parse_material_start(struct osh_material_workspace *wm, struct oshfile *oshf, char const *args) {
     return material_push(wm, oshf, args);
 }

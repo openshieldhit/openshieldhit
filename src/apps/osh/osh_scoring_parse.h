@@ -26,6 +26,14 @@ extern "C" {
  *
  * The legacy fixed-column SHIELD-HIT Fortran/USRBIN-style format is out of
  * scope here.
+ *
+ * @param[in]     oshf  Open detect file positioned at the start.
+ * @param[in,out] ws    Pre-allocated workspace to populate. On failure the
+ *                      workspace may be partially filled; the caller is
+ *                      responsible for freeing it.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on format errors, OSH_ENOMEM on
+ *          allocation failure.
  */
 enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_workspace *ws);
 

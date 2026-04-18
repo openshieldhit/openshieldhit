@@ -1,7 +1,6 @@
 #include "apps/osh/osh_beam_spotlist.h"
 
 #include <ctype.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +8,7 @@
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
 #include "openshieldhit/beam_defs.h"
+#include "openshieldhit/const.h"
 
 #define OSH_SPOTLIST_MAX_COLS 11
 
@@ -17,6 +17,16 @@ static enum osh_status spotlist_detect_layout(FILE *fp, size_t *nspots_out, int 
 static enum osh_status
 spotlist_fill_spot(struct osh_beam_spot *spot, double const values[OSH_SPOTLIST_MAX_COLS], int ncols);
 
+/**
+ * @brief Parse one line of a spotlist file into an array of double values.
+ *
+ * @param[in,out] line      Line buffer; modified in place (NUL terminators may be inserted).
+ * @param[out]    values    Receives up to OSH_SPOTLIST_MAX_COLS parsed values.
+ * @param[out]    ncols_out Receives the number of values parsed from this line.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL if too many columns or a non-numeric
+ *          token is encountered.
+ */
 static enum osh_status spotlist_parse_values(char *line, double values[OSH_SPOTLIST_MAX_COLS], int *ncols_out) {
     char *p;
     char *endp;
@@ -53,6 +63,19 @@ static enum osh_status spotlist_parse_values(char *line, double values[OSH_SPOTL
     return OSH_OK;
 }
 
+/**
+ * @brief Scan the file to determine the column count and number of data rows.
+ *
+ * @details Rewinds @p fp before scanning. All non-blank, non-comment lines must
+ * have the same column count; accepted counts are 5, 6, 7, 9, or 11.
+ *
+ * @param[in]  fp          Open file pointer (rewound on entry).
+ * @param[out] nspots_out  Receives the number of data rows found.
+ * @param[out] ncols_out   Receives the column count shared by all data rows.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL if column counts are inconsistent or
+ *          unsupported, OSH_EPARSE if no data rows are found, OSH_EIO on I/O error.
+ */
 static enum osh_status spotlist_detect_layout(FILE *fp, size_t *nspots_out, int *ncols_out) {
     char buff[OSH_MAX_LINE_LENGTH];
     double values[OSH_SPOTLIST_MAX_COLS];
@@ -112,17 +135,30 @@ static enum osh_status spotlist_detect_layout(FILE *fp, size_t *nspots_out, int 
     return OSH_OK;
 }
 
+/**
+ * @brief Populate a beam spot from one row of parsed spotlist values.
+ *
+ * @details Interprets the column layout determined by @p ncols (5, 6, 7, 9, or
+ * 11). Energy is converted from GeV/nucleon to MeV/nucleon. Beam size is
+ * converted from FWHM [cm] to sigma [cm]. Divergence is converted from mrad to
+ * rad. Spot shape is set to Gaussian if either sigma is positive, otherwise pencil.
+ *
+ * @param[in,out] spot    Spot to fill; fields not covered by @p ncols are left
+ *                        at their template values.
+ * @param[in]     values  Array of at least @p ncols parsed doubles.
+ * @param[in]     ncols   Column count; must be 5, 6, 7, 9, or 11.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for an unsupported column count or
+ *          NULL pointer.
+ */
 static enum osh_status
 spotlist_fill_spot(struct osh_beam_spot *spot, double const values[OSH_SPOTLIST_MAX_COLS], int ncols) {
     double sx;
     double sy;
-    double fwhm_to_sigma;
 
     if (!spot || !values) {
         return OSH_EINVAL;
     }
-
-    fwhm_to_sigma = 1.0 / (2.0 * sqrt(2.0 * log(2.0)));
 
     spot->t0 = values[0] * 1000.0;
     spot->p0 = 0.0;
@@ -130,29 +166,29 @@ spotlist_fill_spot(struct osh_beam_spot *spot, double const values[OSH_SPOTLIST_
 
     switch (ncols) {
     case 5:
-        sx = values[3] * fwhm_to_sigma;
-        sy = values[3] * fwhm_to_sigma;
+        sx = values[3] * OSH_FWHM2SIGMA;
+        sy = values[3] * OSH_FWHM2SIGMA;
         spot->wt = values[4];
         break;
     case 6:
-        sx = values[3] * fwhm_to_sigma;
-        sy = values[4] * fwhm_to_sigma;
+        sx = values[3] * OSH_FWHM2SIGMA;
+        sy = values[4] * OSH_FWHM2SIGMA;
         spot->wt = values[5];
         break;
     case 7:
         spot->tsigma = values[1] * 1000.0;
         spot->psigma = 0.0;
         spot->tsigma_per_nucleon = 1;
-        sx = values[4] * fwhm_to_sigma;
-        sy = values[5] * fwhm_to_sigma;
+        sx = values[4] * OSH_FWHM2SIGMA;
+        sy = values[5] * OSH_FWHM2SIGMA;
         spot->wt = values[6];
         break;
     case 9:
         spot->tsigma = values[1] * 1000.0;
         spot->psigma = 0.0;
         spot->tsigma_per_nucleon = 1;
-        sx = values[4] * fwhm_to_sigma;
-        sy = values[5] * fwhm_to_sigma;
+        sx = values[4] * OSH_FWHM2SIGMA;
+        sy = values[5] * OSH_FWHM2SIGMA;
         spot->div[0] = values[6] * 0.001;
         spot->div[1] = values[7] * 0.001;
         spot->wt = values[8];
@@ -161,8 +197,8 @@ spotlist_fill_spot(struct osh_beam_spot *spot, double const values[OSH_SPOTLIST_
         spot->tsigma = values[1] * 1000.0;
         spot->psigma = 0.0;
         spot->tsigma_per_nucleon = 1;
-        sx = values[4] * fwhm_to_sigma;
-        sy = values[5] * fwhm_to_sigma;
+        sx = values[4] * OSH_FWHM2SIGMA;
+        sy = values[5] * OSH_FWHM2SIGMA;
         spot->div[0] = values[6] * 0.001;
         spot->div[1] = values[7] * 0.001;
         spot->cor[0] = values[8];

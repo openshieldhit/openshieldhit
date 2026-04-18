@@ -16,9 +16,17 @@
 
 static int _rewind_oshfile(struct oshfile *shf);
 
-/* Map a body-type key string to an OSH_GEOMETRY_BODY_* code.
- * Values are identical to the internal OSH_GEMCA_BODY_* constants so that
- * osh_geometry_workspace_prepare() can use them without conversion. */
+/**
+ * @brief Map a body-type key string to an OSH_GEOMETRY_BODY_* code.
+ *
+ * @details Values are identical to the internal OSH_GEMCA_BODY_* constants so
+ * that osh_geometry_workspace_prepare() can use them without conversion.
+ *
+ * @param[in] key  Lowercase or mixed-case body type token (e.g. "sph", "rpp").
+ *
+ * @returns The matching OSH_GEOMETRY_BODY_* constant, or OSH_GEOMETRY_BODY_NONE
+ *          if @p key is unrecognized.
+ */
 static int _body_type_from_key(char const *key) {
     if (strcasecmp(key, "sph") == 0) {
         return OSH_GEOMETRY_BODY_SPH;
@@ -74,14 +82,24 @@ static int _body_type_from_key(char const *key) {
     return OSH_GEOMETRY_BODY_NONE;
 }
 
-/* Return non-zero if key begins a zone continuation line (operator token). */
+/**
+ * @brief Check whether @p key is a zone boolean-expression continuation token.
+ *
+ * @param[in] key  Token to test.
+ *
+ * @returns 1 if @p key starts with +, -, |, ( or ), 0 otherwise.
+ */
 static int _is_zone_continuation(char const *key) {
     return key && (key[0] == '+' || key[0] == '-' || key[0] == '|' || key[0] == '(' || key[0] == ')');
 }
 
-/* Count body cards in the geometry file without retaining state.
- * This stays app-side because it is part of geo.dat parsing, not geometry
- * preparation. */
+/**
+ * @brief Count body cards in the geometry file without retaining state.
+ *
+ * @param[in,out] shf  Open geometry file; rewound internally.
+ *
+ * @returns Number of body cards found, or 0 on I/O error.
+ */
 static size_t _count_bodies(struct oshfile *shf) {
     int lineno;
     char *line = NULL;
@@ -105,9 +123,13 @@ static size_t _count_bodies(struct oshfile *shf) {
     return nbody;
 }
 
-/* Count zones in the geometry file without building any cold objects.
- * Like _count_bodies(), this belongs to the app parser because it depends on
- * geo.dat section structure. */
+/**
+ * @brief Count zones in the geometry file without building any cold objects.
+ *
+ * @param[in,out] shf  Open geometry file; rewound internally.
+ *
+ * @returns Number of zone header cards found, or 0 on I/O error.
+ */
 static size_t _count_zones(struct oshfile *shf) {
     int lineno;
     char *line = NULL;
@@ -142,8 +164,14 @@ static size_t _count_zones(struct oshfile *shf) {
     return nzone;
 }
 
-/* Append NUL-terminated string b to *a, growing the allocation as needed.
- * *a must point to a heap-allocated, NUL-terminated string. */
+/**
+ * @brief Append string @p b to the heap-allocated string at @p *a.
+ *
+ * @param[in,out] a  Pointer to the destination heap string; grown as needed.
+ * @param[in]     b  NUL-terminated string to append.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status _str_append(char **a, char const *b) {
     size_t la = strlen(*a);
     size_t lb = strlen(b);
@@ -156,8 +184,16 @@ static enum osh_status _str_append(char **a, char const *b) {
     return OSH_OK;
 }
 
-/* Find a zone by exact name in the flat cold-zone array.
- * Returns 1 on success (fills *idx_out), 0 if not found. */
+/**
+ * @brief Find a zone by exact name in the flat cold-zone array.
+ *
+ * @param[in]  name     Zone name to look up.
+ * @param[in]  zones    Array of cold zone definitions.
+ * @param[in]  nzones   Length of @p zones.
+ * @param[out] idx_out  Receives the index of the matching zone.
+ *
+ * @returns 1 if the name is found (fills @p *idx_out), 0 otherwise.
+ */
 static int
 _zone_index_from_name(char const *name, struct osh_geometry_zone const *zones, size_t nzones, size_t *idx_out) {
     size_t i;
@@ -170,8 +206,16 @@ _zone_index_from_name(char const *name, struct osh_geometry_zone const *zones, s
     return 0;
 }
 
-/* Return the next whitespace-delimited token from *cursor, NULL when done.
- * Modifies the buffer in place by inserting NUL bytes. */
+/**
+ * @brief Return the next whitespace-delimited token from @p *cursor.
+ *
+ * @details Advances @p *cursor past the returned token. Modifies the buffer
+ * in place by inserting a NUL terminator after each token.
+ *
+ * @param[in,out] cursor  Pointer into the buffer; updated to point past the token.
+ *
+ * @returns Pointer to the start of the token, or NULL when no more tokens remain.
+ */
 static char *_next_token(char **cursor) {
     char *start;
     char *end;
@@ -199,8 +243,18 @@ static char *_next_token(char **cursor) {
     return start;
 }
 
-/* Normalize legacy numeric material names.
- * "0" → "blackhole", "1000" → "vacuum", all others pass through unchanged. */
+/**
+ * @brief Normalize legacy numeric material names.
+ *
+ * @details Maps "0" to "blackhole" and "1000" to "vacuum" with a warning;
+ * all other names pass through unchanged.
+ *
+ * @param[in] raw       Raw material name token from the file.
+ * @param[in] filename  Source file name used in warning messages.
+ * @param[in] lineno    Source line number used in warning messages.
+ *
+ * @returns Normalized name string (either @p raw or a literal constant).
+ */
 static char const *_normalize_material_name(char const *raw, char const *filename, int lineno) {
     if (strcmp(raw, "0") == 0) {
         osh_warn("%s line %d: legacy material '0' mapped to 'blackhole'; use 'blackhole' explicitly", filename, lineno);
@@ -213,7 +267,16 @@ static char const *_normalize_material_name(char const *raw, char const *filenam
     return raw;
 }
 
-/* Duplicate a normalized material name into z->material_name. */
+/**
+ * @brief Duplicate a normalized material name into @p z->material_name.
+ *
+ * @param[in,out] z         Zone to update.
+ * @param[in]     raw_name  Raw material name token (will be normalized).
+ * @param[in]     filename  Source file name used in warning messages.
+ * @param[in]     lineno    Source line number used in warning messages.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status
 _assign_material(struct osh_geometry_zone *z, char const *raw_name, char const *filename, int lineno) {
     char const *name = _normalize_material_name(raw_name, filename, lineno);
@@ -226,6 +289,13 @@ _assign_material(struct osh_geometry_zone *z, char const *raw_name, char const *
     return OSH_OK;
 }
 
+/**
+ * @brief Rewind @p shf to the beginning and reset its line counter.
+ *
+ * @param[in,out] shf  Open geometry file to rewind.
+ *
+ * @returns 1 on success, 0 on I/O error.
+ */
 static int _rewind_oshfile(struct oshfile *shf) {
     if (fseek(shf->fp, 0L, SEEK_SET) != 0) {
         osh_error("Failed to rewind geometry file '%s'", shf->filename);
@@ -237,9 +307,17 @@ static int _rewind_oshfile(struct oshfile *shf) {
 
 /* ---- Phase 1: body section ----------------------------------------------- */
 
-/* Read the body section (from file start up to and including the first END).
- * Fills ws->bodies[0..ws->nbodies-1] with type, name, and raw argument arrays.
- * Leaves the file position just after the first END card. */
+/**
+ * @brief Parse the body section from file start up to the first END card.
+ *
+ * @details Fills ws->bodies[0..ws->nbodies-1] with body type, name, and raw
+ * argument arrays. Leaves the file positioned just after the first END card.
+ *
+ * @param[in,out] shf  Open geometry file; rewound internally.
+ * @param[in,out] ws   Geometry workspace with pre-allocated bodies array.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
+ */
 static enum osh_status _parse_bodies(struct oshfile *shf, struct osh_geometry_workspace *ws) {
     char *line = NULL;
     char *key = NULL;
@@ -373,9 +451,17 @@ done:
 
 /* ---- Phase 2: zone section ----------------------------------------------- */
 
-/* Read the zone section (from just after the first END to the second END).
- * Fills ws->zones[].name and ws->zones[].expr.
- * Precondition: file is positioned just after the first END (left by _parse_bodies). */
+/**
+ * @brief Parse the zone section between the first and second END cards.
+ *
+ * @details Fills ws->zones[].name and ws->zones[].expr. Precondition: file is
+ * positioned just after the first END card as left by _parse_bodies().
+ *
+ * @param[in,out] shf  Open geometry file; read from current position.
+ * @param[in,out] ws   Geometry workspace with pre-allocated zones array.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
+ */
 static enum osh_status _parse_zones(struct oshfile *shf, struct osh_geometry_workspace *ws) {
     char *line = NULL;
     char *key = NULL;
@@ -470,7 +556,19 @@ done:
 
 /* ---- Phase 3: material section ------------------------------------------- */
 
-/* Handle one ASSIGNMAT / ASSIGNMA card: assign material to a zone range. */
+/**
+ * @brief Handle one ASSIGNMAT / ASSIGNMA card.
+ *
+ * @details Assigns a material to a range of zones specified by name, with an
+ * optional stride. Updates ws->zones[].material_name for each matching zone.
+ *
+ * @param[in,out] ws        Geometry workspace whose zones are updated.
+ * @param[in,out] args      Argument string after the ASSIGNMAT keyword; tokenized in place.
+ * @param[in]     filename  Source file name used in error messages.
+ * @param[in]     lineno    Source line number used in error messages.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on invalid arguments, OSH_ENOMEM on failure.
+ */
 static enum osh_status
 _parse_assignmat(struct osh_geometry_workspace *ws, char *args, char const *filename, int lineno) {
     char *cursor = args;
@@ -531,9 +629,17 @@ _parse_assignmat(struct osh_geometry_workspace *ws, char *args, char const *file
     return OSH_OK;
 }
 
-/* Read the material section (after the second END).
- * Handles both ASSIGNMAT cards and the legacy positional zone-list format.
- * Rewinds the file and skips past both END cards before reading. */
+/**
+ * @brief Parse the material section after the second END card.
+ *
+ * @details Handles both ASSIGNMAT cards and the legacy positional zone-list
+ * format. Rewinds the file internally and skips past both END cards.
+ *
+ * @param[in,out] shf  Open geometry file; rewound internally.
+ * @param[in,out] ws   Geometry workspace whose zones receive material names.
+ *
+ * @returns OSH_OK on success, OSH_EPARSE or OSH_ENOMEM on failure.
+ */
 static enum osh_status _parse_media(struct oshfile *shf, struct osh_geometry_workspace *ws) {
     char *line = NULL;
     char *key = NULL;
