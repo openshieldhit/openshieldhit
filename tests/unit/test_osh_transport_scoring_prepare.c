@@ -5,7 +5,7 @@
 #include "apps/osh/osh_app_osh.h"
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"
-#include "scoring/runtime/osh_scoring_prepare.h"
+#include "scoring/runtime/osh_scoring_compile.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -41,7 +41,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_prepare(ws, &rt);
+    rc = osh_scoring_compile(ws, &rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     ASSERT_TRUE(rt.nfilters == 2u);
@@ -147,7 +147,7 @@ static void test_prepare_rejects_dose_without_crashing(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_prepare(ws, &rt);
+    rc = osh_scoring_compile(ws, &rt);
     ASSERT_TRUE(rc == OSH_ENOTSUP);
 
     /* Prepare() already frees partial state on failure; this double-free check

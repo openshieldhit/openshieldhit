@@ -143,7 +143,7 @@ static inline double _minpos(double a, double b);
  *
  * @returns OSH_OK on success, OSH_E* on failure.
  */
-enum osh_status osh_gemca_runtime_setup(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
+enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
     enum osh_status rc;
 
     if (!wg || !rt) {

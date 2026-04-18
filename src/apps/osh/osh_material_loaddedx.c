@@ -1,4 +1,4 @@
-#include "material/osh_material_loaddedx.h"
+#include "apps/osh/osh_material_loaddedx.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -6,7 +6,6 @@
 #include "common/osh_file.h"
 #include "common/osh_logger.h"
 #include "common/osh_readline.h"
-#include "particle/osh_particle.h"
 
 enum { OSH_MATERIAL_LOADDEDX_MINPROJECTILES = 18 };
 
@@ -17,7 +16,6 @@ static void table_reset(struct osh_material_loaddedx_table *table) {
     table->energy_grid = NULL;
     table->mass_stopping_power = NULL;
     table->projectile_z = NULL;
-    table->projectile_a = NULL;
     table->nprojectiles = 0u;
     table->nenergy = 0u;
 }
@@ -115,21 +113,12 @@ static enum osh_status init_projectile_map(struct osh_material_loaddedx_table *t
     size_t i;
 
     table->projectile_z = malloc(nprojectiles * sizeof(unsigned int));
-    table->projectile_a = malloc(nprojectiles * sizeof(unsigned int));
-    if (!table->projectile_z || !table->projectile_a) {
+    if (!table->projectile_z) {
         return OSH_ENOMEM;
     }
 
     for (i = 0; i < nprojectiles; i++) {
-        unsigned int z;
-        unsigned int a;
-
-        z = (unsigned int) (i + 1u);
-        if (!osh_particle_default_isotope_a(z, &a)) {
-            return OSH_EPARSE;
-        }
-        table->projectile_z[i] = z;
-        table->projectile_a[i] = a;
+        table->projectile_z[i] = (unsigned int) (i + 1u);
     }
 
     return OSH_OK;
@@ -253,21 +242,16 @@ void osh_material_loaddedx_table_free(struct osh_material_loaddedx_table *table)
     free(table->energy_grid);
     free(table->mass_stopping_power);
     free(table->projectile_z);
-    free(table->projectile_a);
     table_reset(table);
 }
 
-enum osh_status osh_material_loaddedx_projectile_za(struct osh_material_loaddedx_table const *table,
-                                                    size_t projectile_idx,
-                                                    unsigned int *z_out,
-                                                    unsigned int *a_out) {
-    if (!table || !z_out || !a_out) {
+enum osh_status osh_material_loaddedx_projectile_z(struct osh_material_loaddedx_table const *table,
+                                                   size_t projectile_idx,
+                                                   unsigned int *z_out) {
+    if (!table || projectile_idx >= table->nprojectiles || !z_out) {
         return OSH_EINVAL;
     }
-    if (projectile_idx >= table->nprojectiles) {
-        return OSH_EINVAL;
-    }
+
     *z_out = table->projectile_z[projectile_idx];
-    *a_out = table->projectile_a[projectile_idx];
     return OSH_OK;
 }

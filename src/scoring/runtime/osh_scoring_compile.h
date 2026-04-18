@@ -1,5 +1,5 @@
-#ifndef OSH_SCORING_PREPARE_H
-#define OSH_SCORING_PREPARE_H
+#ifndef OSH_SCORING_COMPILE_H
+#define OSH_SCORING_COMPILE_H
 
 #include "openshieldhit/status.h"
 #include "scoring/osh_scoring.h"
@@ -19,7 +19,7 @@ extern "C" {
  * compiled bridge from readable parser structs to simulation-ready scorer
  * runtime objects.
  */
-enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, struct osh_scoring_runtime *rt);
+enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws, struct osh_scoring_runtime *rt);
 
 /**
  * @brief Release a compiled scorer runtime and all owned memory.
@@ -30,4 +30,4 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt);
 }
 #endif
 
-#endif /* OSH_SCORING_PREPARE_H */
+#endif /* OSH_SCORING_COMPILE_H */

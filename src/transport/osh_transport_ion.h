@@ -29,7 +29,7 @@ struct osh_scoring_runtime;
  * Fippel M, Soukup M. A Monte Carlo dose calculation algorithm for proton
  * therapy. Med Phys. 2004;31(8):2263-2273. doi:10.1118/1.1769631.
  *
- * The caller must invoke osh_gemca_runtime_setup() before and
+ * The caller must invoke osh_gemca_compile() before and
  * osh_gemca_runtime_free() after this function.
  *
  * @sa osh_transport_run_minimal() — public dispatcher that calls this.

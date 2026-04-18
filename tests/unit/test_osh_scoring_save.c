@@ -5,7 +5,7 @@
 #include "apps/osh/osh_app_osh.h"
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"
-#include "scoring/runtime/osh_scoring_prepare.h"
+#include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/save/osh_scoring_save.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
@@ -56,7 +56,7 @@ int main(void) {
     rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(ws != NULL);
-    rc = osh_scoring_prepare(ws, &rt);
+    rc = osh_scoring_compile(ws, &rt);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(rt.noutputs == 2u);
     ASSERT_TRUE(rt.npages == 2u);

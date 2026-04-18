@@ -1,5 +1,6 @@
 add_library(osh_app_osh
     osh_beam_parse.c
+    osh_material_loaddedx.c
     osh_material_parse.c
     osh_scoring_parse.c
     osh_scoring_parse_filter.c

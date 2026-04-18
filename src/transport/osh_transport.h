@@ -106,7 +106,7 @@ struct osh_transport_context {
  * material. Boundary-limited steps are truncated and the exit energy is
  * recovered from the residual CSDA range.
  *
- * The caller is responsible for calling osh_gemca_runtime_setup() before this
+ * The caller is responsible for calling osh_gemca_compile() before this
  * function and osh_gemca_runtime_free() after it returns.
  */
 enum osh_status osh_transport_run_minimal(struct osh_transport_context *transport_ctx,

@@ -53,7 +53,7 @@
  * exposed via `include/openshieldhit/geometry.h`.
  *
  * `osh_gemca_prepared` is currently a private compatibility layer used between
- * `osh_geometry_workspace_prepare()` and `osh_gemca_runtime_setup()`.
+ * `osh_geometry_workspace_prepare()` and `osh_gemca_compile()`.
  * It owns pointer-linked bodies and zones, plus the derived state needed by
  * the legacy analytic GEMCA implementation.
  *

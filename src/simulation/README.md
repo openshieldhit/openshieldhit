@@ -49,22 +49,22 @@ In order:
    `osh_material_by_name`.  This is the cross-domain wiring step that links
    geometry to materials.
 
-2. **Geometry runtime** — calls `osh_gemca_runtime_setup` to compile the pointer-
+2. **Geometry runtime** — calls `osh_gemca_compile` to compile the pointer-
    linked CSG trees from `osh_gemca_prepared` into flat, cache-friendly arrays
    (`osh_gemca_runtime`).
 
-3. **Transport tables** — calls `osh_material_prepare` to build stopping-power and
+3. **Transport tables** — calls `osh_material_compile` to build stopping-power and
    CSDA-range tables for all material/projectile combinations up to the beam's
    maximum Z.
 
-4. **Scoring runtime** — calls `osh_scoring_prepare` to allocate accumulators and
+4. **Scoring runtime** — calls `osh_scoring_compile` to allocate accumulators and
    compile the scoring geometry definitions.
 
 5. **Transport parameters** — copies scalar knobs from the beam workspace into
    `osh_transport_params` and translates beam-specific scatter/straggling enums
    into transport-owned enums.
 
-6. **Beam runtime** — calls `osh_beam_runtime_setup` to initialise the primary
+6. **Beam runtime** — calls `osh_beam_compile` to initialise the primary
    source machinery.
 
 ## What `osh_simulation_run` does

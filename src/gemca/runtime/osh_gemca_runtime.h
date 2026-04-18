@@ -173,7 +173,7 @@ struct gemca_rt_insn {
  *
  * @details
  * Holds the flat RPN instruction array compiled from the zone's cgnode AST
- * during osh_gemca_runtime_setup().  The instruction array is owned by this
+ * during osh_gemca_compile().  The instruction array is owned by this
  * struct and freed by osh_gemca_runtime_free().
  *
  * GUARD_BODY instructions (if any) appear at the front of insns[].  They are
@@ -202,7 +202,7 @@ struct gemca_rt_zone {
  * @brief Compiled runtime representation of the full GEMCA geometry.
  *
  * @details
- * Built once from a cold @ref osh_gemca_prepared by osh_gemca_runtime_setup() and
+ * Built once from a cold @ref osh_gemca_prepared by osh_gemca_compile() and
  * passed to the transport kernel for the duration of a run.  The cold workspace
  * is not owned and must outlive this struct.
  *
@@ -270,7 +270,7 @@ struct osh_gemca_runtime {
  * @returns OSH_OK on success, OSH_EINVAL if wg or rt is NULL, OSH_ENOMEM on
  *          allocation failure.
  */
-enum osh_status osh_gemca_runtime_setup(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 
 /**
  * @brief Release all allocations owned by a gemca runtime.

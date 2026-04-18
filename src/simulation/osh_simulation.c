@@ -5,12 +5,12 @@
 #include "beam/runtime/osh_beam_runtime.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
-#include "material/runtime/osh_material_prepare.h"
+#include "material/runtime/osh_material_compile.h"
 #include "openshieldhit/beam_defs.h"
 #include "openshieldhit/logger.h"
 #include "openshieldhit/simulation.h"
+#include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
-#include "scoring/runtime/osh_scoring_prepare.h"
 #include "scoring/save/osh_scoring_save.h"
 #include "transport/osh_transport.h"
 
@@ -88,7 +88,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 2. Geometry runtime -------------------------------------------- */
 
-    rc = osh_gemca_runtime_setup(gemca, &sim->geom_rt);
+    rc = osh_gemca_compile(gemca, &sim->geom_rt);
     if (rc != OSH_OK) {
         osh_error("%s", "simulation: failed to compile geometry runtime");
         goto fail;
@@ -97,7 +97,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     /* ---- 3. Transport tables --------------------------------------------- */
 
     z_max = (beam->primary.z > 0u) ? (unsigned int) beam->primary.z : 1u;
-    rc = osh_material_prepare(mat, z_max, &sim->transport_tables);
+    rc = osh_material_compile(mat, z_max, &sim->transport_tables);
     if (rc != OSH_OK) {
         osh_error("%s", "simulation: failed to prepare transport tables");
         goto fail;
@@ -105,7 +105,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 4. Scoring runtime --------------------------------------------- */
 
-    rc = osh_scoring_prepare(scoring, &sim->scoring_runtime);
+    rc = osh_scoring_compile(scoring, &sim->scoring_runtime);
     if (rc != OSH_OK) {
         osh_error("%s", "simulation: failed to prepare scoring runtime");
         goto fail;
@@ -145,7 +145,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 6. Beam runtime ------------------------------------------------- */
 
-    rc = osh_beam_runtime_setup(beam, &sim->beam_rt);
+    rc = osh_beam_compile(beam, &sim->beam_rt);
     if (rc != OSH_OK) {
         osh_error("%s", "simulation: failed to initialise beam runtime");
         goto fail;

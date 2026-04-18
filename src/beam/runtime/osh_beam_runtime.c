@@ -18,7 +18,7 @@ fill_from_phsp(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_part
 
 /* ---- Lifecycle ----------------------------------------------------------- */
 
-enum osh_status osh_beam_runtime_setup(struct beam_workspace const *workspace, struct osh_beam_runtime **rt_out) {
+enum osh_status osh_beam_compile(struct beam_workspace const *workspace, struct osh_beam_runtime **rt_out) {
     struct osh_beam_runtime *rt;
     enum osh_status rc;
 

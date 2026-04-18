@@ -22,7 +22,7 @@ extern "C" {
  * @brief Compiled geometry kind for a scoring region.
  *
  * @details
- * Resolved from the keyword string in detect.dat during osh_scoring_prepare().
+ * Resolved from the keyword string in detect.dat during osh_scoring_compile().
  * The integer codes are used in the hot-path geometry dispatch so string
  * comparisons are not needed at score time.
  *

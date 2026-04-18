@@ -29,6 +29,8 @@ static enum osh_status material_fill_element_mee_defaults(struct osh_material *m
 static enum osh_status material_derive_compound_mee(struct osh_material *mat);
 static enum osh_status material_match_element_mee_to_material(struct osh_material *mat);
 static void material_free_fields(struct osh_material *mat);
+static void material_dedx_override_free(struct osh_material_dedx_override *ovr);
+static ptrdiff_t material_dedx_override_find(struct osh_material const *mat, unsigned int projectile_z);
 static char const *material_state_name(int state);
 static int material_has_any_element_mee(struct osh_material const *mat);
 
@@ -56,7 +58,7 @@ enum osh_status osh_material_workspace_create(struct osh_material_workspace **wm
     return OSH_OK;
 }
 
-enum osh_status osh_material_workspace_finalize(struct osh_material_workspace *wm) {
+enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm) {
     enum osh_status rc;
 
     if (!wm) {
@@ -83,6 +85,94 @@ enum osh_status osh_material_workspace_finalize(struct osh_material_workspace *w
     }
 
     return OSH_OK;
+}
+
+enum osh_status osh_material_dedx_set(struct osh_material *mat,
+                                      unsigned int z_projectile,
+                                      double const *energy_mev_per_u,
+                                      double const *dedx_mev_cm2_per_g,
+                                      size_t n_points) {
+    struct osh_material_dedx_override *overrides;
+    struct osh_material_dedx_override *ovr;
+    double *energy_copy;
+    double *dedx_copy;
+    size_t i;
+    size_t dst_idx;
+    ptrdiff_t exact_idx;
+
+    if (!mat || !energy_mev_per_u || !dedx_mev_cm2_per_g || n_points < 2u || z_projectile == 0u) {
+        return OSH_EINVAL;
+    }
+
+    i = 0u;
+    while (i < n_points) {
+        if (dedx_mev_cm2_per_g[i] <= 0.0) {
+            return OSH_EINVAL;
+        }
+        if (i > 0u && energy_mev_per_u[i] <= energy_mev_per_u[i - 1u]) {
+            return OSH_EINVAL;
+        }
+        i++;
+    }
+
+    exact_idx = material_dedx_override_find(mat, z_projectile);
+
+    energy_copy = (double *) malloc(n_points * sizeof(*energy_copy));
+    dedx_copy = (double *) malloc(n_points * sizeof(*dedx_copy));
+    if (!energy_copy || !dedx_copy) {
+        free(energy_copy);
+        free(dedx_copy);
+        return OSH_ENOMEM;
+    }
+    memcpy(energy_copy, energy_mev_per_u, n_points * sizeof(*energy_copy));
+    memcpy(dedx_copy, dedx_mev_cm2_per_g, n_points * sizeof(*dedx_copy));
+
+    if (exact_idx >= 0) {
+        ovr = &mat->dedx_overrides[exact_idx];
+        free(ovr->energy_mev_per_u);
+        free(ovr->dedx_mev_cm2_per_g);
+        ovr->energy_mev_per_u = energy_copy;
+        ovr->dedx_mev_cm2_per_g = dedx_copy;
+        ovr->projectile_z = z_projectile;
+        ovr->npoints = n_points;
+        return OSH_OK;
+    }
+
+    overrides = (struct osh_material_dedx_override *) realloc(mat->dedx_overrides,
+                                                              (mat->ndedx_overrides + 1u) * sizeof(*overrides));
+    if (!overrides) {
+        free(energy_copy);
+        free(dedx_copy);
+        return OSH_ENOMEM;
+    }
+    mat->dedx_overrides = overrides;
+    dst_idx = mat->ndedx_overrides;
+    mat->ndedx_overrides += 1u;
+
+    ovr = &mat->dedx_overrides[dst_idx];
+    ovr->energy_mev_per_u = energy_copy;
+    ovr->dedx_mev_cm2_per_g = dedx_copy;
+    ovr->projectile_z = z_projectile;
+    ovr->npoints = n_points;
+
+    return OSH_OK;
+}
+
+void osh_material_dedx_clear(struct osh_material *mat) {
+    size_t i;
+
+    if (!mat) {
+        return;
+    }
+
+    i = 0u;
+    while (i < mat->ndedx_overrides) {
+        material_dedx_override_free(&mat->dedx_overrides[i]);
+        i++;
+    }
+    free(mat->dedx_overrides);
+    mat->dedx_overrides = NULL;
+    mat->ndedx_overrides = 0u;
 }
 
 enum osh_status osh_material_workspace_free(struct osh_material_workspace *wm) {
@@ -135,6 +225,7 @@ struct osh_material const *osh_material_by_name(struct osh_material_workspace co
 void osh_material_print(struct osh_material_workspace const *wm) {
     size_t i;
     size_t j;
+    size_t k;
     struct osh_material const *mat;
     struct osh_material_element const *elem;
 
@@ -167,7 +258,7 @@ void osh_material_print(struct osh_material_workspace const *wm) {
         } else {
             osh_info("%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
         }
-        osh_info("%-24s : %s", "dE/dx table", mat->dedx_table_path ? mat->dedx_table_path : "(unset)");
+        osh_info("%-24s : %zu", "dE/dx overrides", mat->ndedx_overrides);
         osh_info("%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
         osh_info("%-24s : %s", "State", material_state_name(mat->state));
         osh_info("%-24s : %zu", "Elements", mat->nelements);
@@ -193,6 +284,18 @@ void osh_material_print(struct osh_material_workspace const *wm) {
             }
             j++;
         }
+        k = 0u;
+        while (k < mat->ndedx_overrides) {
+            osh_info("    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
+                     k,
+                     mat->dedx_overrides[k].projectile_z,
+                     mat->dedx_overrides[k].npoints,
+                     mat->dedx_overrides[k].energy_mev_per_u[0],
+                     mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
+                     mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
+                     mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
+            k++;
+        }
 
         i++;
     }
@@ -200,12 +303,13 @@ void osh_material_print(struct osh_material_workspace const *wm) {
 
 static void material_defaults(struct osh_material *mat) {
     mat->elements = NULL;
+    mat->dedx_overrides = NULL;
     mat->name = NULL;
-    mat->dedx_table_path = NULL;
     mat->rho = -1.0;
     mat->mean_excitation_energy = -1.0;
     material_set_rgba(mat, 0.8f, 0.8f, 0.8f, 1.0f);
     mat->nelements = 0u;
+    mat->ndedx_overrides = 0u;
     mat->lineno = 0u;
     mat->index = 0u;
     mat->icru_id = 0;
@@ -953,9 +1057,39 @@ static void material_free_fields(struct osh_material *mat) {
     }
 
     free(mat->elements);
+    osh_material_dedx_clear(mat);
     free(mat->name);
-    free(mat->dedx_table_path);
     material_defaults(mat);
+}
+
+static void material_dedx_override_free(struct osh_material_dedx_override *ovr) {
+    if (!ovr) {
+        return;
+    }
+    free(ovr->energy_mev_per_u);
+    free(ovr->dedx_mev_cm2_per_g);
+    ovr->energy_mev_per_u = NULL;
+    ovr->dedx_mev_cm2_per_g = NULL;
+    ovr->projectile_z = 0u;
+    ovr->npoints = 0u;
+}
+
+static ptrdiff_t material_dedx_override_find(struct osh_material const *mat, unsigned int projectile_z) {
+    size_t i;
+
+    if (!mat) {
+        return -1;
+    }
+
+    i = 0u;
+    while (i < mat->ndedx_overrides) {
+        if (mat->dedx_overrides[i].projectile_z == projectile_z) {
+            return (ptrdiff_t) i;
+        }
+        i++;
+    }
+
+    return -1;
 }
 
 static char const *material_state_name(int state) {

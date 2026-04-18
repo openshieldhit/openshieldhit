@@ -1,4 +1,4 @@
-#include "scoring/runtime/osh_scoring_prepare.h"
+#include "scoring/runtime/osh_scoring_compile.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -408,7 +408,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     memset(rt, 0, sizeof(*rt));
 }
 
-enum osh_status osh_scoring_prepare(struct osh_scoring_workspace const *ws, struct osh_scoring_runtime *rt) {
+enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws, struct osh_scoring_runtime *rt) {
     enum osh_status rc;
     size_t i;
     size_t j;

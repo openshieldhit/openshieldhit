@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "material/osh_material_loaddedx.h"
+#include "apps/osh/osh_material_loaddedx.h"
 #include "openshieldhit/status.h"
 
 #define FTOL 1e-5
@@ -36,7 +36,6 @@ static void test_load_lucite_numeric_only(void) {
     struct osh_material_loaddedx_table table;
     char path[512];
     unsigned int z;
-    unsigned int a;
 
     memset(&table, 0, sizeof(table));
     fixture_path(path, sizeof(path), "Lucite.txt");
@@ -49,9 +48,8 @@ static void test_load_lucite_numeric_only(void) {
     ASSERT_NEAR(osh_material_loaddedx_mass_stopping_power(&table, 0u, 0u), 743.21, 1e-3);
     ASSERT_NEAR(osh_material_loaddedx_mass_stopping_power(&table, 5u, 0u), 3958.0, 1e-3);
     ASSERT_NEAR(osh_material_loaddedx_mass_stopping_power(&table, 17u, table.nenergy - 1u), 714.4, 1e-3);
-    ASSERT_TRUE(osh_material_loaddedx_projectile_za(&table, 5u, &z, &a) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_projectile_z(&table, 5u, &z) == OSH_OK);
     ASSERT_TRUE(z == 6u);
-    ASSERT_TRUE(a == 12u);
 
     osh_material_loaddedx_table_free(&table);
 }
@@ -115,7 +113,6 @@ static void test_load_extended_contiguous_columns(void) {
     struct osh_material_loaddedx_table table;
     char path[512];
     unsigned int z;
-    unsigned int a;
 
     memset(&table, 0, sizeof(table));
     project_fixture_path(path, sizeof(path), "loaddedx_extended.txt");
@@ -123,12 +120,10 @@ static void test_load_extended_contiguous_columns(void) {
     ASSERT_TRUE(osh_material_loaddedx_table_load(path, &table) == OSH_OK);
     ASSERT_TRUE(table.nprojectiles == 20u);
     ASSERT_TRUE(table.nenergy == 2u);
-    ASSERT_TRUE(osh_material_loaddedx_projectile_za(&table, 18u, &z, &a) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_projectile_z(&table, 18u, &z) == OSH_OK);
     ASSERT_TRUE(z == 19u);
-    ASSERT_TRUE(a == 39u);
-    ASSERT_TRUE(osh_material_loaddedx_projectile_za(&table, 19u, &z, &a) == OSH_OK);
+    ASSERT_TRUE(osh_material_loaddedx_projectile_z(&table, 19u, &z) == OSH_OK);
     ASSERT_TRUE(z == 20u);
-    ASSERT_TRUE(a == 40u);
     ASSERT_NEAR(osh_material_loaddedx_mass_stopping_power(&table, 19u, 1u), 2.0, 1e-6);
 
     osh_material_loaddedx_table_free(&table);

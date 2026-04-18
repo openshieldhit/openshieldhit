@@ -1,23 +1,24 @@
 /**
- * @file osh_material_prepare.c
+ * @file osh_material_compile.c
  *
  * @brief Build the runtime stopping-power and CSDA-range tables.
  *
  * @details
  * Two paths to fill one (material, projectile, energy) cell:
  *
- *   LOADDEDX path  — material has dedx_table_path != NULL.  The source table
- *                    is loaded (53 log-spaced points typically), then each
- *                    runtime grid point is filled via log-log interpolation.
- *                    Range is then integrated numerically from the resampled SP.
+ *   Override path  — material has one or more dE/dx overrides. Each covered
+ *                    projectile curve is resampled onto the runtime grid via
+ *                    log-log interpolation. Range is then integrated
+ *                    numerically from the resampled stopping power.
  *
- *   Bethe path     — no LOADDEDX table.  Stopping powers are evaluated directly
- *                    via osh_physics_bethe_eval() at each of the 500 grid points.
+ *   Bethe path     — no material-owned override covers the projectile. Stopping
+ *                    powers are evaluated directly via
+ *                    osh_physics_bethe_eval() at each of the 500 grid points.
  *                    Range integrated the same way.
  *
- * All materials share one energy grid, one projectile list, and one set of grid
- * parameters (log_emin, inv_dlog), so material indices are usable directly as
- * array offsets throughout transport.
+ * All materials share one energy grid, one projectile list, and one set of
+ * grid parameters (log_emin, inv_dlog), so material indices are usable
+ * directly as array offsets throughout transport.
  *
  * Range integration:
  *   R(E_n/A) = integral_{E_0/A}^{E_n/A} A * d(E/A) / SP(E/A)
@@ -28,7 +29,7 @@
  *   R(E_in) - R(E_out) for each step.
  */
 
-#include "material/runtime/osh_material_prepare.h"
+#include "material/runtime/osh_material_compile.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -39,7 +40,6 @@
 #include "material/osh_material.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
-#include "material/osh_material_loaddedx.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
 
@@ -50,6 +50,97 @@
  */
 static inline size_t rt_index(struct osh_material_runtime const *t, size_t mat, size_t proj, size_t e) {
     return (mat * t->nprojectiles + proj) * t->nenergy + e;
+}
+
+/**
+ * @brief Find one exact material-owned dE/dx override by projectile Z.
+ */
+static struct osh_material_dedx_override const *find_material_dedx_override(struct osh_material const *mat,
+                                                                            unsigned int projectile_z) {
+    size_t i;
+
+    if (!mat) {
+        return NULL;
+    }
+
+    i = 0u;
+    while (i < mat->ndedx_overrides) {
+        if (mat->dedx_overrides[i].projectile_z == projectile_z) {
+            return &mat->dedx_overrides[i];
+        }
+        i++;
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Log-log interpolation variant for double-valued source curves.
+ *
+ * @details
+ * The common interpolation helper stores legacy table ordinates as float.
+ * Material-owned public overrides keep source values in double, so this local
+ * helper mirrors the same interpolation rule without widening common API
+ * surface in this branch.
+ */
+static double interpolate_override_dloglog(double xin, double const *xx, double const *ff, size_t n, int mode) {
+    long int i;
+    double x0, x1, y0, y1, log_x, log_x0, log_x1, t;
+
+    if (xin < xx[0]) {
+        switch (mode) {
+        case OSH_INTERPOLATE_OOB_ERR:
+            osh_error("osh_material_compile: override lower bound exceeded.");
+            return NAN;
+        case OSH_INTERPOLATE_OOB_ZERO:
+            return 0.0;
+        case OSH_INTERPOLATE_OOB_NEAREST:
+            return ff[0];
+        default:
+            x0 = xx[0];
+            x1 = xx[1];
+            y0 = ff[0];
+            y1 = ff[1];
+            break;
+        }
+    } else if (xin > xx[n - 1u]) {
+        switch (mode) {
+        case OSH_INTERPOLATE_OOB_ERR:
+            osh_error("osh_material_compile: override upper bound exceeded.");
+            return NAN;
+        case OSH_INTERPOLATE_OOB_ZERO:
+            return 0.0;
+        case OSH_INTERPOLATE_OOB_NEAREST:
+            return ff[n - 1u];
+        default:
+            x0 = xx[n - 2u];
+            x1 = xx[n - 1u];
+            y0 = ff[n - 2u];
+            y1 = ff[n - 1u];
+            break;
+        }
+    } else {
+        i = osh_binary_search_d(xin, xx, (unsigned long int) n);
+        if (i < 0) {
+            osh_error("osh_material_compile: override binary search failed.");
+            return NAN;
+        }
+        x0 = xx[i];
+        x1 = xx[i + 1];
+        y0 = ff[i];
+        y1 = ff[i + 1];
+    }
+
+    if (x0 <= 0.0 || x1 <= 0.0 || y0 <= 0.0 || y1 <= 0.0) {
+        t = (xin - x0) / (x1 - x0);
+        return y0 + t * (y1 - y0);
+    }
+
+    log_x = log(xin);
+    log_x0 = log(x0);
+    log_x1 = log(x1);
+    t = (log_x - log_x0) / (log_x1 - log_x0);
+    return exp(log(y0) + t * (log(y1) - log(y0)));
 }
 
 /**
@@ -475,24 +566,24 @@ static void log_runtime_column_summary(char const *material_name,
 /* ---- Public API ------------------------------------------------------------ */
 
 enum osh_status
-osh_material_prepare(struct osh_material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables) {
+osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables) {
     size_t nmat, nproj, ne, nbytes_sp, nbytes_range;
     size_t mat_idx, proj_idx, e_idx, base;
-    size_t i;
+    size_t i, j;
     unsigned int z, a;
     double dlog, log_e, e_val;
     double mass_mev;
     struct osh_material_runtime t;
     struct osh_material const *mat;
-    struct osh_material_loaddedx_table src;
+    struct osh_material_dedx_override const *dedx_override;
     struct osh_physics_bethe_target tgt;
     float *sp_col, *rng_col;
+    int use_compound_bethe;
     enum osh_status rc;
     if (!wm || !tables)
         return OSH_EINVAL;
 
     memset(&t, 0, sizeof(t));
-    memset(&src, 0, sizeof(src));
 
     /* ---- Grid parameters ------------------------------------------------- */
     ne = OSH_MATERIAL_RUNTIME_NENERGY;
@@ -504,23 +595,17 @@ osh_material_prepare(struct osh_material_workspace const *wm, unsigned int z_max
     t.inv_dlog = 1.0 / dlog;
 
     /* ---- Projectile list -------------------------------------------------- */
-    /*
-     * Expand the caller-requested projectile range to include the widest
-     * contiguous LOADDEDX coverage seen in any material. The runtime set is
-     * the union of both, so later code can fill higher-Z columns with Bethe
-     * fallback when an external table covers fewer projectiles.
-     */
+    /* Expand the caller-requested projectile range to include every projectile
+     * Z mentioned by any material dE/dx override. */
     for (i = OSH_MATERIAL_INDEX_FIRST_USER; i < wm->nmaterials; ++i) {
         mat = osh_material_by_index(wm, i);
-        if (mat && mat->dedx_table_path) {
-            rc = osh_material_loaddedx_table_load(mat->dedx_table_path, &src);
-            if (rc != OSH_OK) {
-                goto fail;
+        if (!mat) {
+            continue;
+        }
+        for (j = 0u; j < mat->ndedx_overrides; ++j) {
+            if (mat->dedx_overrides[j].projectile_z > z_max) {
+                z_max = mat->dedx_overrides[j].projectile_z;
             }
-            if (src.nprojectiles > z_max) {
-                z_max = (unsigned int) src.nprojectiles;
-            }
-            osh_material_loaddedx_table_free(&src);
         }
     }
 
@@ -603,93 +688,54 @@ osh_material_prepare(struct osh_material_workspace const *wm, unsigned int z_max
                  (double) t.rad_length[mat_idx]);
 
         /* ================================================================
-         * LOADDEDX path
+         * Override and Bethe paths
          * ================================================================ */
-        if (mat->dedx_table_path) {
-            size_t n_loaddedx;
-
-            rc = osh_material_loaddedx_table_load(mat->dedx_table_path, &src);
-            if (rc != OSH_OK)
-                goto fail;
-            n_loaddedx = src.nprojectiles;
-
-            osh_info("Material '%s': resampling LOADDEDX table %s for %zu projectiles",
+        use_compound_bethe = (mat->nelements > 1u && material_has_complete_element_mee(mat)) ? 1 : 0;
+        if (!use_compound_bethe) {
+            build_bethe_target(mat, &tgt);
+        }
+        if (mat->ndedx_overrides > 0u) {
+            osh_info(
+                "Material '%s': resampling %zu material-owned dE/dx override curves", mat->name, mat->ndedx_overrides);
+        } else if (use_compound_bethe) {
+            osh_info("Material '%s': generating Bethe stopping powers for %zu projectiles using element-by-element "
+                     "compound mode",
                      mat->name,
-                     mat->dedx_table_path,
-                     n_loaddedx);
+                     nproj);
+        } else {
+            osh_info("Material '%s': generating Bethe stopping powers for %zu projectiles using effective-medium mode",
+                     mat->name,
+                     nproj);
+        }
 
-            for (proj_idx = 0; proj_idx < nproj && proj_idx < src.nprojectiles; ++proj_idx) {
+        for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
+            dedx_override = find_material_dedx_override(mat, t.projectile_z[proj_idx]);
+            if (dedx_override) {
                 base = rt_index(&t, mat_idx, proj_idx, 0);
                 sp_col = t.mass_stopping_power + base;
 
-                /* Resample source onto runtime log-uniform grid via log-log. */
+                /* Resample source curve onto runtime log-uniform grid via log-log. */
                 for (e_idx = 0; e_idx < ne; ++e_idx) {
                     log_e = t.log_emin + (double) e_idx * dlog;
                     e_val = exp(log_e);
-                    sp_col[e_idx] = (float) osh_interpolate_dloglog(e_val,
-                                                                    src.energy_grid,
-                                                                    src.mass_stopping_power + proj_idx * src.nenergy,
-                                                                    (unsigned int) src.nenergy,
-                                                                    OSH_INTERPOLATE_OOB_NEAREST);
+                    sp_col[e_idx] = (float) interpolate_override_dloglog(e_val,
+                                                                         dedx_override->energy_mev_per_u,
+                                                                         dedx_override->dedx_mev_cm2_per_g,
+                                                                         dedx_override->npoints,
+                                                                         OSH_INTERPOLATE_OOB_NEAREST);
                 }
 
                 rng_col = t.range_csda + base;
                 integrate_range(sp_col, rng_col, (double) t.projectile_a[proj_idx], &t);
-                log_runtime_column_summary(mat->name, "LOADDEDX-resampled", &t, mat_idx, proj_idx);
-            }
-
-            if (n_loaddedx < nproj) {
-                osh_info("Material '%s': filling remaining %zu projectile columns with Bethe fallback",
-                         mat->name,
-                         nproj - n_loaddedx);
-                if (mat->nelements > 1u && material_has_complete_element_mee(mat)) {
-                    for (proj_idx = n_loaddedx; proj_idx < nproj; ++proj_idx) {
-                        rc = fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, mat);
-                        if (rc != OSH_OK) {
-                            osh_material_loaddedx_table_free(&src);
-                            goto fail;
-                        }
-                        log_runtime_column_summary(mat->name, "Bethe-fallback-elements", &t, mat_idx, proj_idx);
-                    }
-                } else {
-                    build_bethe_target(mat, &tgt);
-                    for (proj_idx = n_loaddedx; proj_idx < nproj; ++proj_idx) {
-                        rc = fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, &tgt);
-                        if (rc != OSH_OK) {
-                            osh_material_loaddedx_table_free(&src);
-                            goto fail;
-                        }
-                        log_runtime_column_summary(mat->name, "Bethe-fallback-effective", &t, mat_idx, proj_idx);
-                    }
-                }
-            }
-
-            osh_material_loaddedx_table_free(&src);
-
-            /* ================================================================
-             * Bethe path
-             * ================================================================ */
-        } else {
-            if (mat->nelements > 1u && material_has_complete_element_mee(mat)) {
-                osh_info("Material '%s': generating Bethe stopping powers for %zu projectiles using element-by-element "
-                         "compound mode",
-                         mat->name,
-                         nproj);
-                for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
+                log_runtime_column_summary(mat->name, "override-resampled", &t, mat_idx, proj_idx);
+            } else {
+                if (use_compound_bethe) {
                     rc = fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, mat);
                     if (rc != OSH_OK) {
                         goto fail;
                     }
                     log_runtime_column_summary(mat->name, "Bethe-elements", &t, mat_idx, proj_idx);
-                }
-            } else {
-                osh_info(
-                    "Material '%s': generating Bethe stopping powers for %zu projectiles using effective-medium mode",
-                    mat->name,
-                    nproj);
-                build_bethe_target(mat, &tgt);
-
-                for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
+                } else {
                     rc = fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, &tgt);
                     if (rc != OSH_OK) {
                         goto fail;

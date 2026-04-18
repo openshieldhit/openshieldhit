@@ -152,7 +152,7 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh
         return rc;
     }
 
-    rc = osh_material_workspace_finalize(wm);
+    rc = osh_material_workspace_prepare(wm);
     if (rc != OSH_OK) {
         osh_material_workspace_free(wm);
         return rc;
