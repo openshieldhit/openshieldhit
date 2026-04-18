@@ -26,6 +26,9 @@ osh_beam_workspace_free()           release cold workspace
 ## Rules
 
 - This directory owns cold beam data, beam validation, and beam runtime compilation.
+- Setup-time validation and public beam summary output are emitted through
+  borrowed diagnostics sinks supplied by the caller of
+  `osh_beam_workspace_prepare()` and `osh_beam_print()`.
 - Text-file loading and format-specific import happen outside this module.
 - `osh_beam_compile()` is internal to `src/` and called only from `osh_simulation_create`.
 - The runtime struct is owned by `struct osh_simulation`; nothing outside the

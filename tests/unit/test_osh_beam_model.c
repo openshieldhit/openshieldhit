@@ -64,7 +64,7 @@ static void test_single_spot_gaussian_sampling(void) {
     wb.shared.use_sad = 0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
-    rc = osh_beam_workspace_prepare(&wb);
+    rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 42u, 54u);
@@ -134,7 +134,7 @@ static void test_single_spot_sad_fanout(void) {
     wb.shared.sad[1] = 200.0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
-    rc = osh_beam_workspace_prepare(&wb);
+    rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 7u, 11u);
@@ -189,7 +189,7 @@ static void test_single_spot_square_sampling(void) {
     wb.shared.use_sad = 0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
-    rc = osh_beam_workspace_prepare(&wb);
+    rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 123u, 456u);
@@ -245,7 +245,7 @@ static void test_single_spot_circular_sampling(void) {
     wb.shared.use_sad = 0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
-    rc = osh_beam_workspace_prepare(&wb);
+    rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 999u, 1001u);
@@ -305,7 +305,7 @@ static void test_weighted_spot_selection(void) {
     wb.shared.use_sad = 0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
-    rc = osh_beam_workspace_prepare(&wb);
+    rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 321u, 654u);
