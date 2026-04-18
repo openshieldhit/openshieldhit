@@ -133,7 +133,7 @@ enum osh_status osh_geometry_setup_from_path(char const *path,
         return rc;
     }
 
-    rc = osh_geometry_workspace_prepare(ws);
+    rc = osh_geometry_workspace_prepare(ws, diag);
     if (rc != OSH_OK) {
         osh_geometry_workspace_free(ws);
         return rc;

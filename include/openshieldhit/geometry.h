@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "openshieldhit/geometry_defs.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus
@@ -122,11 +123,12 @@ enum osh_status osh_geometry_workspace_create(struct osh_geometry_workspace **ws
  * Calling it a second time on an already-prepared workspace is an error
  * (returns an OSH_E* code without modifying state).
  *
- * @param[in,out] ws  Workspace to prepare.
+ * @param[in,out] ws    Workspace to prepare.
+ * @param[in]     diag  Borrowed diagnostics sink for preparation messages, or NULL.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws);
+enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws, struct osh_diag_sink const *diag);
 
 /**
  * @brief Free a geometry workspace and all geometry it owns.

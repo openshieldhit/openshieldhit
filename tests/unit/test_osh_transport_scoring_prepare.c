@@ -41,7 +41,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_compile(ws, &rt);
+    rc = osh_scoring_compile(ws, NULL, &rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     ASSERT_TRUE(rt.nfilters == 2u);
@@ -147,7 +147,7 @@ static void test_prepare_rejects_dose_without_crashing(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_compile(ws, &rt);
+    rc = osh_scoring_compile(ws, NULL, &rt);
     ASSERT_TRUE(rc == OSH_ENOTSUP);
 
     /* Prepare() already frees partial state on failure; this double-free check

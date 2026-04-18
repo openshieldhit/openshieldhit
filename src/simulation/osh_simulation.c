@@ -126,7 +126,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 4. Scoring runtime --------------------------------------------- */
 
-    rc = osh_scoring_compile(scoring, &sim->scoring_runtime);
+    rc = osh_scoring_compile(scoring, diag, &sim->scoring_runtime);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile scoring runtime");
         goto fail;

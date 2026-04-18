@@ -44,7 +44,7 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_compile(ws, &rt);
+    rc = osh_scoring_compile(ws, NULL, &rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     memset(&part, 0, sizeof(part));
@@ -158,7 +158,7 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     ASSERT_TRUE(ws != NULL);
 
     memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_compile(ws, &rt);
+    rc = osh_scoring_compile(ws, NULL, &rt);
     ASSERT_TRUE(rc == OSH_OK);
 
     memset(&part, 0, sizeof(part));
