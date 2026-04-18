@@ -1,10 +1,18 @@
 #include "apps/osh/osh_run.h"
 
+#if defined(_WIN32)
+#include <direct.h>
+#define getcwd _getcwd
+#else
+#include <unistd.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
+#include "openshieldhit/file.h"
 #include "openshieldhit/simulation.h"
 
 /* ---- Default file names -------------------------------------------------- */
@@ -18,10 +26,31 @@ static char const *const OSH_DETECT_FILENAME = "detect.dat";
 /* ---- Internal helpers ---------------------------------------------------- */
 
 static char *run_resolve_path(char const *workdir, char const *override_path, char const *filename);
+static char *run_resolve_absolute_path(char const *path);
+static enum osh_status run_resolve_output_paths(struct osh_scoring_workspace *scoring, char const *out_dir);
 static int run_file_exists(char const *path);
 
 /* ---- Run ----------------------------------------------------------------- */
 
+/**
+ * @brief Top-level app orchestration for one CLI run or validation pass.
+ *
+ * @details
+ * This is the policy boundary between the file-oriented app layer and the
+ * pure simulation API. The function resolves default input names, loads the
+ * four cold workspaces via `setup_from_path` helpers, rewrites all scoring
+ * output names to fully resolved paths owned by the scoring workspace, then
+ * calls the simulation API in explicit phases:
+ *
+ *   create -> run -> save -> free
+ *
+ * The library never decides where files are written; that policy stays here.
+ * The library does decide which concrete save writer to use for each scoring
+ * output block based on the parsed format keyword.
+ *
+ * @param[in] out  Optional human-readable progress stream.
+ * @param[in] err  Optional human-readable error stream.
+ */
 enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err) {
     char const *workdir;
     char const *outdir;
@@ -29,6 +58,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     char *beam_path = NULL;
     char *mat_path = NULL;
     char *detect_path = NULL;
+    char *abs_outdir = NULL;
     struct osh_beam_workspace *beam = NULL;
     struct osh_geometry_workspace *geom = NULL;
     struct osh_material_workspace *mat = NULL;
@@ -47,10 +77,11 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     beam_path = run_resolve_path(workdir, opt->beam_path, OSH_BEAM_FILENAME);
     mat_path = run_resolve_path(workdir, opt->mat_path, OSH_MAT_FILENAME);
     detect_path = run_resolve_path(workdir, opt->detect_path, OSH_DETECT_FILENAME);
+    abs_outdir = run_resolve_absolute_path(outdir);
 
-    if (!geo_path || !beam_path || !mat_path || !detect_path) {
+    if (!geo_path || !beam_path || !mat_path || !detect_path || !abs_outdir) {
         if (err) {
-            fprintf(err, "Error: out of memory while resolving input paths\n");
+            fprintf(err, "Error: failed to resolve input/output paths\n");
         }
         rc = OSH_ENOMEM;
         goto cleanup;
@@ -65,7 +96,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
             fprintf(out, "  Requested seed offset: %llu\n", opt->seed_offset);
         }
         fprintf(out, "  Working directory: %s\n", workdir);
-        fprintf(out, "  Output directory : %s\n", outdir);
+        fprintf(out, "  Output directory : %s\n", abs_outdir);
         fprintf(out, "  Geometry input   : %s\n", geo_path);
         fprintf(out, "  Beam input       : %s\n", beam_path);
         fprintf(out, "  Material input   : %s\n", mat_path);
@@ -159,6 +190,14 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         fprintf(out, "Loaded scoring: %s\n", detect_path);
     }
 
+    rc = run_resolve_output_paths(scoring, abs_outdir);
+    if (rc != OSH_OK) {
+        if (err) {
+            fprintf(err, "Error: failed to resolve scoring output paths\n");
+        }
+        goto cleanup;
+    }
+
     if (opt->validate_only) {
         if (out) {
             fprintf(out, "Validation completed.\n");
@@ -174,15 +213,22 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    rc = osh_simulation_run(sim, outdir);
+    rc = osh_simulation_run(sim);
     if (rc != OSH_OK) {
         if (err) {
             fprintf(err, "Error: simulation run failed\n");
         }
         goto cleanup;
     }
+    rc = osh_simulation_save(sim);
+    if (rc != OSH_OK) {
+        if (err) {
+            fprintf(err, "Error: failed to save scoring outputs\n");
+        }
+        goto cleanup;
+    }
     if (out) {
-        fprintf(out, "Run completed. Outputs saved to %s\n", outdir);
+        fprintf(out, "Run completed. Outputs saved under %s\n", abs_outdir);
     }
 
 cleanup:
@@ -203,11 +249,20 @@ cleanup:
     free(beam_path);
     free(mat_path);
     free(detect_path);
+    free(abs_outdir);
     return rc;
 }
 
 /* ---- Internal helpers ---------------------------------------------------- */
 
+/**
+ * @brief Resolve one optional input override against the working directory.
+ *
+ * @details
+ * If @p override_path is present it is copied as-is. Otherwise a default file
+ * name is appended to @p workdir. The returned string is heap-allocated and
+ * owned by the caller.
+ */
 static char *run_resolve_path(char const *workdir, char const *override_path, char const *filename) {
     char *path;
     size_t wlen;
@@ -243,6 +298,69 @@ static char *run_resolve_path(char const *workdir, char const *override_path, ch
     return path;
 }
 
+/**
+ * @brief Resolve a path to a normalized absolute path string.
+ *
+ * @details
+ * The CLI may pass a relative output directory. The app layer resolves that
+ * once against the process working directory so later save code can treat all
+ * scoring output filenames as already-final paths.
+ *
+ * @returns Newly allocated normalized path, or NULL on failure.
+ */
+static char *run_resolve_absolute_path(char const *path) {
+    char cwd[4096];
+    char *resolved = NULL;
+
+    if (!path || !path[0]) {
+        return NULL;
+    }
+    if (!getcwd(cwd, sizeof(cwd))) {
+        return NULL;
+    }
+    if (osh_relative_path_to_file(&resolved, cwd, path) != 0) {
+        return NULL;
+    }
+    osh_path_normalize(resolved);
+    return resolved;
+}
+
+/**
+ * @brief Rewrite scoring output filenames to full paths under @p out_dir.
+ *
+ * @details
+ * Each `detect.dat` output keeps its own file name, but the library save
+ * layer now expects that name to already be a resolved destination path.
+ * This helper performs that rewrite in-place on the scoring workspace by
+ * replacing each owned `filename` string with a newly allocated full path.
+ */
+static enum osh_status run_resolve_output_paths(struct osh_scoring_workspace *scoring, char const *out_dir) {
+    size_t i;
+
+    if (!scoring || !out_dir) {
+        return OSH_EINVAL;
+    }
+
+    for (i = 0; i < scoring->noutputs; ++i) {
+        char *resolved = NULL;
+
+        if (!scoring->outputs[i].filename || !scoring->outputs[i].filename[0]) {
+            return OSH_EPARSE;
+        }
+        if (osh_relative_path_to_file(&resolved, out_dir, scoring->outputs[i].filename) != 0) {
+            return OSH_ENOMEM;
+        }
+        osh_path_normalize(resolved);
+        free(scoring->outputs[i].filename);
+        scoring->outputs[i].filename = resolved;
+    }
+
+    return OSH_OK;
+}
+
+/**
+ * @brief Lightweight existence check used before parser-specific setup.
+ */
 static int run_file_exists(char const *path) {
     FILE *fp;
     if (!path || !path[0]) {

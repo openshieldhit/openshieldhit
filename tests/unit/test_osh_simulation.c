@@ -25,9 +25,12 @@ static void write_temp_file(char *path_out, size_t cap, char const *content) {
 
 static void test_create_rejects_null_args(void) {
     struct osh_simulation *sim = NULL;
+    struct osh_results const *results = NULL;
 
     ASSERT_TRUE(osh_simulation_create(NULL, NULL, NULL, NULL, NULL) == OSH_EINVAL);
     ASSERT_TRUE(osh_simulation_create(NULL, NULL, NULL, NULL, &sim) == OSH_EINVAL);
+    ASSERT_TRUE(osh_simulation_get_results(NULL, NULL) == OSH_EINVAL);
+    ASSERT_TRUE(osh_simulation_get_results(NULL, &results) == OSH_EINVAL);
     ASSERT_TRUE(sim == NULL);
 }
 
@@ -131,6 +134,7 @@ static void test_create_free_lifecycle(void) {
     struct osh_material_workspace *mat = NULL;
     struct osh_scoring_workspace *scoring = NULL;
     struct osh_simulation *sim = NULL;
+    struct osh_results const *results = NULL;
 
     snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/00_minimal/geo.dat", OSH_PROJECT_SOURCE_DIR);
     snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/00_minimal/beam.dat", OSH_PROJECT_SOURCE_DIR);
@@ -144,6 +148,12 @@ static void test_create_free_lifecycle(void) {
 
     ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, &sim) == OSH_OK);
     ASSERT_TRUE(sim != NULL);
+    ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
+    ASSERT_TRUE(results != NULL);
+    ASSERT_TRUE(osh_results_requested_nstat(results) == (unsigned long long) beam->nstat);
+    ASSERT_TRUE(osh_results_completed_nstat(results) == 0ull);
+    ASSERT_TRUE(osh_results_has_completed_run(results) == 0);
+    ASSERT_TRUE(osh_simulation_save(sim) == OSH_ESTATE);
 
     ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
     ASSERT_TRUE(osh_simulation_free(NULL) == OSH_OK); /* NULL is a no-op */

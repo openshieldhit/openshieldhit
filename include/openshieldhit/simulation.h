@@ -20,13 +20,14 @@ extern "C" {
  * alive for the lifetime of the simulation object.
  */
 struct osh_simulation;
+struct osh_results;
 
 /**
  * @brief Compile four cold workspaces into a simulation ready to run.
  *
  * @details
  * Performs zone-to-material index resolution, compiles geometry and scoring
- * runtimes, prepares transport tables, and initialises the beam source.
+ * runtimes, compiles transport tables, and initialises the beam source.
  *
  * @param[in]  beam     Prepared beam workspace.
  * @param[in]  geo      Prepared geometry workspace.
@@ -43,18 +44,97 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
                                       struct osh_simulation **sim_out);
 
 /**
- * @brief Run the simulation and save outputs to @p out_dir.
+ * @brief Run the simulation transport and finalize scoring accumulators.
  *
  * @details
- * Drives the transport loop, postprocesses scoring accumulators, and writes
- * all output files.
+ * Drives the transport loop and postprocesses scoring accumulators. The actual
+ * number of simulated primaries is stored internally and used by
+ * osh_simulation_save(). Saving is a separate explicit step.
  *
- * @param[in] sim      Simulation handle created by osh_simulation_create().
- * @param[in] out_dir  Directory for output files.
+ * @param[in] sim  Simulation handle created by osh_simulation_create().
  *
  * @returns OSH_OK on success, or an error code.
  */
-enum osh_status osh_simulation_run(struct osh_simulation *sim, char const *out_dir);
+enum osh_status osh_simulation_run(struct osh_simulation *sim);
+
+/**
+ * @brief Borrow a read-only handle to the current compiled scoring results.
+ *
+ * @details
+ * The returned handle is owned by @p sim and remains valid until the
+ * simulation is freed. Its contents reflect the current scoring runtime state:
+ * immediately after osh_simulation_create() that means zeroed accumulators;
+ * after osh_simulation_run() it means finalized postprocessed results.
+ *
+ * @param[in]  sim  Simulation handle created by osh_simulation_create().
+ * @param[out] out  Receives the borrowed results handle on success.
+ *
+ * @returns OSH_OK on success, or an error code.
+ */
+enum osh_status osh_simulation_get_results(struct osh_simulation const *sim, struct osh_results const **out);
+
+/**
+ * @brief Return the requested primary count associated with a results handle.
+ *
+ * @details
+ * This is the target number of primaries requested when the simulation was
+ * created. It may differ from the completed primary count when future chunked
+ * or time-limited runs are introduced.
+ *
+ * @param[in] results  Results handle returned by osh_simulation_get_results().
+ *
+ * @returns Requested primary count, or 0 if @p results is NULL.
+ */
+unsigned long long osh_results_requested_nstat(struct osh_results const *results);
+
+/**
+ * @brief Return the completed primary count currently represented by results.
+ *
+ * @details
+ * Before the first completed run this returns 0. After a successful run it
+ * returns the actual number of transported primaries represented by the
+ * current results snapshot.
+ *
+ * @param[in] results  Results handle returned by osh_simulation_get_results().
+ *
+ * @returns Completed primary count, or 0 if @p results is NULL.
+ */
+unsigned long long osh_results_completed_nstat(struct osh_results const *results);
+
+/**
+ * @brief Return whether the results handle contains completed run data.
+ *
+ * @details
+ * This can be used by callers to distinguish "simulation created but not yet
+ * run" from a completed run that happened to transport zero primaries.
+ *
+ * @param[in] results  Results handle returned by osh_simulation_get_results().
+ *
+ * @returns 1 if completed run data are available, 0 otherwise.
+ */
+int osh_results_has_completed_run(struct osh_results const *results);
+
+/**
+ * @brief Save all scoring outputs for a finished simulation.
+ *
+ * @details
+ * Iterates all outputs defined in the scoring workspace and writes each one in
+ * its configured format (BDO or ASCII). The completed primary count stored by
+ * osh_simulation_run() is embedded in BDO files and used to normalise ASCII
+ * output per primary.
+ *
+ * Saving before a completed run is invalid and returns OSH_ESTATE.
+ *
+ * Output file paths come from the scoring workspace and are expected to be
+ * fully resolved by the calling application before the simulation is saved.
+ *
+ * @param[in] sim  Simulation handle created by osh_simulation_create().
+ *
+ * @returns OSH_OK on success, OSH_ESTATE if called before a completed run,
+ *          OSH_ENOTSUP if a configured format is not supported, or another
+ *          OSH_E* on I/O error.
+ */
+enum osh_status osh_simulation_save(struct osh_simulation const *sim);
 
 /**
  * @brief Release the simulation.

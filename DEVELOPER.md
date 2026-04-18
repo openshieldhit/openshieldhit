@@ -79,6 +79,15 @@ Rules:
 
 ### Design Decisions
 
+#### API Stability
+
+The public API is still early and **not yet frozen**.
+
+During this stage, prefer the cleaner interface over preserving temporary
+compatibility glue. Small or medium API changes are acceptable when they
+improve ownership, readability, naming, or module boundaries. Once the core
+architecture settles, API changes should become much more deliberate.
+
 This project is also intended as a pedagogical reference. Where practical,
 non-obvious design choices should be briefly explained in a comment near the
 decision — struct layout, ownership model, unit conventions, algorithm

@@ -10,32 +10,22 @@ extern "C" {
 #endif
 
 /**
- * @brief Cold-path save request for finalized scoring output.
+ * @brief Save all compiled outputs described by the workspace/runtime pair.
  *
  * @details
- * Save stays outside `runtime/` because it needs workspace metadata, file
- * format policy, and disk I/O. The request object keeps that cold-path state
- * explicit.
+ * Dispatches to format-specific writers. BDO outputs embed @p nstat in the
+ * file; ASCII outputs normalise each value by dividing by @p nstat.
  *
- * TODO: keep this request trivially hand-offable to a background CPU writer
- * thread once asynchronous saving is introduced. The writer should consume
- * finalized runtime buffers and must not depend on transport internals.
- */
-struct osh_scoring_save_request {
-    char const *out_dir;
-    struct osh_scoring_workspace const *ws;
-    struct osh_scoring_runtime const *rt;
-    unsigned long long nstat;
-    char has_nstat;
-};
-
-/**
- * @brief Save all compiled outputs described by the request.
+ * @param[in] ws     Scoring workspace with output metadata and file paths.
+ * @param[in] rt     Compiled scoring runtime with postprocessed accumulators.
+ * @param[in] nstat  Actual number of primary particles simulated.
  *
- * @details
- * Dispatches to format-specific writers in `src/scoring/save/`.
+ * @returns OSH_OK on success, OSH_ENOTSUP for an unsupported format, or
+ *          another OSH_E* on I/O error.
  */
-enum osh_status osh_scoring_save(struct osh_scoring_save_request const *req);
+enum osh_status osh_scoring_save(struct osh_scoring_workspace const *ws,
+                                 struct osh_scoring_runtime const *rt,
+                                 unsigned long long nstat);
 
 #ifdef __cplusplus
 }

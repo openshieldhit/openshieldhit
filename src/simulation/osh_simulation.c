@@ -14,7 +14,14 @@
 #include "scoring/save/osh_scoring_save.h"
 #include "transport/osh_transport.h"
 
-/* ---- Private definition of the opaque handle ----------------------------- */
+/* ---- Private definitions of the opaque handles --------------------------- */
+
+struct osh_results {
+    unsigned long long requested_nstat;
+    unsigned long long completed_nstat;
+    char has_completed_run;
+    struct osh_scoring_runtime const *scoring;
+};
 
 struct osh_simulation {
     struct osh_beam_workspace const *beam;
@@ -25,6 +32,10 @@ struct osh_simulation {
     struct osh_material_runtime transport_tables;
     struct osh_scoring_runtime scoring_runtime;
     struct osh_transport_context transport_ctx;
+
+    unsigned long long requested_nstat;
+    unsigned long long completed_nstat;
+    struct osh_results results;
 };
 
 /* ---- Lifecycle ----------------------------------------------------------- */
@@ -63,6 +74,11 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     }
     sim->beam = beam;
     sim->scoring = scoring;
+    sim->requested_nstat = (unsigned long long) beam->nstat;
+    sim->results.requested_nstat = sim->requested_nstat;
+    sim->results.completed_nstat = 0ull;
+    sim->results.has_completed_run = 0;
+    sim->results.scoring = &sim->scoring_runtime;
 
     /* ---- 1. Zone → material index resolution ----------------------------- */
 
@@ -159,11 +175,10 @@ fail:
     return rc;
 }
 
-enum osh_status osh_simulation_run(struct osh_simulation *sim, char const *out_dir) {
-    struct osh_scoring_save_request save_req;
+enum osh_status osh_simulation_run(struct osh_simulation *sim) {
     enum osh_status rc;
 
-    if (!sim || !out_dir) {
+    if (!sim) {
         return OSH_EINVAL;
     }
 
@@ -174,26 +189,68 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim, char const *out_d
         return rc;
     }
 
+    sim->completed_nstat = (unsigned long long) sim->transport_ctx.params.nstat;
+
     rc = osh_scoring_postprocess(&sim->scoring_runtime);
     if (rc != OSH_OK) {
         osh_error("%s", "simulation: scoring postprocess failed");
         return rc;
     }
 
-    memset(&save_req, 0, sizeof(save_req));
-    save_req.out_dir = out_dir;
-    save_req.ws = sim->scoring;
-    save_req.rt = &sim->scoring_runtime;
-    save_req.nstat = sim->beam->nstat;
-    save_req.has_nstat = 1;
-
-    rc = osh_scoring_save(&save_req);
-    if (rc != OSH_OK) {
-        osh_error("%s", "simulation: scoring save failed");
-        return rc;
-    }
+    sim->results.requested_nstat = sim->requested_nstat;
+    sim->results.completed_nstat = sim->completed_nstat;
+    sim->results.has_completed_run = 1;
+    sim->results.scoring = &sim->scoring_runtime;
 
     return OSH_OK;
+}
+
+enum osh_status osh_simulation_get_results(struct osh_simulation const *sim, struct osh_results const **out) {
+    if (!sim || !out) {
+        return OSH_EINVAL;
+    }
+
+    *out = &sim->results;
+    return OSH_OK;
+}
+
+unsigned long long osh_results_requested_nstat(struct osh_results const *results) {
+    if (!results) {
+        return 0ull;
+    }
+    return results->requested_nstat;
+}
+
+unsigned long long osh_results_completed_nstat(struct osh_results const *results) {
+    if (!results) {
+        return 0ull;
+    }
+    return results->completed_nstat;
+}
+
+int osh_results_has_completed_run(struct osh_results const *results) {
+    if (!results) {
+        return 0;
+    }
+    return results->has_completed_run ? 1 : 0;
+}
+
+enum osh_status osh_simulation_save(struct osh_simulation const *sim) {
+    enum osh_status rc;
+
+    if (!sim) {
+        return OSH_EINVAL;
+    }
+    if (!sim->results.has_completed_run) {
+        osh_error("%s", "simulation: save requested before a completed run");
+        return OSH_ESTATE;
+    }
+
+    rc = osh_scoring_save(sim->scoring, &sim->scoring_runtime, sim->completed_nstat);
+    if (rc != OSH_OK) {
+        osh_error("%s", "simulation: scoring save failed");
+    }
+    return rc;
 }
 
 enum osh_status osh_simulation_free(struct osh_simulation *sim) {

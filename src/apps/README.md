@@ -34,16 +34,24 @@ installed public API and should not be re-exported through `include/`.
   corresponding `osh_X_workspace_free()` from the core library.
 
   `osh_run.c` orchestrates the top-level run: it resolves paths, calls the four
-  `setup_from_path` functions, then delegates to the library via three calls:
+  `setup_from_path` functions, rewrites output filenames to full paths, then
+  delegates to the library via explicit run/save calls:
 
   ```c
   osh_simulation_create(beam, geo, mat, scoring, &sim);
-  osh_simulation_run(sim, out_dir);
+  osh_simulation_run(sim);
+  osh_simulation_save(sim);
   osh_simulation_free(sim);
   ```
 
   All runtime compilation, zone-to-material wiring, and transport execution are
   private to `src/simulation/`.  The app layer never touches runtime headers.
+
+  Save cadence and execution policy still live here. The app decides whether to
+  run serially or with multiple simulations in parallel, when to save partial
+  results, and what constitutes one completed chunk of work. The library
+  itself selects the concrete writer per output block based on the parsed
+  scoring format.
 
 ## Expected future layout
 
