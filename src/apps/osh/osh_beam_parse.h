@@ -3,6 +3,7 @@
 
 #include "common/osh_file.h"
 #include "openshieldhit/beam.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 /**
@@ -19,6 +20,7 @@
  *
  * @param[in]     oshf  Open file handle positioned at the start of the beam
  *                      data.  filename and lineno are used in diagnostics.
+ * @param[in]     diag              Borrowed diagnostics sink for parse messages, or NULL.
  * @param[in,out] beam              Workspace to fill.  Must be pre-allocated
  *                                  and zero-initialised by the caller.
  * @param[out]    spot_out          Receives the parsed single-spot template.
@@ -31,6 +33,7 @@
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
 enum osh_status osh_beam_parse(struct oshfile *oshf,
+                               struct osh_diag_sink const *diag,
                                struct osh_beam_workspace *beam,
                                struct osh_beam_spot *spot_out,
                                char **spotlist_path_out);

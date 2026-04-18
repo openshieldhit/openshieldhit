@@ -110,7 +110,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         fprintf(out, "  Detect input     : %s\n", detect_path);
     }
 
-    if (osh_geometry_setup_from_path(geo_path, NULL, &geom) != OSH_OK) {
+    if (osh_geometry_setup_from_path(geo_path, opt->diag, &geom) != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to load geometry: %s\n", geo_path);
         }
@@ -129,7 +129,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    if (osh_beam_setup_from_path(beam_path, NULL, &beam) != OSH_OK) {
+    if (osh_beam_setup_from_path(beam_path, opt->diag, &beam) != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to load beam: %s\n", beam_path);
         }
@@ -167,7 +167,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    if (osh_material_setup_from_path(mat_path, NULL, &mat) != OSH_OK) {
+    if (osh_material_setup_from_path(mat_path, opt->diag, &mat) != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to load materials: %s\n", mat_path);
         }
@@ -186,7 +186,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    if (osh_scoring_setup_from_path(detect_path, NULL, &scoring) != OSH_OK) {
+    if (osh_scoring_setup_from_path(detect_path, opt->diag, &scoring) != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to load scoring/detect input: %s\n", detect_path);
         }

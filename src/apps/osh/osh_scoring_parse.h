@@ -2,6 +2,7 @@
 #define OSH_FRONTEND_OPENSHIELDHIT_SCORING_PARSE_H
 
 #include "common/osh_file.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/scoring.h"
 
 #ifdef __cplusplus
@@ -28,6 +29,7 @@ extern "C" {
  * scope here.
  *
  * @param[in]     oshf  Open detect file positioned at the start.
+ * @param[in]     diag  Borrowed diagnostics sink for parse messages, or NULL.
  * @param[in,out] ws    Pre-allocated workspace to populate. On failure the
  *                      workspace may be partially filled; the caller is
  *                      responsible for freeing it.
@@ -35,7 +37,8 @@ extern "C" {
  * @returns OSH_OK on success, OSH_EPARSE on format errors, OSH_ENOMEM on
  *          allocation failure.
  */
-enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_workspace *ws);
+enum osh_status
+osh_scoring_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struct osh_scoring_workspace *ws);
 
 #ifdef __cplusplus
 }
