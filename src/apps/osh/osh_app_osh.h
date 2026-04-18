@@ -18,12 +18,13 @@
  * @ref osh_beam_workspace_free().
  *
  * @param[in]  path    Path to the beam input file (beam.dat).
- * @param[in]  lg      Logger for diagnostic messages, or NULL.
+ * @param[in]  diag    Borrowed diagnostics sink for parser/setup messages, or NULL.
  * @param[out] wb_out  Receives the prepared workspace.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg, struct osh_beam_workspace **wb_out);
+enum osh_status
+osh_beam_setup_from_path(char const *path, struct osh_diag_sink const *diag, struct osh_beam_workspace **wb_out);
 
 /**
  * @brief Load, parse, and prepare a geometry workspace from @p path.
@@ -35,13 +36,14 @@ enum osh_status osh_beam_setup_from_path(char const *path, struct osh_logger *lg
  * @ref osh_geometry_workspace_free().
  *
  * @param[in]  path    Path to the geometry input file (geo.dat).
- * @param[in]  lg      Logger for diagnostic messages, or NULL.
+ * @param[in]  diag    Borrowed diagnostics sink for parser/setup messages, or NULL.
  * @param[out] ws_out  Receives the prepared workspace.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status
-osh_geometry_setup_from_path(char const *path, struct osh_logger *lg, struct osh_geometry_workspace **ws_out);
+enum osh_status osh_geometry_setup_from_path(char const *path,
+                                             struct osh_diag_sink const *diag,
+                                             struct osh_geometry_workspace **ws_out);
 
 /**
  * @brief Load, parse, and prepare a material workspace from @p path.
@@ -52,13 +54,14 @@ osh_geometry_setup_from_path(char const *path, struct osh_logger *lg, struct osh
  * the workspace and must release it with @ref osh_material_workspace_free().
  *
  * @param[in]  path    Path to the material input file (mat.dat).
- * @param[in]  lg      Logger for diagnostic messages, or NULL.
+ * @param[in]  diag    Borrowed diagnostics sink for parser/setup messages, or NULL.
  * @param[out] wm_out  Receives the prepared workspace.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
-enum osh_status
-osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh_material_workspace **wm_out);
+enum osh_status osh_material_setup_from_path(char const *path,
+                                             struct osh_diag_sink const *diag,
+                                             struct osh_material_workspace **wm_out);
 
 /**
  * @brief Load and parse a scoring workspace from @p path.
@@ -70,12 +73,12 @@ osh_material_setup_from_path(char const *path, struct osh_logger *lg, struct osh
  * workspace and must release it with @ref osh_scoring_workspace_free().
  *
  * @param[in]  path    Path to the detect input file (detect.dat).
- * @param[in]  lg      Logger for diagnostic messages, or NULL.
+ * @param[in]  diag    Borrowed diagnostics sink for parser/setup messages, or NULL.
  * @param[out] ws_out  Receives the workspace.
  *
  * @returns OSH_OK on success, or an OSH_E* code on failure.
  */
 enum osh_status
-osh_scoring_setup_from_path(char const *path, struct osh_logger *lg, struct osh_scoring_workspace **ws_out);
+osh_scoring_setup_from_path(char const *path, struct osh_diag_sink const *diag, struct osh_scoring_workspace **ws_out);
 
 #endif /* OSH_APP_OSH_H */
