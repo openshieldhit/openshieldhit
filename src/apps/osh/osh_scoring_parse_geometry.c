@@ -20,10 +20,10 @@
 
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
-#include "openshieldhit/logger.h"
+#include "common/osh_logger.h"
 
 typedef enum osh_status (*geometry_handler_fn)(
-    struct osh_scoring_geometry_def *, char **, int, char const *, unsigned int);
+    struct osh_scoring_geometry_def *, struct osh_diag_sink const *, char **, int, char const *, unsigned int);
 
 struct geometry_entry {
     char const *key;
@@ -32,14 +32,30 @@ struct geometry_entry {
 
 static enum osh_status
 append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, double hi, int nbins);
-static enum osh_status
-geo_name(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-geo_axis(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-geo_rotation(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-geo_zones(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status geo_name(struct osh_scoring_geometry_def *geo,
+                                struct osh_diag_sink const *diag,
+                                char **words,
+                                int nwords,
+                                char const *path,
+                                unsigned int lineno);
+static enum osh_status geo_axis(struct osh_scoring_geometry_def *geo,
+                                struct osh_diag_sink const *diag,
+                                char **words,
+                                int nwords,
+                                char const *path,
+                                unsigned int lineno);
+static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
+                                    struct osh_diag_sink const *diag,
+                                    char **words,
+                                    int nwords,
+                                    char const *path,
+                                    unsigned int lineno);
+static enum osh_status geo_zones(struct osh_scoring_geometry_def *geo,
+                                 struct osh_diag_sink const *diag,
+                                 char **words,
+                                 int nwords,
+                                 char const *path,
+                                 unsigned int lineno);
 
 static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name},
                                                  {OSH_SCORING_KEY_GEO_X, geo_axis},
@@ -55,6 +71,7 @@ static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name
  * @brief Dispatch one tokenized line into the active geometry definition.
  */
 enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def *geo,
+                                                struct osh_diag_sink const *diag,
                                                 char **words,
                                                 int nwords,
                                                 char const *path,
@@ -68,7 +85,7 @@ enum osh_status osh_scoring_parse_geometry_line(struct osh_scoring_geometry_def 
         if (strcmp(geometry_table[i].key, words[0]) == 0) {
             if (found_out)
                 *found_out = 1;
-            return geometry_table[i].handler(geo, words, nwords, path, lineno);
+            return geometry_table[i].handler(geo, diag, words, nwords, path, lineno);
         }
     }
     return OSH_OK;
@@ -102,10 +119,14 @@ append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, 
 /**
  * @brief Parse `Name <value>` for a geometry section.
  */
-static enum osh_status
-geo_name(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status geo_name(struct osh_scoring_geometry_def *geo,
+                                struct osh_diag_sink const *diag,
+                                char **words,
+                                int nwords,
+                                char const *path,
+                                unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Geometry Name requires an argument", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Name requires an argument", path, lineno);
         return OSH_EPARSE;
     }
     free(geo->name);
@@ -116,12 +137,16 @@ geo_name(struct osh_scoring_geometry_def *geo, char **words, int nwords, char co
 /**
  * @brief Parse one axis line (`x|y|z|r lo hi nbins`).
  */
-static enum osh_status
-geo_axis(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status geo_axis(struct osh_scoring_geometry_def *geo,
+                                struct osh_diag_sink const *diag,
+                                char **words,
+                                int nwords,
+                                char const *path,
+                                unsigned int lineno) {
     char label[2];
 
     if (nwords < 4) {
-        osh_error("%s:%u: Geometry axis '%s' requires lo hi nbins", path, lineno, words[0]);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry axis '%s' requires lo hi nbins", path, lineno, words[0]);
         return OSH_EPARSE;
     }
     label[0] = (char) toupper((unsigned char) words[0][0]);
@@ -132,10 +157,14 @@ geo_axis(struct osh_scoring_geometry_def *geo, char **words, int nwords, char co
 /**
  * @brief Parse optional geometry rotation (`theta phi` in degrees).
  */
-static enum osh_status
-geo_rotation(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
+                                    struct osh_diag_sink const *diag,
+                                    char **words,
+                                    int nwords,
+                                    char const *path,
+                                    unsigned int lineno) {
     if (nwords < 3) {
-        osh_error("%s:%u: Geometry Rotation requires theta phi [deg]", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Rotation requires theta phi [deg]", path, lineno);
         return OSH_EPARSE;
     }
     geo->rot_theta_deg = atof(words[1]);
@@ -147,10 +176,14 @@ geo_rotation(struct osh_scoring_geometry_def *geo, char **words, int nwords, cha
 /**
  * @brief Parse zone-range form used by `zone` scoring geometries.
  */
-static enum osh_status
-geo_zones(struct osh_scoring_geometry_def *geo, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status geo_zones(struct osh_scoring_geometry_def *geo,
+                                 struct osh_diag_sink const *diag,
+                                 char **words,
+                                 int nwords,
+                                 char const *path,
+                                 unsigned int lineno) {
     if (nwords < 3) {
-        osh_error("%s:%u: Geometry Zones requires start stop", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Zones requires start stop", path, lineno);
         return OSH_EPARSE;
     }
     geo->zone_start = atoi(words[1]);

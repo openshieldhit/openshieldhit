@@ -226,6 +226,7 @@ spotlist_fill_spot(struct osh_beam_spot *spot, double const values[OSH_SPOTLIST_
 }
 
 enum osh_status osh_beam_spotlist_import(char const *path,
+                                         struct osh_diag_sink const *diag,
                                          struct osh_beam_spot const *template_spot,
                                          struct osh_beam_spot **spots_out,
                                          size_t *nspots_out) {
@@ -250,7 +251,7 @@ enum osh_status osh_beam_spotlist_import(char const *path,
         return OSH_EIO;
     }
 
-    osh_info("Loading external spotlist: %s", path);
+    OSH_DIAG_INFOF(diag, "Loading external spotlist: %s", path);
 
     rc = spotlist_detect_layout(fp, &nspots, &ncols);
     if (rc != OSH_OK) {
@@ -258,7 +259,7 @@ enum osh_status osh_beam_spotlist_import(char const *path,
         return rc;
     }
 
-    osh_info("External spotlist format: %d columns, %lu spots", ncols, (unsigned long) nspots);
+    OSH_DIAG_INFOF(diag, "External spotlist format: %d columns, %lu spots", ncols, (unsigned long) nspots);
 
     spots_new = (struct osh_beam_spot *) calloc(nspots, sizeof(*spots_new));
     if (!spots_new) {

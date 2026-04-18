@@ -39,8 +39,8 @@
 #include <string.h>
 
 #include "apps/osh/osh_scoring_parse_internal.h"
+#include "common/osh_logger.h"
 #include "common/osh_readline.h"
-#include "openshieldhit/logger.h"
 #include "openshieldhit/scoring.h"
 
 /* ---- Internal section enum ----------------------------------------------- */
@@ -53,11 +53,12 @@ static enum osh_status append_filter(struct osh_scoring_workspace *ws);
 static enum osh_status append_settings(struct osh_scoring_workspace *ws);
 static enum osh_status append_geometry(struct osh_scoring_workspace *ws);
 static enum osh_status append_output(struct osh_scoring_workspace *ws);
-static enum osh_status validate(struct osh_scoring_workspace const *ws);
+static enum osh_status validate(struct osh_scoring_workspace const *ws, struct osh_diag_sink const *diag);
 
 /* ---- Public entry point -------------------------------------------------- */
 
-enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_workspace *ws) {
+enum osh_status
+osh_scoring_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struct osh_scoring_workspace *ws) {
     char const *path;
     enum scoring_section section;
     char *line;
@@ -123,7 +124,7 @@ enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_works
 
         /* ---- Section body: dispatch to the appropriate table -------------- */
         if (section == SECTION_NONE) {
-            osh_error("%s:%u: keyword '%s' before any section header", path, lineno, words[0]);
+            OSH_DIAG_ERRORF(diag, "%s:%u: keyword '%s' before any section header", path, lineno, words[0]);
             rc = OSH_EPARSE;
             goto fail;
         }
@@ -134,19 +135,19 @@ enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_works
         switch (section) {
         case SECTION_FILTER:
             rc = osh_scoring_parse_filter_line(
-                &ws->filters[ws->nfilters - 1u], words, nwords, path, (unsigned int) lineno, &found);
+                &ws->filters[ws->nfilters - 1u], diag, words, nwords, path, (unsigned int) lineno, &found);
             break;
         case SECTION_SETTINGS:
             rc = osh_scoring_parse_settings_line(
-                &ws->settings[ws->nsettings - 1u], words, nwords, path, (unsigned int) lineno, &found);
+                &ws->settings[ws->nsettings - 1u], diag, words, nwords, path, (unsigned int) lineno, &found);
             break;
         case SECTION_GEOMETRY:
             rc = osh_scoring_parse_geometry_line(
-                &ws->geometries[ws->ngeometries - 1u], words, nwords, path, (unsigned int) lineno, &found);
+                &ws->geometries[ws->ngeometries - 1u], diag, words, nwords, path, (unsigned int) lineno, &found);
             break;
         case SECTION_OUTPUT:
             rc = osh_scoring_parse_output_line(
-                &ws->outputs[ws->noutputs - 1u], words, nwords, path, (unsigned int) lineno, &found);
+                &ws->outputs[ws->noutputs - 1u], diag, words, nwords, path, (unsigned int) lineno, &found);
             break;
         default:
             break;
@@ -156,13 +157,13 @@ enum osh_status osh_scoring_parse(struct oshfile *oshf, struct osh_scoring_works
             goto fail;
 
         if (!found) {
-            osh_warn("%s:%u: unknown key '%s' in section — ignored", path, lineno, words[0]);
+            OSH_DIAG_WARNF(diag, "%s:%u: unknown key '%s' in section — ignored", path, lineno, words[0]);
         }
     }
 
     free(line);
 
-    return validate(ws);
+    return validate(ws, diag);
 
 fail:
     free(line);
@@ -260,53 +261,54 @@ static enum osh_status append_output(struct osh_scoring_workspace *ws) {
  *
  * @returns OSH_OK if all required fields are present, OSH_EPARSE otherwise.
  */
-static enum osh_status validate(struct osh_scoring_workspace const *ws) {
+static enum osh_status validate(struct osh_scoring_workspace const *ws, struct osh_diag_sink const *diag) {
     size_t i, j;
 
     for (i = 0; i < ws->nfilters; ++i) {
         if (!ws->filters[i].name || ws->filters[i].name[0] == '\0') {
-            osh_error("scoring: filter %zu is missing a Name", i);
+            OSH_DIAG_ERRORF(diag, "scoring: filter %zu is missing a Name", i);
             return OSH_EPARSE;
         }
     }
 
     for (i = 0; i < ws->nsettings; ++i) {
         if (!ws->settings[i].name || ws->settings[i].name[0] == '\0') {
-            osh_error("scoring: settings %zu is missing a Name", i);
+            OSH_DIAG_ERRORF(diag, "scoring: settings %zu is missing a Name", i);
             return OSH_EPARSE;
         }
     }
 
     for (i = 0; i < ws->ngeometries; ++i) {
         if (!ws->geometries[i].kind || ws->geometries[i].kind[0] == '\0') {
-            osh_error("scoring: geometry %zu is missing a type keyword", i);
+            OSH_DIAG_ERRORF(diag, "scoring: geometry %zu is missing a type keyword", i);
             return OSH_EPARSE;
         }
         if (!ws->geometries[i].name || ws->geometries[i].name[0] == '\0') {
-            osh_error("scoring: geometry %zu (%s) is missing a Name", i, ws->geometries[i].kind);
+            OSH_DIAG_ERRORF(diag, "scoring: geometry %zu (%s) is missing a Name", i, ws->geometries[i].kind);
             return OSH_EPARSE;
         }
         if (ws->geometries[i].naxes == 0u && strcmp(ws->geometries[i].kind, "zone") != 0) {
-            osh_warn("scoring: geometry '%s' has no axis definitions", ws->geometries[i].name);
+            OSH_DIAG_WARNF(diag, "scoring: geometry '%s' has no axis definitions", ws->geometries[i].name);
         }
     }
 
     for (i = 0; i < ws->noutputs; ++i) {
         if (!ws->outputs[i].filename || ws->outputs[i].filename[0] == '\0') {
-            osh_error("scoring: output %zu is missing a Filename", i);
+            OSH_DIAG_ERRORF(diag, "scoring: output %zu is missing a Filename", i);
             return OSH_EPARSE;
         }
         if (!ws->outputs[i].geometry_name || ws->outputs[i].geometry_name[0] == '\0') {
-            osh_error("scoring: output '%s' is missing a Geo reference", ws->outputs[i].filename);
+            OSH_DIAG_ERRORF(diag, "scoring: output '%s' is missing a Geo reference", ws->outputs[i].filename);
             return OSH_EPARSE;
         }
         if (ws->outputs[i].npages == 0u) {
-            osh_error("scoring: output '%s' has no Quantity lines", ws->outputs[i].filename);
+            OSH_DIAG_ERRORF(diag, "scoring: output '%s' has no Quantity lines", ws->outputs[i].filename);
             return OSH_EPARSE;
         }
         for (j = 0; j < ws->outputs[i].npages; ++j) {
             if (!ws->outputs[i].pages[j].quantity || ws->outputs[i].pages[j].quantity[0] == '\0') {
-                osh_error("scoring: output '%s' page %zu has an empty Quantity", ws->outputs[i].filename, j);
+                OSH_DIAG_ERRORF(
+                    diag, "scoring: output '%s' page %zu has an empty Quantity", ws->outputs[i].filename, j);
                 return OSH_EPARSE;
             }
         }
