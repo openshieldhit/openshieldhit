@@ -93,6 +93,8 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
         break;
     }
 
-    osh_error("transport: %s transport is not implemented", osh_transport_family_name(family));
+    OSH_DIAG_ERRORF(transport_ctx ? transport_ctx->diag : NULL,
+                    "transport: %s transport is not implemented",
+                    osh_transport_family_name(family));
     return OSH_ENOTSUP;
 }

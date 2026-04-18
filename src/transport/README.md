@@ -40,6 +40,16 @@ Ownership notes:
 - Material preparation, geometry compilation, and scoring setup stay outside
   `transport/`; transport should consume their runtime representations.
 
+Diagnostics notes:
+
+- The active runtime path receives a borrowed `struct osh_diag_sink` through
+  `struct osh_transport_context`.
+- Transport emits progress, unsupported-mode errors, and step-level runtime
+  failures through that sink.
+- `NULL` sink means silent transport diagnostics.
+- Older untouched modules outside `transport/` may still use the legacy global
+  logger during the staged migration.
+
 ## Multithreading Direction
 
 The intended parallelism model is not "one thread per particle family".

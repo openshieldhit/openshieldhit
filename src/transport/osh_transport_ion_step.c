@@ -127,6 +127,7 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
                                                   struct osh_particle_pool *pool,
                                                   size_t slot,
                                                   struct osh_gemca_runtime const *geom_rt,
+                                                  struct osh_transport_context const *transport_ctx,
                                                   struct osh_material_runtime const *tables,
                                                   struct osh_rng *rng);
 
@@ -139,6 +140,7 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
 static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
                                        size_t slot,
+                                       struct osh_transport_context const *transport_ctx,
                                        struct osh_scoring_runtime *scoring);
 
 /* Table helpers */
@@ -200,7 +202,7 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
 
         /* Phase 3 — sample random hinge; MCS scatter for physics-limited steps;
          *           clip post-hinge leg against zone boundary */
-        rc = ion_step_hinge_and_scatter(&ctx, pool, slot, geom_rt, tables, rng);
+        rc = ion_step_hinge_and_scatter(&ctx, pool, slot, geom_rt, transport_ctx, tables, rng);
         if (rc != OSH_OK)
             return rc;
         if (ctx.done)
@@ -214,7 +216,7 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
     }
 
     /* Phase 5 — score step, update pool position/energy/direction, nudge */
-    return ion_step_commit(&ctx, pool, slot, scoring);
+    return ion_step_commit(&ctx, pool, slot, transport_ctx, scoring);
 }
 
 /* ---- Phase 1: setup ------------------------------------------------------ */
@@ -427,12 +429,13 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         (fabs(ctx->preclip_step_len - ds_csda) <= OSH_TRANSPORT_STEP_LEN_REL_TOL * fmax(1.0, ctx->preclip_step_len));
     if (ctx->demin_limited && ctx->boundary_ds + OSH_TRANSPORT_BOUNDARY_EPS < ds_csda && transport_ctx
         && !transport_ctx->warned_boundary_demin_override) {
-        osh_warn("transport: boundary-limited step shorter than DEMIN; allowing sub-DEMIN step near boundary "
-                 "(boundary_ds=%.17g cm, demin_loss=%.17g MeV, e0=%.17g MeV, zone=%zu)",
-                 ctx->boundary_ds,
-                 ctx->demin_total,
-                 ctx->e0,
-                 ctx->zone_idx);
+        OSH_DIAG_WARNF(transport_ctx->diag,
+                       "transport: boundary-limited step shorter than DEMIN; allowing sub-DEMIN step near boundary "
+                       "(boundary_ds=%.17g cm, demin_loss=%.17g MeV, e0=%.17g MeV, zone=%zu)",
+                       ctx->boundary_ds,
+                       ctx->demin_total,
+                       ctx->e0,
+                       ctx->zone_idx);
         transport_ctx->warned_boundary_demin_override = 1;
     }
 }
@@ -460,6 +463,7 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
                                                   struct osh_particle_pool *pool,
                                                   size_t slot,
                                                   struct osh_gemca_runtime const *geom_rt,
+                                                  struct osh_transport_context const *transport_ctx,
                                                   struct osh_material_runtime const *tables,
                                                   struct osh_rng *rng) {
     double residual_range;
@@ -530,17 +534,18 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
 
     boundary_tail_ds = osh_gemca_runtime_get_distance(geom_rt, ctx->zone_idx, &hinge_ray);
     if (boundary_tail_ds < 0.0) {
-        osh_error("transport: negative hinge boundary distance zone=%zu h=%.17g tail_req=%.17g hinge=(%.17g, %.17g, "
-                  "%.17g) w=(%.17g, %.17g, %.17g)",
-                  ctx->zone_idx,
-                  ctx->h,
-                  ctx->tail_len,
-                  hinge_ray.p[0],
-                  hinge_ray.p[1],
-                  hinge_ray.p[2],
-                  hinge_ray.cp[0],
-                  hinge_ray.cp[1],
-                  hinge_ray.cp[2]);
+        OSH_DIAG_ERRORF(transport_ctx->diag,
+                        "transport: negative hinge boundary distance zone=%zu h=%.17g tail_req=%.17g hinge=(%.17g, "
+                        "%.17g, %.17g) w=(%.17g, %.17g, %.17g)",
+                        ctx->zone_idx,
+                        ctx->h,
+                        ctx->tail_len,
+                        hinge_ray.p[0],
+                        hinge_ray.p[1],
+                        hinge_ray.p[2],
+                        hinge_ray.cp[0],
+                        hinge_ray.cp[1],
+                        hinge_ray.cp[2]);
         return OSH_ESTATE;
     }
     if (boundary_tail_ds < ctx->tail_len) {
@@ -646,6 +651,7 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
 static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
                                        size_t slot,
+                                       struct osh_transport_context const *transport_ctx,
                                        struct osh_scoring_runtime *scoring) {
     double qx;
     double qy;
@@ -681,22 +687,23 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
 
     rc = osh_scoring_score_step(scoring, ctx->part, &st);
     if (rc != OSH_OK) {
-        osh_error("transport: scoring rejected step rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) q=(%.17g, %.17g, %.17g) "
-                  "v=(%.17g, %.17g, %.17g) w=(%.17g, %.17g, %.17g)",
-                  (int) rc,
-                  st.ds,
-                  st.p[0],
-                  st.p[1],
-                  st.p[2],
-                  st.q[0],
-                  st.q[1],
-                  st.q[2],
-                  st.v[0],
-                  st.v[1],
-                  st.v[2],
-                  st.w[0],
-                  st.w[1],
-                  st.w[2]);
+        OSH_DIAG_ERRORF(transport_ctx->diag,
+                        "transport: scoring rejected step rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) q=(%.17g, %.17g, "
+                        "%.17g) v=(%.17g, %.17g, %.17g) w=(%.17g, %.17g, %.17g)",
+                        (int) rc,
+                        st.ds,
+                        st.p[0],
+                        st.p[1],
+                        st.p[2],
+                        st.q[0],
+                        st.q[1],
+                        st.q[2],
+                        st.v[0],
+                        st.v[1],
+                        st.v[2],
+                        st.w[0],
+                        st.w[1],
+                        st.w[2]);
         return rc;
     }
 

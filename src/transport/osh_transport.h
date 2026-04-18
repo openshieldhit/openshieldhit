@@ -7,6 +7,7 @@
 #include "common/osh_ray.h"
 #include "common/osh_step.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus
@@ -73,6 +74,7 @@ struct osh_transport_params {
  */
 struct osh_transport_context {
     struct osh_transport_params params;
+    struct osh_diag_sink const *diag; /**< Borrowed diagnostics sink; NULL silences transport diagnostics. */
     char warned_boundary_demin_override;
 };
 

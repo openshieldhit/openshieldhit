@@ -27,8 +27,8 @@ static void test_create_rejects_null_args(void) {
     struct osh_simulation *sim = NULL;
     struct osh_results const *results = NULL;
 
-    ASSERT_TRUE(osh_simulation_create(NULL, NULL, NULL, NULL, NULL) == OSH_EINVAL);
-    ASSERT_TRUE(osh_simulation_create(NULL, NULL, NULL, NULL, &sim) == OSH_EINVAL);
+    ASSERT_TRUE(osh_simulation_create(NULL, NULL, NULL, NULL, NULL, NULL) == OSH_EINVAL);
+    ASSERT_TRUE(osh_simulation_create(NULL, NULL, NULL, NULL, NULL, &sim) == OSH_EINVAL);
     ASSERT_TRUE(osh_simulation_get_results(NULL, NULL) == OSH_EINVAL);
     ASSERT_TRUE(osh_simulation_get_results(NULL, &results) == OSH_EINVAL);
     ASSERT_TRUE(sim == NULL);
@@ -48,7 +48,7 @@ static void test_create_rejects_unprepared_geometry(void) {
     ASSERT_TRUE(osh_scoring_workspace_create(&scoring) == OSH_OK);
 
     /* geo->prepared is NULL: must be rejected before any expensive setup */
-    rc = osh_simulation_create(beam, geo, mat, scoring, &sim);
+    rc = osh_simulation_create(beam, geo, mat, scoring, NULL, &sim);
     ASSERT_TRUE(rc == OSH_ESTATE);
     ASSERT_TRUE(sim == NULL);
 
@@ -109,7 +109,7 @@ static void test_create_rejects_unknown_zone_material(void) {
     ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
     ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
 
-    rc = osh_simulation_create(beam, geo, mat, scoring, &sim);
+    rc = osh_simulation_create(beam, geo, mat, scoring, NULL, &sim);
     ASSERT_TRUE(rc == OSH_EPARSE);
     ASSERT_TRUE(sim == NULL);
 
@@ -146,7 +146,7 @@ static void test_create_free_lifecycle(void) {
     ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
     ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
 
-    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, &sim) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
     ASSERT_TRUE(sim != NULL);
     ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
     ASSERT_TRUE(results != NULL);

@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus
@@ -18,17 +19,18 @@ extern "C" {
  * defaults (workdir defaults to ".", other paths to workdir/<name>.dat).
  */
 struct osh_run_options {
-    char const *workdir;            /**< Working directory for resolving default file names. */
-    char const *out_dir;            /**< Output directory; NULL falls back to workdir. */
-    char const *geo_path;           /**< Explicit geometry file path; NULL → workdir/geo.dat. */
-    char const *beam_path;          /**< Explicit beam file path;     NULL → workdir/beam.dat. */
-    char const *mat_path;           /**< Explicit material file path;  NULL → workdir/mat.dat. */
-    char const *detect_path;        /**< Explicit detect file path;    NULL → workdir/detect.dat. */
-    unsigned long long nstat;       /**< Primary history count override; used only when has_nstat != 0. */
-    int has_nstat;                  /**< 1 if nstat should override the beam file value. */
-    unsigned long long seed_offset; /**< RNG seed offset override; used only when has_seed_offset != 0. */
-    int has_seed_offset;            /**< 1 if seed_offset should override the beam file value. */
-    int validate_only;              /**< 1 = validate inputs then exit without running transport. */
+    char const *workdir;              /**< Working directory for resolving default file names. */
+    char const *out_dir;              /**< Output directory; NULL falls back to workdir. */
+    char const *geo_path;             /**< Explicit geometry file path; NULL → workdir/geo.dat. */
+    char const *beam_path;            /**< Explicit beam file path;     NULL → workdir/beam.dat. */
+    char const *mat_path;             /**< Explicit material file path;  NULL → workdir/mat.dat. */
+    char const *detect_path;          /**< Explicit detect file path;    NULL → workdir/detect.dat. */
+    unsigned long long nstat;         /**< Primary history count override; used only when has_nstat != 0. */
+    int has_nstat;                    /**< 1 if nstat should override the beam file value. */
+    unsigned long long seed_offset;   /**< RNG seed offset override; used only when has_seed_offset != 0. */
+    int has_seed_offset;              /**< 1 if seed_offset should override the beam file value. */
+    int validate_only;                /**< 1 = validate inputs then exit without running transport. */
+    struct osh_diag_sink const *diag; /**< Borrowed diagnostics sink for simulation/transport messages. */
 };
 
 /**
