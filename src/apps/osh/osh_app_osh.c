@@ -85,7 +85,7 @@ osh_beam_setup_from_path(char const *path, struct osh_diag_sink const *diag, str
     }
     free(spotlist_path);
 
-    rc = osh_beam_workspace_prepare(wb);
+    rc = osh_beam_workspace_prepare(wb, diag);
     if (rc != OSH_OK) {
         osh_beam_workspace_free(wb);
         return rc;
