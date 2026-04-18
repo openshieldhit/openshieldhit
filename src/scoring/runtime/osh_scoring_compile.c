@@ -225,6 +225,7 @@ static int compare_prepared_pages(void const *a, void const *b) {
 }
 
 static enum osh_status copy_filter_runtime(struct osh_scoring_filter_runtime *dst,
+                                           struct osh_diag_sink const *diag,
                                            struct osh_scoring_filter_def const *src) {
     size_t i;
     enum osh_scoring_filter_field field;
@@ -248,15 +249,17 @@ static enum osh_status copy_filter_runtime(struct osh_scoring_filter_runtime *ds
         field = filter_field_to_enum(src->rules[i].field);
         op = filter_op_to_enum(src->rules[i].op);
         if (field == OSH_SCORING_FILTER_FIELD_UNKNOWN) {
-            osh_error("Scoring filter '%s' uses unknown field '%s'",
-                      src->name ? src->name : "(unnamed)",
-                      src->rules[i].field);
+            OSH_DIAG_ERRORF(diag,
+                            "Scoring filter '%s' uses unknown field '%s'",
+                            src->name ? src->name : "(unnamed)",
+                            src->rules[i].field);
             return OSH_EINVAL;
         }
         if (op == OSH_SCORING_FILTER_OP_INVALID) {
-            osh_error("Scoring filter '%s' uses unknown operator '%s'",
-                      src->name ? src->name : "(unnamed)",
-                      src->rules[i].op);
+            OSH_DIAG_ERRORF(diag,
+                            "Scoring filter '%s' uses unknown operator '%s'",
+                            src->name ? src->name : "(unnamed)",
+                            src->rules[i].op);
             return OSH_EINVAL;
         }
         dst->rules[i].field = field;
@@ -408,7 +411,9 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     memset(rt, 0, sizeof(*rt));
 }
 
-enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws, struct osh_scoring_runtime *rt) {
+enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
+                                    struct osh_diag_sink const *diag,
+                                    struct osh_scoring_runtime *rt) {
     enum osh_status rc;
     size_t i;
     size_t j;
@@ -444,7 +449,7 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws, stru
             goto fail;
         }
         for (i = 0; i < rt->nfilters; ++i) {
-            rc = copy_filter_runtime(&rt->filters[i], &ws->filters[i]);
+            rc = copy_filter_runtime(&rt->filters[i], diag, &ws->filters[i]);
             if (rc != OSH_OK) {
                 goto fail;
             }
@@ -475,7 +480,7 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws, stru
             rc = copy_geometry_runtime(&rt->geometries[i], &ws->geometries[i]);
             if (rc != OSH_OK) {
                 if (rc == OSH_EINVAL) {
-                    osh_error("Scoring geometry '%s' has no valid runtime binning", ws->geometries[i].name);
+                    OSH_DIAG_ERRORF(diag, "Scoring geometry '%s' has no valid runtime binning", ws->geometries[i].name);
                 }
                 goto fail;
             }
@@ -493,27 +498,30 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws, stru
     for (i = 0; i < ws->noutputs; ++i) {
         gidx = find_geometry_index(ws, ws->outputs[i].geometry_name);
         if (gidx < 0) {
-            osh_error("Scoring output '%s' references unknown geometry '%s'",
-                      ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
-                      ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)");
+            OSH_DIAG_ERRORF(diag,
+                            "Scoring output '%s' references unknown geometry '%s'",
+                            ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                            ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)");
             rc = OSH_EINVAL;
             goto fail;
         }
         output_geom_idx[i] = gidx;
         if (!runtime_supports_geometry(&rt->geometries[gidx])) {
-            osh_error("Scoring output '%s' uses unsupported runtime geometry '%s' (kind=%s)",
-                      ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
-                      ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)",
-                      ws->geometries[gidx].kind ? ws->geometries[gidx].kind : "(unknown)");
+            OSH_DIAG_ERRORF(diag,
+                            "Scoring output '%s' uses unsupported runtime geometry '%s' (kind=%s)",
+                            ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                            ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)",
+                            ws->geometries[gidx].kind ? ws->geometries[gidx].kind : "(unknown)");
             rc = OSH_ENOTSUP;
             goto fail;
         }
         for (j = 0; j < ws->outputs[i].npages; ++j) {
             score_kind = quantity_to_score_kind(ws->outputs[i].pages[j].quantity);
             if (!runtime_supports_score_kind(score_kind)) {
-                osh_error("Scoring output '%s' uses unsupported quantity '%s' for runtime scoring",
-                          ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
-                          ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)");
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring output '%s' uses unsupported quantity '%s' for runtime scoring",
+                                ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                                ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)");
                 rc = OSH_ENOTSUP;
                 goto fail;
             }
@@ -631,9 +639,10 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws, stru
             for (k = 0; k < src_page->nfilter_names; ++k) {
                 fidx = find_filter_index(rt, src_page->filter_names[k]);
                 if (fidx < 0) {
-                    osh_error("Scoring page '%s' references unknown filter '%s'",
-                              src_page->quantity ? src_page->quantity : "(unnamed)",
-                              src_page->filter_names[k]);
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring page '%s' references unknown filter '%s'",
+                                    src_page->quantity ? src_page->quantity : "(unnamed)",
+                                    src_page->filter_names[k]);
                     rc = OSH_EINVAL;
                     goto fail;
                 }

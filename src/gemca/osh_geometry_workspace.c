@@ -49,7 +49,7 @@ enum osh_status osh_geometry_workspace_create(struct osh_geometry_workspace **ws
     return OSH_OK;
 }
 
-enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws) {
+enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws, struct osh_diag_sink const *diag) {
     size_t i;
     struct osh_gemca_prepared *gemca = NULL;
     enum osh_status rc = OSH_ENOMEM;
@@ -58,7 +58,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         return OSH_EINVAL;
     }
     if (ws->prepared) {
-        osh_error("%s", "geometry: osh_geometry_workspace_prepare called on an already-prepared workspace");
+        OSH_DIAG_ERRORF(diag, "%s", "geometry: osh_geometry_workspace_prepare called on an already-prepared workspace");
         return OSH_ESTATE;
     }
 
