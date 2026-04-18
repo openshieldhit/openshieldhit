@@ -212,7 +212,7 @@ static void test_prepare_mixed_loaddedx_and_bethe_paths(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_material_compile(wm, 25u, &tables);
+    rc = osh_material_compile(wm, 25u, NULL, &tables);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(tables.nmaterials == 5u);
     ASSERT_TRUE(tables.nprojectiles == 25u);
@@ -315,7 +315,7 @@ static void test_prepare_bethe_infers_element_mee_from_material_mean_excitation(
     ASSERT_TRUE(mat_effective->elements[0].mean_excitation_energy > 0.0);
     ASSERT_TRUE(mat_effective->elements[1].mean_excitation_energy > 0.0);
 
-    rc = osh_material_compile(wm, 1u, &tables);
+    rc = osh_material_compile(wm, 1u, NULL, &tables);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(tables.nprojectiles == 1u);
 
@@ -353,7 +353,7 @@ static void test_prepare_rejects_projectiles_beyond_isotope_db(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_material_compile(wm, (unsigned int) OSH_ISOTOPE_DB_NELEM, &tables);
+    rc = osh_material_compile(wm, (unsigned int) OSH_ISOTOPE_DB_NELEM, NULL, &tables);
     ASSERT_TRUE(rc == OSH_EINVAL);
 
     osh_material_runtime_free(&tables);

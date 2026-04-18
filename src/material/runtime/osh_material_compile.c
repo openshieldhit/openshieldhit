@@ -386,6 +386,7 @@ static enum osh_status fill_bethe_projectile_column(struct osh_material_runtime 
                                                     size_t mat_idx,
                                                     size_t proj_idx,
                                                     double dlog,
+                                                    struct osh_diag_sink const *diag,
                                                     struct osh_physics_bethe_target const *tgt) {
     struct osh_physics_bethe_projectile proj;
     struct osh_physics_bethe_sewn sewn;
@@ -400,9 +401,10 @@ static enum osh_status fill_bethe_projectile_column(struct osh_material_runtime 
     proj.z = (double) t->projectile_z[proj_idx];
     proj.a = (double) t->projectile_a[proj_idx];
     if (!osh_particle_nuclear_mass_mev_from_za(t->projectile_z[proj_idx], t->projectile_a[proj_idx], &proj.mass_mev)) {
-        osh_error("transport: missing nuclear rest mass for projectile Z=%u A=%u",
-                  t->projectile_z[proj_idx],
-                  t->projectile_a[proj_idx]);
+        OSH_DIAG_ERRORF(diag,
+                        "transport: missing nuclear rest mass for projectile Z=%u A=%u",
+                        t->projectile_z[proj_idx],
+                        t->projectile_a[proj_idx]);
         return OSH_EINVAL;
     }
 
@@ -439,6 +441,7 @@ static enum osh_status fill_bethe_compound_projectile_column(struct osh_material
                                                              size_t mat_idx,
                                                              size_t proj_idx,
                                                              double dlog,
+                                                             struct osh_diag_sink const *diag,
                                                              struct osh_material const *mat) {
     struct osh_physics_bethe_projectile proj;
     struct osh_physics_bethe_target *elt_tgts;
@@ -451,9 +454,10 @@ static enum osh_status fill_bethe_compound_projectile_column(struct osh_material
     proj.z = (double) t->projectile_z[proj_idx];
     proj.a = (double) t->projectile_a[proj_idx];
     if (!osh_particle_nuclear_mass_mev_from_za(t->projectile_z[proj_idx], t->projectile_a[proj_idx], &proj.mass_mev)) {
-        osh_error("transport: missing nuclear rest mass for projectile Z=%u A=%u",
-                  t->projectile_z[proj_idx],
-                  t->projectile_a[proj_idx]);
+        OSH_DIAG_ERRORF(diag,
+                        "transport: missing nuclear rest mass for projectile Z=%u A=%u",
+                        t->projectile_z[proj_idx],
+                        t->projectile_a[proj_idx]);
         return OSH_EINVAL;
     }
 
@@ -524,7 +528,8 @@ static void log_runtime_column_summary(char const *material_name,
                                        char const *source_tag,
                                        struct osh_material_runtime const *t,
                                        size_t mat_idx,
-                                       size_t proj_idx) {
+                                       size_t proj_idx,
+                                       struct osh_diag_sink const *diag) {
     size_t base;
     unsigned int z;
     unsigned int a;
@@ -532,7 +537,7 @@ static void log_runtime_column_summary(char const *material_name,
     float sp1;
     float r1;
 
-    if (osh_log_get_level() > OSH_LOG_DEBUG) {
+    if (!diag || !diag->emit || diag->min_level > OSH_DIAG_LEVEL_DEBUG) {
         return;
     }
 
@@ -549,24 +554,27 @@ static void log_runtime_column_summary(char const *material_name,
      * this has proven more reliable in practice for surfacing the runtime
      * table summaries during validate-mode dry runs.
      */
-    osh_info("    %s projectile[%zu] Z=%u A=%u: SP(%.3f)=%.6g SP(%.1f)=%.6g Range(%.1f)=%.6g [%s]",
-             material_name ? material_name : "(unnamed)",
-             proj_idx,
-             z,
-             a,
-             t->emin,
-             sp0,
-             t->emax,
-             sp1,
-             t->emax,
-             r1,
-             source_tag ? source_tag : "runtime");
+    OSH_DIAG_INFOF(diag,
+                   "    %s projectile[%zu] Z=%u A=%u: SP(%.3f)=%.6g SP(%.1f)=%.6g Range(%.1f)=%.6g [%s]",
+                   material_name ? material_name : "(unnamed)",
+                   proj_idx,
+                   z,
+                   a,
+                   t->emin,
+                   sp0,
+                   t->emax,
+                   sp1,
+                   t->emax,
+                   r1,
+                   source_tag ? source_tag : "runtime");
 }
 
 /* ---- Public API ------------------------------------------------------------ */
 
-enum osh_status
-osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max, struct osh_material_runtime *tables) {
+enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
+                                     unsigned int z_max,
+                                     struct osh_diag_sink const *diag,
+                                     struct osh_material_runtime *tables) {
     size_t nmat, nproj, ne, nbytes_sp, nbytes_range;
     size_t mat_idx, proj_idx, e_idx, base;
     size_t i, j;
@@ -615,8 +623,9 @@ osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max
 
     t.nprojectiles = nproj;
 
-    osh_info("Preparing runtime stopping-power tables: %zu energy points from %.3f to %.1f MeV/u", ne, t.emin, t.emax);
-    osh_info("Runtime projectile set: %zu representative ions (Z = 1..%zu)", nproj, nproj);
+    OSH_DIAG_INFOF(
+        diag, "Preparing runtime stopping-power tables: %zu energy points from %.3f to %.1f MeV/u", ne, t.emin, t.emax);
+    OSH_DIAG_INFOF(diag, "Runtime projectile set: %zu representative ions (Z = 1..%zu)", nproj, nproj);
 
     /* Projectile Z, A, and nuclear-mass arrays. */
     t.projectile_z = calloc(nproj, sizeof(*t.projectile_z));
@@ -630,13 +639,13 @@ osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max
     for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
         z = (unsigned int) (proj_idx + 1u);
         if (!osh_particle_default_isotope_a(z, &a)) {
-            osh_error("Unsupported projectile Z=%u: no default isotope in the isotope database", z);
+            OSH_DIAG_ERRORF(diag, "Unsupported projectile Z=%u: no default isotope in the isotope database", z);
             rc = OSH_EINVAL;
             goto fail;
         }
 
         if (!osh_particle_nuclear_mass_mev_from_za(z, a, &mass_mev)) {
-            osh_error("Missing nuclear rest mass for projectile Z=%u A=%u", z, a);
+            OSH_DIAG_ERRORF(diag, "Missing nuclear rest mass for projectile Z=%u A=%u", z, a);
             rc = OSH_EINVAL;
             goto fail;
         }
@@ -644,7 +653,7 @@ osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max
         t.projectile_z[proj_idx] = z;
         t.projectile_a[proj_idx] = a;
         t.projectile_mass_mev[proj_idx] = mass_mev;
-        osh_info("    projectile[%zu]: Z=%u A=%u mass=%.4f MeV", proj_idx, z, a, mass_mev);
+        OSH_DIAG_INFOF(diag, "    projectile[%zu]: Z=%u A=%u mass=%.4f MeV", proj_idx, z, a, mass_mev);
     }
 
     /* ---- Table storage --------------------------------------------------- */
@@ -681,11 +690,12 @@ osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max
          * straggling.  These depend only on composition, not on projectile or
          * energy, so they are computed once here and stored in the flat arrays. */
         compute_material_atomic(mat, &t.z_mean[mat_idx], &t.z_over_a[mat_idx], &t.rad_length[mat_idx]);
-        osh_info("Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2",
-                 mat->name,
-                 (double) t.z_mean[mat_idx],
-                 (double) t.z_over_a[mat_idx],
-                 (double) t.rad_length[mat_idx]);
+        OSH_DIAG_INFOF(diag,
+                       "Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2",
+                       mat->name,
+                       (double) t.z_mean[mat_idx],
+                       (double) t.z_over_a[mat_idx],
+                       (double) t.rad_length[mat_idx]);
 
         /* ================================================================
          * Override and Bethe paths
@@ -695,17 +705,23 @@ osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max
             build_bethe_target(mat, &tgt);
         }
         if (mat->ndedx_overrides > 0u) {
-            osh_info(
-                "Material '%s': resampling %zu material-owned dE/dx override curves", mat->name, mat->ndedx_overrides);
+            OSH_DIAG_INFOF(diag,
+                           "Material '%s': resampling %zu material-owned dE/dx override curves",
+                           mat->name,
+                           mat->ndedx_overrides);
         } else if (use_compound_bethe) {
-            osh_info("Material '%s': generating Bethe stopping powers for %zu projectiles using element-by-element "
-                     "compound mode",
-                     mat->name,
-                     nproj);
+            OSH_DIAG_INFOF(
+                diag,
+                "Material '%s': generating Bethe stopping powers for %zu projectiles using element-by-element "
+                "compound mode",
+                mat->name,
+                nproj);
         } else {
-            osh_info("Material '%s': generating Bethe stopping powers for %zu projectiles using effective-medium mode",
-                     mat->name,
-                     nproj);
+            OSH_DIAG_INFOF(
+                diag,
+                "Material '%s': generating Bethe stopping powers for %zu projectiles using effective-medium mode",
+                mat->name,
+                nproj);
         }
 
         for (proj_idx = 0; proj_idx < nproj; ++proj_idx) {
@@ -727,20 +743,20 @@ osh_material_compile(struct osh_material_workspace const *wm, unsigned int z_max
 
                 rng_col = t.range_csda + base;
                 integrate_range(sp_col, rng_col, (double) t.projectile_a[proj_idx], &t);
-                log_runtime_column_summary(mat->name, "override-resampled", &t, mat_idx, proj_idx);
+                log_runtime_column_summary(mat->name, "override-resampled", &t, mat_idx, proj_idx, diag);
             } else {
                 if (use_compound_bethe) {
-                    rc = fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, mat);
+                    rc = fill_bethe_compound_projectile_column(&t, mat_idx, proj_idx, dlog, diag, mat);
                     if (rc != OSH_OK) {
                         goto fail;
                     }
-                    log_runtime_column_summary(mat->name, "Bethe-elements", &t, mat_idx, proj_idx);
+                    log_runtime_column_summary(mat->name, "Bethe-elements", &t, mat_idx, proj_idx, diag);
                 } else {
-                    rc = fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, &tgt);
+                    rc = fill_bethe_projectile_column(&t, mat_idx, proj_idx, dlog, diag, &tgt);
                     if (rc != OSH_OK) {
                         goto fail;
                     }
-                    log_runtime_column_summary(mat->name, "Bethe-effective", &t, mat_idx, proj_idx);
+                    log_runtime_column_summary(mat->name, "Bethe-effective", &t, mat_idx, proj_idx, diag);
                 }
             }
         }

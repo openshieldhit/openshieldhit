@@ -223,7 +223,7 @@ int main(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wm != NULL);
 
-    rc = osh_material_compile(wm, 6u, &tables);
+    rc = osh_material_compile(wm, 6u, NULL, &tables);
     ASSERT_TRUE(rc == OSH_OK);
 
     water_loaded = osh_material_by_name(wm, "WaterLoaded");

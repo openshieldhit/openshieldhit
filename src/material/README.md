@@ -32,5 +32,8 @@ osh_material_workspace_free()       release cold workspace
 - It defines and validates the cold material model used by the rest of the
   library.
 - Runtime transport tables are built here, then consumed elsewhere.
+- Compile-time diagnostics for runtime table construction are emitted through
+  a borrowed diagnostics sink supplied by the caller of
+  `osh_material_compile()`.
 - Other modules may consume `struct osh_material_runtime`, but should not
   construct it directly.
