@@ -19,10 +19,11 @@
 
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
+#include "common/osh_logger.h"
 #include "common/osh_readline.h"
-#include "openshieldhit/logger.h"
 
-typedef enum osh_status (*output_handler_fn)(struct osh_scoring_output_def *, char **, int, char const *, unsigned int);
+typedef enum osh_status (*output_handler_fn)(
+    struct osh_scoring_output_def *, struct osh_diag_sink const *, char **, int, char const *, unsigned int);
 
 struct output_entry {
     char const *key;
@@ -31,14 +32,30 @@ struct output_entry {
 
 static enum osh_status append_page(struct osh_scoring_output_def *out);
 static enum osh_status append_page_filter(struct osh_scoring_page_def *page, char const *name);
-static enum osh_status
-output_filename(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-output_geo(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
-static enum osh_status
-output_quantity(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno);
+static enum osh_status output_filename(struct osh_scoring_output_def *out,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno);
+static enum osh_status output_geo(struct osh_scoring_output_def *out,
+                                  struct osh_diag_sink const *diag,
+                                  char **words,
+                                  int nwords,
+                                  char const *path,
+                                  unsigned int lineno);
+static enum osh_status output_fileformat(struct osh_scoring_output_def *out,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno);
+static enum osh_status output_quantity(struct osh_scoring_output_def *out,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno);
 
 static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_filename},
                                              {OSH_SCORING_KEY_GEO_REF, output_geo},
@@ -51,6 +68,7 @@ static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_f
  * @brief Dispatch one tokenized line into the active output definition.
  */
 enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out,
+                                              struct osh_diag_sink const *diag,
                                               char **words,
                                               int nwords,
                                               char const *path,
@@ -64,7 +82,7 @@ enum osh_status osh_scoring_parse_output_line(struct osh_scoring_output_def *out
         if (strcmp(output_table[i].key, words[0]) == 0) {
             if (found_out)
                 *found_out = 1;
-            return output_table[i].handler(out, words, nwords, path, lineno);
+            return output_table[i].handler(out, diag, words, nwords, path, lineno);
         }
     }
     return OSH_OK;
@@ -102,10 +120,14 @@ static enum osh_status append_page_filter(struct osh_scoring_page_def *page, cha
 /**
  * @brief Parse `Filename <value>`.
  */
-static enum osh_status
-output_filename(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status output_filename(struct osh_scoring_output_def *out,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Output Filename requires an argument", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Output Filename requires an argument", path, lineno);
         return OSH_EPARSE;
     }
     free(out->filename);
@@ -116,10 +138,14 @@ output_filename(struct osh_scoring_output_def *out, char **words, int nwords, ch
 /**
  * @brief Parse `Geo <geometry_name>`.
  */
-static enum osh_status
-output_geo(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status output_geo(struct osh_scoring_output_def *out,
+                                  struct osh_diag_sink const *diag,
+                                  char **words,
+                                  int nwords,
+                                  char const *path,
+                                  unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Output Geo requires a geometry name", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Output Geo requires a geometry name", path, lineno);
         return OSH_EPARSE;
     }
     free(out->geometry_name);
@@ -130,10 +156,14 @@ output_geo(struct osh_scoring_output_def *out, char **words, int nwords, char co
 /**
  * @brief Parse `Fileformat <name>` (and alias `Format <name>`).
  */
-static enum osh_status
-output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status output_fileformat(struct osh_scoring_output_def *out,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno) {
     if (nwords < 2) {
-        osh_error("%s:%u: Output Fileformat requires a format name", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Output Fileformat requires a format name", path, lineno);
         return OSH_EPARSE;
     }
     free(out->fileformat);
@@ -145,14 +175,18 @@ output_fileformat(struct osh_scoring_output_def *out, char **words, int nwords, 
 /**
  * @brief Parse one `Quantity` line and append the corresponding page.
  */
-static enum osh_status
-output_quantity(struct osh_scoring_output_def *out, char **words, int nwords, char const *path, unsigned int lineno) {
+static enum osh_status output_quantity(struct osh_scoring_output_def *out,
+                                       struct osh_diag_sink const *diag,
+                                       char **words,
+                                       int nwords,
+                                       char const *path,
+                                       unsigned int lineno) {
     enum osh_status rc;
     size_t page_idx;
     int i;
 
     if (nwords < 2) {
-        osh_error("%s:%u: Output Quantity requires a quantity name", path, lineno);
+        OSH_DIAG_ERRORF(diag, "%s:%u: Output Quantity requires a quantity name", path, lineno);
         return OSH_EPARSE;
     }
     rc = append_page(out);

@@ -170,7 +170,9 @@ static enum osh_status init_projectile_map(struct osh_material_loaddedx_table *t
     return OSH_OK;
 }
 
-enum osh_status osh_material_loaddedx_table_load(char const *path, struct osh_material_loaddedx_table *table) {
+enum osh_status osh_material_loaddedx_table_load(char const *path,
+                                                 struct osh_diag_sink const *diag,
+                                                 struct osh_material_loaddedx_table *table) {
     struct oshfile *oshf;
     char *line;
     double *energy_rows;
@@ -223,16 +225,17 @@ enum osh_status osh_material_loaddedx_table_load(char const *path, struct osh_ma
         free(line);
         line = NULL;
         if (rc != OSH_OK) {
-            osh_error("in %s line %d: expected 1 energy column and at least %d contiguous stopping-power columns",
-                      path,
-                      lineno,
-                      OSH_MATERIAL_LOADDEDX_MINPROJECTILES);
+            OSH_DIAG_ERRORF(diag,
+                            "in %s line %d: expected 1 energy column and at least %d contiguous stopping-power columns",
+                            path,
+                            lineno,
+                            OSH_MATERIAL_LOADDEDX_MINPROJECTILES);
             free(row_values);
             row_values = NULL;
             break;
         }
         if (nrows > 0u && row_energy <= energy_rows[nrows - 1u]) {
-            osh_error("in %s line %d: energy grid must be strictly increasing", path, lineno);
+            OSH_DIAG_ERRORF(diag, "in %s line %d: energy grid must be strictly increasing", path, lineno);
             rc = OSH_EPARSE;
             free(row_values);
             row_values = NULL;
@@ -248,7 +251,7 @@ enum osh_status osh_material_loaddedx_table_load(char const *path, struct osh_ma
     }
 
     if (rc == OSH_OK && nrows == 0u) {
-        osh_error("in %s: no numeric stopping-power rows found", path);
+        OSH_DIAG_ERRORF(diag, "in %s: no numeric stopping-power rows found", path);
         rc = OSH_EPARSE;
     }
 
