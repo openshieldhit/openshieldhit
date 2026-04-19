@@ -20,7 +20,6 @@ struct oshfile *osh_fopen(char const *filename) {
 
     fp = fopen(filename, "r");
     if (!fp) {
-        osh_error("Could not open file: %s", filename);
         return NULL;
     }
 
@@ -41,7 +40,6 @@ struct oshfile *osh_fopen(char const *filename) {
         return NULL;
     }
     if (oshf->map_len < 1) {
-        osh_error("osh_fopen: file appears to contain no newlines.");
         osh_fclose(oshf);
         return NULL;
     }
@@ -109,7 +107,6 @@ static enum osh_status _mapfile(struct oshfile *oshf) {
     size_t map_slots;
 
     if (!oshf || !oshf->fp) {
-        osh_error("osh_mapfile: null file pointer");
         return OSH_EINVAL;
     }
 
@@ -125,12 +122,7 @@ static enum osh_status _mapfile(struct oshfile *oshf) {
         }
     }
     if (ferror(oshf->fp)) {
-        osh_error("osh_mapfile: failed while scanning file '%s'", oshf->filename);
         return OSH_EIO;
-    }
-
-    if (oshf->map_len < 1) {
-        osh_warn("osh_mapfile: file appears to contain no newlines.");
     }
 
     /* Allocate and fill the map with byte address of each new line */
@@ -152,7 +144,6 @@ static enum osh_status _mapfile(struct oshfile *oshf) {
         }
     }
     if (ferror(oshf->fp)) {
-        osh_error("osh_mapfile: failed while building line map for '%s'", oshf->filename);
         return OSH_EIO;
     }
 
@@ -168,7 +159,6 @@ static enum osh_status _rewind_file(struct oshfile *oshf) {
         return OSH_EINVAL;
     }
     if (fseek(oshf->fp, 0L, SEEK_SET) != 0) {
-        osh_error("osh_mapfile: failed to rewind file '%s'", oshf->filename);
         return OSH_EIO;
     }
     clearerr(oshf->fp);

@@ -198,6 +198,12 @@ struct gemca_rt_zone {
     int voxel_body_idx;          /**< Index of voxel body in bodies[], or -1 if none. */
 };
 
+enum osh_gemca_zone_batch_dispatch {
+    OSH_GEMCA_ZONE_BATCH_DISPATCH_SCALAR = 0,
+    OSH_GEMCA_ZONE_BATCH_DISPATCH_SCALAR_NOCPU = 1,
+    OSH_GEMCA_ZONE_BATCH_DISPATCH_AVX2 = 2
+};
+
 /**
  * @brief Compiled runtime representation of the full GEMCA geometry.
  *
@@ -234,6 +240,7 @@ struct osh_gemca_runtime {
     size_t nsurfaces;                           /**< Number of entries in surfaces[]. */
     size_t nbodies;                             /**< Number of entries in bodies[]. */
     size_t nzones;                              /**< Number of entries in zones[]. */
+    int zone_batch_dispatch;                    /**< enum osh_gemca_zone_batch_dispatch */
 };
 
 /* ---- Lifecycle ------------------------------------------------------------ */
@@ -271,6 +278,7 @@ struct osh_gemca_runtime {
  *          allocation failure.
  */
 enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+char const *osh_gemca_runtime_zone_batch_dispatch_name(struct osh_gemca_runtime const *rt);
 
 /**
  * @brief Release all allocations owned by a gemca runtime.
