@@ -3,7 +3,7 @@
 
 #include "beam/osh_beam.h"
 #include "beam/runtime/osh_beam_runtime.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/runtime/osh_material_compile.h"

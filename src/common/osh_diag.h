@@ -1,5 +1,5 @@
-#ifndef OSH_LOGGER_H
-#define OSH_LOGGER_H
+#ifndef OSH_DIAG_H
+#define OSH_DIAG_H
 
 #include "openshieldhit/logger.h"
 
@@ -12,4 +12,4 @@
 #define OSH_DIAG_ERRORF(diag, fmt, ...) OSH_DIAGF((diag), OSH_DIAG_LEVEL_ERROR, (fmt), ##__VA_ARGS__)
 #define OSH_DIAG_FATALF(diag, fmt, ...) OSH_DIAGF((diag), OSH_DIAG_LEVEL_FATAL, (fmt), ##__VA_ARGS__)
 
-#endif /* OSH_LOGGER_H */
+#endif /* OSH_DIAG_H */

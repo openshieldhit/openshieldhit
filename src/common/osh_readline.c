@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "osh_logger.h"
+#include "osh_diag.h"
 
 static int _is_comment(char c);
 

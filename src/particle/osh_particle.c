@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "common/osh_const.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "particle/osh_isotope_db.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_db.h"

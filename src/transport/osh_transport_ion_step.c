@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #include "common/osh_coord.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
 #include "common/osh_ray.h"
 #include "common/osh_step.h"

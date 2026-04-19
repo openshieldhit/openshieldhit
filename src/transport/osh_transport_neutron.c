@@ -1,6 +1,6 @@
 #include "transport/osh_transport_neutron.h"
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "transport/osh_transport.h"
 
 enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *transport_ctx,

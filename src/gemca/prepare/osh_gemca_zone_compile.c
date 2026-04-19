@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/prepare/osh_gemca_stack.h"
 

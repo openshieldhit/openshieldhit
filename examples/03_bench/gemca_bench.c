@@ -19,7 +19,7 @@
 #include <time.h>
 
 #include "apps/osh/osh_app_osh.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
 #include "openshieldhit/geometry.h"
