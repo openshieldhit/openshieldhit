@@ -114,6 +114,9 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile geometry runtime");
         goto fail;
     }
+    OSH_DIAG_INFOF(diag,
+                   "simulation: geometry runtime zone batch dispatcher: %s",
+                   osh_gemca_runtime_zone_batch_dispatch_name(&sim->geom_rt));
 
     /* ---- 3. Transport tables --------------------------------------------- */
 

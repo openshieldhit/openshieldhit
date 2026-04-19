@@ -4,7 +4,6 @@
 #include <stdlib.h>
 
 #include "common/osh_coord.h"
-#include "common/osh_logger.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_calc_surface.h"
@@ -49,9 +48,6 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
         d = _dist_zone(&z->node, &rr, &is_inside); /* find shortest distance to closest body */
         if (!is_inside) {                          /* keep advancing until we left the zone */
             break;
-        }
-        if (d < 0.0) {
-            osh_error("osh_gemca_get_distance(): negative distance to zone boundary");
         }
         if (d < OSH_GEMCA_STEPLIM) {
             // TODO: check if this may introduce scoring artefacts when a step is half in two zones
@@ -100,7 +96,6 @@ static inline double _dist_zone(struct cgnode const *self, struct ray const *r, 
             *is_inside = left_inside && !right_inside;
             break;
         default:
-            osh_error("_dist_zone(): unknown operator");
             *is_inside = 0;
             break;
         }
@@ -240,7 +235,6 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
         break;
 
     default:
-        osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
         return OSH_ENOTSUP;
     }
     return OSH_OK;

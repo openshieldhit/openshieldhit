@@ -38,6 +38,7 @@ struct dist_frame {
 static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 static enum osh_status setup_zones(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+static int detect_zone_batch_dispatch(void);
 
 /* Zone compilation */
 static enum osh_status
@@ -151,6 +152,7 @@ enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct os
     }
 
     rt->workspace = wg;
+    rt->zone_batch_dispatch = detect_zone_batch_dispatch();
 
     rc = setup_surfaces(wg, rt);
     if (rc != OSH_OK) {
@@ -170,17 +172,23 @@ enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct os
         return rc;
     }
 
-#ifdef OSH_GEMCA_RUNTIME_HAVE_AVX2
-    if (__builtin_cpu_supports("avx2")) {
-        osh_info("osh_gemca_runtime: zone batch dispatcher: AVX2+FMA (4-wide SIMD)");
-    } else {
-        osh_info("osh_gemca_runtime: zone batch dispatcher: scalar (AVX2 built-in but CPU lacks support)");
-    }
-#else
-    osh_info("osh_gemca_runtime: zone batch dispatcher: scalar (built without AVX2)");
-#endif
-
     return OSH_OK;
+}
+
+char const *osh_gemca_runtime_zone_batch_dispatch_name(struct osh_gemca_runtime const *rt) {
+    if (!rt) {
+        return "scalar";
+    }
+
+    switch (rt->zone_batch_dispatch) {
+    case OSH_GEMCA_ZONE_BATCH_DISPATCH_AVX2:
+        return "AVX2+FMA (4-wide SIMD)";
+    case OSH_GEMCA_ZONE_BATCH_DISPATCH_SCALAR_NOCPU:
+        return "scalar (AVX2 built-in but CPU lacks support)";
+    case OSH_GEMCA_ZONE_BATCH_DISPATCH_SCALAR:
+    default:
+        return "scalar";
+    }
 }
 
 /**
@@ -289,10 +297,6 @@ double osh_gemca_runtime_get_distance(struct osh_gemca_runtime const *rt, size_t
     while (1) {
         d = eval_distance(rt, &rt->zones[zone_idx], &rr, &is_inside);
         if (!is_inside) {
-            break;
-        }
-        if (d < 0.0) {
-            osh_error("osh_gemca_runtime_get_distance(): negative step distance");
             break;
         }
         if (d < OSH_GEMCA_STEPLIM) {
@@ -979,6 +983,17 @@ void osh_gemca_runtime_get_zone_batch(struct osh_gemca_runtime const *rt,
     }
 }
 
+static int detect_zone_batch_dispatch(void) {
+#ifdef OSH_GEMCA_RUNTIME_HAVE_AVX2
+    if (__builtin_cpu_supports("avx2")) {
+        return OSH_GEMCA_ZONE_BATCH_DISPATCH_AVX2;
+    }
+    return OSH_GEMCA_ZONE_BATCH_DISPATCH_SCALAR_NOCPU;
+#else
+    return OSH_GEMCA_ZONE_BATCH_DISPATCH_SCALAR;
+#endif
+}
+
 /**
  * @brief Boundary-distance query for a batch of @p n particles (SoA inputs).
  *
@@ -1035,10 +1050,6 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
         while (1) {
             d = eval_distance(rt, &rt->zones[zone_idx], &rr, &is_inside);
             if (!is_inside) {
-                break;
-            }
-            if (d < 0.0) {
-                osh_error("osh_gemca_runtime_get_distance_batch(): negative step distance");
                 break;
             }
             if (d < OSH_GEMCA_STEPLIM) {
@@ -1482,7 +1493,6 @@ eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *
         case GEMCA_RT_PUSH_BODY:
         case GEMCA_RT_PUSH_VOXEL_BODY:
             if (sp >= OSH_GEMCA_RT_MAX_STACK) {
-                osh_error("eval_membership(): RPN stack overflow (depth %d)", sp);
                 return 0;
             }
             stack[sp++] = in_body_rt(rt, insn->operand, r);
@@ -1514,7 +1524,6 @@ eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *
             break;
 
         default:
-            osh_error("eval_membership(): unknown opcode %d", insn->op);
             return 0;
         }
     }
@@ -1588,7 +1597,6 @@ static void eval_membership_batch_active(struct osh_gemca_runtime const *rt,
         case GEMCA_RT_PUSH_BODY:
         case GEMCA_RT_PUSH_VOXEL_BODY:
             if (sp >= OSH_GEMCA_RT_MAX_STACK) {
-                osh_error("eval_membership_batch_active(): RPN stack overflow (depth %d)", sp);
                 return;
             }
             check_body_batch_indexed_rt(
@@ -1627,7 +1635,6 @@ static void eval_membership_batch_active(struct osh_gemca_runtime const *rt,
             break;
 
         default:
-            osh_error("eval_membership_batch_active(): unknown opcode %d", insn->op);
             return;
         }
     }
@@ -1692,7 +1699,6 @@ eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z,
         case GEMCA_RT_PUSH_BODY:
         case GEMCA_RT_PUSH_VOXEL_BODY:
             if (sp >= OSH_GEMCA_RT_MAX_STACK) {
-                osh_error("eval_distance(): RPN stack overflow (depth %d)", sp);
                 *is_inside = 0;
                 return 0.0;
             }
@@ -1740,7 +1746,6 @@ eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z,
             break;
 
         default:
-            osh_error("eval_distance(): unknown opcode %d", insn->op);
             *is_inside = 0;
             return OSH_GEMCA_INFINITY;
         }
@@ -1879,7 +1884,6 @@ transform_to_local_rt(struct gemca_rt_body const *b, struct ray const *r, struct
         break;
 
     default:
-        osh_error("transform_to_local_rt(): unsupported coordinate system %d", (int) b->coord);
         return OSH_ENOTSUP;
     }
 
@@ -1944,7 +1948,6 @@ static inline enum osh_status transform_to_local_batch_rt(struct gemca_rt_body c
         break;
 
     default:
-        osh_error("transform_to_local_batch_rt(): unsupported coordinate system %d", (int) b->coord);
         return OSH_ENOTSUP;
     }
 
@@ -2070,7 +2073,6 @@ static inline int _check_surface_components_rt(
         return ((sf->p[0] * ux) + (sf->p[1] * uy) + (sf->p[2] * uz) > 0.0) ? 0 : 1;
 
     default:
-        osh_error("_check_surface_components_rt(): unknown surface type %d", sf->type);
         return 1;
     }
 }

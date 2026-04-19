@@ -3,7 +3,6 @@
 #include <stdlib.h>
 
 #include "common/osh_coord.h"
-#include "common/osh_logger.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_calc_surface.h"
@@ -83,7 +82,6 @@ static inline int _in_node(struct cgnode const *self, struct ray const *r) {
         return _in_node(self->left, r) || _in_node(self->right, r);
 
     default:
-        osh_error("_in_node(): unknown operator");
         return 0;
     }
 }
@@ -161,7 +159,6 @@ static inline enum osh_status _transform_to_local(struct body const *b, struct r
         break;
 
     default:
-        osh_error("_transform_to_local() unsupported coordinate system :%i", b->coord);
         return OSH_ENOTSUP;
     }
     return OSH_OK;
