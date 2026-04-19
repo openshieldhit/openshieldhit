@@ -312,24 +312,24 @@ int osh_particle_nuclear_mass_mev_from_za(unsigned int z, unsigned int a, double
     return 1;
 }
 
-void osh_print_particle(struct particle const *p) {
+void osh_print_particle(struct particle const *p, struct osh_diag_sink const *diag) {
     char name_buf[64];
 
-    if (!p) {
+    if (!p || !diag || !diag->emit || diag->min_level > OSH_DIAG_LEVEL_INFO) {
         return;
     }
     if (!osh_particle_name_from_pdg(p->pdg, name_buf, sizeof(name_buf))) {
         name_buf[0] = '\0';
     }
 
-    osh_info("Particle: %s", name_buf);
-    osh_info(OSH_LOG_HLINE);
-    osh_info("%-18s : %i", "PDG code", p->pdg);
-    osh_info("%-18s : %i", "Z", (int) p->z);
-    osh_info("%-18s : %i", "A", (int) p->a);
+    OSH_DIAG_INFOF(diag, "Particle: %s", name_buf);
+    OSH_DIAG_INFOF(diag, "%s", "------------------------------------------------------------");
+    OSH_DIAG_INFOF(diag, "%-18s : %i", "PDG code", p->pdg);
+    OSH_DIAG_INFOF(diag, "%-18s : %i", "Z", (int) p->z);
+    OSH_DIAG_INFOF(diag, "%-18s : %i", "A", (int) p->a);
     /* Mass is the bare nuclear mass (fully stripped ion, no electrons).
      * Derived as: atomic_mass * OSH_AMU - Z * m_electron (CODATA 2018). */
-    osh_info("%-18s : %-12.5f MeV/c^2  (nuclear, CODATA 2018)", "Mass", p->mass);
-    osh_info("%-18s : %-12.5f Da        (nuclear, CODATA 2018)", "Mass", p->mass / OSH_AMU);
-    osh_info("%-18s : %i e", "Charge", (int) p->charge);
+    OSH_DIAG_INFOF(diag, "%-18s : %-12.5f MeV/c^2  (nuclear, CODATA 2018)", "Mass", p->mass);
+    OSH_DIAG_INFOF(diag, "%-18s : %-12.5f Da        (nuclear, CODATA 2018)", "Mass", p->mass / OSH_AMU);
+    OSH_DIAG_INFOF(diag, "%-18s : %i e", "Charge", (int) p->charge);
 }

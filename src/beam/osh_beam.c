@@ -22,6 +22,7 @@ static int _resolve_primary_particle(struct beam_workspace const *wb, struct par
 static void _postparse_spot_energy(struct beam_spot *spot, struct particle const *part);
 static void _build_spot_tm(struct beam_spot const *spot, struct beam_shared const *sh, double tm_out[16]);
 static void _beam_print_primary(struct particle const *p, struct osh_diag_sink const *diag);
+static char const *_beam_onoff(int value);
 
 enum osh_status osh_beam_workspace_create(struct beam_workspace **wb_out) {
     enum osh_status rc = OSH_OK;
@@ -71,8 +72,6 @@ enum osh_status osh_beam_workspace_prepare(struct beam_workspace *wb, struct osh
 
     if (diag && diag->emit && diag->min_level <= OSH_DIAG_LEVEL_INFO) {
         osh_beam_print(wb, diag);
-    } else if (!diag && osh_log_get_level() <= OSH_LOG_INFO) {
-        osh_beam_print(wb, NULL);
     }
 
     return OSH_OK;
@@ -481,81 +480,51 @@ static int _wb_postparse(struct beam_workspace *wb) {
 
 /* osh_beamdef.h name arrays (osh_beam_mscat_names etc.) included via osh_beam.h */
 
+static char const *_beam_onoff(int value) {
+    return value ? "ON" : "OFF";
+}
+
 void osh_beam_print(struct beam_workspace const *wb, struct osh_diag_sink const *diag) {
     struct particle primary_part;
     struct osh_beam_prepared const *prepared;
     int rc;
 
-    if (!wb) {
+    if (!wb || !diag || !diag->emit || diag->min_level > OSH_DIAG_LEVEL_INFO) {
         return;
     }
     prepared = wb->prepared;
 
-    if (diag && diag->emit) {
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "Beam configuration:");
-        OSH_DIAG_INFOF(diag, "%s", OSH_LOG_HLINE);
-        OSH_DIAG_INFOF(diag, "%-40s : %li", "Requested primaries NSTAT", (long int) wb->nstat);
-        if (wb->nsave > 0) {
-            OSH_DIAG_INFOF(diag, "%-40s : %li", "Save interval NSAVE", (long int) wb->nsave);
-        } else {
-            OSH_DIAG_INFOF(diag, "%-40s : %s", "Save interval NSAVE", "OFF");
-        }
-        OSH_DIAG_INFOF(diag, "%-40s : %i", "Random seed RNDSEED", wb->rndseed);
-        OSH_DIAG_INFOF(diag, "%-40s : %i", "Random seed offset", wb->rndoffset);
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "%-18s : %f", "DeltaE/E", wb->deltae);
-        OSH_DIAG_INFOF(diag, "%-18s : %f MeV", "Neutron cut", wb->ncut);
-        OSH_DIAG_INFOF(diag, "%-18s : %f MeV/nucleon", "DeltaE min", wb->demin);
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "%-18s : %s", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);
-        OSH_DIAG_INFOF(diag, "%-18s : %s", "Straggling mode", osh_beam_stragg_names[(int) wb->straggl]);
-        OSH_DIAG_INFOF(diag, "%-18s : %s", "Nuclear react.", osh_log_offon[(int) wb->nuclear]);
-        OSH_DIAG_INFOF(diag, "%-18s : %s", "Apcorr mode", osh_log_offon[(int) wb->apcorr]);
-        OSH_DIAG_INFOF(diag, "%-18s : %s", "Beam mode", osh_beam_mode_names[(int) wb->beam_mode]);
-        OSH_DIAG_INFOF(diag, "%-18s : %s", "Make LN", osh_log_offon[(int) wb->makeln]);
-        OSH_DIAG_INFOF(diag, "%-18s : %s", "Fast neutrons", osh_log_offon[(int) wb->neutrfast]);
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  cm", "SAD (x,y)", wb->shared.sad[0], wb->shared.sad[1]);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  cm", "Focus", wb->shared.focus);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  deg", "Theta", wb->shared.theta * 180.0 * OSH_M_1_PI);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  deg", "Phi", wb->shared.phi * 180.0 * OSH_M_1_PI);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV", "Emax", prepared ? prepared->emax : 0.0);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV/c", "Pmax", prepared ? prepared->pmax : 0.0);
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "Beam configuration:");
+    OSH_DIAG_INFOF(diag, "%s", "------------------------------------------------------------");
+    OSH_DIAG_INFOF(diag, "%-40s : %li", "Requested primaries NSTAT", (long int) wb->nstat);
+    if (wb->nsave > 0) {
+        OSH_DIAG_INFOF(diag, "%-40s : %li", "Save interval NSAVE", (long int) wb->nsave);
     } else {
-        osh_info("%s", "");
-        osh_info("%s", "");
-        osh_info("Beam configuration:");
-        osh_info(OSH_LOG_HLINE);
-        osh_info("%-40s : %li", "Requested primaries NSTAT", (long int) wb->nstat);
-        if (wb->nsave > 0) {
-            osh_info("%-40s : %li", "Save interval NSAVE", (long int) wb->nsave);
-        } else {
-            osh_info("%-40s : %s", "Save interval NSAVE", "OFF");
-        }
-        osh_info("%-40s : %i", "Random seed RNDSEED", wb->rndseed);
-        osh_info("%-40s : %i", "Random seed offset", wb->rndoffset);
-        osh_info("%s", "");
-        osh_info("%-18s : %f", "DeltaE/E", wb->deltae);
-        osh_info("%-18s : %f MeV", "Neutron cut", wb->ncut);
-        osh_info("%-18s : %f MeV/nucleon", "DeltaE min", wb->demin);
-        osh_info("%s", "");
-        osh_info("%-18s : %s", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);
-        osh_info("%-18s : %s", "Straggling mode", osh_beam_stragg_names[(int) wb->straggl]);
-        osh_info("%-18s : %s", "Nuclear react.", osh_log_offon[(int) wb->nuclear]);
-        osh_info("%-18s : %s", "Apcorr mode", osh_log_offon[(int) wb->apcorr]);
-        osh_info("%-18s : %s", "Beam mode", osh_beam_mode_names[(int) wb->beam_mode]);
-        osh_info("%-18s : %s", "Make LN", osh_log_offon[(int) wb->makeln]);
-        osh_info("%-18s : %s", "Fast neutrons", osh_log_offon[(int) wb->neutrfast]);
-        osh_info("%s", "");
-        osh_info("%-18s : %.3f  %.3f  cm", "SAD (x,y)", wb->shared.sad[0], wb->shared.sad[1]);
-        osh_info("%-18s : %.3f  cm", "Focus", wb->shared.focus);
-        osh_info("%-18s : %.3f  deg", "Theta", wb->shared.theta * 180.0 * OSH_M_1_PI);
-        osh_info("%-18s : %.3f  deg", "Phi", wb->shared.phi * 180.0 * OSH_M_1_PI);
-        osh_info("%-18s : %.3f  MeV", "Emax", prepared ? prepared->emax : 0.0);
-        osh_info("%-18s : %.3f  MeV/c", "Pmax", prepared ? prepared->pmax : 0.0);
+        OSH_DIAG_INFOF(diag, "%-40s : %s", "Save interval NSAVE", "OFF");
     }
+    OSH_DIAG_INFOF(diag, "%-40s : %i", "Random seed RNDSEED", wb->rndseed);
+    OSH_DIAG_INFOF(diag, "%-40s : %i", "Random seed offset", wb->rndoffset);
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "%-18s : %f", "DeltaE/E", wb->deltae);
+    OSH_DIAG_INFOF(diag, "%-18s : %f MeV", "Neutron cut", wb->ncut);
+    OSH_DIAG_INFOF(diag, "%-18s : %f MeV/nucleon", "DeltaE min", wb->demin);
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "%-18s : %s", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);
+    OSH_DIAG_INFOF(diag, "%-18s : %s", "Straggling mode", osh_beam_stragg_names[(int) wb->straggl]);
+    OSH_DIAG_INFOF(diag, "%-18s : %s", "Nuclear react.", _beam_onoff((int) wb->nuclear));
+    OSH_DIAG_INFOF(diag, "%-18s : %s", "Apcorr mode", _beam_onoff((int) wb->apcorr));
+    OSH_DIAG_INFOF(diag, "%-18s : %s", "Beam mode", osh_beam_mode_names[(int) wb->beam_mode]);
+    OSH_DIAG_INFOF(diag, "%-18s : %s", "Make LN", _beam_onoff((int) wb->makeln));
+    OSH_DIAG_INFOF(diag, "%-18s : %s", "Fast neutrons", _beam_onoff((int) wb->neutrfast));
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  cm", "SAD (x,y)", wb->shared.sad[0], wb->shared.sad[1]);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  cm", "Focus", wb->shared.focus);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  deg", "Theta", wb->shared.theta * 180.0 * OSH_M_1_PI);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  deg", "Phi", wb->shared.phi * 180.0 * OSH_M_1_PI);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV", "Emax", prepared ? prepared->emax : 0.0);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV/c", "Pmax", prepared ? prepared->pmax : 0.0);
 
     if (wb->has_primary) {
         rc = _resolve_primary_particle(wb, &primary_part);
@@ -570,52 +539,29 @@ void osh_beam_print(struct beam_workspace const *wb, struct osh_diag_sink const 
 }
 
 void osh_beam_print_spot(struct beam_spot const *spot, struct osh_diag_sink const *diag) {
-    if (!spot) {
+    if (!spot || !diag || !diag->emit || diag->min_level > OSH_DIAG_LEVEL_INFO) {
         return;
     }
 
-    if (diag && diag->emit) {
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  %.3f  cm", "Position", spot->p[0], spot->p[1], spot->p[2]);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  cm", "Size/sigma", spot->size[0], spot->size[1]);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  mrad", "Divergence", spot->div[0] * 1000.0, spot->div[1] * 1000.0);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f", "Correlation", spot->cor[0], spot->cor[1]);
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV", "T0", spot->t0);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV", "TSigma", spot->tsigma);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV/c", "P0", spot->p0);
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV/c", "PSigma", spot->psigma);
-        OSH_DIAG_INFOF(diag, "%-18s : %i", "TSigma type", (int) spot->tsigma_type);
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "%-18s : %.3f", "Stat.weight", spot->wt);
-        OSH_DIAG_INFOF(diag, "%-18s : %u", "Spot ID", spot->spot_id);
-        OSH_DIAG_INFOF(diag, "%-18s : %u", "Layer ID", spot->layer_id);
-        if (spot->shape >= 0 && (int) spot->shape < 4) {
-            OSH_DIAG_INFOF(diag, "%-18s : %s", "Shape", osh_beam_shape_names[(int) spot->shape]);
-        } else {
-            OSH_DIAG_INFOF(diag, "%-18s : invalid (%i)", "Shape", (int) spot->shape);
-        }
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  %.3f  cm", "Position", spot->p[0], spot->p[1], spot->p[2]);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  cm", "Size/sigma", spot->size[0], spot->size[1]);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f  mrad", "Divergence", spot->div[0] * 1000.0, spot->div[1] * 1000.0);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  %.3f", "Correlation", spot->cor[0], spot->cor[1]);
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV", "T0", spot->t0);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV", "TSigma", spot->tsigma);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV/c", "P0", spot->p0);
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f  MeV/c", "PSigma", spot->psigma);
+    OSH_DIAG_INFOF(diag, "%-18s : %i", "TSigma type", (int) spot->tsigma_type);
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "%-18s : %.3f", "Stat.weight", spot->wt);
+    OSH_DIAG_INFOF(diag, "%-18s : %u", "Spot ID", spot->spot_id);
+    OSH_DIAG_INFOF(diag, "%-18s : %u", "Layer ID", spot->layer_id);
+    if (spot->shape >= 0 && (int) spot->shape < 4) {
+        OSH_DIAG_INFOF(diag, "%-18s : %s", "Shape", osh_beam_shape_names[(int) spot->shape]);
     } else {
-        osh_info("%s", "");
-        osh_info("%-18s : %.3f  %.3f  %.3f  cm", "Position", spot->p[0], spot->p[1], spot->p[2]);
-        osh_info("%-18s : %.3f  %.3f  cm", "Size/sigma", spot->size[0], spot->size[1]);
-        osh_info("%-18s : %.3f  %.3f  mrad", "Divergence", spot->div[0] * 1000.0, spot->div[1] * 1000.0);
-        osh_info("%-18s : %.3f  %.3f", "Correlation", spot->cor[0], spot->cor[1]);
-        osh_info("%s", "");
-        osh_info("%-18s : %.3f  MeV", "T0", spot->t0);
-        osh_info("%-18s : %.3f  MeV", "TSigma", spot->tsigma);
-        osh_info("%-18s : %.3f  MeV/c", "P0", spot->p0);
-        osh_info("%-18s : %.3f  MeV/c", "PSigma", spot->psigma);
-        osh_info("%-18s : %i", "TSigma type", (int) spot->tsigma_type);
-        osh_info("%s", "");
-        osh_info("%-18s : %.3f", "Stat.weight", spot->wt);
-        osh_info("%-18s : %u", "Spot ID", spot->spot_id);
-        osh_info("%-18s : %u", "Layer ID", spot->layer_id);
-        if (spot->shape >= 0 && (int) spot->shape < 4) {
-            osh_info("%-18s : %s", "Shape", osh_beam_shape_names[(int) spot->shape]);
-        } else {
-            osh_info("%-18s : invalid (%i)", "Shape", (int) spot->shape);
-        }
+        OSH_DIAG_INFOF(diag, "%-18s : invalid (%i)", "Shape", (int) spot->shape);
     }
 }
 
@@ -629,18 +575,8 @@ static void _beam_print_primary(struct particle const *p, struct osh_diag_sink c
         name_buf[0] = '\0';
     }
 
-    if (diag && diag->emit) {
+    if (diag && diag->emit && diag->min_level <= OSH_DIAG_LEVEL_INFO) {
         OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "Particle: %s", name_buf);
-        OSH_DIAG_INFOF(diag, "%s", OSH_LOG_HLINE);
-        OSH_DIAG_INFOF(diag, "%-18s : %i", "PDG code", p->pdg);
-        OSH_DIAG_INFOF(diag, "%-18s : %i", "Z", (int) p->z);
-        OSH_DIAG_INFOF(diag, "%-18s : %i", "A", (int) p->a);
-        OSH_DIAG_INFOF(diag, "%-18s : %-12.5f MeV/c^2  (nuclear, CODATA 2018)", "Mass", p->mass);
-        OSH_DIAG_INFOF(diag, "%-18s : %-12.5f Da        (nuclear, CODATA 2018)", "Mass", p->mass / OSH_AMU);
-        OSH_DIAG_INFOF(diag, "%-18s : %i e", "Charge", (int) p->charge);
-    } else {
-        osh_info("%s", "");
-        osh_print_particle(p);
+        osh_print_particle(p, diag);
     }
 }

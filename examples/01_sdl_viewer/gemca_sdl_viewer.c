@@ -40,14 +40,21 @@ int zero_ray(struct ray *r);
 int plot(struct osh_gemca_prepared *g, int ndots);
 void setRendererColor(SDL_Renderer *renderer, int zid);
 void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
+static void stderr_diag(void *user, int level, char const *file, int line, char const *function, char const *message);
+
+static void stderr_diag(void *user, int level, char const *file, int line, char const *function, char const *message) {
+    FILE *fp = (FILE *) user;
+    (void) file;
+    (void) line;
+    (void) function;
+    fprintf(fp ? fp : stderr, "[%s] %s\n", osh_diag_level_name(level), message);
+}
 
 int main(int argc, char *argv[]) {
 
     struct osh_geometry_workspace *geom = NULL;
     struct osh_gemca_prepared *g = NULL;
-
-    /* Setup logger, select OSH_LOG_DEBUG for more information. */
-    osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
+    struct osh_diag_sink diag = {.emit = stderr_diag, .user = stderr, .min_level = OSH_DIAG_LEVEL_INFO};
 
     /* Handle --version flag */
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
@@ -67,12 +74,12 @@ int main(int argc, char *argv[]) {
 
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
-    if (osh_geometry_setup_from_path(argv[1], NULL, &geom) != OSH_OK) {
+    if (osh_geometry_setup_from_path(argv[1], &diag, &geom) != OSH_OK) {
         fprintf(stderr, "osh_geometry_setup_from_path() failed\n");
         return EXIT_FAILURE;
     }
     g = geom->prepared;
-    osh_gemca_prepared_print(g);
+    osh_gemca_prepared_print(g, &diag);
 
     plot(g, 4);
 

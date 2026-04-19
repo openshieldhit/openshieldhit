@@ -101,15 +101,22 @@ void drawDot(SDL_Renderer *renderer, int centerX, int centerY, int radius);
 int ray_cast_statistics(struct osh_gemca_prepared *g, int nstat);
 static void draw_ray_path(SDL_Renderer *s, struct osh_gemca_prepared *g, struct ray ray0, double max_range_cm);
 static void draw_map(SDL_Renderer *s, struct osh_gemca_prepared *g, int ndots);
+static void stderr_diag(void *user, int level, char const *file, int line, char const *function, char const *message);
+
+static void stderr_diag(void *user, int level, char const *file, int line, char const *function, char const *message) {
+    FILE *fp = (FILE *) user;
+    (void) file;
+    (void) line;
+    (void) function;
+    fprintf(fp ? fp : stderr, "[%s] %s\n", osh_diag_level_name(level), message);
+}
 
 int main(int argc, char *argv[]) {
 
     struct osh_geometry_workspace *geom = NULL;
     struct osh_gemca_prepared *g = NULL;
     int zone = 1;
-
-    /* Setup logger, select OSH_LOG_DEBUG for more information. */
-    osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
+    struct osh_diag_sink diag = {.emit = stderr_diag, .user = stderr, .min_level = OSH_DIAG_LEVEL_INFO};
 
     /* Handle --version flag */
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
@@ -144,7 +151,7 @@ int main(int argc, char *argv[]) {
     printf("----------------ffff---------------------\n");
     printf("PHASE 1: parse %s\n", argv[1]);
     fflush(stdout);
-    if (osh_geometry_setup_from_path(argv[1], NULL, &geom) != OSH_OK) {
+    if (osh_geometry_setup_from_path(argv[1], &diag, &geom) != OSH_OK) {
         fprintf(stderr, "bnct_sdl: osh_geometry_setup_from_path() failed for '%s'\n", argv[1]);
         return EXIT_FAILURE;
     }
@@ -161,7 +168,7 @@ int main(int argc, char *argv[]) {
            (unsigned long long) g->nzones);
     fflush(stdout);
 
-    osh_gemca_prepared_print(g);
+    osh_gemca_prepared_print(g, &diag);
 
     if (plot(g, 4000, zone) != 0) {
         fprintf(stderr, "bnct_sdl: plot() failed\n");

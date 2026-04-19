@@ -179,9 +179,6 @@ int _parse_header(struct oshfile *shf, struct voxelct *ct) {
         } else if (strcasecmp(OSH_GEMCA_VOXEL_KEY_SLICENO, key) == 0) { /* slice_no: z_table data */
             /* we now need to read a z-table */
             if (!ct->has_ztable) {
-                osh_warn("_parse_header(): in %s line %lu. No 'z_table yes', skipping the rest of the file. ",
-                         ct->fname_hed,
-                         lineno);
                 break;
             }
             while (osh_readline(shf, &line, &lineno) > 0) { /* read the z_table */

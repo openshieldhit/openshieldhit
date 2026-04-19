@@ -58,9 +58,9 @@ installed public API and should not be re-exported through `include/`.
   itself selects the concrete writer per output block based on the parsed
   scoring format.
 
-  The diagnostics-sink migration is intentionally narrow at present: app,
-  simulation, and transport use the explicit sink, while older untouched
-  modules may still rely on the legacy global logger.
+  Diagnostics ownership is explicit: app, simulation, and transport use a
+  caller-owned sink, and deeper modules should either do the same or stay
+  silent unless they sit at a real setup/compile boundary.
 
 ## Expected future layout
 
