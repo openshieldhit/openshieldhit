@@ -158,7 +158,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
          * set up already (step 2 above) because the tokeniser resolves body
          * names to pointers at this stage. */
         if (cz->expr && cz->expr[0]) {
-            rc = osh_gemca_zone_compile_expr(z, cz->expr, gemca);
+            rc = osh_gemca_zone_compile_expr(z, cz->expr, gemca, diag);
             if (rc != OSH_OK) {
                 goto fail;
             }

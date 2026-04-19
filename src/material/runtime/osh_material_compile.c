@@ -90,7 +90,6 @@ static double interpolate_override_dloglog(double xin, double const *xx, double 
     if (xin < xx[0]) {
         switch (mode) {
         case OSH_INTERPOLATE_OOB_ERR:
-            osh_error("osh_material_compile: override lower bound exceeded.");
             return NAN;
         case OSH_INTERPOLATE_OOB_ZERO:
             return 0.0;
@@ -106,7 +105,6 @@ static double interpolate_override_dloglog(double xin, double const *xx, double 
     } else if (xin > xx[n - 1u]) {
         switch (mode) {
         case OSH_INTERPOLATE_OOB_ERR:
-            osh_error("osh_material_compile: override upper bound exceeded.");
             return NAN;
         case OSH_INTERPOLATE_OOB_ZERO:
             return 0.0;
@@ -122,7 +120,6 @@ static double interpolate_override_dloglog(double xin, double const *xx, double 
     } else {
         i = osh_binary_search_d(xin, xx, (unsigned long int) n);
         if (i < 0) {
-            osh_error("osh_material_compile: override binary search failed.");
             return NAN;
         }
         x0 = xx[i];
@@ -549,10 +546,9 @@ static void log_runtime_column_summary(char const *material_name,
     r1 = t->range_csda[base + t->nenergy - 1u];
 
     /*
-     * Emit through osh_info() under an explicit debug-level gate. The logger
-     * already routes these only for -vv runs via the level check above, and
-     * this has proven more reliable in practice for surfacing the runtime
-     * table summaries during validate-mode dry runs.
+     * Emit through the diagnostics sink under an explicit debug-level gate.
+     * This has proven useful for surfacing runtime-table summaries during
+     * validate-mode dry runs without adding noise to the hot path.
      */
     OSH_DIAG_INFOF(diag,
                    "    %s projectile[%zu] Z=%u A=%u: SP(%.3f)=%.6g SP(%.1f)=%.6g Range(%.1f)=%.6g [%s]",

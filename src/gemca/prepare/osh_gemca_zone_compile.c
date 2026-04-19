@@ -12,10 +12,10 @@ static struct body *_body_from_name(char *bname, struct osh_gemca_prepared *g);
 
 static struct cgnode *_new_node_comp(struct stack *st, char operator);
 static struct cgnode *_new_node_body(struct body *b);
-static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g);
+static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g, struct osh_diag_sink const *diag);
 
-static size_t _reformat(char const *input, char **output);
-static int _tokenizer(char const *input, char ***t);
+static size_t _reformat(char const *input, char **output, struct osh_diag_sink const *diag);
+static int _tokenizer(char const *input, char ***t, struct osh_diag_sink const *diag);
 static void _reverse_tokens(char **tokens, int ntokens);
 static int _is_operator(char o);
 
@@ -33,7 +33,6 @@ enum osh_status osh_gemca_zone_init(struct zone **zone) {
     z = calloc(1, sizeof(struct zone));
 
     if (z == NULL) {
-        osh_error("osh_gemca_zone_init: could not allocate memory");
         return OSH_ENOMEM;
     }
 
@@ -140,7 +139,7 @@ static struct cgnode *_new_node_body(struct body *b) {
  *
  * @author Niels Bassler
  */
-static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
+static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g, struct osh_diag_sink const *diag) {
 
     size_t i;
     char *token;
@@ -182,7 +181,7 @@ static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
                 }
             }
             if (opst == NULL) {
-                osh_error("%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
+                OSH_DIAG_ERRORF(diag, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
             }
         } else {
             /* this is a simple body / leaf node. Push it to the stack as such, */
@@ -190,7 +189,7 @@ static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
             /* But first, lookup body from token name. */
             b = _body_from_name(token, g);
             if (b == NULL) {
-                osh_error("_build_ast() coudn't find body names '%s'", token);
+                OSH_DIAG_ERRORF(diag, "_build_ast() coudn't find body names '%s'", token);
             }
             node = _new_node_body(b);
 
@@ -206,7 +205,7 @@ static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
         si = osh_gemca_stack_pop(opst);
 
         if ((si->v.op == '(') || (si->v.op == ')')) {
-            osh_error("%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
+            OSH_DIAG_ERRORF(diag, "%s:%zu: unbalanced parenthesis in zone description", g->filename, z->lineno);
         } else {
             /* make csgnode from popped and push to csgstack */
             node = _new_node_comp(st, si->v.op);
@@ -220,7 +219,7 @@ static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
     /* what is left on the stack is the AST object. */
     si = osh_gemca_stack_pop(st);
     if (si == NULL) {
-        osh_error("empty zone description");
+        OSH_DIAG_ERRORF(diag, "empty zone description");
         return NULL;
     }
     z->node = *si->v.cgnode;
@@ -247,7 +246,7 @@ static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g) {
  *
  * @author Niels Bassler
  */
-static size_t _reformat(char const *input, char **output) {
+static size_t _reformat(char const *input, char **output, struct osh_diag_sink const *diag) {
 
     size_t i; /* index for input string */
     size_t j; /* index for output string */
@@ -266,7 +265,7 @@ static size_t _reformat(char const *input, char **output) {
     {
         char *tmp = realloc(*output, ol * sizeof(char));
         if (tmp == NULL) {
-            osh_error("_reformat(): cannot malloc");
+            OSH_DIAG_ERRORF(diag, "_reformat(): cannot malloc");
             return -1;
         }
         *output = tmp;
@@ -296,7 +295,7 @@ static size_t _reformat(char const *input, char **output) {
         /* do not add '+' or '-' if there was a leading '(' */
         if ((*output)[j - 1] == '(') {
             if (input[i] == '-') {
-                osh_error("leading body cannot be a '-' body, only '+'");
+                OSH_DIAG_ERRORF(diag, "leading body cannot be a '-' body, only '+'");
             } else if (input[i] == '+') {
                 /* do not add unary '+' to output stream, i.e. (+2-1) -> (2-1) */
                 i++;
@@ -332,7 +331,7 @@ static size_t _reformat(char const *input, char **output) {
             {
                 char *tmp = realloc(*output, ol * sizeof(char));
                 if (tmp == NULL) {
-                    osh_error("_reformat(): cannot realloc #2");
+                    OSH_DIAG_ERRORF(diag, "_reformat(): cannot realloc #2");
                     return -1;
                 }
                 *output = tmp;
@@ -348,7 +347,7 @@ static size_t _reformat(char const *input, char **output) {
     {
         char *tmp = realloc(*output, (j + 1) * sizeof(char));
         if (tmp == NULL) {
-            osh_error("_reformat(): cannot realloc #3");
+            OSH_DIAG_ERRORF(diag, "_reformat(): cannot realloc #3");
             return -1;
         }
         *output = tmp;
@@ -369,7 +368,7 @@ static size_t _reformat(char const *input, char **output) {
  *
  * @author Niels Bassler
  */
-static int _tokenizer(char const *input, char ***ptokens) {
+static int _tokenizer(char const *input, char ***ptokens, struct osh_diag_sink const *diag) {
     size_t ilen;
     size_t n;
     size_t i;
@@ -401,7 +400,7 @@ static int _tokenizer(char const *input, char ***ptokens) {
 
     *ptokens = (char **) calloc(n, sizeof(char *));
     if (*ptokens == NULL) {
-        osh_error("_tokenizer(): cannot allocate token list");
+        OSH_DIAG_ERRORF(diag, "_tokenizer(): cannot allocate token list");
         return -1;
     }
 
@@ -520,7 +519,10 @@ static int _has_null_body(struct cgnode const *node) {
     return _has_null_body(node->left) || _has_null_body(node->right);
 }
 
-enum osh_status osh_gemca_zone_compile_expr(struct zone *z, char const *expr, struct osh_gemca_prepared *g) {
+enum osh_status osh_gemca_zone_compile_expr(struct zone *z,
+                                            char const *expr,
+                                            struct osh_gemca_prepared *g,
+                                            struct osh_diag_sink const *diag) {
     char *tstr = NULL;
     char **tokens = NULL;
     int ntokens;
@@ -536,15 +538,22 @@ enum osh_status osh_gemca_zone_compile_expr(struct zone *z, char const *expr, st
         return OSH_ENOMEM;
     }
 
-    _reformat(expr, &tstr);
-    ntokens = _tokenizer(tstr, &tokens);
+    if (_reformat(expr, &tstr, diag) == (size_t) -1) {
+        free(tstr);
+        return OSH_ENOMEM;
+    }
+    ntokens = _tokenizer(tstr, &tokens, diag);
+    if (ntokens < 0) {
+        free(tstr);
+        return OSH_ENOMEM;
+    }
     _reverse_tokens(tokens, ntokens);
     free(tstr);
 
     z->tokens = tokens;
     z->ntokens = (size_t) ntokens;
 
-    _build_ast(z, g);
+    _build_ast(z, g, diag);
 
     /* _build_ast() logs errors for unresolved body names but does not abort.
      * Check the compiled tree: any NULL body pointer means the zone expr

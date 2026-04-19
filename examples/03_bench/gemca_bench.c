@@ -29,6 +29,14 @@
 
 #define DEFAULT_NRAYS 1000000
 
+static void stderr_diag(void *user, int level, char const *file, int line, char const *function, char const *message) {
+    FILE *fp = (FILE *) user;
+    (void) file;
+    (void) line;
+    (void) function;
+    fprintf(fp ? fp : stderr, "[%s] %s\n", osh_diag_level_name(level), message);
+}
+
 /* Returns wall-clock seconds with at least millisecond resolution. */
 static double _now(void) {
     struct timespec ts;
@@ -109,6 +117,7 @@ int main(int argc, char *argv[]) {
     struct osh_gemca_prepared *g = NULL;
     struct osh_rng rng;
     struct ray r;
+    struct osh_diag_sink diag = {.emit = stderr_diag, .user = stderr, .min_level = OSH_DIAG_LEVEL_INFO};
 
     double bbox_min[3];
     double bbox_max[3];
@@ -118,9 +127,6 @@ int main(int argc, char *argv[]) {
     double t0;
     double t1;
     double elapsed;
-
-    /* Setup logger, select OSH_LOG_DEBUG for more information. */
-    osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
 
     /* --- argument handling ------------------------------------------------ */
     if (argc < 2) {
@@ -137,7 +143,7 @@ int main(int argc, char *argv[]) {
 
     /* --- load geometry ---------------------------------------------------- */
     printf("Loading geometry: %s\n", argv[1]);
-    if (osh_geometry_setup_from_path(argv[1], NULL, &geom) != OSH_OK) {
+    if (osh_geometry_setup_from_path(argv[1], &diag, &geom) != OSH_OK) {
         fprintf(stderr, "osh_geometry_setup_from_path() failed\n");
         return EXIT_FAILURE;
     }

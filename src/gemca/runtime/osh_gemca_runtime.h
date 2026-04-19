@@ -277,7 +277,8 @@ struct osh_gemca_runtime {
  * @returns OSH_OK on success, OSH_EINVAL if wg or rt is NULL, OSH_ENOMEM on
  *          allocation failure.
  */
-enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+enum osh_status
+osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt);
 char const *osh_gemca_runtime_zone_batch_dispatch_name(struct osh_gemca_runtime const *rt);
 
 /**

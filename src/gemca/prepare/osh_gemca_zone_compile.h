@@ -2,6 +2,7 @@
 #define OSH_GEMCA_ZONE_COMPILE_H
 
 #include "gemca/osh_gemca2.h"
+#include "openshieldhit/logger.h"
 
 /**
  * @file osh_gemca_zone_compile.h
@@ -29,6 +30,9 @@ enum osh_status osh_gemca_zone_init(struct zone **zone);
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-enum osh_status osh_gemca_zone_compile_expr(struct zone *z, char const *expr, struct osh_gemca_prepared *g);
+enum osh_status osh_gemca_zone_compile_expr(struct zone *z,
+                                            char const *expr,
+                                            struct osh_gemca_prepared *g,
+                                            struct osh_diag_sink const *diag);
 
 #endif /* OSH_GEMCA_ZONE_COMPILE_H */

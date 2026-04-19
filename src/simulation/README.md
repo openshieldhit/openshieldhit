@@ -174,6 +174,6 @@ The diagnostics sink currently covers the main runtime path:
 - `osh_simulation_save`
 - `transport/`
 
-Older modules that have not yet been migrated may still emit through the
-legacy global logger API.  That coexistence is intentional for now to keep the
-migration branch narrow.
+Older modules that have not yet been migrated should either move to explicit
+diagnostics sinks or drop low-value logging entirely. The main runtime path no
+longer depends on any global logger state.
