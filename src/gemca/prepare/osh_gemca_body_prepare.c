@@ -2,8 +2,6 @@
 
 #include <stdlib.h>
 
-#include "common/osh_logger.h"
-
 /**
  * @brief Allocate and zero-initialise one internal GEMCA body object.
  *
@@ -21,14 +19,12 @@
  */
 enum osh_status osh_gemca_body_init(struct body **body) {
     if (body == NULL) {
-        osh_error("osh_gemca_body_init() called with NULL output pointer");
         return OSH_EINVAL;
     }
 
     *body = NULL;
     *body = calloc(1, sizeof(struct body));
     if (*body == NULL) {
-        osh_error("osh_gemca_body_init() cannot allocate memory");
         return OSH_ENOMEM;
     }
     return OSH_OK;

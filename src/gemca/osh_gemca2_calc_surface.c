@@ -5,7 +5,6 @@
 #include <stdlib.h>
 
 #include "common/osh_coord.h"
-#include "common/osh_logger.h"
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
@@ -102,7 +101,6 @@ enum osh_status osh_gemca2_add_surf_pars(struct surface *s, int type) {
         s->np = 2;            /* [A,B]^2   x^2 + y^2 - (z-A)^2/B^2 = 0 (always along z) */
         break;
     default:
-        osh_error("_add_surf_pars: unknown surface type: %i", type);
         return OSH_EINVAL;
     }
     s->p = calloc(s->np, sizeof(double));
@@ -166,12 +164,7 @@ int osh_gemca2_check_surface_side(struct surface const *sf, struct ray const *r)
         return _inside_plane(sf, r);
         break;
 
-    case OSH_GEMCA_SURF_NONE:
-        osh_error("_check_surface_side(): NONE surface type %i", sf->type);
-        break;
-
     default:
-        osh_error("_check_surface_side(): unknown surface type %i", sf->type);
         break;
     }
     return 1; /* is inside */
