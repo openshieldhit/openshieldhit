@@ -40,6 +40,14 @@
 #include "openshieldhit/geometry.h"
 #include "random/osh_rng.h"
 
+static void stderr_diag(void *user, int level, char const *file, int line, char const *function, char const *message) {
+    FILE *fp = (FILE *) user;
+    (void) file;
+    (void) line;
+    (void) function;
+    fprintf(fp ? fp : stderr, "[%s] %s\n", osh_diag_level_name(level), message);
+}
+
 /* ---- Window layout --------------------------------------------------------- */
 
 #define PANEL_PIXELS 600
@@ -492,10 +500,9 @@ int main(int argc, char *argv[]) {
     char title[320];
     int rc;
     int quit;
+    struct osh_diag_sink diag = {.emit = stderr_diag, .user = stderr, .min_level = OSH_DIAG_LEVEL_INFO};
 
     memset(&rt, 0, sizeof(rt));
-
-    osh_log_init(OSH_LOG_INFO, OSH_LOG_F_NONE);
 
     rc = parse_args(argc, argv, &opts);
     if (rc != 0) {
@@ -504,16 +511,16 @@ int main(int argc, char *argv[]) {
 
     /* ---- Load geometry ---------------------------------------------------- */
 
-    if (osh_geometry_setup_from_path(opts.geo_file, NULL, &geom) != OSH_OK) {
+    if (osh_geometry_setup_from_path(opts.geo_file, &diag, &geom) != OSH_OK) {
         fprintf(stderr, "error: failed to load geometry from '%s'\n", opts.geo_file);
         return 1;
     }
     g = geom->prepared;
-    osh_gemca_prepared_print(g);
+    osh_gemca_prepared_print(g, &diag);
 
     /* ---- Compile runtime -------------------------------------------------- */
 
-    if (osh_gemca_compile(g, &rt) != OSH_OK) {
+    if (osh_gemca_compile(g, &diag, &rt) != OSH_OK) {
         fprintf(stderr, "error: failed to compile gemca runtime\n");
         osh_geometry_workspace_free(geom);
         return 1;

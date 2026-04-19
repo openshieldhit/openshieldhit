@@ -86,8 +86,6 @@ enum osh_status osh_material_workspace_prepare(struct osh_material_workspace *wm
 
     if (diag && diag->emit && diag->min_level <= OSH_DIAG_LEVEL_INFO) {
         osh_material_print(wm, diag);
-    } else if (!diag && osh_log_get_level() <= OSH_LOG_INFO) {
-        osh_material_print(wm, NULL);
     }
 
     return OSH_OK;
@@ -235,143 +233,77 @@ void osh_material_print(struct osh_material_workspace const *wm, struct osh_diag
     struct osh_material const *mat;
     struct osh_material_element const *elem;
 
-    if (!wm) {
+    if (!wm || !diag || !diag->emit || diag->min_level > OSH_DIAG_LEVEL_INFO) {
         return;
     }
 
-    if (diag && diag->emit) {
-        OSH_DIAG_INFOF(diag, "%s", "");
-        OSH_DIAG_INFOF(diag, "Material configuration:");
-        OSH_DIAG_INFOF(diag, "%s", OSH_LOG_HLINE);
-        OSH_DIAG_INFOF(diag, "%-24s : %zu", "Number of materials", wm->nmaterials);
-    } else {
-        osh_info("%s", "");
-        osh_info("Material configuration:");
-        osh_info(OSH_LOG_HLINE);
-        osh_info("%-24s : %zu", "Number of materials", wm->nmaterials);
-    }
+    OSH_DIAG_INFOF(diag, "%s", "");
+    OSH_DIAG_INFOF(diag, "Material configuration:");
+    OSH_DIAG_INFOF(diag, "%s", "------------------------------------------------------------");
+    OSH_DIAG_INFOF(diag, "%-24s : %zu", "Number of materials", wm->nmaterials);
 
     i = 0;
     while (i < wm->nmaterials) {
         mat = &wm->materials[i];
-        if (diag && diag->emit) {
-            OSH_DIAG_INFOF(diag, "%s", "");
-            OSH_DIAG_INFOF(diag, "Material[%zu]: index=%zu name=%s", i, mat->index, mat->name ? mat->name : "(unset)");
-            if (mat->icru_id == 0) {
-                OSH_DIAG_INFOF(diag, "%-24s : %s", "ICRU id", "(unset)");
-            } else {
-                OSH_DIAG_INFOF(diag, "%-24s : %i", "ICRU id", mat->icru_id);
-            }
-            if (mat->rho < 0.0) {
-                OSH_DIAG_INFOF(diag, "%-24s : %s", "Density RHO", "(N/A)");
-            } else {
-                OSH_DIAG_INFOF(diag, "%-24s : %.6f g/cm^3", "Density RHO", mat->rho);
-            }
-            if (mat->mean_excitation_energy < 0.0) {
-                OSH_DIAG_INFOF(diag, "%-24s : %s", "Mean excitation energy", "(N/A)");
-            } else {
-                OSH_DIAG_INFOF(diag, "%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
-            }
-            OSH_DIAG_INFOF(diag, "%-24s : %zu", "dE/dx overrides", mat->ndedx_overrides);
-            OSH_DIAG_INFOF(
-                diag, "%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
-            OSH_DIAG_INFOF(diag, "%-24s : %s", "State", material_state_name(mat->state));
-            OSH_DIAG_INFOF(diag, "%-24s : %zu", "Elements", mat->nelements);
-
-            j = 0;
-            while (j < mat->nelements) {
-                elem = &mat->elements[j];
-                if (elem->mean_excitation_energy < 0.0) {
-                    OSH_DIAG_INFOF(
-                        diag,
-                        "    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=(N/A)",
-                        j,
-                        elem->z,
-                        elem->a,
-                        elem->atom_count,
-                        elem->mass_fraction);
-                } else {
-                    OSH_DIAG_INFOF(
-                        diag,
-                        "    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.4f eV",
-                        j,
-                        elem->z,
-                        elem->a,
-                        elem->atom_count,
-                        elem->mass_fraction,
-                        elem->mean_excitation_energy);
-                }
-                j++;
-            }
-            k = 0u;
-            while (k < mat->ndedx_overrides) {
-                OSH_DIAG_INFOF(diag,
-                               "    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
-                               k,
-                               mat->dedx_overrides[k].projectile_z,
-                               mat->dedx_overrides[k].npoints,
-                               mat->dedx_overrides[k].energy_mev_per_u[0],
-                               mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
-                               mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
-                               mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
-                k++;
-            }
+        OSH_DIAG_INFOF(diag, "%s", "");
+        OSH_DIAG_INFOF(diag, "Material[%zu]: index=%zu name=%s", i, mat->index, mat->name ? mat->name : "(unset)");
+        if (mat->icru_id == 0) {
+            OSH_DIAG_INFOF(diag, "%-24s : %s", "ICRU id", "(unset)");
         } else {
-            osh_info("%s", "");
-            osh_info("Material[%zu]: index=%zu name=%s", i, mat->index, mat->name ? mat->name : "(unset)");
-            if (mat->icru_id == 0) {
-                osh_info("%-24s : %s", "ICRU id", "(unset)");
-            } else {
-                osh_info("%-24s : %i", "ICRU id", mat->icru_id);
-            }
-            if (mat->rho < 0.0) {
-                osh_info("%-24s : %s", "Density RHO", "(N/A)");
-            } else {
-                osh_info("%-24s : %.6f g/cm^3", "Density RHO", mat->rho);
-            }
-            if (mat->mean_excitation_energy < 0.0) {
-                osh_info("%-24s : %s", "Mean excitation energy", "(N/A)");
-            } else {
-                osh_info("%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
-            }
-            osh_info("%-24s : %zu", "dE/dx overrides", mat->ndedx_overrides);
-            osh_info("%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
-            osh_info("%-24s : %s", "State", material_state_name(mat->state));
-            osh_info("%-24s : %zu", "Elements", mat->nelements);
+            OSH_DIAG_INFOF(diag, "%-24s : %i", "ICRU id", mat->icru_id);
+        }
+        if (mat->rho < 0.0) {
+            OSH_DIAG_INFOF(diag, "%-24s : %s", "Density RHO", "(N/A)");
+        } else {
+            OSH_DIAG_INFOF(diag, "%-24s : %.6f g/cm^3", "Density RHO", mat->rho);
+        }
+        if (mat->mean_excitation_energy < 0.0) {
+            OSH_DIAG_INFOF(diag, "%-24s : %s", "Mean excitation energy", "(N/A)");
+        } else {
+            OSH_DIAG_INFOF(diag, "%-24s : %.4f eV", "Mean excitation energy", mat->mean_excitation_energy);
+        }
+        OSH_DIAG_INFOF(diag, "%-24s : %zu", "dE/dx overrides", mat->ndedx_overrides);
+        OSH_DIAG_INFOF(
+            diag, "%-24s : %.3g %.3g %.3g %.3g", "RGBA", mat->rgba[0], mat->rgba[1], mat->rgba[2], mat->rgba[3]);
+        OSH_DIAG_INFOF(diag, "%-24s : %s", "State", material_state_name(mat->state));
+        OSH_DIAG_INFOF(diag, "%-24s : %zu", "Elements", mat->nelements);
 
-            j = 0;
-            while (j < mat->nelements) {
-                elem = &mat->elements[j];
-                if (elem->mean_excitation_energy < 0.0) {
-                    osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=(N/A)",
-                             j,
-                             elem->z,
-                             elem->a,
-                             elem->atom_count,
-                             elem->mass_fraction);
-                } else {
-                    osh_info("    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.4f eV",
-                             j,
-                             elem->z,
-                             elem->a,
-                             elem->atom_count,
-                             elem->mass_fraction,
-                             elem->mean_excitation_energy);
-                }
-                j++;
+        j = 0;
+        while (j < mat->nelements) {
+            elem = &mat->elements[j];
+            if (elem->mean_excitation_energy < 0.0) {
+                OSH_DIAG_INFOF(diag,
+                               "    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=(N/A)",
+                               j,
+                               elem->z,
+                               elem->a,
+                               elem->atom_count,
+                               elem->mass_fraction);
+            } else {
+                OSH_DIAG_INFOF(
+                    diag,
+                    "    element[%zu]: Z=%u A=%u atoms=%.8g mass_fraction=%.8g mean_excitation_energy=%.4f eV",
+                    j,
+                    elem->z,
+                    elem->a,
+                    elem->atom_count,
+                    elem->mass_fraction,
+                    elem->mean_excitation_energy);
             }
-            k = 0u;
-            while (k < mat->ndedx_overrides) {
-                osh_info("    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
-                         k,
-                         mat->dedx_overrides[k].projectile_z,
-                         mat->dedx_overrides[k].npoints,
-                         mat->dedx_overrides[k].energy_mev_per_u[0],
-                         mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
-                         mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
-                         mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
-                k++;
-            }
+            j++;
+        }
+        k = 0u;
+        while (k < mat->ndedx_overrides) {
+            OSH_DIAG_INFOF(diag,
+                           "    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
+                           k,
+                           mat->dedx_overrides[k].projectile_z,
+                           mat->dedx_overrides[k].npoints,
+                           mat->dedx_overrides[k].energy_mev_per_u[0],
+                           mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
+                           mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
+                           mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
+            k++;
         }
         i++;
     }

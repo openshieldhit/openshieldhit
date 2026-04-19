@@ -37,14 +37,20 @@ struct dist_frame {
 /* Setup helpers */
 static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
-static enum osh_status setup_zones(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+static enum osh_status
+setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt);
 static int detect_zone_batch_dispatch(void);
 
 /* Zone compilation */
-static enum osh_status
-compile_zone(struct zone const *z, struct osh_gemca_prepared const *wg, struct gemca_rt_zone *zrt);
-static void
-compile_node(struct cgnode const *node, struct osh_gemca_prepared const *wg, struct gemca_rt_insn *insns, int *ninsns);
+static enum osh_status compile_zone(struct zone const *z,
+                                    struct osh_gemca_prepared const *wg,
+                                    struct osh_diag_sink const *diag,
+                                    struct gemca_rt_zone *zrt);
+static void compile_node(struct cgnode const *node,
+                         struct osh_gemca_prepared const *wg,
+                         struct osh_diag_sink const *diag,
+                         struct gemca_rt_insn *insns,
+                         int *ninsns);
 static int count_leaves(struct cgnode const *node);
 static struct body const *find_guard_body(struct cgnode const *node);
 static int find_body_index(struct osh_gemca_prepared const *wg, struct body const *b);
@@ -144,7 +150,8 @@ static inline double _minpos(double a, double b);
  *
  * @returns OSH_OK on success, OSH_E* on failure.
  */
-enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
+enum osh_status
+osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt) {
     enum osh_status rc;
 
     if (!wg || !rt) {
@@ -166,7 +173,7 @@ enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg, struct os
         return rc;
     }
 
-    rc = setup_zones(wg, rt);
+    rc = setup_zones(wg, diag, rt);
     if (rc != OSH_OK) {
         osh_gemca_runtime_free(rt);
         return rc;
@@ -1173,7 +1180,8 @@ static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct 
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
-static enum osh_status setup_zones(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
+static enum osh_status
+setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt) {
     size_t iz;
     enum osh_status rc;
 
@@ -1184,7 +1192,7 @@ static enum osh_status setup_zones(struct osh_gemca_prepared const *wg, struct o
     rt->nzones = wg->nzones;
 
     for (iz = 0; iz < wg->nzones; iz++) {
-        rc = compile_zone(wg->zones[iz], wg, &rt->zones[iz]);
+        rc = compile_zone(wg->zones[iz], wg, diag, &rt->zones[iz]);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -1218,8 +1226,10 @@ static enum osh_status setup_zones(struct osh_gemca_prepared const *wg, struct o
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
-static enum osh_status
-compile_zone(struct zone const *z, struct osh_gemca_prepared const *wg, struct gemca_rt_zone *zrt) {
+static enum osh_status compile_zone(struct zone const *z,
+                                    struct osh_gemca_prepared const *wg,
+                                    struct osh_diag_sink const *diag,
+                                    struct gemca_rt_zone *zrt) {
     struct body const *guard;
     int guard_idx;
     int nleaves;
@@ -1262,7 +1272,7 @@ compile_zone(struct zone const *z, struct osh_gemca_prepared const *wg, struct g
     }
 
     /* Compile the CSG tree post-order into the remaining slots. */
-    compile_node(&z->node, wg, zrt->insns, &ninsns);
+    compile_node(&z->node, wg, diag, zrt->insns, &ninsns);
 
     zrt->ninsns = ninsns;
 
@@ -1296,11 +1306,12 @@ compile_zone(struct zone const *z, struct osh_gemca_prepared const *wg, struct g
             }
         }
         if (max_sp > OSH_GEMCA_RT_MAX_STACK) {
-            osh_error("compile_zone: zone '%s' requires RPN stack depth %d > max %d; "
-                      "increase OSH_GEMCA_RT_MAX_STACK",
-                      z->name,
-                      max_sp,
-                      OSH_GEMCA_RT_MAX_STACK);
+            OSH_DIAG_ERRORF(diag,
+                            "compile_zone: zone '%s' requires RPN stack depth %d > max %d; increase "
+                            "OSH_GEMCA_RT_MAX_STACK",
+                            z->name,
+                            max_sp,
+                            OSH_GEMCA_RT_MAX_STACK);
             free(zrt->insns);
             zrt->insns = NULL;
             return OSH_EINVAL;
@@ -1334,8 +1345,11 @@ compile_zone(struct zone const *z, struct osh_gemca_prepared const *wg, struct g
  * @param[in,out] insns   Destination instruction array (must have sufficient capacity).
  * @param[in,out] ninsns  Running count of instructions written so far.
  */
-static void
-compile_node(struct cgnode const *node, struct osh_gemca_prepared const *wg, struct gemca_rt_insn *insns, int *ninsns) {
+static void compile_node(struct cgnode const *node,
+                         struct osh_gemca_prepared const *wg,
+                         struct osh_diag_sink const *diag,
+                         struct gemca_rt_insn *insns,
+                         int *ninsns) {
     int body_idx;
 
     if (node->type == _OSH_GEMCA_CGNODE_BODY) {
@@ -1344,7 +1358,7 @@ compile_node(struct cgnode const *node, struct osh_gemca_prepared const *wg, str
              * resolve.  The error has already been logged; emit a sentinel
              * operand (-1) so the RPN stack stays balanced.  Evaluators treat
              * body_idx < 0 as "always outside", making the zone unreachable. */
-            osh_error("compile_node: leaf node has NULL body pointer — zone will be unreachable");
+            OSH_DIAG_ERRORF(diag, "compile_node: leaf node has NULL body pointer — zone will be unreachable");
             insns[*ninsns].op = GEMCA_RT_PUSH_BODY;
             insns[*ninsns].operand = -1;
             (*ninsns)++;
@@ -1358,8 +1372,8 @@ compile_node(struct cgnode const *node, struct osh_gemca_prepared const *wg, str
     }
 
     /* Interior node: left subtree, right subtree, then operator. */
-    compile_node(node->left, wg, insns, ninsns);
-    compile_node(node->right, wg, insns, ninsns);
+    compile_node(node->left, wg, diag, insns, ninsns);
+    compile_node(node->right, wg, diag, insns, ninsns);
 
     switch (node->op) {
     case '|':
@@ -1372,7 +1386,7 @@ compile_node(struct cgnode const *node, struct osh_gemca_prepared const *wg, str
         insns[*ninsns].op = GEMCA_RT_DIFF;
         break;
     default:
-        osh_error("compile_node(): unknown CSG operator '%c'", node->op);
+        OSH_DIAG_ERRORF(diag, "compile_node(): unknown CSG operator '%c'", node->op);
         insns[*ninsns].op = GEMCA_RT_UNION; /* safe fallback */
         break;
     }

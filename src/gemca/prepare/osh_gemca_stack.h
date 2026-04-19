@@ -2,6 +2,7 @@
 #define OSH_GEMCA_STACK_H
 
 #include "gemca/osh_gemca2.h"
+#include "openshieldhit/logger.h"
 
 #define _OSH_GEMCA_STACKITEM_OPERATOR 0
 #define _OSH_GEMCA_STACKITEM_CGNODE 1
@@ -24,6 +25,6 @@ struct stackitem {
 size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i);
 struct stackitem *osh_gemca_stack_pop(struct stack *s);
 void osh_gemca_stack_free(struct stack **ps);
-void osh_gemca_stack_print(struct stack *s);
+void osh_gemca_stack_print(struct stack *s, struct osh_diag_sink const *diag);
 
 #endif /* OSH_GEMCA_STACK_H */

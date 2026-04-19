@@ -109,7 +109,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 2. Geometry runtime -------------------------------------------- */
 
-    rc = osh_gemca_compile(gemca, &sim->geom_rt);
+    rc = osh_gemca_compile(gemca, diag, &sim->geom_rt);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile geometry runtime");
         goto fail;

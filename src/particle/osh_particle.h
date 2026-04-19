@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "openshieldhit/logger.h"
+
 /**
  * @brief Species descriptor for a particle type.
  *
@@ -125,6 +127,6 @@ int osh_particle_atomic_mass_amu_from_za(unsigned int z, unsigned int a, double 
  */
 int osh_particle_nuclear_mass_mev_from_za(unsigned int z, unsigned int a, double *mass_out);
 
-void osh_print_particle(struct particle const *p);
+void osh_print_particle(struct particle const *p, struct osh_diag_sink const *diag);
 
 #endif /* OSH_PARTICLE_H */

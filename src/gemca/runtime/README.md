@@ -96,7 +96,7 @@ needed before a GPU kernel can be written.
 
 | Item | Location | Action for GPU |
 |---|---|---|
-| `osh_error()` in hot path | `eval_membership_batch_active` | Replace with per-particle error flag or silent no-op in GPU kernel |
+| Diagnostics in hot path | `eval_membership_batch_active` | Replace with per-particle error flag or silent no-op in GPU kernel |
 | `struct ray` in scalar tail | `get_zone_batch_avx2` | Drop — no scalar tail on GPU; all lanes run in parallel |
 | `__builtin_cpu_supports` dispatch | `get_zone_batch` | Host-only; kernel is launched unconditionally from host code |
 | `workspace` pointer in `osh_gemca_runtime` | diagnostics | Not copied to device |

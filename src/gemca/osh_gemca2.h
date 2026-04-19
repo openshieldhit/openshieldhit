@@ -6,6 +6,7 @@
 
 #include "common/osh_coord.h"
 #include "common/osh_ray.h" /* struct ray, struct ray_v, struct ray_c */
+#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 /** @defgroup gemca Geometry Engine (GEMCA)
@@ -181,11 +182,17 @@ double osh_gemca_get_distance(struct zone *z, struct ray const *r);
 
 /** @name Debug printing */
 /** @{ */
-void osh_gemca_prepared_print(struct osh_gemca_prepared const *g); /**< Print full workspace summary to debug log */
-void osh_gemca_print_body(struct body const *b);                   /**< Print body parameters to debug log */
-void osh_gemca_print_zone(struct zone const *z);                   /**< Print zone parameters to debug log */
-void osh_gemca_print_surface(struct surface const *s);             /**< Print surface parameters to debug log */
-void osh_gemca_print_cgnodes(struct cgnode const *self);           /**< Recursively print CSG tree to debug log */
+void osh_gemca_prepared_print(
+    struct osh_gemca_prepared const *g,
+    struct osh_diag_sink const *diag); /**< Print full workspace summary to diagnostics sink */
+void osh_gemca_print_body(struct body const *b,
+                          struct osh_diag_sink const *diag); /**< Print body parameters to diagnostics sink */
+void osh_gemca_print_zone(struct zone const *z,
+                          struct osh_diag_sink const *diag); /**< Print zone parameters to diagnostics sink */
+void osh_gemca_print_surface(struct surface const *s,
+                             struct osh_diag_sink const *diag); /**< Print surface parameters to diagnostics sink */
+void osh_gemca_print_cgnodes(struct cgnode const *self,
+                             struct osh_diag_sink const *diag); /**< Recursively print CSG tree to diagnostics sink */
 /** @} */
 
 /** @} */ /* end defgroup gemca */

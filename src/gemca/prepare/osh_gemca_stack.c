@@ -77,22 +77,28 @@ void osh_gemca_stack_free(struct stack **ps) {
     *ps = NULL;
 }
 
-void osh_gemca_stack_print(struct stack *s) {
+void osh_gemca_stack_print(struct stack *s, struct osh_diag_sink const *diag) {
     size_t i;
-    osh_debug(OSH_LOG_HLINE);
-    osh_debug("STACK : %p", (void *) s);
-    osh_debug("NELEM : %llu", (unsigned long long) s->ni);
-    osh_debug("NMEM  : %llu", (unsigned long long) s->n);
+    if (!s || !diag || !diag->emit || diag->min_level > OSH_DIAG_LEVEL_DEBUG) {
+        return;
+    }
+
+    OSH_DIAG_DEBUGF(diag, "%s", "------------------------------------------------------------");
+    OSH_DIAG_DEBUGF(diag, "STACK : %p", (void *) s);
+    OSH_DIAG_DEBUGF(diag, "NELEM : %llu", (unsigned long long) s->ni);
+    OSH_DIAG_DEBUGF(diag, "NMEM  : %llu", (unsigned long long) s->n);
 
     for (i = 0; i < s->ni; i++) {
         if (s->si[i]->type == _OSH_GEMCA_STACKITEM_OPERATOR) {
-            osh_debug("    StackITEM: %llu: %p  type: %i  '%c'",
-                      (unsigned long long) i,
-                      (void *) s->si[i],
-                      s->si[i]->type,
-                      s->si[i]->v.op);
+            OSH_DIAG_DEBUGF(diag,
+                            "    StackITEM: %llu: %p  type: %i  '%c'",
+                            (unsigned long long) i,
+                            (void *) s->si[i],
+                            s->si[i]->type,
+                            s->si[i]->v.op);
         } else {
-            osh_debug("    StackITEM: %llu: %p  type: %i", (unsigned long long) i, (void *) s->si[i], s->si[i]->type);
+            OSH_DIAG_DEBUGF(
+                diag, "    StackITEM: %llu: %p  type: %i", (unsigned long long) i, (void *) s->si[i], s->si[i]->type);
         }
     }
 }
