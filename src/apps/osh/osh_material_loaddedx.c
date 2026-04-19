@@ -3,8 +3,8 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#include "common/osh_diag.h"
 #include "common/osh_file.h"
-#include "common/osh_logger.h"
 #include "common/osh_readline.h"
 
 enum { OSH_MATERIAL_LOADDEDX_MINPROJECTILES = 18 };

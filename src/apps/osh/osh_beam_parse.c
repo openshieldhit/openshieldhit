@@ -6,8 +6,8 @@
 #include <string.h>
 
 #include "apps/osh/osh_beam_parse_keys.h"
+#include "common/osh_diag.h"
 #include "common/osh_file.h"
-#include "common/osh_logger.h"
 #include "common/osh_readline.h"
 #include "openshieldhit/beam.h"
 #include "openshieldhit/const.h"

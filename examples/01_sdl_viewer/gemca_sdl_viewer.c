@@ -10,7 +10,7 @@
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_version.h"
 #include "gemca/osh_gemca2.h"
 #include "openshieldhit/geometry.h"

@@ -8,8 +8,8 @@
 #include "apps/osh/osh_geometry_parse.h"
 #include "apps/osh/osh_material_parse.h"
 #include "apps/osh/osh_scoring_parse.h"
+#include "common/osh_diag.h"
 #include "common/osh_file.h"
-#include "common/osh_logger.h"
 #include "openshieldhit/material.h"
 #include "openshieldhit/status.h"
 

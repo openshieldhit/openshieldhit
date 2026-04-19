@@ -7,8 +7,8 @@
 
 #include "apps/osh/osh_material_loaddedx.h"
 #include "apps/osh/osh_material_parse_keys.h"
+#include "common/osh_diag.h"
 #include "common/osh_file.h"
-#include "common/osh_logger.h"
 #include "common/osh_readline.h"
 
 static enum osh_status parse_density(struct osh_diag_sink const *diag,

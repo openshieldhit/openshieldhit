@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 
 struct prepared_page_ref {
     size_t output_idx;

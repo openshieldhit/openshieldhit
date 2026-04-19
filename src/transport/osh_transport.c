@@ -1,6 +1,6 @@
 #include "transport/osh_transport.h"
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "transport/osh_transport_ion.h"
 #include "transport/osh_transport_neutron.h"
 #include "transport/osh_transport_photon.h"

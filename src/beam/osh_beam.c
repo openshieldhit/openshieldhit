@@ -7,7 +7,7 @@
 #include "beam/osh_beam_spots.h"
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_physics.h"
 #include "common/osh_vect.h"
 #include "openshieldhit/status.h"

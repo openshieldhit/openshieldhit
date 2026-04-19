@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
 
