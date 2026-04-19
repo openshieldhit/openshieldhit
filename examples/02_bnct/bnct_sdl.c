@@ -9,7 +9,7 @@
 
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_coord.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_ray.h"
 #include "common/osh_vect.h"
 #include "common/osh_version.h"

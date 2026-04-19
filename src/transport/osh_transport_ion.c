@@ -3,7 +3,7 @@
 #include <time.h>
 
 #include "beam/runtime/osh_beam_runtime.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "random/osh_rng.h"

@@ -1,7 +1,7 @@
-#include "osh_logger.h"
-
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "osh_diag.h"
 
 char const *osh_diag_level_name(int level) {
     switch (level) {

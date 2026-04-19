@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_readline.h"
 #include "openshieldhit/beam_defs.h"
 #include "openshieldhit/const.h"

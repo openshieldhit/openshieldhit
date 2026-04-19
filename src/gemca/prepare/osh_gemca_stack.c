@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 
 struct stackitem *osh_gemca_stack_pop(struct stack *s) {
     struct stackitem *si;

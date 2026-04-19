@@ -19,7 +19,7 @@
 
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "common/osh_readline.h"
 
 typedef enum osh_status (*output_handler_fn)(

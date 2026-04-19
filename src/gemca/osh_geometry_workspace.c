@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_calc_body.h"
 #include "gemca/osh_gemca2_internal.h"

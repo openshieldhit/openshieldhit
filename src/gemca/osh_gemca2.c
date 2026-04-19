@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "common/osh_logger.h"
+#include "common/osh_diag.h"
 #include "gemca/osh_gemca2_calc_body.h"
 #include "gemca/osh_gemca2_calc_zone.h"
 #include "gemca/osh_gemca2_defines.h"
