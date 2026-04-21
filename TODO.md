@@ -14,25 +14,25 @@ Recent architectural cleanups already completed:
       produce separate runtime objects
 - [x] simulation orchestration split into `src/simulation/`
 - [x] module READMEs updated to match the current layering
+- [x] explicit diagnostics sink replaces the old library-owned global logger
+      on the main runtime/setup path
+- [x] legacy logger API removed; internal diagnostics helper renamed to
+      `osh_diag`
 
 ## Near-Term API / Architecture
 
-- [ ] Split save/export from `osh_simulation_run()`
-  - Goal: run transport first, then let the caller trigger BDO / ASCII save
-    explicitly through a separate API
-  - Likely branch: simulation/save API cleanup
-- [ ] Rework logging around callbacks / context-owned sinks
-  - Goal: remove library-owned global logger assumptions and remaining
-    unsolicited stdout/stderr output
-  - Keep diagnostics in the library, but route them through caller-controlled
-    sinks
 - [ ] Revisit remaining path/file metadata in public cold workspaces
   - `wdir`, `fname`, and similar fields should ideally disappear from public
-    API once save/export no longer depends on them
+    API as the remaining app-owned path handling is cleaned up
+- [ ] Add result merge API for embarrassingly parallel runs
+  - Likely shape: merge accumulated scoring/results state from multiple
+    simulation instances before save/postprocess
+- [ ] Add chunked / partial run control
+  - Let the app run a simulation in batches, inspect partial results, merge,
+    and save explicitly
 - [ ] Finish naming consistency passes where worthwhile
   - remaining stale "prepare" wording in messages/comments
-  - eventual removal of temporary internal compatibility aliases such as
-    `beam_workspace` vs `osh_beam_workspace`
+  - remaining internal compatibility aliases where they no longer help
 
 ## Beam
 
@@ -55,7 +55,6 @@ Recent architectural cleanups already completed:
 
 ## Geometry / GEMCA
 
-- [ ] Make the GEMCA parser path fully library-safe / non-terminating
 - [ ] Add AVX2 batch path for `eval_distance` /
       `osh_gemca_runtime_get_distance_batch`
 - [ ] Flatten `insns_flat[]` + `insn_begin[]` in GEMCA runtime to remove
@@ -113,6 +112,7 @@ Recent architectural cleanups already completed:
 ## Notes
 
 - Core modules should not parse files or own input-format-specific I/O.
+- Diagnostics are caller-owned via borrowed `osh_diag_sink` instances.
 - App code may parse any format it wants, then populate the public cold structs
   through data-only APIs.
 - Cold workspaces are the stable user-facing model; runtime structs are derived
