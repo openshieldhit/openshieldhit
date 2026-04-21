@@ -2,7 +2,7 @@
 #define OSH_FRONTEND_OPENSHIELDHIT_MATERIAL_PARSE_H
 
 #include "common/osh_file.h"
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/material.h"
 #include "openshieldhit/status.h"
 

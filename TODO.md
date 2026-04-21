@@ -16,8 +16,8 @@ Recent architectural cleanups already completed:
 - [x] module READMEs updated to match the current layering
 - [x] explicit diagnostics sink replaces the old library-owned global logger
       on the main runtime/setup path
-- [x] legacy logger API removed; internal diagnostics helper renamed to
-      `osh_diag`
+- [x] legacy logger API removed; public diagnostics live in `diag.h`, internal
+      diagnostics helpers in `osh_diag`, and fatal OOM aborts in `osh_abort`
 
 ## Near-Term API / Architecture
 

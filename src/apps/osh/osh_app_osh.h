@@ -2,8 +2,8 @@
 #define OSH_APP_OSH_H
 
 #include "openshieldhit/beam.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/geometry.h"
-#include "openshieldhit/logger.h"
 #include "openshieldhit/material.h"
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"

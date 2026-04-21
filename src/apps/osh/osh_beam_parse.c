@@ -32,21 +32,6 @@ struct beam_parse_state {
 };
 
 /*
- * File-local parser diagnostic shorthands.
- *
- * `osh_error/osh_warn/osh_info` are kept here as local aliases so the old
- * parser call sites remained readable during the diagnostics-sink migration.
- * TODO: rename these to beam_parse_error/beam_parse_warn/beam_parse_info (or
- * similar) when this file gets its next parser cleanup pass.
- */
-#define BEAM_PARSE_ERRORF(...) OSH_DIAG_ERRORF(state->diag, __VA_ARGS__)
-#define BEAM_PARSE_WARNF(...) OSH_DIAG_WARNF(state->diag, __VA_ARGS__)
-#define BEAM_PARSE_INFOF(...) OSH_DIAG_INFOF(state->diag, __VA_ARGS__)
-#define osh_error(...) BEAM_PARSE_ERRORF(__VA_ARGS__)
-#define osh_warn(...) BEAM_PARSE_WARNF(__VA_ARGS__)
-#define osh_info(...) BEAM_PARSE_INFOF(__VA_ARGS__)
-
-/*
  * Shared parse-handler signatures intentionally keep some parameters present
  * even when a specific handler does not use them. For those callback-style
  * signatures, an `unused` attribute is less noisy than sprinkling `(void)x`
@@ -253,15 +238,15 @@ static int _parse_apcorr(PARSE_HANDLER_ARGS) {
 static int _parse_beamdir(PARSE_HANDLER_ARGS) {
     float _f[2];
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) != 2) {
-        BEAM_PARSE_ERRORF("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (_f[0] < 0.0f || _f[0] > 180.0f) {
-        BEAM_PARSE_ERRORF("in %s line %i: theta must be within [0:180] deg", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: theta must be within [0:180] deg", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (_f[1] < 0.0f || _f[1] > 360.0f) {
-        BEAM_PARSE_ERRORF("in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: phi must be within [0:360] deg", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     beam->shared.theta = (double) _f[0] * OSH_M_PI_180;
@@ -298,7 +283,7 @@ static int _parse_beamdiv(PARSE_HANDLER_ARGS) {
     }
     nread = sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]);
     if (nread < 2 || nread > 3) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     /* divergence is given in mrad in the file — convert to rad */
@@ -331,7 +316,7 @@ static int _parse_beampos(PARSE_HANDLER_ARGS) {
         return OSH_ESTATE;
     }
     if (sscanf(args, "%f %f %f", &_f[0], &_f[1], &_f[2]) != 3) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     for (i = 0; i < 3; i++) {
@@ -373,13 +358,13 @@ static int _parse_beamsad(PARSE_HANDLER_ARGS) {
         beam->shared.sad[1] = _f[1];
         break;
     default:
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (beam->shared.sad[0] > 0.0 && beam->shared.sad[1] > 0.0) {
         beam->shared.use_sad = 1;
     } else {
-        osh_error("in %s line %i: SAD must be > 0.0", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: SAD must be > 0.0", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     return OSH_OK;
@@ -422,7 +407,7 @@ static int _parse_beamsigma(PARSE_HANDLER_ARGS) {
     }
     nread = sscanf(args, "%f %f", &_f[0], &_f[1]);
     if (nread < 1 || nread > 2) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (nread == 1) {
@@ -464,7 +449,8 @@ static int _parse_beamsigma(PARSE_HANDLER_ARGS) {
 static int _parse_bmodmc(PARSE_HANDLER_ARGS) {
     (void) beam;
     (void) args;
-    osh_warn("in %s line %i: BMODMC parsed but rifi not yet implemented", oshf->filename, oshf->lineno);
+    OSH_DIAG_WARNF(
+        state->diag, "in %s line %i: BMODMC parsed but rifi not yet implemented", oshf->filename, oshf->lineno);
     return OSH_OK;
 }
 
@@ -480,7 +466,8 @@ static int _parse_bmodmc(PARSE_HANDLER_ARGS) {
 static int _parse_bmodtrans(PARSE_HANDLER_ARGS) {
     (void) beam;
     (void) args;
-    osh_warn("in %s line %i: BMODTRANS is deprecated and will be ignored", oshf->filename, oshf->lineno);
+    OSH_DIAG_WARNF(
+        state->diag, "in %s line %i: BMODTRANS is deprecated and will be ignored", oshf->filename, oshf->lineno);
     return OSH_OK;
 }
 
@@ -502,7 +489,7 @@ static int _parse_bmodtrans(PARSE_HANDLER_ARGS) {
 static int _parse_deltae(PARSE_HANDLER_ARGS) {
     float _f;
     if (sscanf(args, "%f", &_f) != 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->deltae = _f;
@@ -527,7 +514,7 @@ static int _parse_deltae(PARSE_HANDLER_ARGS) {
 static int _parse_demin(PARSE_HANDLER_ARGS) {
     float _f;
     if (sscanf(args, "%f", &_f) != 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->demin = _f;
@@ -550,7 +537,7 @@ static int _parse_demin(PARSE_HANDLER_ARGS) {
  */
 static int _parse_emtrans(PARSE_HANDLER_ARGS) {
     if (sscanf(args, "%c", &(beam->emtrans)) != 1) {
-        osh_error("in %s line %i: unknown EMTRANS mode '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: unknown EMTRANS mode '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     return OSH_OK;
@@ -573,7 +560,7 @@ static int _parse_emtrans(PARSE_HANDLER_ARGS) {
 static int _parse_extspec(PARSE_HANDLER_ARGS) {
     (void) beam;
     (void) args;
-    osh_error("in %s line %i: EXTSPEC is not yet implemented", oshf->filename, oshf->lineno);
+    OSH_DIAG_ERRORF(state->diag, "in %s line %i: EXTSPEC is not yet implemented", oshf->filename, oshf->lineno);
     return OSH_EPARSE;
 }
 
@@ -614,7 +601,8 @@ static int _parse_primary(PARSE_HANDLER_ARGS) {
 
     n = sscanf(args, "%63s %63s", tok1, tok2);
     if (n < 1) {
-        osh_warn("in %s line %i: PRIMARY expects a name, PDG code, or '<Z> <A>'", oshf->filename, oshf->lineno);
+        OSH_DIAG_WARNF(
+            state->diag, "in %s line %i: PRIMARY expects a name, PDG code, or '<Z> <A>'", oshf->filename, oshf->lineno);
         return OSH_EINVAL;
     }
 
@@ -625,28 +613,35 @@ static int _parse_primary(PARSE_HANDLER_ARGS) {
         struct isotope iso;
         char ex2;
         if (sscanf(tok1, "%u%c", &z, &extra) != 1 || sscanf(tok2, "%u%c", &a, &ex2) != 1) {
-            osh_warn("in %s line %i: PRIMARY with two values expects '<Z> <A>'", oshf->filename, oshf->lineno);
+            OSH_DIAG_WARNF(
+                state->diag, "in %s line %i: PRIMARY with two values expects '<Z> <A>'", oshf->filename, oshf->lineno);
             return OSH_EINVAL;
         }
         if (!osh_isotope_from_za(&iso, z, a)) {
-            osh_warn("in %s line %i: unknown ion with Z=%u A=%u", oshf->filename, oshf->lineno, z, a);
+            OSH_DIAG_WARNF(
+                state->diag, "in %s line %i: unknown ion with Z=%u A=%u", oshf->filename, oshf->lineno, z, a);
             return OSH_EINVAL;
         }
         pdg = OSH_PART_PDG_HIBASE + (int) z * 10000 + (int) a * 10;
         if (!osh_particle_from_pdg(&part, pdg)) {
-            osh_warn("in %s line %i: failed to construct ion with Z=%u A=%u", oshf->filename, oshf->lineno, z, a);
+            OSH_DIAG_WARNF(state->diag,
+                           "in %s line %i: failed to construct ion with Z=%u A=%u",
+                           oshf->filename,
+                           oshf->lineno,
+                           z,
+                           a);
             return OSH_EINVAL;
         }
     } else if (sscanf(tok1, "%d%c", &pdg, &extra) == 1) {
         /* Single pure integer: PDG code */
         if (!osh_particle_from_pdg(&part, pdg)) {
-            osh_warn("in %s line %i: unknown PDG code %d", oshf->filename, oshf->lineno, pdg);
+            OSH_DIAG_WARNF(state->diag, "in %s line %i: unknown PDG code %d", oshf->filename, oshf->lineno, pdg);
             return OSH_EINVAL;
         }
     } else {
         /* Name lookup */
         if (!osh_particle_from_name(&part, tok1)) {
-            osh_warn("in %s line %i: unknown particle '%s'", oshf->filename, oshf->lineno, tok1);
+            OSH_DIAG_WARNF(state->diag, "in %s line %i: unknown particle '%s'", oshf->filename, oshf->lineno, tok1);
             return OSH_EINVAL;
         }
     }
@@ -676,7 +671,7 @@ static int _parse_primary(PARSE_HANDLER_ARGS) {
 static int _parse_makeln(PARSE_HANDLER_ARGS) {
     int _i;
     if (sscanf(args, "%i", &_i) != 1) {
-        osh_error("in %s line %i: unknown MAKELN mode '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: unknown MAKELN mode '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->makeln = (char) _i;
@@ -702,12 +697,13 @@ static int _parse_makeln(PARSE_HANDLER_ARGS) {
 static int _parse_mscat(PARSE_HANDLER_ARGS) {
     int _i;
     if (sscanf(args, "%i", &_i) != 1) {
-        osh_error("in %s line %i: unknown MSCAT mode '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: unknown MSCAT mode '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->scatter = (char) _i;
     if (beam->scatter > OSH_BEAM_MSCAT_MOLIERE || beam->scatter < OSH_BEAM_MSCAT_OFF) {
-        osh_error("in %s line %i: invalid MSCAT mode '%i'", oshf->filename, oshf->lineno, beam->scatter);
+        OSH_DIAG_ERRORF(
+            state->diag, "in %s line %i: invalid MSCAT mode '%i'", oshf->filename, oshf->lineno, beam->scatter);
         return OSH_EPARSE;
     }
     return OSH_OK;
@@ -731,7 +727,7 @@ static int _parse_mscat(PARSE_HANDLER_ARGS) {
 static int _parse_neutrfast(PARSE_HANDLER_ARGS) {
     int _i;
     if (sscanf(args, "%i", &_i) != 1) {
-        osh_error("in %s line %i: unknown NEUTRFAST mode '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: unknown NEUTRFAST mode '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->neutrfast = (char) _i;
@@ -756,7 +752,7 @@ static int _parse_neutrfast(PARSE_HANDLER_ARGS) {
 static int _parse_neutrlcut(PARSE_HANDLER_ARGS) {
     float _f;
     if (sscanf(args, "%f", &_f) != 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->ncut = _f;
@@ -785,11 +781,11 @@ static int _parse_nstat(PARSE_HANDLER_ARGS) {
 
     nread = sscanf(args, "%i %i", &_i[0], &_i[1]);
     if (nread < 1 || nread > 2) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (_i[0] < 0) {
-        osh_error("in %s line %i: NSTAT must be >= 0", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: NSTAT must be >= 0", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -819,12 +815,13 @@ static int _parse_nstat(PARSE_HANDLER_ARGS) {
 static int _parse_nucre(PARSE_HANDLER_ARGS) {
     int _i;
     if (sscanf(args, "%i", &_i) != 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->nuclear = (char) _i;
     if (beam->nuclear > 1 || beam->nuclear < 0) {
-        osh_error("in %s line %i: invalid NUCRE mode '%i'", oshf->filename, oshf->lineno, beam->nuclear);
+        OSH_DIAG_ERRORF(
+            state->diag, "in %s line %i: invalid NUCRE mode '%i'", oshf->filename, oshf->lineno, beam->nuclear);
         return OSH_EPARSE;
     }
     return OSH_OK;
@@ -849,7 +846,7 @@ static int _parse_nucre(PARSE_HANDLER_ARGS) {
 static int _parse_rndseed(PARSE_HANDLER_ARGS) {
     int _i;
     if (sscanf(args, "%i", &_i) != 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->rndseed = _i;
@@ -879,12 +876,13 @@ static int _parse_rndseed(PARSE_HANDLER_ARGS) {
 static int _parse_stragg(PARSE_HANDLER_ARGS) {
     int _i;
     if (sscanf(args, "%i", &_i) != 1) {
-        osh_error("in %s line %i: unknown STRAGG mode '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: unknown STRAGG mode '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     beam->straggl = (char) _i;
     if (beam->straggl > OSH_BEAM_STRAGG_VAVILOV || beam->straggl < OSH_BEAM_STRAGG_OFF) {
-        osh_error("in %s line %i: invalid STRAGG mode '%i'", oshf->filename, oshf->lineno, beam->straggl);
+        OSH_DIAG_ERRORF(
+            state->diag, "in %s line %i: invalid STRAGG mode '%i'", oshf->filename, oshf->lineno, beam->straggl);
         return OSH_EPARSE;
     }
     return OSH_OK;
@@ -924,7 +922,7 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
     _f[0] = 0.0f;
     _f[1] = 0.0f;
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) < 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
 
@@ -937,11 +935,12 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
         spot->p0 = 0.0;
         spot->t0_per_nucleon = 1;
         if (_f[0] < OSH_BEAM_TMIN) {
-            osh_error("in %s line %i: TMAX0 %.4f MeV/nucleon is below transport threshold %.4f MeV/nucleon",
-                      oshf->filename,
-                      oshf->lineno,
-                      (double) _f[0],
-                      OSH_BEAM_TMIN);
+            OSH_DIAG_ERRORF(state->diag,
+                            "in %s line %i: TMAX0 %.4f MeV/nucleon is below transport threshold %.4f MeV/nucleon",
+                            oshf->filename,
+                            oshf->lineno,
+                            (double) _f[0],
+                            OSH_BEAM_TMIN);
             return OSH_EPARSE;
         }
     }
@@ -980,11 +979,12 @@ static int _parse_tcut0(PARSE_HANDLER_ARGS) {
     _f[0] = 0.0f;
     _f[1] = 0.0f;
     if (sscanf(args, "%f %f", &_f[0], &_f[1]) > 2) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (_f[0] > _f[1]) {
-        osh_error("in %s line %i: TCUT0 upper bound must be >= lower bound", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(
+            state->diag, "in %s line %i: TCUT0 upper bound must be >= lower bound", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     beam->tcut = fabs(_f[0]);
@@ -1013,13 +1013,14 @@ static int _parse_usebmod(PARSE_HANDLER_ARGS) {
     (void) beam;
     (void) state;
     if (sscanf(args, "%f %255s", &_f, tmpstr) > 2) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (_resolve_input_relative_path(oshf, tmpstr, &_path) != OSH_OK) {
         return OSH_ENOMEM;
     }
-    osh_warn("in %s line %i: USEBMOD parsed but rifi loader not yet implemented", oshf->filename, oshf->lineno);
+    OSH_DIAG_WARNF(
+        state->diag, "in %s line %i: USEBMOD parsed but rifi loader not yet implemented", oshf->filename, oshf->lineno);
     free(_path);
     return OSH_OK;
 }
@@ -1049,7 +1050,7 @@ static int _parse_usecbeam(PARSE_HANDLER_ARGS) {
     char tmpstr[256];
     char *_path = NULL;
     if (sscanf(args, "%255s", tmpstr) != 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (_resolve_input_relative_path(oshf, tmpstr, &_path) != OSH_OK) {
@@ -1058,7 +1059,7 @@ static int _parse_usecbeam(PARSE_HANDLER_ARGS) {
     if (state && state->spotlist_path_out) {
         free(*state->spotlist_path_out);
         *state->spotlist_path_out = _path;
-        osh_info("USECBEAM enabled: queued external spotlist %s", *state->spotlist_path_out);
+        OSH_DIAG_INFOF(state->diag, "USECBEAM enabled: queued external spotlist %s", *state->spotlist_path_out);
         _path = NULL;
     }
     free(_path);
@@ -1087,13 +1088,16 @@ static int _parse_useparlev(PARSE_HANDLER_ARGS) {
     (void) beam;
     (void) state;
     if (sscanf(args, "%255s", tmpstr) != 1) {
-        osh_error("in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     if (_resolve_input_relative_path(oshf, tmpstr, &_path) != OSH_OK) {
         return OSH_ENOMEM;
     }
-    osh_warn("in %s line %i: USEPARLEV parsed but parlev loader not yet implemented", oshf->filename, oshf->lineno);
+    OSH_DIAG_WARNF(state->diag,
+                   "in %s line %i: USEPARLEV parsed but parlev loader not yet implemented",
+                   oshf->filename,
+                   oshf->lineno);
     free(_path);
     return OSH_OK;
 }

@@ -47,8 +47,8 @@ Diagnostics notes:
 - Transport emits progress, unsupported-mode errors, and step-level runtime
   failures through that sink.
 - `NULL` sink means silent transport diagnostics.
-- Older untouched modules outside `transport/` may still use the legacy global
-  logger during the staged migration.
+- Deeper modules outside `transport/` should either use their own explicit
+  diagnostics sinks at real ownership boundaries or stay silent.
 
 ## Multithreading Direction
 

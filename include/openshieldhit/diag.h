@@ -1,5 +1,5 @@
-#ifndef OPENSHIELDHIT_LOGGER_H
-#define OPENSHIELDHIT_LOGGER_H
+#ifndef OPENSHIELDHIT_DIAG_H
+#define OPENSHIELDHIT_DIAG_H
 
 #include <stdarg.h>
 
@@ -128,21 +128,8 @@ void osh_diag_emitf(
 #endif
     ;
 
-/**
- * @brief Abort the process after reporting an allocation failure to `stderr`.
- *
- * @details
- * This helper remains available for low-level utility code that treats
- * out-of-memory as fatal and cannot recover locally.
- */
-void osh_alloc_failed(char const *fmt, ...)
-#if defined(__GNUC__) || defined(__clang__)
-    __attribute__((format(printf, 1, 2))) __attribute__((noreturn))
-#endif
-    ;
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* OPENSHIELDHIT_LOGGER_H */
+#endif /* OPENSHIELDHIT_DIAG_H */

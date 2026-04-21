@@ -7,7 +7,7 @@
 #include "common/osh_ray.h"
 #include "common/osh_step.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus

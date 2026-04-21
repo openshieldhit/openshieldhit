@@ -2,7 +2,7 @@
 #define OSH_GEMCA_ZONE_COMPILE_H
 
 #include "gemca/osh_gemca2.h"
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 
 /**
  * @file osh_gemca_zone_compile.h

@@ -2,7 +2,7 @@
 #define OSH_FRONTEND_OPENSHIELDHIT_SCORING_PARSE_H
 
 #include "common/osh_file.h"
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/scoring.h"
 
 #ifdef __cplusplus

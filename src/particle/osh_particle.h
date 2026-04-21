@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 
 /**
  * @brief Species descriptor for a particle type.
