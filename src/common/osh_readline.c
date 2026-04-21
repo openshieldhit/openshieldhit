@@ -6,7 +6,6 @@
 #include <string.h>
 
 #include "osh_abort.h"
-#include "osh_diag.h"
 
 static int _is_comment(char c);
 

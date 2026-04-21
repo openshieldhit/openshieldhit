@@ -5,7 +5,6 @@
 
 #include "openshieldhit/status.h"
 #include "osh_abort.h"
-#include "osh_diag.h"
 
 static enum osh_status _mapfile(struct oshfile *oshf);
 static enum osh_status _rewind_file(struct oshfile *oshf);
