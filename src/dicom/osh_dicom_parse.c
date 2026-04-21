@@ -82,14 +82,20 @@ int osh_dicom_walk(
         pos += 6; /* group(2) + element(2) + vr(2) */
 
         if (_is_long_vr(vr)) {
-            if (pos + 6 > size)
-                break;
+            if (pos + 6 > size) {
+                OSH_DIAG_ERRORF(
+                    diag, "dicom: truncated long-VR header at (%04X,%04X)", (unsigned) group, (unsigned) element);
+                return 0;
+            }
             pos += 2; /* reserved bytes */
             length = _u32(buf + pos);
             pos += 4;
         } else {
-            if (pos + 2 > size)
-                break;
+            if (pos + 2 > size) {
+                OSH_DIAG_ERRORF(
+                    diag, "dicom: truncated short-VR header at (%04X,%04X)", (unsigned) group, (unsigned) element);
+                return 0;
+            }
             length = _u16(buf + pos);
             pos += 2;
         }
@@ -100,8 +106,15 @@ int osh_dicom_walk(
             break;
         }
 
-        if (pos + length > size)
-            break;
+        if (pos + length > size) {
+            OSH_DIAG_ERRORF(diag,
+                            "dicom: tag (%04X,%04X) overruns buffer (%u bytes at offset %zu)",
+                            (unsigned) group,
+                            (unsigned) element,
+                            (unsigned) length,
+                            pos);
+            return 0;
+        }
         value_start = pos;
         pos += length;
 

@@ -73,7 +73,7 @@ static void test_rtdose_geometry(void) {
 static void test_rtdose_write_roundtrip(void) {
     struct osh_dicom_rtdose rd;
     struct osh_dicom_rtdose rd2;
-    char const *tmp = "/tmp/osh_test_rtdose_roundtrip.dcm";
+    char const *tmp = "osh_test_rtdose_roundtrip.dcm";
     size_t i;
 
     ASSERT_TRUE(osh_dicom_rtdose_read(RD_FILE, &rd, NULL) == OSH_OK);
@@ -87,4 +87,5 @@ static void test_rtdose_write_roundtrip(void) {
 
     osh_dicom_rtdose_free(&rd);
     osh_dicom_rtdose_free(&rd2);
+    (void) remove(tmp);
 }

@@ -1,3 +1,5 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:94d3677fdfb02827b8253e0edb3356f373f0ba7ffe4cc942d8347939bac0e77f
-size 143
+Complete datasets with CT,RS and RN files can go here.
+Keep this lean, < 500 MB. Only add what is absolutely needed for test and development.
+
+These fixtures are stored in Git LFS. Local checkouts and CI jobs that run the
+DICOM unit tests must fetch LFS payloads rather than plain pointer files.

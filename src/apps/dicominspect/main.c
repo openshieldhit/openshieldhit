@@ -4,6 +4,13 @@
 #include "openshieldhit/diag.h"
 #include "openshieldhit/dicom.h"
 
+/*
+ * Small developer utility for smoke-testing the DICOM reader.
+ *
+ * Keep this intentionally narrow: one local diagnostics sink plus two summary
+ * commands (`ct` and `rtdose`). If the DICOM layer grows, document richer
+ * workflows in README.md rather than turning this file into a framework.
+ */
 static void emit(void *user, int level, char const *file, int line, char const *function, char const *message) {
     (void) user;
     (void) file;
