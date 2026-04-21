@@ -1,10 +1,10 @@
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "common/osh_abort.h"
 #include "common/osh_diag.h"
+#include "common/osh_file.h"
 #include "dicom/osh_dicom_parse.h"
 #include "openshieldhit/dicom.h"
 
@@ -25,6 +25,13 @@ struct _slice {
 
 struct _collect {
     struct _slice s;
+};
+
+struct _scan_ct_dir {
+    struct _slice **slices;
+    int *n;
+    int *cap;
+    struct osh_diag_sink const *diag;
 };
 
 static int _slice_pixel_count(size_t *out, int rows, int cols) {
@@ -118,60 +125,70 @@ static int _is_dcm(char const *name) {
             && (ext[3] == 'm' || ext[3] == 'M'));
 }
 
+static enum osh_status
+_append_ct_slice(struct _slice **slices, int *n, int *cap, char const *path, struct osh_diag_sink const *diag) {
+    unsigned char *buf;
+    size_t buf_size;
+    struct _collect c;
+
+    buf = osh_dicom_load_file(path, &buf_size, diag);
+    if (!buf) {
+        return OSH_OK;
+    }
+
+    memset(&c, 0, sizeof(c));
+    c.s.rescale_slope = 1.0;
+    osh_dicom_walk(buf, buf_size, _tag_cb, &c, diag);
+    free(buf);
+
+    if (!c.s.is_ct || !c.s.pixels || c.s.rows == 0 || c.s.cols == 0) {
+        free(c.s.pixels);
+        return OSH_OK;
+    }
+
+    if (*n == *cap) {
+        int new_cap = *cap ? *cap * 2 : 32;
+        struct _slice *tmp = (struct _slice *) realloc(*slices, (size_t) new_cap * sizeof(**slices));
+        if (!tmp) {
+            osh_abort_oomf("dicom ct: slice array");
+        }
+        *slices = tmp;
+        *cap = new_cap;
+    }
+    (*slices)[(*n)++] = c.s;
+    return OSH_OK;
+}
+
+static int _scan_ct_file(char const *path, void *user) {
+    struct _scan_ct_dir *scan = (struct _scan_ct_dir *) user;
+
+    if (!_is_dcm(path)) {
+        return 1;
+    }
+    (void) _append_ct_slice(scan->slices, scan->n, scan->cap, path, scan->diag);
+    return 1;
+}
+
 enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, struct osh_diag_sink const *diag) {
-    DIR *d;
-    struct dirent *ent;
     struct _slice *slices = NULL;
     int n = 0;
     int cap = 0;
-    char path[4096];
+    struct _scan_ct_dir scan;
+    enum osh_status rc;
 
     memset(ct, 0, sizeof(*ct));
     ct->rescale_slope = 1.0;
 
-    d = opendir(dir);
-    if (!d) {
+    scan.slices = &slices;
+    scan.n = &n;
+    scan.cap = &cap;
+    scan.diag = diag;
+
+    rc = osh_dir_foreach_file(dir, _scan_ct_file, &scan);
+    if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "dicom ct: cannot open directory '%s'", dir);
         return OSH_EIO;
     }
-
-    while ((ent = readdir(d)) != NULL) {
-        unsigned char *buf;
-        size_t buf_size;
-        struct _collect c;
-
-        if (!_is_dcm(ent->d_name)) {
-            continue;
-        }
-        snprintf(path, sizeof(path), "%s/%s", dir, ent->d_name);
-
-        buf = osh_dicom_load_file(path, &buf_size, diag);
-        if (!buf) {
-            continue;
-        }
-
-        memset(&c, 0, sizeof(c));
-        c.s.rescale_slope = 1.0;
-        osh_dicom_walk(buf, buf_size, _tag_cb, &c, diag);
-        free(buf);
-
-        if (!c.s.is_ct || !c.s.pixels || c.s.rows == 0 || c.s.cols == 0) {
-            free(c.s.pixels);
-            continue;
-        }
-
-        if (n == cap) {
-            int new_cap = cap ? cap * 2 : 32;
-            struct _slice *tmp = (struct _slice *) realloc(slices, (size_t) new_cap * sizeof(*slices));
-            if (!tmp) {
-                osh_abort_oomf("dicom ct: slice array");
-            }
-            slices = tmp;
-            cap = new_cap;
-        }
-        slices[n++] = c.s;
-    }
-    closedir(d);
 
     if (n == 0) {
         OSH_DIAG_ERRORF(diag, "dicom ct: no valid CT slices found in '%s'", dir);

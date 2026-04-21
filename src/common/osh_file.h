@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "openshieldhit/status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -63,6 +65,29 @@ void osh_path_normalize(char *path);
  * allocation failure.
  */
 char *osh_path_dirname(char const *path);
+
+/**
+ * @brief Callback used by osh_dir_foreach_file().
+ *
+ * @param[in] path  Full path to one non-directory entry.
+ * @param[in] user  Caller context.
+ *
+ * @return Non-zero to continue, zero to stop iteration early.
+ */
+typedef int (*osh_dir_iter_fn)(char const *path, void *user);
+
+/**
+ * @brief Iterate over non-directory entries in a directory.
+ *
+ * @details
+ * This helper centralizes the platform-specific directory walking needed by
+ * callers such as the DICOM CT series loader. The callback receives one full
+ * path per non-directory entry and may stop iteration early by returning 0.
+ *
+ * @return OSH_OK on success, OSH_EIO if the directory cannot be opened or
+ * walked, or OSH_EINVAL for invalid arguments.
+ */
+enum osh_status osh_dir_foreach_file(char const *dir, osh_dir_iter_fn fn, void *user);
 
 #ifdef __cplusplus
 }
