@@ -64,9 +64,9 @@ char const *osh_diag_level_name(int level);
  * @brief Format and emit one diagnostics message through a caller-owned sink.
  *
  * @details
- * This helper is intended primarily for library-internal paths that already
- * own a borrowed @ref osh_diag_sink. It checks for NULL sinks and performs
- * level filtering before invoking @ref osh_diag_emit_fn.
+ * Checks for NULL sinks and performs level filtering before invoking
+ * @ref osh_diag_emit_fn. Useful for callers implementing wrapper or tee sinks
+ * that need to forward a @c va_list without re-expanding it.
  *
  * @param[in] diag      Borrowed diagnostics sink; NULL means silent.
  * @param[in] level     One of @ref osh_diag_level.
