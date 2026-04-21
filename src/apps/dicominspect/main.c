@@ -31,11 +31,11 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    if (strcmp(argv[1], "ct") == 0)
+    if (strcmp(argv[1], "ct") == 0) {
         print_ct(argv[2]);
-    else if (strcmp(argv[1], "rtdose") == 0)
+    } else if (strcmp(argv[1], "rtdose") == 0) {
         print_rtdose(argv[2]);
-    else {
+    } else {
         usage(argv[0]);
         return 1;
     }
@@ -50,10 +50,12 @@ static void usage(char const *prog) {
 static void print_ct(char const *dir) {
     struct osh_dicom_ct ct;
     int i;
-    int16_t pmin, pmax;
+    int16_t pmin;
+    int16_t pmax;
 
-    if (osh_dicom_ct_read(dir, &ct, &diag) != OSH_OK)
+    if (osh_dicom_ct_read(dir, &ct, &diag) != OSH_OK) {
         return;
+    }
 
     printf("CT Series\n");
     printf("---------\n");
@@ -69,15 +71,17 @@ static void print_ct(char const *dir) {
 
     pmin = pmax = ct.pixels[0];
     for (i = 1; i < ct.n_slices * ct.rows * ct.cols; i++) {
-        if (ct.pixels[i] < pmin)
+        if (ct.pixels[i] < pmin) {
             pmin = ct.pixels[i];
-        if (ct.pixels[i] > pmax)
+        }
+        if (ct.pixels[i] > pmax) {
             pmax = ct.pixels[i];
+        }
     }
     printf("Pixel range   : [%d, %d] (raw int16)\n", (int) pmin, (int) pmax);
     printf("HU range      : [%.0f, %.0f]\n",
-           pmin * ct.rescale_slope + ct.rescale_intercept,
-           pmax * ct.rescale_slope + ct.rescale_intercept);
+           (pmin * ct.rescale_slope) + ct.rescale_intercept,
+           (pmax * ct.rescale_slope) + ct.rescale_intercept);
 
     osh_dicom_ct_free(&ct);
 }
@@ -88,8 +92,9 @@ static void print_rtdose(char const *path) {
     uint32_t pmax;
     int fn;
 
-    if (osh_dicom_rtdose_read(path, &rd, &diag) != OSH_OK)
+    if (osh_dicom_rtdose_read(path, &rd, &diag) != OSH_OK) {
         return;
+    }
 
     printf("RTDOSE\n");
     printf("------\n");
@@ -103,17 +108,21 @@ static void print_rtdose(char const *path) {
 
     if (rd.frame_offsets) {
         printf("Frame offsets :");
-        for (fn = 0; fn < rd.n_frames && fn < 8; fn++)
+        for (fn = 0; fn < rd.n_frames && fn < 8; fn++) {
             printf(" %.2f", rd.frame_offsets[fn]);
-        if (rd.n_frames > 8)
+        }
+        if (rd.n_frames > 8) {
             printf(" ...");
+        }
         printf(" mm\n");
     }
 
     pmax = 0;
-    for (i = 0; i < rd.n_pixels; i++)
-        if (rd.pixels[i] > pmax)
+    for (i = 0; i < rd.n_pixels; i++) {
+        if (rd.pixels[i] > pmax) {
             pmax = rd.pixels[i];
+        }
+    }
     printf("Max dose      : %.4f Gy\n", pmax * rd.dose_grid_scaling);
 
     osh_dicom_rtdose_free(&rd);
