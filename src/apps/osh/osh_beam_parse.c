@@ -16,12 +16,29 @@
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_pdg.h"
 
+/*
+ * Shared parser context passed to all beam.dat key handlers.
+ *
+ * Today this bundles both parser-control context (diag) and parser-owned
+ * output scratch/result pointers (single-spot template + deferred USECBEAM
+ * path). That keeps the handler signatures small, but the roles are mixed.
+ * TODO: split this into clearer "context" vs "parse outputs" structs if the
+ * parser grows further.
+ */
 struct beam_parse_state {
     struct osh_diag_sink const *diag;
     struct osh_beam_spot *spot_out;
     char **spotlist_path_out;
 };
 
+/*
+ * File-local parser diagnostic shorthands.
+ *
+ * `osh_error/osh_warn/osh_info` are kept here as local aliases so the old
+ * parser call sites remained readable during the diagnostics-sink migration.
+ * TODO: rename these to beam_parse_error/beam_parse_warn/beam_parse_info (or
+ * similar) when this file gets its next parser cleanup pass.
+ */
 #define BEAM_PARSE_ERRORF(...) OSH_DIAG_ERRORF(state->diag, __VA_ARGS__)
 #define BEAM_PARSE_WARNF(...) OSH_DIAG_WARNF(state->diag, __VA_ARGS__)
 #define BEAM_PARSE_INFOF(...) OSH_DIAG_INFOF(state->diag, __VA_ARGS__)
@@ -29,6 +46,12 @@ struct beam_parse_state {
 #define osh_warn(...) BEAM_PARSE_WARNF(__VA_ARGS__)
 #define osh_info(...) BEAM_PARSE_INFOF(__VA_ARGS__)
 
+/*
+ * Shared parse-handler signatures intentionally keep some parameters present
+ * even when a specific handler does not use them. For those callback-style
+ * signatures, an `unused` attribute is less noisy than sprinkling `(void)x`
+ * casts through every trivial handler body.
+ */
 #if defined(__GNUC__) || defined(__clang__)
 #define OSH_PARSE_UNUSED __attribute__((unused))
 #else
