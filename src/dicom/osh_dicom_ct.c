@@ -31,13 +31,14 @@ static int _slice_pixel_count(size_t *out, int rows, int cols) {
     size_t r;
     size_t c;
 
-    if (!out || rows <= 0 || cols <= 0)
+    if (!out || rows <= 0 || cols <= 0) {
         return 0;
-
+    }
     r = (size_t) rows;
     c = (size_t) cols;
-    if (r > SIZE_MAX / c)
+    if (r > SIZE_MAX / c) {
         return 0;
+    }
     *out = r * c;
     return 1;
 }
@@ -52,12 +53,13 @@ _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const 
         char mod[17] = {0};
         size_t n = length < 16 ? length : 16;
         memcpy(mod, value, n);
-        /* trim trailing spaces */
-        while (n > 0 && mod[n - 1] == ' ')
+        while (n > 0 && mod[n - 1] == ' ') {
             mod[--n] = '\0';
+        }
         s->is_ct = (strcmp(mod, "CT") == 0);
-        if (!s->is_ct)
-            return 0;                                  /* not CT — stop immediately */
+        if (!s->is_ct) {
+            return 0; /* not CT — stop immediately */
+        }
     } else if (group == 0x0020 && element == 0x0032) { /* Image Position Patient */
         double pos[3] = {0.0, 0.0, 0.0};
         osh_dicom_ds_array(value, length, pos, 3);
@@ -90,8 +92,9 @@ _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const 
         if (_slice_pixel_count(&n, s->rows, s->cols) && n <= (size_t) length / sizeof(int16_t)) {
             bytes = n * sizeof(int16_t);
             s->pixels = (int16_t *) malloc(bytes);
-            if (!s->pixels)
+            if (!s->pixels) {
                 osh_abort_oomf("dicom ct: slice pixel buffer");
+            }
             memcpy(s->pixels, value, bytes);
         }
         return 0; /* pixel data is always last — stop walking */
@@ -107,8 +110,9 @@ static int _z_cmp(void const *a, void const *b) {
 
 static int _is_dcm(char const *name) {
     size_t n = strlen(name);
-    if (n < 4)
+    if (n < 4) {
         return 0;
+    }
     char const *ext = name + n - 4;
     return (ext[0] == '.' && (ext[1] == 'd' || ext[1] == 'D') && (ext[2] == 'c' || ext[2] == 'C')
             && (ext[3] == 'm' || ext[3] == 'M'));
@@ -136,13 +140,15 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
         size_t buf_size;
         struct _collect c;
 
-        if (!_is_dcm(ent->d_name))
+        if (!_is_dcm(ent->d_name)) {
             continue;
+        }
         snprintf(path, sizeof(path), "%s/%s", dir, ent->d_name);
 
         buf = osh_dicom_load_file(path, &buf_size, diag);
-        if (!buf)
+        if (!buf) {
             continue;
+        }
 
         memset(&c, 0, sizeof(c));
         c.s.rescale_slope = 1.0;
@@ -157,8 +163,9 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
         if (n == cap) {
             int new_cap = cap ? cap * 2 : 32;
             struct _slice *tmp = (struct _slice *) realloc(slices, (size_t) new_cap * sizeof(*slices));
-            if (!tmp)
+            if (!tmp) {
                 osh_abort_oomf("dicom ct: slice array");
+            }
             slices = tmp;
             cap = new_cap;
         }
@@ -177,7 +184,7 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
     {
         int rows = slices[0].rows;
         int cols = slices[0].cols;
-        size_t slice_px = (size_t) (rows * cols);
+        size_t slice_px = (size_t) rows * (size_t) cols;
         int i;
 
         ct->rows = rows;
@@ -199,11 +206,12 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
         ct->slice_spacing = (n > 1) ? (slices[n - 1].z - slices[0].z) / (double) (n - 1) : 0.0;
 
         ct->pixels = (int16_t *) malloc(slice_px * (size_t) n * sizeof(int16_t));
-        if (!ct->pixels)
+        if (!ct->pixels) {
             osh_abort_oomf("dicom ct: pixel array");
+        }
 
         for (i = 0; i < n; i++) {
-            memcpy(ct->pixels + (size_t) i * slice_px, slices[i].pixels, slice_px * sizeof(int16_t));
+            memcpy(ct->pixels + ((size_t) i * slice_px), slices[i].pixels, slice_px * sizeof(int16_t));
             free(slices[i].pixels);
         }
     }
@@ -214,8 +222,9 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
 }
 
 void osh_dicom_ct_free(struct osh_dicom_ct *ct) {
-    if (!ct)
+    if (!ct) {
         return;
+    }
     free(ct->pixels);
     ct->pixels = NULL;
 }

@@ -20,9 +20,9 @@ static int _ds_value_capacity(unsigned char const *value, uint32_t length) {
     uint32_t i;
     int in_token;
 
-    if (!value || length == 0)
+    if (!value || length == 0) {
         return 0;
-
+    }
     count = 0;
     in_token = 0;
     for (i = 0; i < length; i++) {
@@ -43,18 +43,20 @@ static int _rtdose_pixel_count(size_t *out, int n_frames, int rows, int cols) {
     size_t b;
     size_t c;
 
-    if (!out || n_frames <= 0 || rows <= 0 || cols <= 0)
+    if (!out || n_frames <= 0 || rows <= 0 || cols <= 0) {
         return 0;
-
+    }
     a = (size_t) n_frames;
     b = (size_t) rows;
     c = (size_t) cols;
 
-    if (a > SIZE_MAX / b)
+    if (a > SIZE_MAX / b) {
         return 0;
+    }
     a *= b;
-    if (a > SIZE_MAX / c)
+    if (a > SIZE_MAX / c) {
         return 0;
+    }
     *out = a * c;
     return 1;
 }
@@ -95,14 +97,16 @@ _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const 
         int capacity = _ds_value_capacity(value, length);
         int parsed;
 
-        if (rd->n_frames > capacity)
+        if (rd->n_frames > capacity) {
             capacity = rd->n_frames;
-        if (capacity < 1)
+        }
+        if (capacity < 1) {
             capacity = 1;
-
+        }
         rd->frame_offsets = (double *) calloc((size_t) capacity, sizeof(double));
-        if (!rd->frame_offsets)
+        if (!rd->frame_offsets) {
             osh_abort_oomf("dicom rtdose: frame offsets");
+        }
         parsed = osh_dicom_ds_array(value, length, rd->frame_offsets, capacity);
         if (rd->n_frames > 0 && parsed != rd->n_frames) {
             OSH_DIAG_WARNF(
@@ -138,8 +142,9 @@ enum osh_status osh_dicom_rtdose_read(char const *path, struct osh_dicom_rtdose 
     memset(rd, 0, sizeof(*rd));
 
     buf = osh_dicom_load_file(path, &buf_size, diag);
-    if (!buf)
+    if (!buf) {
         return OSH_EIO;
+    }
 
     rd->_raw = buf;
     rd->_raw_size = buf_size;
@@ -188,8 +193,9 @@ osh_dicom_rtdose_write(char const *path, struct osh_dicom_rtdose const *rd, stru
 }
 
 void osh_dicom_rtdose_free(struct osh_dicom_rtdose *rd) {
-    if (!rd)
+    if (!rd) {
         return;
+    }
     free(rd->_raw); /* also invalidates rd->pixels */
     free(rd->frame_offsets);
     rd->_raw = NULL;

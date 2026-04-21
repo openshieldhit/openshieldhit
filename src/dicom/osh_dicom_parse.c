@@ -40,16 +40,27 @@ unsigned char *osh_dicom_load_file(char const *path, size_t *out_size, struct os
         OSH_DIAG_ERRORF(diag, "dicom: cannot open '%s'", path);
         return NULL;
     }
-    if (fseek(fp, 0, SEEK_END) != 0 || (sz = ftell(fp)) < 0) {
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        OSH_DIAG_ERRORF(diag, "dicom: cannot seek '%s'", path);
+        fclose(fp);
+        return NULL;
+    }
+    sz = ftell(fp);
+    if (sz < 0) {
         OSH_DIAG_ERRORF(diag, "dicom: cannot determine size of '%s'", path);
         fclose(fp);
         return NULL;
     }
-    rewind(fp);
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        OSH_DIAG_ERRORF(diag, "dicom: cannot rewind '%s'", path);
+        fclose(fp);
+        return NULL;
+    }
 
     buf = (unsigned char *) malloc((size_t) sz);
-    if (!buf)
+    if (!buf) {
         osh_abort_oomf("dicom: loading '%s'", path);
+    }
 
     if (fread(buf, 1, (size_t) sz, fp) != (size_t) sz) {
         OSH_DIAG_ERRORF(diag, "dicom: read error on '%s'", path);
@@ -118,8 +129,9 @@ int osh_dicom_walk(
         value_start = pos;
         pos += length;
 
-        if (!fn(group, element, (char const *) vr, buf + value_start, length, user))
+        if (!fn(group, element, (char const *) vr, buf + value_start, length, user)) {
             return 1; /* caller requested stop */
+        }
     }
     return 1;
 }
@@ -132,18 +144,23 @@ int osh_dicom_ds_array(unsigned char const *value, uint32_t length, double *out,
     while (i < length && count < max_count) {
         size_t j = 0;
         /* skip leading whitespace / null padding */
-        while (i < length && (value[i] == ' ' || value[i] == '\0'))
+        while (i < length && (value[i] == ' ' || value[i] == '\0')) {
             i++;
-        if (i >= length)
+        }
+        if (i >= length) {
             break;
+        }
         /* copy token up to backslash separator */
-        while (i < length && value[i] != '\\' && j < sizeof(tmp) - 1)
+        while (i < length && value[i] != '\\' && j < sizeof(tmp) - 1) {
             tmp[j++] = (char) value[i++];
+        }
         tmp[j] = '\0';
-        if (j > 0)
+        if (j > 0) {
             out[count++] = atof(tmp);
-        if (i < length && value[i] == '\\')
+        }
+        if (i < length && value[i] == '\\') {
             i++;
+        }
     }
     return count;
 }
@@ -155,7 +172,8 @@ double osh_dicom_ds(unsigned char const *value, uint32_t length) {
 }
 
 uint16_t osh_dicom_us(unsigned char const *value, uint32_t length) {
-    if (length < 2)
+    if (length < 2) {
         return 0;
+    }
     return _u16(value);
 }
