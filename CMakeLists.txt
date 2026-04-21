@@ -98,7 +98,9 @@ add_subdirectory(src/scoring)
 add_subdirectory(src/physics)
 add_subdirectory(src/transport)
 add_subdirectory(src/simulation)
+add_subdirectory(src/dicom)
 add_subdirectory(src/apps/osh)
+add_subdirectory(src/apps/dicominspect)
 
 # ---- Umbrella target AFTER the libs exist ----
 add_library(osh_all INTERFACE)
@@ -113,6 +115,7 @@ target_link_libraries(osh_all INTERFACE
     osh_gemca_runtime
     osh_scoring
     osh_transport
+    osh_dicom
 )
 target_include_directories(osh_all INTERFACE
     ${PROJECT_SOURCE_DIR}/src
