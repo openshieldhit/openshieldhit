@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,8 +11,53 @@
 struct _collect {
     struct osh_dicom_rtdose *rd;
     unsigned char const *buf; /* kept to compute pixel offset */
+    struct osh_diag_sink const *diag;
     int ok;
 };
+
+static int _ds_value_capacity(unsigned char const *value, uint32_t length) {
+    int count;
+    uint32_t i;
+    int in_token;
+
+    if (!value || length == 0)
+        return 0;
+
+    count = 0;
+    in_token = 0;
+    for (i = 0; i < length; i++) {
+        if (value[i] == '\\') {
+            in_token = 0;
+            continue;
+        }
+        if (!in_token && value[i] != ' ' && value[i] != '\0') {
+            count++;
+            in_token = 1;
+        }
+    }
+    return count;
+}
+
+static int _rtdose_pixel_count(size_t *out, int n_frames, int rows, int cols) {
+    size_t a;
+    size_t b;
+    size_t c;
+
+    if (!out || n_frames <= 0 || rows <= 0 || cols <= 0)
+        return 0;
+
+    a = (size_t) n_frames;
+    b = (size_t) rows;
+    c = (size_t) cols;
+
+    if (a > SIZE_MAX / b)
+        return 0;
+    a *= b;
+    if (a > SIZE_MAX / c)
+        return 0;
+    *out = a * c;
+    return 1;
+}
 
 static int
 _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const *value, uint32_t length, void *user) {
@@ -46,21 +92,38 @@ _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const 
     } else if (group == 0x0028 && element == 0x0030) { /* Pixel Spacing */
         osh_dicom_ds_array(value, length, rd->pixel_spacing, 2);
     } else if (group == 0x3004 && element == 0x000C) { /* Grid Frame Offset Vector */
-        int count = length / 12;                       /* rough upper bound for DS array */
-        if (count < 1)
-            count = rd->n_frames > 0 ? rd->n_frames : 256;
-        rd->frame_offsets = (double *) malloc((size_t) count * sizeof(double));
+        int capacity = _ds_value_capacity(value, length);
+        int parsed;
+
+        if (rd->n_frames > capacity)
+            capacity = rd->n_frames;
+        if (capacity < 1)
+            capacity = 1;
+
+        rd->frame_offsets = (double *) calloc((size_t) capacity, sizeof(double));
         if (!rd->frame_offsets)
             osh_abort_oomf("dicom rtdose: frame offsets");
-        osh_dicom_ds_array(value, length, rd->frame_offsets, count);
+        parsed = osh_dicom_ds_array(value, length, rd->frame_offsets, capacity);
+        if (rd->n_frames > 0 && parsed != rd->n_frames) {
+            OSH_DIAG_WARNF(
+                c->diag, "dicom rtdose: parsed %d frame offsets but Number of Frames is %d", parsed, rd->n_frames);
+        }
     } else if (group == 0x3004 && element == 0x000E) { /* Dose Grid Scaling */
         rd->dose_grid_scaling = osh_dicom_ds(value, length);
     } else if (group == 0x7FE0 && element == 0x0010) { /* Pixel Data */
-        rd->n_pixels = (size_t) (rd->n_frames * rd->rows * rd->cols);
-        if (rd->n_pixels > 0 && length >= rd->n_pixels * sizeof(uint32_t)) {
+        size_t offset;
+        unsigned char *pixel_base;
+
+        rd->n_pixels = 0;
+        if (_rtdose_pixel_count(&rd->n_pixels, rd->n_frames, rd->rows, rd->cols)
+            && length >= rd->n_pixels * sizeof(uint32_t)) {
             rd->_pixel_data_offset = (size_t) (value - c->buf);
-            rd->pixels = (uint32_t *) (rd->_raw + rd->_pixel_data_offset);
-            c->ok = 1;
+            offset = rd->_pixel_data_offset;
+            pixel_base = rd->_raw + offset;
+            if (((uintptr_t) pixel_base % sizeof(uint32_t)) == 0u) {
+                rd->pixels = (uint32_t *) pixel_base;
+                c->ok = 1;
+            }
         }
         return 0; /* always last — stop */
     }
@@ -83,12 +146,13 @@ enum osh_status osh_dicom_rtdose_read(char const *path, struct osh_dicom_rtdose 
 
     c.rd = rd;
     c.buf = buf;
+    c.diag = diag;
     c.ok = 0;
 
     osh_dicom_walk(buf, buf_size, _tag_cb, &c, diag);
 
     if (!c.ok) {
-        OSH_DIAG_ERRORF(diag, "dicom rtdose: failed to read pixel data from '%s'", path);
+        OSH_DIAG_ERRORF(diag, "dicom rtdose: failed to read aligned pixel data from '%s'", path);
         osh_dicom_rtdose_free(rd);
         return OSH_EPARSE;
     }

@@ -62,6 +62,11 @@ installed public API and should not be re-exported through `include/`.
   caller-owned sink, and deeper modules should either do the same or stay
   silent unless they sit at a real setup/compile boundary.
 
+- `src/apps/dicominspect/`
+  Tiny developer-facing CLI for inspecting CT series and RTDOSE files through
+  the small DICOM support layer in `src/dicom/`. This is a utility executable,
+  not a full application stack like `src/apps/osh/`.
+
 ## Expected future layout
 
 - `src/apps/osh_topas/`

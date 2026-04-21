@@ -27,6 +27,21 @@ struct _collect {
     struct _slice s;
 };
 
+static int _slice_pixel_count(size_t *out, int rows, int cols) {
+    size_t r;
+    size_t c;
+
+    if (!out || rows <= 0 || cols <= 0)
+        return 0;
+
+    r = (size_t) rows;
+    c = (size_t) cols;
+    if (r > SIZE_MAX / c)
+        return 0;
+    *out = r * c;
+    return 1;
+}
+
 static int
 _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const *value, uint32_t length, void *user) {
     struct _collect *c = (struct _collect *) user;
@@ -70,12 +85,14 @@ _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const 
     } else if (group == 0x0028 && element == 0x1053) { /* Rescale Slope */
         s->rescale_slope = osh_dicom_ds(value, length);
     } else if (group == 0x7FE0 && element == 0x0010) { /* Pixel Data */
-        size_t n = (size_t) (s->rows * s->cols);
-        if (n > 0 && length >= n * sizeof(int16_t)) {
-            s->pixels = (int16_t *) malloc(n * sizeof(int16_t));
+        size_t n;
+        size_t bytes;
+        if (_slice_pixel_count(&n, s->rows, s->cols) && n <= (size_t) length / sizeof(int16_t)) {
+            bytes = n * sizeof(int16_t);
+            s->pixels = (int16_t *) malloc(bytes);
             if (!s->pixels)
                 osh_abort_oomf("dicom ct: slice pixel buffer");
-            memcpy(s->pixels, value, n * sizeof(int16_t));
+            memcpy(s->pixels, value, bytes);
         }
         return 0; /* pixel data is always last — stop walking */
     }
