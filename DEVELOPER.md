@@ -63,7 +63,7 @@ Follow this structure:
  * @param[out]    baz  Description.
  *
  * @returns Description of return value, or "Does not return" if the
- *          function calls osh_error() on all error paths.
+ *          function aborts via a noreturn fatal helper on all error paths.
  */
 ```
 

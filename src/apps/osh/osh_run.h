@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus

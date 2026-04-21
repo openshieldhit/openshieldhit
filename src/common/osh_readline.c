@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "osh_abort.h"
 #include "osh_diag.h"
 
 static int _is_comment(char c);
@@ -41,7 +42,7 @@ int osh_readline(struct oshfile *oshf, char **line, int *lineno) {
     if (*line == NULL) {
         *line = calloc(OSH_MAX_LINE_LENGTH, sizeof(char));
         if (!*line) {
-            osh_alloc_failed("osh_readline: failed to allocate memory for line buffer");
+            osh_abort_oomf("osh_readline: failed to allocate memory for line buffer");
         }
     }
 
@@ -102,7 +103,7 @@ int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aar
         /* Allocate and copy line */
         line = calloc(OSH_MAX_LINE_LENGTH, sizeof(char));
         if (!line) {
-            osh_alloc_failed("osh_readline_key: failed to allocate memory for line buffer");
+            osh_abort_oomf("osh_readline_key: failed to allocate memory for line buffer");
             return -1;
         }
         strncpy(line, buff, OSH_MAX_LINE_LENGTH);

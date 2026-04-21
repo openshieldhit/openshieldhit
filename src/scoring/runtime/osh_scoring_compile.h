@@ -1,7 +1,7 @@
 #ifndef OSH_SCORING_COMPILE_H
 #define OSH_SCORING_COMPILE_H
 
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
 #include "scoring/osh_scoring.h"
 #include "scoring/runtime/osh_scoring_runtime.h"

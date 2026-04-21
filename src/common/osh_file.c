@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "openshieldhit/status.h"
+#include "osh_abort.h"
 #include "osh_diag.h"
 
 static enum osh_status _mapfile(struct oshfile *oshf);
@@ -25,7 +26,7 @@ struct oshfile *osh_fopen(char const *filename) {
 
     oshf = malloc(sizeof(struct oshfile));
     if (!oshf) {
-        osh_alloc_failed("osh_fopen");
+        osh_abort_oomf("osh_fopen");
     }
 
     oshf->fp = fp;
@@ -129,7 +130,7 @@ static enum osh_status _mapfile(struct oshfile *oshf) {
     map_slots = (oshf->map_len > 0) ? (size_t) oshf->map_len : 1u;
     oshf->map = calloc(map_slots, sizeof(long int));
     if (!oshf->map) {
-        osh_alloc_failed("osh_mapfile: failed to allocate memory for line map");
+        osh_abort_oomf("osh_mapfile: failed to allocate memory for line map");
     }
 
     if (_rewind_file(oshf) != OSH_OK) {

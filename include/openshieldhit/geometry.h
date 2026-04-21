@@ -3,8 +3,8 @@
 
 #include <stddef.h>
 
+#include "openshieldhit/diag.h"
 #include "openshieldhit/geometry_defs.h"
-#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus

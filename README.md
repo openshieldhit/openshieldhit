@@ -116,7 +116,7 @@ geometry, accumulate dose in scoring detectors, and produce Bragg-peak depth-dos
 distributions.
 
 ## TODO
-- [x] logger
+- [x] diagnostics sink
 - [x] vector library
 - [x] readline for tag and key parsing
 - [x] prng

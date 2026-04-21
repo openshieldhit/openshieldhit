@@ -12,10 +12,6 @@
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/status.h"
 
-#define osh_error(...) OSH_DIAG_ERRORF(diag, __VA_ARGS__)
-#define osh_warn(...) OSH_DIAG_WARNF(diag, __VA_ARGS__)
-#define osh_info(...) OSH_DIAG_INFOF(diag, __VA_ARGS__)
-
 /* ---- Internal helpers ---------------------------------------------------- */
 
 static int _rewind_oshfile(struct oshfile *shf, struct osh_diag_sink const *diag);

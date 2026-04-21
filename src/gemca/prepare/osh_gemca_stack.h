@@ -2,7 +2,7 @@
 #define OSH_GEMCA_STACK_H
 
 #include "gemca/osh_gemca2.h"
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 
 #define _OSH_GEMCA_STACKITEM_OPERATOR 0
 #define _OSH_GEMCA_STACKITEM_CGNODE 1
