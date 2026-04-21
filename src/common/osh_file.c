@@ -1,5 +1,11 @@
 #include "osh_file.h"
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -292,4 +298,79 @@ char *osh_path_dirname(char const *path) {
     memcpy(dir, path, len);
     dir[len] = '\0';
     return dir;
+}
+
+enum osh_status osh_dir_foreach_file(char const *dir, osh_dir_iter_fn fn, void *user) {
+    if (!dir || !fn) {
+        return OSH_EINVAL;
+    }
+
+#if defined(_WIN32)
+    {
+        WIN32_FIND_DATAA fd;
+        HANDLE hfind;
+        char pattern[4096];
+        char path[4096];
+
+        if (snprintf(pattern, sizeof(pattern), "%s\\*", dir) < 0) {
+            return OSH_EIO;
+        }
+        hfind = FindFirstFileA(pattern, &fd);
+        if (hfind == INVALID_HANDLE_VALUE) {
+            return OSH_EIO;
+        }
+
+        do {
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+                continue;
+            }
+            if (snprintf(path, sizeof(path), "%s\\%s", dir, fd.cFileName) < 0) {
+                FindClose(hfind);
+                return OSH_EIO;
+            }
+            if (!fn(path, user)) {
+                break;
+            }
+        } while (FindNextFileA(hfind, &fd));
+
+        FindClose(hfind);
+        return OSH_OK;
+    }
+#else
+    {
+        DIR *d;
+        struct dirent *ent;
+        char path[4096];
+
+        d = opendir(dir);
+        if (!d) {
+            return OSH_EIO;
+        }
+
+        while ((ent = readdir(d)) != NULL) {
+            struct stat st;
+
+            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+                continue;
+            }
+            if (snprintf(path, sizeof(path), "%s/%s", dir, ent->d_name) < 0) {
+                closedir(d);
+                return OSH_EIO;
+            }
+            if (stat(path, &st) != 0) {
+                closedir(d);
+                return OSH_EIO;
+            }
+            if (!S_ISREG(st.st_mode)) {
+                continue;
+            }
+            if (!fn(path, user)) {
+                break;
+            }
+        }
+
+        closedir(d);
+        return OSH_OK;
+    }
+#endif
 }
