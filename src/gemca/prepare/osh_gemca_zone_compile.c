@@ -189,7 +189,7 @@ static struct cgnode *_build_ast(struct zone *z, struct osh_gemca_prepared *g, s
             /* But first, lookup body from token name. */
             b = _body_from_name(token, g);
             if (b == NULL) {
-                OSH_DIAG_ERRORF(diag, "_build_ast() coudn't find body names '%s'", token);
+                OSH_DIAG_ERRORF(diag, "_build_ast() couldn't find body names '%s'", token);
             }
             node = _new_node_body(b);
 

@@ -566,13 +566,8 @@ void osh_beam_print_spot(struct beam_spot const *spot, struct osh_diag_sink cons
 }
 
 static void _beam_print_primary(struct particle const *p, struct osh_diag_sink const *diag) {
-    char name_buf[64];
-
     if (!p) {
         return;
-    }
-    if (!osh_particle_name_from_pdg(p->pdg, name_buf, sizeof(name_buf))) {
-        name_buf[0] = '\0';
     }
 
     if (diag && diag->emit && diag->min_level <= OSH_DIAG_LEVEL_INFO) {

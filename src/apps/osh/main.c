@@ -44,7 +44,6 @@ int main(int argc, char *argv[]) {
     }
 
     diag.emit = cli_diag_emit;
-    diag.user = stdout;
     diag.min_level = (opt.verbose == 0)   ? OSH_DIAG_LEVEL_WARN
                      : (opt.verbose == 1) ? OSH_DIAG_LEVEL_INFO
                                           : OSH_DIAG_LEVEL_DEBUG;
@@ -93,14 +92,22 @@ static int exit_code_for_status(enum osh_status status) {
 
 static void
 cli_diag_emit(void *user, int level, char const *file, int line, char const *function, char const *message) {
-    FILE *fp = (FILE *) user;
+    FILE *fp;
+    (void) user;
     (void) file;
     (void) line;
     (void) function;
 
-    if (!fp || !message) {
+    if (!message) {
         return;
     }
+
+    /* Keep informational chatter pipe-friendly on stdout while routing
+     * warnings and errors to stderr. To add log-file output, replace the
+     * NULL user pointer with a small context struct carrying a log FILE*,
+     * then write to it here alongside fp — no API change required. */
+    fp = (level >= OSH_DIAG_LEVEL_WARN) ? stderr : stdout;
+
     fprintf(fp, "[%s] %s\n", osh_diag_level_name(level), message);
     fflush(fp);
 }
