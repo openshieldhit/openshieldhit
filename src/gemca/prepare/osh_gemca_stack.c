@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 
+#include "common/osh_abort.h"
 #include "common/osh_diag.h"
 
 struct stackitem *osh_gemca_stack_pop(struct stack *s) {
@@ -26,7 +27,7 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
         /* allocate memory to the stack */
         s = (struct stack *) calloc(1, sizeof(struct stack));
         if (s == NULL) {
-            osh_alloc_failed("osh_gemca_stack_push(): stack");
+            osh_abort_oomf("osh_gemca_stack_push(): stack");
         }
 
         /* allocate memory to 32 stack pointers */
@@ -34,7 +35,7 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
         s->si = (struct stackitem **) calloc(s->n, sizeof(struct stackitem *));
         if (s->si == NULL) {
             free(s);
-            osh_alloc_failed("osh_gemca_stack_push(): stack items");
+            osh_abort_oomf("osh_gemca_stack_push(): stack items");
         }
 
         /* number of elements in stack is so far just 0 */
@@ -52,7 +53,7 @@ size_t osh_gemca_stack_push(struct stack **ps, struct stackitem *i) {
         tmp_si = (struct stackitem **) realloc((void *) s->si, new_n * sizeof(struct stackitem *));
         if (tmp_si == NULL) {
             /* Keep existing stack untouched to avoid dangling pointers at call sites. */
-            osh_alloc_failed("osh_gemca_stack_push(): stack grow");
+            osh_abort_oomf("osh_gemca_stack_push(): stack grow");
         }
         s->si = tmp_si;
         s->n = new_n;

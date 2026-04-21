@@ -2,8 +2,8 @@
 #define OSH_FRONTEND_OPENSHIELDHIT_GEOMETRY_PARSE_H
 
 #include "common/osh_file.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/geometry.h"
-#include "openshieldhit/logger.h"
 #include "openshieldhit/status.h"
 
 /**

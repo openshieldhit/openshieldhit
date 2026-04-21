@@ -90,8 +90,6 @@ struct material_dispatch_entry {
                                char const *args);
 };
 
-#define osh_error(...) OSH_DIAG_ERRORF(diag, __VA_ARGS__)
-
 /*
  * Preferred mean-excitation keys are MATERIALI for material-level fallback
  * data and ELEMENTI for the last parsed element. MIVALUE/MIAV and IVALUE/IAV
@@ -173,7 +171,8 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
         }
 
         if (!material_active) {
-            osh_error("in %s line %d: material key '%s' outside MATERIAL block", oshf->filename, lineno, key);
+            OSH_DIAG_ERRORF(
+                diag, "in %s line %d: material key '%s' outside MATERIAL block", oshf->filename, lineno, key);
             free(line);
             return OSH_EPARSE;
         }
@@ -195,7 +194,7 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
         }
 
         if (!found) {
-            osh_error("in %s line %d: unknown material key '%s'", oshf->filename, lineno, key);
+            OSH_DIAG_ERRORF(diag, "in %s line %d: unknown material key '%s'", oshf->filename, lineno, key);
             free(line);
             return OSH_EPARSE;
         }
@@ -223,15 +222,15 @@ static enum osh_status parse_density(struct osh_diag_sink const *diag,
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: RHO outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: RHO outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (!args || sscanf(args, "%lf %c", &rho, &extra) != 1) {
-        osh_error("in %s line %i: RHO expects one floating point value", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: RHO expects one floating point value", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (rho <= 0.0) {
-        osh_error("in %s line %i: RHO must be > 0", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: RHO must be > 0", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -263,18 +262,18 @@ static enum osh_status parse_color(struct osh_diag_sink const *diag,
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: COLOR outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: COLOR outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (!args || sscanf(args, "%f %f %f %f %c", &rgba[0], &rgba[1], &rgba[2], &rgba[3], &extra) != 4) {
-        osh_error("in %s line %i: COLOR expects four floating point values", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: COLOR expects four floating point values", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
     i = 0;
     while (i < 4) {
         if (rgba[i] < 0.0f || rgba[i] > 1.0f) {
-            osh_error("in %s line %i: COLOR components must be within [0,1]", oshf->filename, oshf->lineno);
+            OSH_DIAG_ERRORF(diag, "in %s line %i: COLOR components must be within [0,1]", oshf->filename, oshf->lineno);
             return OSH_EPARSE;
         }
         mat->rgba[i] = rgba[i];
@@ -308,7 +307,7 @@ static enum osh_status parse_element_by_mass(struct osh_diag_sink const *diag,
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: ELEMENTBYMASS outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: ELEMENTBYMASS outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -344,7 +343,7 @@ static enum osh_status parse_element_by_number(struct osh_diag_sink const *diag,
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: NUCLID outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: NUCLID outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -375,7 +374,7 @@ parse_end(struct osh_diag_sink const *diag, struct osh_material_workspace *wm, s
     (void) wm;
 
     if (args && args[0] != '\0') {
-        osh_error("in %s line %i: END expects no arguments", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: END expects no arguments", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -404,11 +403,13 @@ static enum osh_status parse_element_mean_excitation_energy(struct osh_diag_sink
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: ELEMENTI/IVALUE/IAV outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(
+            diag, "in %s line %i: ELEMENTI/IVALUE/IAV outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (mat->nelements == 0u) {
-        osh_error("in %s line %i: ELEMENTI/IVALUE/IAV requires a preceding element card", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(
+            diag, "in %s line %i: ELEMENTI/IVALUE/IAV requires a preceding element card", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -455,11 +456,11 @@ static enum osh_status parse_loaddedx(struct osh_diag_sink const *diag,
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: LOADDEDX outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: LOADDEDX outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (!args || sscanf(args, "%511s %c", path, &extra) != 1) {
-        osh_error("in %s line %i: LOADDEDX expects one path", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: LOADDEDX expects one path", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -530,7 +531,7 @@ static enum osh_status parse_material_mean_excitation_energy(struct osh_diag_sin
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: MATERIALI outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: MATERIALI outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -568,15 +569,15 @@ static enum osh_status parse_icru(struct osh_diag_sink const *diag,
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: ICRU outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: ICRU outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (!args || sscanf(args, "%i %c", &icru_id, &extra) != 1) {
-        osh_error("in %s line %i: ICRU expects one integer value", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: ICRU expects one integer value", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (icru_id < 0) {
-        osh_error("in %s line %i: ICRU must be >= 0", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: ICRU must be >= 0", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -627,11 +628,11 @@ static enum osh_status parse_state(struct osh_diag_sink const *diag,
 
     mat = material_current(wm);
     if (!mat) {
-        osh_error("in %s line %i: STATE outside MATERIAL block", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: STATE outside MATERIAL block", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (!args || sscanf(args, "%31s %c", state_token, &extra) != 1) {
-        osh_error("in %s line %i: STATE expects an integer or keyword", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: STATE expects an integer or keyword", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
@@ -643,7 +644,7 @@ static enum osh_status parse_state(struct osh_diag_sink const *diag,
 
     rc = parse_state_value(&state, state_token);
     if (rc != OSH_OK) {
-        osh_error("in %s line %i: unknown STATE '%s'", oshf->filename, oshf->lineno, state_token);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: unknown STATE '%s'", oshf->filename, oshf->lineno, state_token);
         return rc;
     }
 
@@ -711,11 +712,12 @@ static enum osh_status parse_mean_excitation_energy_value(double *mean_excitatio
     char extra;
 
     if (!args || sscanf(args, "%lf %c", &mean_excitation_energy, &extra) != 1) {
-        osh_error("in %s line %i: %s expects one floating point value", oshf->filename, oshf->lineno, key_name);
+        OSH_DIAG_ERRORF(
+            diag, "in %s line %i: %s expects one floating point value", oshf->filename, oshf->lineno, key_name);
         return OSH_EPARSE;
     }
     if (mean_excitation_energy < 0.0) {
-        osh_error("in %s line %i: %s must be >= 0", oshf->filename, oshf->lineno, key_name);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: %s must be >= 0", oshf->filename, oshf->lineno, key_name);
         return OSH_EPARSE;
     }
 
@@ -748,21 +750,28 @@ static enum osh_status parse_element_card_args(unsigned int *z_out,
     double amount;
 
     if (!args) {
-        osh_error(
-            "in %s line %i: %s expects '<Z> <amount>' or '<Z> <A> <amount>'", oshf->filename, oshf->lineno, key_name);
+        OSH_DIAG_ERRORF(diag,
+                        "in %s line %i: %s expects '<Z> <amount>' or '<Z> <A> <amount>'",
+                        oshf->filename,
+                        oshf->lineno,
+                        key_name);
         return OSH_EPARSE;
     }
 
     ntok = sscanf(args, "%31s %31s %31s %31s", tok0, tok1, tok2, extra);
     if (ntok != 2 && ntok != 3) {
-        osh_error(
-            "in %s line %i: %s expects '<Z> <amount>' or '<Z> <A> <amount>'", oshf->filename, oshf->lineno, key_name);
+        OSH_DIAG_ERRORF(diag,
+                        "in %s line %i: %s expects '<Z> <amount>' or '<Z> <A> <amount>'",
+                        oshf->filename,
+                        oshf->lineno,
+                        key_name);
         return OSH_EPARSE;
     }
 
     rc = parse_uint_token(&z, tok0);
     if (rc != OSH_OK || z == 0u) {
-        osh_error("in %s line %i: %s element Z must be a positive integer", oshf->filename, oshf->lineno, key_name);
+        OSH_DIAG_ERRORF(
+            diag, "in %s line %i: %s element Z must be a positive integer", oshf->filename, oshf->lineno, key_name);
         return OSH_EPARSE;
     }
 
@@ -772,16 +781,18 @@ static enum osh_status parse_element_card_args(unsigned int *z_out,
     } else {
         rc = parse_uint_token(&a, tok1);
         if (rc != OSH_OK || a == 0u) {
-            osh_error("in %s line %i: %s isotope A must be a positive integer when provided",
-                      oshf->filename,
-                      oshf->lineno,
-                      key_name);
+            OSH_DIAG_ERRORF(diag,
+                            "in %s line %i: %s isotope A must be a positive integer when provided",
+                            oshf->filename,
+                            oshf->lineno,
+                            key_name);
             return OSH_EPARSE;
         }
         rc = parse_double_token(&amount, tok2);
     }
     if (rc != OSH_OK || amount <= 0.0) {
-        osh_error("in %s line %i: %s amount must be a positive number", oshf->filename, oshf->lineno, key_name);
+        OSH_DIAG_ERRORF(
+            diag, "in %s line %i: %s amount must be a positive number", oshf->filename, oshf->lineno, key_name);
         return OSH_EPARSE;
     }
 
@@ -852,12 +863,12 @@ static enum osh_status material_push(struct osh_diag_sink const *diag,
     char extra;
 
     if (!args || sscanf(args, "%127s %c", name, &extra) != 1) {
-        osh_error("in %s line %i: MATERIAL expects one name", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: MATERIAL expects one name", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
 
     if (osh_material_by_name(wm, name) != NULL) {
-        osh_error("in %s line %i: duplicate MATERIAL name '%s'", oshf->filename, oshf->lineno, name);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: duplicate MATERIAL name '%s'", oshf->filename, oshf->lineno, name);
         return OSH_EPARSE;
     }
 
@@ -907,19 +918,21 @@ static enum osh_status material_push_element(struct osh_diag_sink const *diag,
     size_t i;
 
     if (z == 0u) {
-        osh_error("in %s line %i: element Z must be > 0", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: element Z must be > 0", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (atom_count <= 0.0 && mass_fraction <= 0.0) {
-        osh_error("in %s line %i: element amount must be > 0", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(diag, "in %s line %i: element amount must be > 0", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     i = 0;
     while (i < mat->nelements) {
         if ((atom_count > 0.0 && mat->elements[i].mass_fraction > 0.0)
             || (mass_fraction > 0.0 && mat->elements[i].atom_count > 0.0)) {
-            osh_error(
-                "in %s line %i: mixed material element input modes are not supported", oshf->filename, oshf->lineno);
+            OSH_DIAG_ERRORF(diag,
+                            "in %s line %i: mixed material element input modes are not supported",
+                            oshf->filename,
+                            oshf->lineno);
             return OSH_EPARSE;
         }
         i++;

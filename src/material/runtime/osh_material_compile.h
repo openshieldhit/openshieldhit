@@ -3,7 +3,7 @@
 
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus

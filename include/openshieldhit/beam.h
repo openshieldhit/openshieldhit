@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "openshieldhit/beam_defs.h"
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus

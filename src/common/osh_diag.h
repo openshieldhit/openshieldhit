@@ -1,7 +1,7 @@
 #ifndef OSH_DIAG_H
 #define OSH_DIAG_H
 
-#include "openshieldhit/logger.h"
+#include "openshieldhit/diag.h"
 
 #define OSH_DIAGF(diag, lvl, fmt, ...) osh_diag_emitf((diag), (lvl), __FILE__, __LINE__, __func__, (fmt), ##__VA_ARGS__)
 

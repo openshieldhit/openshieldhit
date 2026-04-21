@@ -83,8 +83,8 @@ In order:
    source machinery.
 
 The borrowed diagnostics sink is stored on the simulation and forwarded into
-the transport context.  This keeps the main runtime path free of process-global
-logger ownership.
+the transport context.  This keeps the main runtime path free of hidden
+process-global diagnostics ownership.
 
 ## What `osh_simulation_run` does
 
