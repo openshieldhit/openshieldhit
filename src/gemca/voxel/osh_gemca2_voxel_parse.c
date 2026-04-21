@@ -1,5 +1,6 @@
 #include "gemca/voxel/osh_gemca2_voxel_parse.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,9 +11,23 @@
 #include "gemca/voxel/osh_gemca2_voxel_defines.h"
 #include "gemca/voxel/osh_gemca2_voxel_keys.h"
 
+/* TODO: remove when voxel/CT work begins — replace osh_err with OSH_DIAG_*F */
+#define EX_CONFIG 78
+#define EX_UNAVAILABLE 69
+
 static int _parse_header(struct oshfile *shf, struct voxelct *ct);
 static int _load_ctx(struct voxelct *ct);
 static inline int16_t _swap_int16(int16_t val);
+
+/* This one should also go, when CT works beings, an replaced with diag.h */
+static void osh_err(int code, char const *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    (void) vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    exit(code);
+}
 
 int osh_gemca_voxel_load(char const *fname, struct voxelct *ct) {
 
