@@ -268,21 +268,29 @@ static char *_next_token(char **cursor) {
  */
 static enum osh_status _finalize_body(
     struct osh_geometry_workspace *ws, size_t ibody, int btype, char const *name, double const *par, int npar) {
-    if (!ws || ibody >= ws->nbodies || !name || npar < 0) {
+    char *name_copy = NULL;
+    double *a_copy = NULL;
+
+    if (!ws || ibody >= ws->nbodies || !name || npar < 0 || (npar > 0 && !par)) {
         return OSH_EINVAL;
     }
-    ws->bodies[ibody].type = btype;
-    ws->bodies[ibody].name = strdup(name);
-    if (!ws->bodies[ibody].name) {
+    /* Allocate into temporaries first; only write to ws on full success to
+     * avoid partial initialisation that would complicate caller cleanup. */
+    name_copy = strdup(name);
+    if (!name_copy) {
         return OSH_ENOMEM;
     }
     if (npar > 0) {
-        ws->bodies[ibody].a = (double *) calloc((size_t) npar, sizeof(double));
-        if (!ws->bodies[ibody].a) {
+        a_copy = (double *) calloc((size_t) npar, sizeof(double));
+        if (!a_copy) {
+            free(name_copy);
             return OSH_ENOMEM;
         }
-        memcpy(ws->bodies[ibody].a, par, (size_t) npar * sizeof(double));
+        memcpy(a_copy, par, (size_t) npar * sizeof(double));
     }
+    ws->bodies[ibody].type = btype;
+    ws->bodies[ibody].name = name_copy;
+    ws->bodies[ibody].a = a_copy;
     ws->bodies[ibody].na = npar;
     return OSH_OK;
 }
@@ -298,7 +306,7 @@ static int _parse_double_token(char const *token, double *out) {
     }
     errno = 0;
     v = strtod(token, &end);
-    if (errno != 0 || end == token || *end != '\0') {
+    if (errno != 0 || end == token || *end != '\0' || !isfinite(v)) {
         return 0;
     }
     *out = v;
@@ -670,7 +678,6 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 ws->bodies[ibody].hu = body_hu;
                 ws->bodies[ibody].n_hu = body_n_hu;
                 body_hu = NULL;
-                body_n_hu = 0u;
             }
             free(line);
             line = NULL;
@@ -690,7 +697,6 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 ws->bodies[ibody].hu = body_hu;
                 ws->bodies[ibody].n_hu = body_n_hu;
                 body_hu = NULL;
-                body_n_hu = 0u;
                 ibody++;
             }
 
