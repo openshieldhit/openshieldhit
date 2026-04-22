@@ -8,6 +8,7 @@
 #include "common/osh_coord.h"
 #include "common/osh_diag.h"
 #include "common/osh_vect.h"
+#include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_calc_surface.h"
 #include "gemca/osh_gemca2_defines.h"
@@ -573,6 +574,7 @@ static enum osh_status _setup_vox(struct body *b) {
     b->ct_grid.n[0] = nx;
     b->ct_grid.n[1] = ny;
     b->ct_grid.n[2] = nz;
+    b->ct_grid.tile_order = OSH_VOXEL_ORDER_MORTON8;
 
     /* ----------- Setup translation matrix */
     /* b->t maps universe -> voxel-local (BZALIGN). Translation terms are set

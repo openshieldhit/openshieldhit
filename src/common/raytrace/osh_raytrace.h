@@ -2,6 +2,7 @@
 #define OSH_RAYTRACE_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,23 +16,26 @@ extern "C" {
  * voxel count along each axis.  The grid spans:
  *   [origin[i],  origin[i] + n[i]*spacing[i]]  for i = 0,1,2.
  *
- * Linear voxel index convention: idx = ix + n[0]*(iy + n[1]*iz).
+ * Voxel index convention is controlled by tile_order (OSH_VOXEL_ORDER_*):
+ *   0 (ROW_MAJOR): idx = ix + n[0]*(iy + n[1]*iz)
+ *   8 (MORTON8):   8×8×8 Morton-tiled — see osh_voxel_order.h
  *
  * Both the CT transport grid and scoring mesh grids use this descriptor.
  * Callers construct it from their own geometry representation and pass it
  * to osh_raytrace_traverse(); the algorithm sees no domain types.
  */
 struct osh_raytrace_grid {
-    double origin[3];  /* position of the corner of voxel [0,0,0] [cm] */
-    double spacing[3]; /* voxel size along each axis [cm] */
-    size_t n[3];       /* number of voxels along each axis */
+    double origin[3];   /* position of the corner of voxel [0,0,0] [cm] */
+    double spacing[3];  /* voxel size along each axis [cm] */
+    size_t n[3];        /* number of voxels along each axis */
+    uint8_t tile_order; /* OSH_VOXEL_ORDER_* — controls flat index formula */
 };
 
 /**
  * @brief One voxel entered by a ray, with the path length spent inside it.
  */
 struct osh_voxel_crossing {
-    size_t idx;      /* linear voxel index: ix + n[0]*(iy + n[1]*iz) */
+    size_t idx;      /* flat voxel index in the layout given by grid->tile_order */
     double path_len; /* track length through this voxel [cm] */
 };
 
