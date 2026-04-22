@@ -1,13 +1,16 @@
 #include "apps/osh/osh_geometry_parse.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "apps/osh/osh_geometry_parse_keys.h"
 #include "common/osh_diag.h"
+#include "common/osh_file.h"
 #include "common/osh_readline.h"
 #include "gemca/osh_gemca2_defines.h"
+#include "openshieldhit/dicom.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/status.h"
@@ -15,6 +18,16 @@
 /* ---- Internal helpers ---------------------------------------------------- */
 
 static int _rewind_oshfile(struct oshfile *shf, struct osh_diag_sink const *diag);
+static enum osh_status _finalize_body(
+    struct osh_geometry_workspace *ws, size_t ibody, int btype, char const *name, double const *par, int npar);
+static int _parse_double_token(char const *token, double *out);
+static enum osh_status _parse_dcm_body(char const *args,
+                                       char const *geo_filename,
+                                       int lineno,
+                                       struct osh_diag_sink const *diag,
+                                       char name_out[OSH_GEMCA_BODY_NAME_MAXLEN],
+                                       double par_out[OSH_GEMCA_NARGS_MAX],
+                                       int *npar_out);
 
 /**
  * @brief Map a body-type key string to an OSH_GEOMETRY_BODY_* code.
@@ -28,55 +41,58 @@ static int _rewind_oshfile(struct oshfile *shf, struct osh_diag_sink const *diag
  *          if @p key is unrecognized.
  */
 static int _body_type_from_key(char const *key) {
-    if (strcasecmp(key, "sph") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_SPH) == 0) {
         return OSH_GEOMETRY_BODY_SPH;
     }
-    if (strcasecmp(key, "wed") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_WED) == 0) {
         return OSH_GEOMETRY_BODY_WED;
     }
-    if (strcasecmp(key, "arb") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_ARB) == 0) {
         return OSH_GEOMETRY_BODY_ARB;
     }
-    if (strcasecmp(key, "box") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_BOX) == 0) {
         return OSH_GEOMETRY_BODY_BOX;
     }
-    if (strcasecmp(key, "vox") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_VOX) == 0) {
         return OSH_GEOMETRY_BODY_VOX;
     }
-    if (strcasecmp(key, "rpp") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_DCM) == 0) {
+        return OSH_GEOMETRY_BODY_VOX;
+    }
+    if (strcasecmp(key, OSH_GEO_KEY_RPP) == 0) {
         return OSH_GEOMETRY_BODY_RPP;
     }
-    if (strcasecmp(key, "rcc") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_RCC) == 0) {
         return OSH_GEOMETRY_BODY_RCC;
     }
-    if (strcasecmp(key, "rec") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_REC) == 0) {
         return OSH_GEOMETRY_BODY_REC;
     }
-    if (strcasecmp(key, "trc") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_TRC) == 0) {
         return OSH_GEOMETRY_BODY_TRC;
     }
-    if (strcasecmp(key, "ell") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_ELL) == 0) {
         return OSH_GEOMETRY_BODY_ELL;
     }
-    if (strcasecmp(key, "yzp") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_YZP) == 0) {
         return OSH_GEOMETRY_BODY_YZP;
     }
-    if (strcasecmp(key, "xzp") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_XZP) == 0) {
         return OSH_GEOMETRY_BODY_XZP;
     }
-    if (strcasecmp(key, "xyp") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_XYP) == 0) {
         return OSH_GEOMETRY_BODY_XYP;
     }
-    if (strcasecmp(key, "pla") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_PLA) == 0) {
         return OSH_GEOMETRY_BODY_PLA;
     }
-    if (strcasecmp(key, "rot") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_ROT) == 0) {
         return OSH_GEOMETRY_BODY_ROT;
     }
-    if (strcasecmp(key, "cpy") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_CPY) == 0) {
         return OSH_GEOMETRY_BODY_CPY;
     }
-    if (strcasecmp(key, "mov") == 0) {
+    if (strcasecmp(key, OSH_GEO_KEY_MOV) == 0) {
         return OSH_GEOMETRY_BODY_MOV;
     }
     return OSH_GEOMETRY_BODY_NONE;
@@ -244,6 +260,216 @@ static char *_next_token(char **cursor) {
 }
 
 /**
+ * @brief Copy one parsed body record into the workspace body array.
+ */
+static enum osh_status _finalize_body(
+    struct osh_geometry_workspace *ws, size_t ibody, int btype, char const *name, double const *par, int npar) {
+    if (!ws || ibody >= ws->nbodies || !name || npar < 0) {
+        return OSH_EINVAL;
+    }
+    ws->bodies[ibody].type = btype;
+    ws->bodies[ibody].name = strdup(name);
+    if (!ws->bodies[ibody].name) {
+        return OSH_ENOMEM;
+    }
+    if (npar > 0) {
+        ws->bodies[ibody].a = (double *) calloc((size_t) npar, sizeof(double));
+        if (!ws->bodies[ibody].a) {
+            return OSH_ENOMEM;
+        }
+        memcpy(ws->bodies[ibody].a, par, (size_t) npar * sizeof(double));
+    }
+    ws->bodies[ibody].na = npar;
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse one token as a finite double value.
+ */
+static int _parse_double_token(char const *token, double *out) {
+    char *end = NULL;
+    double v;
+    if (!token || !out) {
+        return 0;
+    }
+    errno = 0;
+    v = strtod(token, &end);
+    if (errno != 0 || end == token || *end != '\0') {
+        return 0;
+    }
+    *out = v;
+    return 1;
+}
+
+/**
+ * @brief Parse one DCM card and convert CT metadata into VOX raw parameters.
+ *
+ * @details
+ * Expected card payload (after key):
+ * `name ct_dir gantry_deg couch_deg tx_cm ty_cm tz_cm`
+ *
+ * Generated VOX parameters:
+ *   0..2   x0,y0,z0 voxel-grid corner [cm] in local voxel coordinates
+ *   3..5   dx,dy,dz voxel spacing [cm]
+ *   6..8   nx,ny,nz voxel counts
+ *   9..10  gantry,couch [deg]
+ *   11..13 translation tx,ty,tz [cm] of the local voxel-corner in universe
+ *
+ * Note: x0/y0/z0 here is the voxel-corner convention. DICOM Image Position
+ * Patient is the voxel-center convention. Therefore user-given DCM tx/ty/tz
+ * (interpreted as first-voxel-center coordinates) are converted to corner
+ * coordinates by subtracting 0.5*dx, 0.5*dy, 0.5*dz.
+ *
+ * Coordinate-chain intent (manual RTPLAN replacement):
+ * - The CT reader gives geometry in DICOM patient coordinates.
+ * - RTPLAN isocenter is not parsed yet; caller supplies placement through
+ *   tx/ty/tz in the DCM card.
+ * - In practice, callers should provide tx/ty/tz already expressed in the
+ *   chosen universe frame (typically patient coordinates shifted so
+ *   isocenter is at universe origin).
+ *
+ * See also docs/voxel_coordinates.md (single-source convention note).
+ */
+static enum osh_status _parse_dcm_body(char const *args,
+                                       char const *geo_filename,
+                                       int lineno,
+                                       struct osh_diag_sink const *diag,
+                                       char name_out[OSH_GEMCA_BODY_NAME_MAXLEN],
+                                       double par_out[OSH_GEMCA_NARGS_MAX],
+                                       int *npar_out) {
+    char *work = NULL;
+    char *cursor = NULL;
+    char *tok = NULL;
+    char *ct_dir_rel = NULL;
+    char *geo_dir = NULL;
+    char *ct_dir_abs = NULL;
+    struct osh_dicom_ct ct;
+    enum osh_status rc = OSH_EPARSE;
+    double gantry_deg;
+    double couch_deg;
+    double tx_cm;
+    double ty_cm;
+    double tz_cm;
+
+    if (!args || !name_out || !par_out || !npar_out) {
+        return OSH_EINVAL;
+    }
+
+    memset(&ct, 0, sizeof(ct));
+    work = strdup(args);
+    if (!work) {
+        return OSH_ENOMEM;
+    }
+    cursor = work;
+
+    tok = _next_token(&cursor);
+    if (!tok) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: DCM card requires a body name", geo_filename, lineno);
+        goto done;
+    }
+    if (strlen(tok) >= OSH_GEMCA_BODY_NAME_MAXLEN) {
+        OSH_DIAG_ERRORF(diag,
+                        "%s line %d: DCM body name too long (max %d chars)",
+                        geo_filename,
+                        lineno,
+                        OSH_GEMCA_BODY_NAME_MAXLEN - 1);
+        goto done;
+    }
+    memcpy(name_out, tok, strlen(tok) + 1u);
+
+    ct_dir_rel = _next_token(&cursor);
+    if (!ct_dir_rel) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: DCM card requires a CT directory path", geo_filename, lineno);
+        goto done;
+    }
+
+    tok = _next_token(&cursor);
+    if (!_parse_double_token(tok, &gantry_deg)) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM gantry angle", geo_filename, lineno);
+        goto done;
+    }
+    tok = _next_token(&cursor);
+    if (!_parse_double_token(tok, &couch_deg)) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM couch angle", geo_filename, lineno);
+        goto done;
+    }
+    tok = _next_token(&cursor);
+    if (!_parse_double_token(tok, &tx_cm)) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation X", geo_filename, lineno);
+        goto done;
+    }
+    tok = _next_token(&cursor);
+    if (!_parse_double_token(tok, &ty_cm)) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Y", geo_filename, lineno);
+        goto done;
+    }
+    tok = _next_token(&cursor);
+    if (!_parse_double_token(tok, &tz_cm)) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Z", geo_filename, lineno);
+        goto done;
+    }
+    if (_next_token(&cursor) != NULL) {
+        OSH_DIAG_ERRORF(diag,
+                        "%s line %d: too many DCM arguments (expected: name dir gantry couch tx ty tz)",
+                        geo_filename,
+                        lineno);
+        goto done;
+    }
+
+    geo_dir = osh_path_dirname(geo_filename);
+    if (osh_relative_path_to_file(&ct_dir_abs, geo_dir, ct_dir_rel) != 0) {
+        rc = OSH_ENOMEM;
+        goto done;
+    }
+    osh_path_normalize(ct_dir_abs);
+
+    rc = osh_dicom_ct_read(ct_dir_abs, &ct, diag);
+    if (rc != OSH_OK) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: failed to read CT DICOM directory '%s'", geo_filename, lineno, ct_dir_abs);
+        goto done;
+    }
+    if (ct.rows <= 0 || ct.cols <= 0 || ct.n_slices <= 0 || ct.pixel_spacing[0] <= 0.0 || ct.pixel_spacing[1] <= 0.0
+        || ct.slice_spacing <= 0.0) {
+        rc = OSH_EPARSE;
+        OSH_DIAG_ERRORF(diag, "%s line %d: DCM CT metadata is invalid for voxel body setup", geo_filename, lineno);
+        goto done;
+    }
+
+    /* Local voxel grid in cm plus transform terms consumed by _setup_vox().
+     * Keep x0/y0/z0 explicit even for DCM: they are the generic VOX corner
+     * parameters and may be non-zero for non-DCM VOX sources. */
+    par_out[0] = 0.0; /* x0: local corner of voxel [0,0,0] */
+    par_out[1] = 0.0; /* y0: local corner of voxel [0,0,0] */
+    par_out[2] = 0.0; /* z0: local corner of voxel [0,0,0] */
+    par_out[3] = 0.1 * ct.pixel_spacing[1];
+    par_out[4] = 0.1 * ct.pixel_spacing[0];
+    par_out[5] = 0.1 * ct.slice_spacing;
+    par_out[6] = (double) ct.cols;
+    par_out[7] = (double) ct.rows;
+    par_out[8] = (double) ct.n_slices;
+    par_out[9] = gantry_deg;
+    par_out[10] = couch_deg;
+    /* DICOM ImagePositionPatient is center-based for the first voxel.
+     * VOX x0/y0/z0 + tx/ty/tz are corner-based in the current model.
+     * Shift by half a voxel to convert center -> corner before building the
+     * BZALIGN transform. */
+    par_out[11] = tx_cm - 0.5 * par_out[3];
+    par_out[12] = ty_cm - 0.5 * par_out[4];
+    par_out[13] = tz_cm - 0.5 * par_out[5];
+    *npar_out = 14;
+    rc = OSH_OK;
+
+done:
+    if (ct.pixels) {
+        osh_dicom_ct_free(&ct);
+    }
+    free(ct_dir_abs);
+    free(geo_dir);
+    free(work);
+    return rc;
+}
+
+/**
  * @brief Normalize legacy numeric material names.
  *
  * @details Maps "0" to "blackhole" and "1000" to "vacuum" with a warning;
@@ -337,6 +563,7 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
     int nt;
     int npar = 0;
     int off = 0;
+    int allow_continuation = 0;
     char nstr[OSH_GEMCA_BODY_NAME_MAXLEN];
     double par[OSH_GEMCA_NARGS_MAX];
     size_t ibody = 0;
@@ -352,23 +579,13 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
         if (strcasecmp(key, OSH_GEO_KEY_END) == 0) {
             /* Finalize last body. */
             if (body_active) {
-                ws->bodies[ibody].type = btype;
-                ws->bodies[ibody].name = strdup(nstr);
-                if (!ws->bodies[ibody].name) {
-                    rc = OSH_ENOMEM;
+                rc = _finalize_body(ws, ibody, btype, nstr, par, npar);
+                if (rc != OSH_OK) {
                     goto done;
                 }
-                if (npar > 0) {
-                    ws->bodies[ibody].a = (double *) calloc((size_t) npar, sizeof(double));
-                    if (!ws->bodies[ibody].a) {
-                        rc = OSH_ENOMEM;
-                        goto done;
-                    }
-                    memcpy(ws->bodies[ibody].a, par, (size_t) npar * sizeof(double));
-                }
-                ws->bodies[ibody].na = npar;
             }
             free(line);
+            line = NULL;
             return OSH_OK; /* File is now positioned just after the first END. */
         }
 
@@ -377,21 +594,10 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
         if (btype_new != OSH_GEOMETRY_BODY_NONE) {
             /* Finalize the previous body, if any. */
             if (body_active) {
-                ws->bodies[ibody].type = btype;
-                ws->bodies[ibody].name = strdup(nstr);
-                if (!ws->bodies[ibody].name) {
-                    rc = OSH_ENOMEM;
+                rc = _finalize_body(ws, ibody, btype, nstr, par, npar);
+                if (rc != OSH_OK) {
                     goto done;
                 }
-                if (npar > 0) {
-                    ws->bodies[ibody].a = (double *) calloc((size_t) npar, sizeof(double));
-                    if (!ws->bodies[ibody].a) {
-                        rc = OSH_ENOMEM;
-                        goto done;
-                    }
-                    memcpy(ws->bodies[ibody].a, par, (size_t) npar * sizeof(double));
-                }
-                ws->bodies[ibody].na = npar;
                 ibody++;
             }
 
@@ -409,10 +615,33 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 rc = OSH_EPARSE;
                 goto done;
             }
-            /* First six values: name + up to 5 floats on the same line. */
-            nt = sscanf(args, "%s %lf %lf %lf %lf %lf %lf", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
-            npar = nt - 1;
-            off = 6;
+            allow_continuation = 1;
+
+            if (strcasecmp(key, OSH_GEO_KEY_VOX) == 0) {
+                OSH_DIAG_ERRORF(
+                    diag, "%s line %d: legacy VOX card parsing is TODO; use DCM for now", shf->filename, lineno);
+                rc = OSH_EPARSE;
+                goto done;
+            }
+            if (strcasecmp(key, OSH_GEO_KEY_DCM) == 0) {
+                rc = _parse_dcm_body(args, shf->filename, lineno, diag, nstr, par, &npar);
+                if (rc != OSH_OK) {
+                    goto done;
+                }
+                allow_continuation = 0;
+                off = npar;
+            } else {
+                /* First six values: name + up to 5 floats on the same line. */
+                nt = sscanf(
+                    args, "%s %lf %lf %lf %lf %lf %lf", nstr, &par[0], &par[1], &par[2], &par[3], &par[4], &par[5]);
+                if (nt < 1) {
+                    OSH_DIAG_ERRORF(diag, "%s line %d: missing body name", shf->filename, lineno);
+                    rc = OSH_EPARSE;
+                    goto done;
+                }
+                npar = nt - 1;
+                off = 6;
+            }
 
         } else {
             /* Continuation line: accumulate more float arguments. */
@@ -421,6 +650,12 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 free(line);
                 line = NULL;
                 continue;
+            }
+            if (!allow_continuation) {
+                OSH_DIAG_ERRORF(
+                    diag, "%s line %d: unexpected continuation line for this body card", shf->filename, lineno);
+                rc = OSH_EPARSE;
+                goto done;
             }
 
             if ((off + 5) >= OSH_GEMCA_NARGS_MAX) {

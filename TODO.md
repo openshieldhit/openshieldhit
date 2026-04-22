@@ -216,24 +216,52 @@ Files:
 
 Files:
 - `src/apps/osh/osh_geometry_parse.c` — in `_parse_bodies`, handle `"DCM"` keyword:
-  - Read one string token (CT dir path) + 2 doubles (gantry_deg, couch_deg)
+  - Read one string token (CT dir path) + 5 doubles (`gantry_deg couch_deg tx ty tz`)
   - Call `osh_dicom_ct_read(path, &ct, diag)` immediately (parse-time; DICOM is not deferred)
-  - Derive and store bounding box args `{0, cols*px[1]/10, 0, rows*px[0]/10, 0, n_slices*slice_spacing/10}` and rotation angles — then hand off to the same `_setup_vox` path that a VOX card uses
-  - Pin `ct.pixels` (cast to `int16_t *`) into app-owned HU storage; set `b->hu` to the borrowed pointer; free the rest of `osh_dicom_ct` after extraction
+  - Derive and store VOX grid args `{x0,y0,z0, dx,dy,dz, nx,ny,nz}` and transform args `{gantry,couch,tx,ty,tz}`
+  - For DCM, interpret tx/ty/tz as first-voxel-center and convert to corner-based placement by subtracting `0.5*spacing`
+  - Keep legacy `VOX` card parsing disabled for now with explicit TODO parse error
 - `src/gemca/osh_gemca2_calc_body.c` — complete the existing TODOs in `_setup_vox` (lines 501–532):
-  - Accept pre-filled bounding box args (already set by parser for both DCM and VOX cards)
+  - Accept pre-filled voxel-grid args (already set by parser for DCM and future VOX cards)
   - Build transform matrix from gantry + couch + isocenter using `osh_vect_rot_y` / `osh_vect_rot_z` (existing pattern); verify sign conventions match IEC 61217 once, document
-  - Populate `b->ct_grid` (origin = zero in local frame, spacing from bounding box args / n[3], n[3] from args)
+  - Build enclosing surfaces from `x0 + d*n` extents
 - `src/gemca/osh_gemca2.h` — add to `struct body`: `struct osh_raytrace_grid ct_grid; const int16_t *hu;`
 
 HU ownership: the app layer (e.g. `osh_app_osh.c`) holds a `int16_t *` allocation for the CT volume. `b->hu` is a borrowed pointer into it. `struct body` does not own or free it.
 
-Verify: parse a small synthetic DICOM series via `DCM` card; assert bounding box corners match expected values; assert transform matrix is orthonormal; assert `b->hu != NULL`.
+Progress on branch `66-2`:
+- [x] `DCM` body card wired in geometry parser
+- [x] DICOM CT read at parse-time from `DCM` card
+- [x] VOX arg model switched to `x0,y0,z0, dx,dy,dz, nx,ny,nz, gantry,couch, tx,ty,tz`
+- [x] Explicit docs on corner-vs-center convention at parser/body setup level
+- [x] `_setup_vox()` consumes the new arg layout and builds correct enclosure extents
+- [x] Unit tests for DCM parsing + legacy VOX TODO behavior
+- [ ] `ct_grid` stored on cold `struct body`
+- [ ] `hu` pointer ownership/borrowing wired from app to body/runtime
+- [ ] Non-axial CT orientation (`row_cosine`, `col_cosine`) applied to placement
+
+Verify (current):
+- parse DICOM series via `DCM`; assert spacing/counts and transformed placement args
+- assert legacy `VOX` card returns TODO parse error
+
+Verify (remaining):
+- assert transform matrix orthonormal under representative gantry/couch combinations
+- assert `b->hu != NULL` and `b->ct_grid` fields once M3 storage is in place
+
+---
+
+### Coordinate Conventions (DCM/VOX)
+
+- Canonical reference moved to:
+  - [docs/voxel_coordinates.md](docs/voxel_coordinates.md)
+- Keep code comments concise and update the design note when conventions change.
 
 ---
 
 ### M3 — CT grid in `gemca_rt_body` (runtime compile)
 **Goal:** Propagate `ct_grid` and `hu` pointer from `struct body` through `osh_gemca_compile()` into `gemca_rt_body`.
+
+Status: not started (blocked on completing remaining M2 cold-storage fields).
 
 Files:
 - `src/gemca/runtime/osh_gemca_runtime.h` — add to `struct gemca_rt_body`:
@@ -249,6 +277,8 @@ Verify: compile a geometry with one DCM body; assert `rt->bodies[i].ct_grid.n[2]
 
 ### M4 — Jacobs voxel traversal in transport hot path
 **Goal:** Activate `GEMCA_RT_PUSH_VOXEL_BODY` to split steps at material-bin boundaries using Jacobs raytrace.
+
+Status: not started (depends on M3 runtime `ct_grid` + `hu` propagation).
 
 Files:
 - `src/gemca/runtime/osh_gemca_runtime.c` — fill stub at line 1720:
@@ -266,6 +296,8 @@ Verify: pencil beam through uniform-HU phantom; step lengths sum to expected tra
 ### M5 — Per-voxel density to transport kernel
 **Goal:** Pass per-voxel density from the Jacobs traversal to the transport kernel for correct WEPL/range calculation.
 
+Status: not started (depends on M4 voxel traversal dispatch).
+
 Files:
 - Introduce `struct gemca_rt_voxel_step { double dist; double rho; }` returned from `dist_voxel_body_rt()` (avoids mutating `struct step` which is transport-owned)
 - Wherever `osh_gemca_runtime_get_distance` result is consumed by the transport loop: use the returned `rho` to scale stopping power for WEPL accumulation instead of the zone material's nominal density
@@ -276,6 +308,8 @@ Verify: two-tissue phantom (bone + soft tissue); scored WEPL matches analytical 
 
 ### M6 — RTDOSE scoring geometry (`OSH_SCORING_GEO_VOXEL`)
 **Goal:** Wire up `OSH_SCORING_GEO_VOXEL` (already in enum as type 4) to score onto RTDOSE grid via Jacobs raytrace with per-voxel density weighting.
+
+Status: not started (depends on M4/M5).
 
 Files:
 - `include/openshieldhit/scoring.h` — add `char *rtdose_path` to `struct osh_scoring_geometry_def` (for `kind == "Voxel"`)
@@ -302,8 +336,11 @@ Verify: known pencil-beam traversal; scored dose distribution matches analytical
 ### M7 — Integration & CLI plumbing
 **Goal:** End-to-end pipeline: user specifies `DCM` in geo.dat and `Geometry Voxel` in detect.dat.
 
+Status: not started (depends on M2–M6 core pieces).
+
 Files:
-- `src/apps/osh/osh_geometry_parse.c` — ensure `DCM` keyword triggers M2 path; string token after two doubles for path
+- `src/apps/osh/osh_geometry_parse.c` — ensure `DCM` keyword triggers M2 path:
+  `DCM <name> <ct_dir> <gantry> <couch> <tx> <ty> <tz>`
 - `src/apps/osh/osh_scoring_parse_geometry.c` — `Voxel` geometry kind accepts RTDOSE path, no axis definitions
 - `src/apps/osh/osh_run.c` — orchestrate: detect DCM body → load CT → pass to geometry compile; load RTDOSE → pass to scoring compile; wire shared transform matrix
 
