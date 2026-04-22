@@ -19,7 +19,7 @@ static int _setup_wed(struct body *b);
 static int _setup_arb(struct body *b);
 
 static int _setup_box(struct body *b);
-static int _setup_vox(struct body *b);
+static enum osh_status _setup_vox(struct body *b);
 static int _setup_rpp(struct body *b);
 
 static int _setup_rcc(struct body *b);
@@ -92,9 +92,13 @@ static enum osh_status setup_body(struct body *b) {
     case OSH_GEMCA_BODY_BOX:
         _setup_box(b);
         break;
-    case OSH_GEMCA_BODY_VOX:
-        _setup_vox(b);
+    case OSH_GEMCA_BODY_VOX: {
+        enum osh_status vox_rc = _setup_vox(b);
+        if (vox_rc != OSH_OK) {
+            return vox_rc;
+        }
         break;
+    }
     case OSH_GEMCA_BODY_RPP:
         _setup_rpp(b);
         break;
@@ -489,7 +493,7 @@ static int _setup_box(struct body *b) {
  *
  * @author Niels Bassler
  */
-static int _setup_vox(struct body *b) {
+static enum osh_status _setup_vox(struct body *b) {
 
     int const nsurfs = 6;
     struct surface *sf; /* temporary surface */
@@ -526,20 +530,32 @@ static int _setup_vox(struct body *b) {
     int i;
     int j;
 
-    x0 = (b->na > 0) ? b->a[0] : 0.0;
-    y0 = (b->na > 1) ? b->a[1] : 0.0;
-    z0 = (b->na > 2) ? b->a[2] : 0.0;
-    dx = (b->na > 3) ? b->a[3] : 0.0;
-    dy = (b->na > 4) ? b->a[4] : 0.0;
-    dz = (b->na > 5) ? b->a[5] : 0.0;
-    nx = (b->na > 6 && b->a[6] > 0.0) ? (size_t) b->a[6] : 0u;
-    ny = (b->na > 7 && b->a[7] > 0.0) ? (size_t) b->a[7] : 0u;
-    nz = (b->na > 8 && b->a[8] > 0.0) ? (size_t) b->a[8] : 0u;
-    gantry_angle = ((b->na > 9 ? b->a[9] : 0.0) / 180.0) * OSH_M_PI;
-    couch_angle = ((b->na > 10 ? b->a[10] : 0.0) / 180.0) * OSH_M_PI;
-    tx_cm = (b->na > 11) ? b->a[11] : 0.0;
-    ty_cm = (b->na > 12) ? b->a[12] : 0.0;
-    tz_cm = (b->na > 13) ? b->a[13] : 0.0;
+    /* All 14 VOX arguments are mandatory — no silent defaults. */
+    if (b->na != OSH_GEMCA_NARGS_VOX) {
+        return OSH_EINVAL;
+    }
+    dx = b->a[3];
+    dy = b->a[4];
+    dz = b->a[5];
+    if (dx <= 0.0 || dy <= 0.0 || dz <= 0.0) {
+        return OSH_EINVAL;
+    }
+    /* Voxel counts must be exact positive integers within size_t range. */
+    if (b->a[6] < 1.0 || b->a[6] != floor(b->a[6]) || b->a[7] < 1.0 || b->a[7] != floor(b->a[7]) || b->a[8] < 1.0
+        || b->a[8] != floor(b->a[8])) {
+        return OSH_EINVAL;
+    }
+    x0 = b->a[0];
+    y0 = b->a[1];
+    z0 = b->a[2];
+    nx = (size_t) b->a[6];
+    ny = (size_t) b->a[7];
+    nz = (size_t) b->a[8];
+    gantry_angle = (b->a[9] / 180.0) * OSH_M_PI;
+    couch_angle = (b->a[10] / 180.0) * OSH_M_PI;
+    tx_cm = b->a[11];
+    ty_cm = b->a[12];
+    tz_cm = b->a[13];
 
     x_min = x0;
     y_min = y0;
@@ -614,7 +630,7 @@ static int _setup_vox(struct body *b) {
     sf->p[0] = 1;
     sf->p[1] = -z_max;
 
-    return 1;
+    return OSH_OK;
 }
 
 /**
