@@ -29,6 +29,7 @@
 #include <float.h>
 #include <math.h>
 
+#include "common/osh_voxel_order.h"
 #include "common/raytrace/osh_raytrace.h"
 
 #define JACOBS_EPS 1.0e-9 /* probe offset to step inside the entry voxel */
@@ -127,6 +128,13 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         }
     }
 
+    /* Pre-compute tile counts for Morton layout (unused for row-major).
+     * Declared here (after statements) to keep them const and let the compiler
+     * see them as invariant across the traversal loop — exception to the
+     * project's C89-style top-of-function declaration convention. */
+    size_t const Tx = (grid->n[0] + 7u) >> 3u;
+    size_t const Ty = (grid->n[1] + 7u) >> 3u;
+
     ac = alpha_entry;
     n = 0;
 
@@ -143,7 +151,9 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         /* Clip to alpha_exit. */
         a_next = (ai[axis] < alpha_exit) ? ai[axis] : alpha_exit;
 
-        crossings[n].idx = (size_t) ii[0] + grid->n[0] * ((size_t) ii[1] + grid->n[1] * (size_t) ii[2]);
+        crossings[n].idx = (grid->tile_order == OSH_VOXEL_ORDER_MORTON8)
+                               ? osh_voxel_tile_idx((size_t) ii[0], (size_t) ii[1], (size_t) ii[2], Tx, Ty)
+                               : (size_t) ii[0] + grid->n[0] * ((size_t) ii[1] + grid->n[1] * (size_t) ii[2]);
         crossings[n].path_len = (a_next - ac) * ds; /* convert alpha fraction to length */
         ++n;
 
