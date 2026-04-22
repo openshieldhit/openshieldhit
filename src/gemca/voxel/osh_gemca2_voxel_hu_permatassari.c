@@ -121,7 +121,7 @@ void osh_gemca_voxel_build_hu_lut_permatassari2020(uint8_t lut[2601]) {
 
     hu = -1000;
     while (hu <= 1600) {
-        lut[hu + 1000] = hu_to_bin_from_breakpoints((int16_t) hu, _ct_hu, (size_t) (_nmat + 1));
+        lut[hu + 1000] = hu_to_bin_from_breakpoints((int16_t) hu, _ct_hu, (size_t) _nmat + 1u);
         hu++;
     }
 }

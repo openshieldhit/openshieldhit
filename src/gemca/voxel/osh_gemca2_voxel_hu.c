@@ -216,7 +216,7 @@ void osh_gemca_voxel_build_hu_lut(uint8_t lut[2601]) {
 }
 
 static int _hu2idx_slow(int16_t hu) {
-    return (int) osh_binary_search_i2(hu, _ct_hu, (unsigned long int) (_nmat + 1));
+    return (int) osh_binary_search_i2(hu, _ct_hu, (unsigned long int) _nmat + 1ul);
 }
 
 /* Optional WEPL conversion algorithms — not used in the transport path */

@@ -18,7 +18,8 @@
  * Checks that the Schneider 2000 piecewise fits join without jumps at
  * HU = -98, 14, 23, 100. */
 static void test_hu2rho_continuity(void) {
-    float rho_lo, rho_hi;
+    float rho_lo;
+    float rho_hi;
 
     /* breakpoint at -98: air/lung → adipose-water */
     rho_lo = osh_gemca_voxel_hu2rho(-99, 0);
