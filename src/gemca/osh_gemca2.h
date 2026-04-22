@@ -2,10 +2,12 @@
 #define _OSH_GEMCA2
 
 #include <float.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "common/osh_coord.h"
 #include "common/osh_ray.h" /* struct ray, struct ray_v, struct ray_c */
+#include "common/raytrace/osh_raytrace.h"
 #include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
 
@@ -77,16 +79,18 @@ struct osh_gemca_prepared {
  *          OSH_COORD_UNIVERSE to the body's local coordinate system.
  */
 struct body {
-    double t[16];           /**< 4x4 row-major transformation matrix (universe → body-local coords) */
-    struct surface **surfs; /**< Array of pointers to the surfaces that bound this body */
-    size_t lineno;          /**< Line number in geo.dat where this body was defined */
-    char *name;             /**< User-given name (string key, never converted to an integer ID) */
-    char *filename_vox;     /**< Path to voxel file, only set for voxel body types */
-    double *a;              /**< Raw argument list as given in geo.dat */
-    int na;                 /**< Number of entries in a[] */
-    int type;               /**< Body type identifier (OSH_GEMCA_BODY_* defines) */
-    int nsurfs;             /**< Number of entries in surfs[] */
-    char coord;             /**< Coordinate system of body parameters (OSH_COORD_* value) */
+    double t[16];                     /**< 4x4 row-major transformation matrix (universe → body-local coords) */
+    struct surface **surfs;           /**< Array of pointers to the surfaces that bound this body */
+    size_t lineno;                    /**< Line number in geo.dat where this body was defined */
+    char *name;                       /**< User-given name (string key, never converted to an integer ID) */
+    char *filename_vox;               /**< Path to voxel file, only set for voxel body types */
+    double *a;                        /**< Raw argument list as given in geo.dat */
+    int na;                           /**< Number of entries in a[] */
+    int type;                         /**< Body type identifier (OSH_GEMCA_BODY_* defines) */
+    int nsurfs;                       /**< Number of entries in surfs[] */
+    char coord;                       /**< Coordinate system of body parameters (OSH_COORD_* value) */
+    struct osh_raytrace_grid ct_grid; /**< Local voxel grid descriptor for VOX bodies (corner/spacing/count). */
+    int16_t const *hu; /**< Borrowed HU array pointer for VOX bodies; owned by app/workspace-level CT storage. */
 };
 
 /**

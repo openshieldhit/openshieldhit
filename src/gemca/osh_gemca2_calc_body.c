@@ -508,9 +508,11 @@ static int _setup_vox(struct body *b) {
     double dx;
     double dy;
     double dz;
-    double nx;
-    double ny;
-    double nz;
+    /* Integer voxel counts used by ct_grid.n[] and extent construction.
+     * VOX args are parsed as double, so convert once here to the index type. */
+    size_t nx;
+    size_t ny;
+    size_t nz;
     double x_min;
     double x_max;
     double y_min;
@@ -530,9 +532,9 @@ static int _setup_vox(struct body *b) {
     dx = (b->na > 3) ? b->a[3] : 0.0;
     dy = (b->na > 4) ? b->a[4] : 0.0;
     dz = (b->na > 5) ? b->a[5] : 0.0;
-    nx = (b->na > 6) ? b->a[6] : 0.0;
-    ny = (b->na > 7) ? b->a[7] : 0.0;
-    nz = (b->na > 8) ? b->a[8] : 0.0;
+    nx = (b->na > 6 && b->a[6] > 0.0) ? (size_t) b->a[6] : 0u;
+    ny = (b->na > 7 && b->a[7] > 0.0) ? (size_t) b->a[7] : 0u;
+    nz = (b->na > 8 && b->a[8] > 0.0) ? (size_t) b->a[8] : 0u;
     gantry_angle = ((b->na > 9 ? b->a[9] : 0.0) / 180.0) * OSH_M_PI;
     couch_angle = ((b->na > 10 ? b->a[10] : 0.0) / 180.0) * OSH_M_PI;
     tx_cm = (b->na > 11) ? b->a[11] : 0.0;
@@ -542,9 +544,19 @@ static int _setup_vox(struct body *b) {
     x_min = x0;
     y_min = y0;
     z_min = z0;
-    x_max = x0 + dx * nx;
-    y_max = y0 + dy * ny;
-    z_max = z0 + dz * nz;
+    x_max = x0 + dx * (double) nx;
+    y_max = y0 + dy * (double) ny;
+    z_max = z0 + dz * (double) nz;
+
+    b->ct_grid.origin[0] = x0;
+    b->ct_grid.origin[1] = y0;
+    b->ct_grid.origin[2] = z0;
+    b->ct_grid.spacing[0] = dx;
+    b->ct_grid.spacing[1] = dy;
+    b->ct_grid.spacing[2] = dz;
+    b->ct_grid.n[0] = nx;
+    b->ct_grid.n[1] = ny;
+    b->ct_grid.n[2] = nz;
 
     /* ----------- Setup translation matrix */
     /* b->t maps universe -> voxel-local (BZALIGN). Translation terms are set

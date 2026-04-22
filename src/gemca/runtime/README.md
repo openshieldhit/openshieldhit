@@ -12,7 +12,7 @@ Three contiguous arrays replace the cold layout:
 | Array | Content |
 |---|---|
 | `surfaces[]` | All body surfaces concatenated, fixed-size parameter slots |
-| `bodies[]` | Transform matrix, coordinate system tag, offset into `surfaces[]` |
+| `bodies[]` | Transform matrix, voxel-grid metadata (`ct_grid`/`hu` for VOX), coordinate system tag, offset into `surfaces[]` |
 | `zones[]` | Per-zone flat RPN instruction array, material index |
 
 Zone membership is evaluated by a small integer stack machine that walks the

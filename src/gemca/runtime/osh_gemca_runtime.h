@@ -146,13 +146,19 @@ struct gemca_rt_surface {
  *
  * Surfaces belonging to this body occupy `osh_gemca_runtime.surfaces[surf_begin ..
  * surf_begin + nsurfs)` as a contiguous slice.
+ *
+ * For voxel bodies, ct_grid stores the local grid descriptor used by raytrace
+ * traversal and hu is a borrowed pointer to the immutable HU volume (owned by
+ * app/cold CT storage, not by the runtime).
  */
 struct gemca_rt_body {
-    double t[16];      /**< 4x4 row-major transformation matrix (universe → body-local). */
-    size_t surf_begin; /**< Start index into osh_gemca_runtime.surfaces[]. */
-    int nsurfs;        /**< Number of surfaces in surfaces[surf_begin..surf_begin+nsurfs). */
-    int type;          /**< Body type: OSH_GEMCA_BODY_* (used to detect voxel bodies). */
-    char coord;        /**< Coordinate system: OSH_COORD_* value. */
+    double t[16];                     /**< 4x4 row-major transformation matrix (universe → body-local). */
+    struct osh_raytrace_grid ct_grid; /**< Local voxel grid descriptor for VOX bodies. */
+    int16_t const *hu;                /**< Borrowed HU pointer for VOX bodies; may be NULL for non-VOX bodies. */
+    size_t surf_begin;                /**< Start index into osh_gemca_runtime.surfaces[]. */
+    int nsurfs;                       /**< Number of surfaces in surfaces[surf_begin..surf_begin+nsurfs). */
+    int type;                         /**< Body type: OSH_GEMCA_BODY_* (used to detect voxel bodies). */
+    char coord;                       /**< Coordinate system: OSH_COORD_* value. */
 };
 
 /**
