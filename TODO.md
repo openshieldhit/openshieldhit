@@ -237,16 +237,16 @@ Progress on branch `66-2`:
 - [x] `_setup_vox()` consumes the new arg layout and builds correct enclosure extents
 - [x] Unit tests for DCM parsing + legacy VOX TODO behavior
 - [x] `ct_grid` stored on cold `struct body` and copied to runtime `gemca_rt_body`
-- [ ] `hu` pointer ownership/borrowing wired from app to body/runtime
-- [ ] Non-axial CT orientation (`row_cosine`, `col_cosine`) applied to placement
+- [x] VOX transform matrix orthonormality covered by unit tests across representative gantry/couch angles
+- [x] `hu` pointer ownership/borrowing wired for DCM (workspace-owned HU -> cold body -> runtime body)
+- [x] Non-axial CT currently rejected with explicit parse error (future: apply `row_cosine`/`col_cosine` in placement)
 
 Verify (current):
 - parse DICOM series via `DCM`; assert spacing/counts and transformed placement args
 - assert legacy `VOX` card returns TODO parse error
 
 Verify (remaining):
-- assert transform matrix orthonormal under representative gantry/couch combinations
-- assert `b->hu != NULL` and `b->ct_grid` fields once M3 storage is in place
+- none (M2 acceptance checks covered by unit tests)
 
 ---
 
@@ -261,7 +261,7 @@ Verify (remaining):
 ### M3 — CT grid in `gemca_rt_body` (runtime compile)
 **Goal:** Propagate `ct_grid` and `hu` pointer from `struct body` through `osh_gemca_compile()` into `gemca_rt_body`.
 
-Status: not started (blocked on completing remaining M2 cold-storage fields).
+Status: completed for DCM-backed voxel bodies.
 
 Files:
 - `src/gemca/runtime/osh_gemca_runtime.h` — add to `struct gemca_rt_body`:

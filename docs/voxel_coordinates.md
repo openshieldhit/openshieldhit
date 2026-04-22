@@ -63,7 +63,10 @@ When RTPLAN parsing is added:
 
 ## Open Items
 
-- Non-axial CT orientation (`row_cosine`,`col_cosine`) is not yet applied in DCM placement.
+- Non-axial CT orientation is currently rejected in DCM parsing with a clear
+  error (axial-only support for now). Future work will apply
+  `row_cosine`/`col_cosine` to placement for full oblique support.
 - `ct_grid` is now propagated to cold/runtime body structs (`struct body`, `gemca_rt_body`).
-- `hu` pointer ownership/borrowing is not yet wired end-to-end.
+- `hu` ownership is now wired for DCM: workspace-owned HU buffer is borrowed by
+  prepared/runtime GEMCA body structs (no copy of HU volume).
 - Jacobs voxel traversal dispatch in runtime is pending (M4).
