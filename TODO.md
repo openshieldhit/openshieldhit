@@ -275,15 +275,57 @@ Verify: compile a geometry with one DCM body; assert `rt->bodies[i].ct_grid.n[2]
 
 ---
 
+### M3b — Array layout for cache-friendly voxel traversal
+**Goal:** Make voxel array access cache-efficient for arbitrary ray directions, with infrastructure to compare layout strategies.
+
+Status: not started (depends on M3; must land before M4 locks the index contract).
+
+**Problem:** Row-major layout gives 524 KB stride per z-step for a 512×512 CT — guaranteed L3 miss. Same problem applies to RTDOSE dose accumulation (read-modify-write per particle crossing).
+
+**Design: `tile_order` field on `struct osh_raytrace_grid`** controls which index formula Jacobs uses:
+
+```c
+uint8_t tile_order; /* 0=row-major (default/baseline), 8=Morton-8×8×8, 1..7=axis-perm (future) */
+```
+
+Jacobs line 146 switches on this — perfectly predicted branch, zero hot-path cost. Row-major stays available as benchmark baseline.
+
+**Layout A — Morton-tiled (`tile_order=8`, primary candidate):**
+`Tx×Ty×Tz` tiles of 512 voxels in row-major tile order, 3-way Morton order within each tile. Worst-case locality: ~1 KB per 8-voxel run in any axis.
+```c
+size_t Tx=(n[0]+7u)>>3u, Ty=(n[1]+7u)>>3u;   /* once before loop */
+idx = ((ix>>3u) + Tx*((iy>>3u) + Ty*(iz>>3u))) * 512u
+    + _m3x[ix&7u] | _m3y[iy&7u] | _m3z[iz&7u];
+```
+LUTs: `_m3x={0,1,8,9,64,65,72,73}`, `_m3y={0,2,16,18,128,130,144,146}`, `_m3z={0,4,32,36,256,260,288,292}`
+
+**Layout B — Axis-permuted row-major (`tile_order=1..7`, future):**
+Permute storage axes so the beam-dominant direction is innermost (stride-1). Optimal for single-field treatments; set at load time from gantry angle. Implement after M3b benchmarks quantify Morton gain. The `tile_order` field already reserves space.
+
+**Shared infrastructure (CT + RTDOSE):**
+- New `src/common/osh_voxel_order.h` — `tile_order` constants + inline index helpers
+- New `src/common/osh_voxel_order.c` — `osh_voxel_reorder(src, nx, ny, nz, element_size, tile_order, out_len)`: generic reorder for any element size; used at CT load and RTDOSE array init
+- `src/common/raytrace/osh_raytrace.h` — add `uint8_t tile_order` to `struct osh_raytrace_grid`
+- `src/common/raytrace/osh_raytrace_jacobs_msh.c` line 146 — switch on `grid->tile_order`
+- `src/apps/osh/osh_geometry_parse.c` — call `osh_voxel_reorder()` after pinning CT pixels; set `ct_grid.tile_order`; update `b->n_hu`
+- New `tests/unit/test_osh_voxel_order.c` — LUT completeness; round-trip 16×16×16; non-power-of-8 dims
+- `tests/unit/test_osh_geometry_dcm.c` — replace `hu[n_hu-1]` with interior voxel spot-check
+
+Note: RTDOSE dose array (M6) uses same `osh_voxel_reorder` — defer to M6 but design the function generically now.
+
+Verify: row-major baseline unchanged (`tile_order=0`); Morton round-trip correct; traversal spot-checks pass for both layouts.
+
+---
+
 ### M4 — Jacobs voxel traversal in transport hot path
 **Goal:** Activate `GEMCA_RT_PUSH_VOXEL_BODY` to split steps at material-bin boundaries using Jacobs raytrace.
 
-Status: not started (depends on M3 runtime `ct_grid` + `hu` propagation).
+Status: not started (depends on M3b — `osh_raytrace_traverse` must switch on `grid->tile_order` before `hu[crossing.idx]` is valid for non-row-major layouts).
 
 Files:
 - `src/gemca/runtime/osh_gemca_runtime.c` — fill stub at line 1720:
   1. Call `osh_raytrace_traverse()` on `body->ct_grid` to get `crossings[]`
-  2. Walk crossings; call `osh_gemca_voxel_hu2idx(hu[crossing.idx])` per voxel
+  2. Walk crossings; call `osh_gemca_voxel_hu2idx(hu[crossing.idx])` per voxel (O(1) LUT)
   3. Return accumulated `path_len` up to (not including) the first bin change as the step boundary distance; if no bin change, return the full RPP boundary distance
 - New: `src/gemca/runtime/osh_gemca_runtime_voxel.c` — factor out `dist_voxel_body_rt()` to keep the main switch clean
 
@@ -354,6 +396,8 @@ Verify: full system test with real DICOM CT + RTDOSE pair; dose grid dimensions 
 M1 (Schneider materials)     M2 (DCM parse + DICOM→body)
                                       │
                                       M3 (ct_grid in gemca_rt_body)
+                                      │
+                                   M3b (voxel array layout / Morton)
                                       │
                               M4 (Jacobs hot path)
                                       │

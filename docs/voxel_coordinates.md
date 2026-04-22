@@ -6,7 +6,7 @@ This note is the canonical reference for `DCM`/`VOX` geometry coordinates.
 
 - `src/apps/osh/osh_geometry_parse.c` (`DCM` card mapping)
 - `src/gemca/osh_gemca2_calc_body.c` (`_setup_vox` transform/surfaces)
-- future M3/M4 runtime voxel traversal (`ct_grid`, Jacobs)
+- `src/gemca/runtime/osh_gemca_runtime.c` (M3: ct_grid/hu propagation, M4: Jacobs dispatch pending)
 
 ## Coordinate Frames
 
@@ -66,7 +66,6 @@ When RTPLAN parsing is added:
 - Non-axial CT orientation is currently rejected in DCM parsing with a clear
   error (axial-only support for now). Future work will apply
   `row_cosine`/`col_cosine` to placement for full oblique support.
-- `ct_grid` is now propagated to cold/runtime body structs (`struct body`, `gemca_rt_body`).
-- `hu` ownership is now wired for DCM: workspace-owned HU buffer is borrowed by
-  prepared/runtime GEMCA body structs (no copy of HU volume).
-- Jacobs voxel traversal dispatch in runtime is pending (M4).
+- `ct_grid` is propagated to cold/runtime body structs (`struct body`, `gemca_rt_body`).
+- `hu` ownership: workspace-owned HU buffer is borrowed (no copy) by prepared/runtime GEMCA body structs.
+- Jacobs voxel traversal dispatch (`GEMCA_RT_PUSH_VOXEL_BODY`) is pending (M4).

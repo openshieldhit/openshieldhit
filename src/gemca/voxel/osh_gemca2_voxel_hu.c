@@ -61,7 +61,7 @@ int osh_gemca_voxel_hu2idx(int16_t hu) {
         return 0;
     }
     if (hu > 1600) {
-        return 0;
+        return _nmat - 1;
     }
     return _hu2idx_slow(hu);
 }
@@ -98,7 +98,6 @@ float osh_gemca_voxel_hu2wepl(int16_t hu, char alg) {
         break;
     default:
         return 0.0;
-        break;
     }
     return wepl * 1000.0;
 }
@@ -134,7 +133,7 @@ enum osh_status osh_gemca_voxel_register_schneider_materials(struct osh_material
         nelm = 0;
         j = 0;
         while (j < (size_t) _nelm) {
-            if (_ct_relm[i][j] > 0.0f && (unsigned int) _ct_elmz[j] > 0u) {
+            if (_ct_relm[i][j] > 0.0f && _ct_elmz[j] > 0u) {
                 nelm++;
             }
             j++;
@@ -176,7 +175,7 @@ enum osh_status osh_gemca_voxel_register_schneider_materials(struct osh_material
         frac_total = 0.0;
         j = 0;
         while (j < (size_t) _nelm) {
-            if (_ct_relm[i][j] > 0.0f && (unsigned int) _ct_elmz[j] > 0u) {
+            if (_ct_relm[i][j] > 0.0f && _ct_elmz[j] > 0u) {
                 frac_total += (double) _ct_relm[i][j];
             }
             j++;
@@ -185,8 +184,8 @@ enum osh_status osh_gemca_voxel_register_schneider_materials(struct osh_material
         k = 0;
         j = 0;
         while (j < (size_t) _nelm) {
-            if (_ct_relm[i][j] > 0.0f && (unsigned int) _ct_elmz[j] > 0u) {
-                elements[k].z = (unsigned int) _ct_elmz[j];
+            if (_ct_relm[i][j] > 0.0f && _ct_elmz[j] > 0u) {
+                elements[k].z = _ct_elmz[j];
                 elements[k].a = 0u;
                 elements[k].mass_fraction = (double) _ct_relm[i][j] / frac_total;
                 elements[k].atom_count = -1.0;
