@@ -236,7 +236,7 @@ Progress on branch `66-2`:
 - [x] Explicit docs on corner-vs-center convention at parser/body setup level
 - [x] `_setup_vox()` consumes the new arg layout and builds correct enclosure extents
 - [x] Unit tests for DCM parsing + legacy VOX TODO behavior
-- [ ] `ct_grid` stored on cold `struct body`
+- [x] `ct_grid` stored on cold `struct body` and copied to runtime `gemca_rt_body`
 - [ ] `hu` pointer ownership/borrowing wired from app to body/runtime
 - [ ] Non-axial CT orientation (`row_cosine`, `col_cosine`) applied to placement
 

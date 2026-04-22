@@ -64,5 +64,6 @@ When RTPLAN parsing is added:
 ## Open Items
 
 - Non-axial CT orientation (`row_cosine`,`col_cosine`) is not yet applied in DCM placement.
-- `ct_grid` and `hu` are not yet propagated to cold/runtime body structs (M3).
+- `ct_grid` is now propagated to cold/runtime body structs (`struct body`, `gemca_rt_body`).
+- `hu` pointer ownership/borrowing is not yet wired end-to-end.
 - Jacobs voxel traversal dispatch in runtime is pending (M4).
