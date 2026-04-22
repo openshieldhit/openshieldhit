@@ -10,6 +10,7 @@
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
 #include "common/osh_readline.h"
+#include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "openshieldhit/dicom.h"
 #include "openshieldhit/geometry.h"
@@ -543,9 +544,19 @@ static enum osh_status _parse_dcm_body(char const *args,
     par_out[12] = ty_cm - 0.5 * par_out[4];
     par_out[13] = tz_cm - 0.5 * par_out[5];
     *npar_out = 14;
-    *n_hu_out = (size_t) ct.n_slices * (size_t) ct.rows * (size_t) ct.cols;
-    *hu_out = ct.pixels;
+    *hu_out = (int16_t *) osh_voxel_reorder(ct.pixels,
+                                            (size_t) ct.cols,
+                                            (size_t) ct.rows,
+                                            (size_t) ct.n_slices,
+                                            sizeof(int16_t),
+                                            OSH_VOXEL_ORDER_MORTON8,
+                                            n_hu_out);
+    free(ct.pixels);
     ct.pixels = NULL;
+    if (!*hu_out) {
+        rc = OSH_ENOMEM;
+        goto done;
+    }
     rc = OSH_OK;
 
 done:

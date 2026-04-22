@@ -5,6 +5,7 @@
 
 #include "apps/osh/osh_geometry_parse.h"
 #include "common/osh_file.h"
+#include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "openshieldhit/dicom.h"
@@ -59,7 +60,12 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
     ASSERT_TRUE(strcmp(ws->bodies[0].name, "CTBOX") == 0);
     ASSERT_TRUE(ws->bodies[0].a != NULL);
     ASSERT_TRUE(ws->bodies[0].hu != NULL);
-    ASSERT_TRUE(ws->bodies[0].n_hu == (size_t) ct.n_slices * (size_t) ct.rows * (size_t) ct.cols);
+    {
+        size_t Tx = ((size_t) ct.cols + 7u) >> 3u;
+        size_t Ty = ((size_t) ct.rows + 7u) >> 3u;
+        size_t Tz = ((size_t) ct.n_slices + 7u) >> 3u;
+        ASSERT_TRUE(ws->bodies[0].n_hu == Tx * Ty * Tz * 512u);
+    }
     ASSERT_TRUE(ws->bodies[0].na == 14);
 
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[0], 0.0, 1.0e-9));
@@ -142,8 +148,16 @@ static void test_dcm_prepare_compile_propagates_ct_grid(void) {
     ASSERT_TRUE(rt_body->ct_grid.n[2] == cold_body->ct_grid.n[2]);
     ASSERT_TRUE(rt_body->hu != NULL);
     ASSERT_TRUE(rt_body->hu == cold_body->hu);
+    /* hu[0] = Morton index 0 = voxel (0,0,0) — same as row-major index 0. */
     ASSERT_TRUE(rt_body->hu[0] == ct.pixels[0]);
-    ASSERT_TRUE(rt_body->hu[ws->bodies[0].n_hu - 1u] == ct.pixels[ws->bodies[0].n_hu - 1u]);
+    /* Spot-check an interior voxel via its Morton index. */
+    {
+        size_t Tx = ((size_t) ct.cols + 7u) >> 3u;
+        size_t Ty = ((size_t) ct.rows + 7u) >> 3u;
+        size_t mi = osh_voxel_tile_idx(1u, 2u, 3u, Tx, Ty);
+        size_t ri = 1u + (size_t) ct.cols * (2u + (size_t) ct.rows * 3u);
+        ASSERT_TRUE(rt_body->hu[mi] == ct.pixels[ri]);
+    }
 
     osh_gemca_runtime_free(&rt);
     osh_dicom_ct_free(&ct);
