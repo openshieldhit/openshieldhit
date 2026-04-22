@@ -333,7 +333,7 @@ static int _setup_arb(struct body *b) {
         osh_gemca2_add_surf_pars(sf, OSH_GEMCA_SURF_PLANE);
     }
 
-    /* A normal arb is specified by 8 points, 8 * 3 = 24 arguemnts.
+    /* A normal arb is specified by 8 points, 8 * 3 = 24 arguments.
        FLUKA format has a 25th argument for the faces of the surfaces */
     if (b->na == 25) {
         /* this is FLUKA format ARB. */
@@ -1066,7 +1066,7 @@ static int _setup_rot(struct body *b) {
        0: body number affected
        1,2,3: rotation over some axes
      */
-    (void) *b;
+    (void) b;
 
     // TODO
     return 1;
@@ -1089,7 +1089,7 @@ static int _setup_cpy(struct body *b) {
        1:---23: any parameter affectes ?
      */
 
-    (void) *b;
+    (void) b;
     // TODO
     return 1;
 }
@@ -1110,7 +1110,7 @@ static int _setup_mov(struct body *b) {
        0: body number affected
        1:---23: any parameter affectes
      */
-    (void) *b;
+    (void) b;
     // TODO
     return 1;
 }

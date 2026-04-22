@@ -232,6 +232,9 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
         }
     }
 
+    /* Backward-compatibility: legacy mat.dat files have no HUTABLE card.
+     * Auto-register Schneider2000 so existing simulations keep working without
+     * modification.  An explicit HUTABLE card overrides this. */
     if (!hutable_seen && is_matdat_path(oshf->filename)) {
         rc = osh_gemca_voxel_register_schneider_materials(wm);
         if (rc != OSH_OK) {
@@ -1109,11 +1112,12 @@ static int is_matdat_path(char const *path) {
         return 0;
     }
 
-    base = strrchr(path, '/');
-    if (base) {
-        base++;
-    } else {
-        base = path;
+    base = path;
+    while (*path) {
+        if (*path == '/' || *path == '\\') {
+            base = path + 1;
+        }
+        path++;
     }
 
     pattern = "mat.dat";
