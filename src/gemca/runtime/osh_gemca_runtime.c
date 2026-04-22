@@ -1128,10 +1128,10 @@ static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struc
  * @brief Compile body metadata from the cold workspace into rt->bodies[].
  *
  * @details
- * Records the transformation matrix, coordinate system, body type, and the
- * offset (surf_begin) into rt->surfaces[] for each body.  The offset is
- * computed by accumulating surface counts in body order, which matches the
- * layout produced by setup_surfaces().
+ * Records the transformation matrix, voxel-grid metadata, coordinate system,
+ * body type, and the offset (surf_begin) into rt->surfaces[] for each body.
+ * The offset is computed by accumulating surface counts in body order, which
+ * matches the layout produced by setup_surfaces().
  *
  * @param[in]  wg  Cold workspace.
  * @param[out] rt  Runtime (rt->surfaces must already be populated).
@@ -1156,6 +1156,8 @@ static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct 
         dst = &rt->bodies[ib];
 
         memcpy(dst->t, b->t, 16 * sizeof(double));
+        memcpy(&dst->ct_grid, &b->ct_grid, sizeof(dst->ct_grid));
+        dst->hu = b->hu;
         dst->surf_begin = surf_offset;
         dst->nsurfs = b->nsurfs;
         dst->type = b->type;
