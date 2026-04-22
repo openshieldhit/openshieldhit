@@ -16,6 +16,7 @@
 #define OSH_MATERIAL_KEY_LOADDEDX         "loaddedx"
 #define OSH_MATERIAL_KEY_MATERIAL         "material"
 #define OSH_MATERIAL_KEY_MATERIALI        "materiali"
+#define OSH_MATERIAL_KEY_HUTABLE          "hutable"
 #define OSH_MATERIAL_KEY_MIAV             "miav"
 #define OSH_MATERIAL_KEY_MIVALUE          "mivalue"
 #define OSH_MATERIAL_KEY_NUCLID           "nuclid"
