@@ -468,12 +468,20 @@ static int _setup_box(struct body *b) {
  * @brief Setup a CT voxel geometry.
  *
  * @details
- *          VOX given user args b->a[*]: (all in OSH_COORD_UNIVERSE)
- *          0,1,2: isocenter x,y,z in [cm]
- *          3: couch [degrees]
- *          4: gantry [degrees]
- *          5: target dose in [Gy]
- *          remaining parameters will be read from the .hed file.
+ *          VOX/DCM body raw args b->a[*]:
+ *          0,1,2: x0,y0,z0 [cm] voxel-grid corner in local voxel frame
+ *          3,4,5: dx,dy,dz [cm] voxel spacing
+ *          6,7,8: nx,ny,nz voxel counts
+ *          9: gantry angle [degrees]
+ *          10: couch angle [degrees]
+ *          11,12,13: translation tx,ty,tz [cm] in OSH_COORD_UNIVERSE,
+ *                    interpreted as the universe position of the local
+ *                    voxel-corner point (x0,y0,z0)
+ *
+ *          IMPORTANT:
+ *          x0,y0,z0 follows voxel-corner convention.
+ *          DICOM Image Position Patient follows voxel-center convention.
+ *          See docs/voxel_coordinates.md for full mapping details.
  *
  * @param[in,out] b - the body which will be setup
  *
@@ -492,21 +500,56 @@ static int _setup_vox(struct body *b) {
         {0, 0, 1},
     };
 
-    double couch_angle = 0.0;
-    double gantry_angle = 0.0;
+    double couch_angle;
+    double gantry_angle;
+    double x0;
+    double y0;
+    double z0;
+    double dx;
+    double dy;
+    double dz;
+    double nx;
+    double ny;
+    double nz;
+    double x_min;
+    double x_max;
+    double y_min;
+    double y_max;
+    double z_min;
+    double z_max;
+    double tx_cm;
+    double ty_cm;
+    double tz_cm;
 
     int i;
     int j;
 
-    // TODO:
-    // open b->filename_vox
-    // get parameters from it
+    x0 = (b->na > 0) ? b->a[0] : 0.0;
+    y0 = (b->na > 1) ? b->a[1] : 0.0;
+    z0 = (b->na > 2) ? b->a[2] : 0.0;
+    dx = (b->na > 3) ? b->a[3] : 0.0;
+    dy = (b->na > 4) ? b->a[4] : 0.0;
+    dz = (b->na > 5) ? b->a[5] : 0.0;
+    nx = (b->na > 6) ? b->a[6] : 0.0;
+    ny = (b->na > 7) ? b->a[7] : 0.0;
+    nz = (b->na > 8) ? b->a[8] : 0.0;
+    gantry_angle = ((b->na > 9 ? b->a[9] : 0.0) / 180.0) * OSH_M_PI;
+    couch_angle = ((b->na > 10 ? b->a[10] : 0.0) / 180.0) * OSH_M_PI;
+    tx_cm = (b->na > 11) ? b->a[11] : 0.0;
+    ty_cm = (b->na > 12) ? b->a[12] : 0.0;
+    tz_cm = (b->na > 13) ? b->a[13] : 0.0;
+
+    x_min = x0;
+    y_min = y0;
+    z_min = z0;
+    x_max = x0 + dx * nx;
+    y_max = y0 + dy * ny;
+    z_max = z0 + dz * nz;
 
     /* ----------- Setup translation matrix */
-    /* translation and rotation needed lowest corner is at 0,0,0 */
+    /* b->t maps universe -> voxel-local (BZALIGN). Translation terms are set
+     * so the local voxel-corner (x0,y0,z0) is placed at tx/ty/tz in universe. */
     b->coord = OSH_COORD_BZALIGN;
-    couch_angle = (b->a[3] / 180.0) * OSH_M_PI;
-    gantry_angle = (b->a[4] / 180.0) * OSH_M_PI;
 
     /* rotate the base tb according to gantry / couch angles */
     for (i = 0; i < 3; i++) {
@@ -521,45 +564,43 @@ static int _setup_vox(struct body *b) {
         }
     }
 
-    /* isocenter shift goes into translation part of transformation matrix */
-    b->t[3] = -b->a[0];
-    b->t[7] = -b->a[1];
-    b->t[11] = -b->a[2];
+    /* world placement shift goes into translation part of transformation matrix */
+    b->t[3] = -tx_cm;
+    b->t[7] = -ty_cm;
+    b->t[11] = -tz_cm;
 
     /* ----------- Setup surfaces */
     osh_gemca2_add_surfaces(b, nsurfs);
 
-    // TODO: get b->a[] parameters set properly from voxelload()
-
     sf = b->surfs[0];
     osh_gemca2_add_surf_pars(sf, OSH_GEMCA_SURF_PLANEX);
-    sf->p[0] = -1;      /* = A */
-    sf->p[1] = b->a[0]; /* = D = -Ax   =>   Ax - D = 0 */
+    sf->p[0] = -1;    /* = A */
+    sf->p[1] = x_min; /* = D = -Ax   =>   Ax - D = 0 */
 
     sf = b->surfs[1];
     osh_gemca2_add_surf_pars(sf, OSH_GEMCA_SURF_PLANEX);
-    sf->p[0] = 1;        /* normal vector inverted, so it points into the zone */
-    sf->p[1] = -b->a[1]; /* Ax - D = 0 */
+    sf->p[0] = 1;      /* normal vector inverted, so it points into the zone */
+    sf->p[1] = -x_max; /* Ax - D = 0 */
 
     sf = b->surfs[2];
     osh_gemca2_add_surf_pars(sf, OSH_GEMCA_SURF_PLANEY);
     sf->p[0] = -1;
-    sf->p[1] = b->a[2];
+    sf->p[1] = y_min;
 
     sf = b->surfs[3];
     osh_gemca2_add_surf_pars(sf, OSH_GEMCA_SURF_PLANEY);
     sf->p[0] = 1;
-    sf->p[1] = -b->a[3];
+    sf->p[1] = -y_max;
 
     sf = b->surfs[4];
     osh_gemca2_add_surf_pars(sf, OSH_GEMCA_SURF_PLANEZ);
     sf->p[0] = -1;
-    sf->p[1] = b->a[4];
+    sf->p[1] = z_min;
 
     sf = b->surfs[5];
     osh_gemca2_add_surf_pars(sf, OSH_GEMCA_SURF_PLANEZ);
     sf->p[0] = 1;
-    sf->p[1] = -b->a[5];
+    sf->p[1] = -z_max;
 
     return 1;
 }

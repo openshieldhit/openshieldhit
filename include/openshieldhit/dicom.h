@@ -19,7 +19,7 @@ extern "C" {
  * DICOM Patient Coordinate System.
  */
 struct osh_dicom_ct {
-    double origin[3];        /**< Image Position Patient of first slice [mm] */
+    double origin[3];        /**< DICOM Image Position Patient (center of first voxel in first slice) [mm] */
     double row_cosine[3];    /**< Image Orientation Patient: row direction */
     double col_cosine[3];    /**< Image Orientation Patient: column direction */
     double pixel_spacing[2]; /**< [row_spacing, col_spacing] in mm */
