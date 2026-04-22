@@ -2,6 +2,7 @@
 #define OPENSHIELDHIT_GEOMETRY_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "openshieldhit/diag.h"
 #include "openshieldhit/geometry_defs.h"
@@ -48,13 +49,19 @@ struct osh_gemca_prepared; /* defined in src/gemca/osh_gemca2.h */
  *
  * The @p a array and @p name string are owned by this struct and freed by
  * @ref osh_geometry_workspace_free().
+ *
+ * For DCM-backed voxel bodies, @p hu points to a heap allocation of
+ * `n_hu = nx*ny*nz` HU values [int16]. The workspace owns and frees this
+ * memory. For non-voxel bodies, @p hu is NULL and @p n_hu is 0.
  */
 struct osh_geometry_body {
-    char *name; /**< User-given body name (null-terminated, unique within the workspace). */
-    double *a;  /**< Raw argument list as given in the geometry input; length is @p na. */
-    int na;     /**< Number of entries in @p a[]. */
-    int type;   /**< Body type: one of the @ref OSH_GEOMETRY_BODY_* codes. */
-    char coord; /**< Coordinate system of body parameters: one of the @ref OSH_GEOMETRY_COORD_* codes. */
+    char *name;  /**< User-given body name (null-terminated, unique within the workspace). */
+    double *a;   /**< Raw argument list as given in the geometry input; length is @p na. */
+    int16_t *hu; /**< Optional HU voxel array owned by the workspace (DCM/VOX bodies). */
+    size_t n_hu; /**< Number of entries in @p hu (0 when hu is NULL). */
+    int na;      /**< Number of entries in @p a[]. */
+    int type;    /**< Body type: one of the @ref OSH_GEOMETRY_BODY_* codes. */
+    char coord;  /**< Coordinate system of body parameters: one of the @ref OSH_GEOMETRY_COORD_* codes. */
 };
 
 /**

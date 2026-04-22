@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,7 +28,10 @@ static enum osh_status _parse_dcm_body(char const *args,
                                        struct osh_diag_sink const *diag,
                                        char name_out[OSH_GEMCA_BODY_NAME_MAXLEN],
                                        double par_out[OSH_GEMCA_NARGS_MAX],
-                                       int *npar_out);
+                                       int *npar_out,
+                                       int16_t **hu_out,
+                                       size_t *n_hu_out);
+static int _ct_orientation_is_axial(struct osh_dicom_ct const *ct);
 
 /**
  * @brief Map a body-type key string to an OSH_GEOMETRY_BODY_* code.
@@ -302,6 +306,52 @@ static int _parse_double_token(char const *token, double *out) {
 }
 
 /**
+ * @brief Check whether CT ImageOrientationPatient describes an axial stack.
+ *
+ * @details
+ * Current DCM->VOX placement supports axial CT only. Axial means row/column
+ * direction cosines lie in the XY plane and their cross-product normal points
+ * along +/-Z. This still allows in-plane rotation around Z.
+ *
+ * Future work: remove this guard once full orientation-cosine placement is
+ * implemented for arbitrary oblique datasets.
+ */
+static int _ct_orientation_is_axial(struct osh_dicom_ct const *ct) {
+    double const eps = 1.0e-3;
+    double const *r;
+    double const *c;
+    double row_norm_sq;
+    double col_norm_sq;
+    double row_col_dot;
+    double n[3];
+
+    if (!ct) {
+        return 0;
+    }
+
+    r = ct->row_cosine;
+    c = ct->col_cosine;
+    row_norm_sq = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
+    col_norm_sq = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+    row_col_dot = r[0] * c[0] + r[1] * c[1] + r[2] * c[2];
+    n[0] = r[1] * c[2] - r[2] * c[1];
+    n[1] = r[2] * c[0] - r[0] * c[2];
+    n[2] = r[0] * c[1] - r[1] * c[0];
+
+    if (fabs(row_norm_sq - 1.0) > eps || fabs(col_norm_sq - 1.0) > eps || fabs(row_col_dot) > eps) {
+        return 0;
+    }
+    if (fabs(r[2]) > eps || fabs(c[2]) > eps) {
+        return 0;
+    }
+    if (fabs(n[0]) > eps || fabs(n[1]) > eps || fabs(fabs(n[2]) - 1.0) > eps) {
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
  * @brief Parse one DCM card and convert CT metadata into VOX raw parameters.
  *
  * @details
@@ -315,6 +365,9 @@ static int _parse_double_token(char const *token, double *out) {
  *   9..10  gantry,couch [deg]
  *   11..13 translation tx,ty,tz [cm] of the local voxel-corner in universe
  *
+ * On success this function also transfers ownership of the DICOM HU pixel
+ * buffer to @p hu_out (workspace-level ownership).
+ *
  * Note: x0/y0/z0 here is the voxel-corner convention. DICOM Image Position
  * Patient is the voxel-center convention. Therefore user-given DCM tx/ty/tz
  * (interpreted as first-voxel-center coordinates) are converted to corner
@@ -327,6 +380,9 @@ static int _parse_double_token(char const *token, double *out) {
  * - In practice, callers should provide tx/ty/tz already expressed in the
  *   chosen universe frame (typically patient coordinates shifted so
  *   isocenter is at universe origin).
+ * - Current limitation: only axial CT orientation is accepted. Non-axial
+ *   datasets are rejected with a parse error until full orientation-cosine
+ *   placement support is implemented.
  *
  * See also docs/voxel_coordinates.md (single-source convention note).
  */
@@ -336,7 +392,9 @@ static enum osh_status _parse_dcm_body(char const *args,
                                        struct osh_diag_sink const *diag,
                                        char name_out[OSH_GEMCA_BODY_NAME_MAXLEN],
                                        double par_out[OSH_GEMCA_NARGS_MAX],
-                                       int *npar_out) {
+                                       int *npar_out,
+                                       int16_t **hu_out,
+                                       size_t *n_hu_out) {
     char *work = NULL;
     char *cursor = NULL;
     char *tok = NULL;
@@ -354,6 +412,11 @@ static enum osh_status _parse_dcm_body(char const *args,
     if (!args || !name_out || !par_out || !npar_out) {
         return OSH_EINVAL;
     }
+    if (!hu_out || !n_hu_out) {
+        return OSH_EINVAL;
+    }
+    *hu_out = NULL;
+    *n_hu_out = 0u;
 
     memset(&ct, 0, sizeof(ct));
     work = strdup(args);
@@ -429,9 +492,24 @@ static enum osh_status _parse_dcm_body(char const *args,
         goto done;
     }
     if (ct.rows <= 0 || ct.cols <= 0 || ct.n_slices <= 0 || ct.pixel_spacing[0] <= 0.0 || ct.pixel_spacing[1] <= 0.0
-        || ct.slice_spacing <= 0.0) {
+        || ct.slice_spacing <= 0.0 || !ct.pixels) {
         rc = OSH_EPARSE;
         OSH_DIAG_ERRORF(diag, "%s line %d: DCM CT metadata is invalid for voxel body setup", geo_filename, lineno);
+        goto done;
+    }
+    if (!_ct_orientation_is_axial(&ct)) {
+        rc = OSH_EPARSE;
+        OSH_DIAG_ERRORF(diag,
+                        "%s line %d: non-axial CT orientation is not supported yet in DCM placement "
+                        "(future work: apply row/col cosines); row=[%.6f %.6f %.6f], col=[%.6f %.6f %.6f]",
+                        geo_filename,
+                        lineno,
+                        ct.row_cosine[0],
+                        ct.row_cosine[1],
+                        ct.row_cosine[2],
+                        ct.col_cosine[0],
+                        ct.col_cosine[1],
+                        ct.col_cosine[2]);
         goto done;
     }
 
@@ -457,6 +535,9 @@ static enum osh_status _parse_dcm_body(char const *args,
     par_out[12] = ty_cm - 0.5 * par_out[4];
     par_out[13] = tz_cm - 0.5 * par_out[5];
     *npar_out = 14;
+    *n_hu_out = (size_t) ct.n_slices * (size_t) ct.rows * (size_t) ct.cols;
+    *hu_out = ct.pixels;
+    ct.pixels = NULL;
     rc = OSH_OK;
 
 done:
@@ -566,6 +647,8 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
     int allow_continuation = 0;
     char nstr[OSH_GEMCA_BODY_NAME_MAXLEN];
     double par[OSH_GEMCA_NARGS_MAX];
+    int16_t *body_hu = NULL;
+    size_t body_n_hu = 0u;
     size_t ibody = 0;
     int body_active = 0;
     enum osh_status rc = OSH_OK;
@@ -581,8 +664,13 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
             if (body_active) {
                 rc = _finalize_body(ws, ibody, btype, nstr, par, npar);
                 if (rc != OSH_OK) {
+                    free(body_hu);
                     goto done;
                 }
+                ws->bodies[ibody].hu = body_hu;
+                ws->bodies[ibody].n_hu = body_n_hu;
+                body_hu = NULL;
+                body_n_hu = 0u;
             }
             free(line);
             line = NULL;
@@ -596,8 +684,13 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
             if (body_active) {
                 rc = _finalize_body(ws, ibody, btype, nstr, par, npar);
                 if (rc != OSH_OK) {
+                    free(body_hu);
                     goto done;
                 }
+                ws->bodies[ibody].hu = body_hu;
+                ws->bodies[ibody].n_hu = body_n_hu;
+                body_hu = NULL;
+                body_n_hu = 0u;
                 ibody++;
             }
 
@@ -624,10 +717,15 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 goto done;
             }
             if (strcasecmp(key, OSH_GEO_KEY_DCM) == 0) {
-                rc = _parse_dcm_body(args, shf->filename, lineno, diag, nstr, par, &npar);
+                int16_t *dcm_hu = NULL;
+                size_t dcm_n_hu = 0u;
+                rc = _parse_dcm_body(args, shf->filename, lineno, diag, nstr, par, &npar, &dcm_hu, &dcm_n_hu);
                 if (rc != OSH_OK) {
+                    free(dcm_hu);
                     goto done;
                 }
+                body_hu = dcm_hu;
+                body_n_hu = dcm_n_hu;
                 allow_continuation = 0;
                 off = npar;
             } else {
@@ -641,6 +739,8 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 }
                 npar = nt - 1;
                 off = 6;
+                body_hu = NULL;
+                body_n_hu = 0u;
             }
 
         } else {
@@ -689,6 +789,7 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
     }
 
 done:
+    free(body_hu);
     free(line);
     return rc;
 }
