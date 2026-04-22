@@ -17,8 +17,11 @@ static void geometry_body_free_fields(struct osh_geometry_body *b) {
     }
     free(b->name);
     free(b->a);
+    free(b->hu);
     b->name = NULL;
     b->a = NULL;
+    b->hu = NULL;
+    b->n_hu = 0u;
 }
 
 static void geometry_zone_free_fields(struct osh_geometry_zone *z) {
@@ -93,6 +96,7 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         b->type = cb->type;
         b->coord = cb->coord;
         b->na = cb->na;
+        b->hu = cb->hu;
 
         if (cb->name) {
             b->name = strdup(cb->name);
