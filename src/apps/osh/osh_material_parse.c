@@ -10,6 +10,7 @@
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
 #include "common/osh_readline.h"
+#include "gemca/voxel/osh_gemca2_voxel_hu.h"
 
 static enum osh_status parse_density(struct osh_diag_sink const *diag,
                                      struct osh_material_workspace *wm,
@@ -51,6 +52,10 @@ static enum osh_status parse_state(struct osh_diag_sink const *diag,
                                    struct osh_material_workspace *wm,
                                    struct oshfile *oshf,
                                    char const *args);
+static enum osh_status parse_hutable(struct osh_diag_sink const *diag,
+                                     struct osh_material_workspace *wm,
+                                     struct oshfile *oshf,
+                                     char const *args);
 
 static struct osh_material *material_current(struct osh_material_workspace *wm);
 static void material_defaults(struct osh_material *mat);
@@ -81,6 +86,7 @@ static enum osh_status material_push_element(struct osh_diag_sink const *diag,
                                              double mass_fraction);
 static enum osh_status copy_string(char **dst, char const *src);
 static enum osh_status parse_state_value(int *state_out, char const *token);
+static int is_matdat_path(char const *path);
 
 struct material_dispatch_entry {
     char const *key;
@@ -134,6 +140,7 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
     int i;
     int found;
     int material_active;
+    int hutable_seen;
 
     if (!oshf || !wm) {
         return OSH_EINVAL;
@@ -141,6 +148,7 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
 
     line = NULL;
     material_active = 0;
+    hutable_seen = 0;
     while (osh_readline_key(oshf, &line, &key, &args, &lineno) != -1) {
         i = 0;
         while (key[i] != '\0') {
@@ -167,6 +175,30 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
                 return rc;
             }
             material_active = 0;
+            continue;
+        }
+
+        if (strcmp(OSH_MATERIAL_KEY_HUTABLE, key) == 0) {
+            if (material_active) {
+                OSH_DIAG_ERRORF(diag,
+                                "in %s line %d: HUTABLE is only allowed at top level (outside MATERIAL block)",
+                                oshf->filename,
+                                lineno);
+                free(line);
+                return OSH_EPARSE;
+            }
+            if (hutable_seen) {
+                OSH_DIAG_ERRORF(diag, "in %s line %d: duplicate HUTABLE card", oshf->filename, lineno);
+                free(line);
+                return OSH_EPARSE;
+            }
+            rc = parse_hutable(diag, wm, oshf, args);
+            free(line);
+            line = NULL;
+            if (rc != OSH_OK) {
+                return rc;
+            }
+            hutable_seen = 1;
             continue;
         }
 
@@ -197,6 +229,13 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
             OSH_DIAG_ERRORF(diag, "in %s line %d: unknown material key '%s'", oshf->filename, lineno, key);
             free(line);
             return OSH_EPARSE;
+        }
+    }
+
+    if (!hutable_seen && is_matdat_path(oshf->filename)) {
+        rc = osh_gemca_voxel_register_schneider_materials(wm);
+        if (rc != OSH_OK) {
+            return rc;
         }
     }
 
@@ -652,6 +691,47 @@ static enum osh_status parse_state(struct osh_diag_sink const *diag,
     return OSH_OK;
 }
 
+static enum osh_status parse_hutable(struct osh_diag_sink const *diag,
+                                     struct osh_material_workspace *wm,
+                                     struct oshfile *oshf,
+                                     char const *args) {
+    enum osh_status rc;
+    char table_name[64];
+    char extra;
+    int i;
+
+    if (!args || sscanf(args, "%63s %c", table_name, &extra) != 1) {
+        OSH_DIAG_ERRORF(diag, "in %s line %i: HUTABLE expects one table name", oshf->filename, oshf->lineno);
+        return OSH_EPARSE;
+    }
+
+    i = 0;
+    while (table_name[i] != '\0') {
+        table_name[i] = (char) tolower((unsigned char) table_name[i]);
+        i++;
+    }
+
+    if (strcmp(table_name, "schneider2000") == 0) {
+        rc = osh_gemca_voxel_register_schneider_materials(wm);
+    } else if (strcmp(table_name, "permatassari2020") == 0) {
+        rc = osh_gemca_voxel_register_permatassari_materials(wm);
+    } else {
+        OSH_DIAG_ERRORF(diag,
+                        "in %s line %i: unknown HUTABLE '%s' (expected Schneider2000 or Permatassari2020)",
+                        oshf->filename,
+                        oshf->lineno,
+                        table_name);
+        return OSH_EPARSE;
+    }
+
+    if (rc != OSH_OK) {
+        OSH_DIAG_ERRORF(
+            diag, "in %s line %i: failed to register HUTABLE '%s'", oshf->filename, oshf->lineno, table_name);
+    }
+
+    return rc;
+}
+
 /**
  * @brief Return a pointer to the material currently being built (the last one).
  *
@@ -1018,4 +1098,35 @@ static enum osh_status parse_state_value(int *state_out, char const *token) {
     }
 
     return OSH_EPARSE;
+}
+
+static int is_matdat_path(char const *path) {
+    char const *base;
+    char const *pattern;
+    size_t i;
+
+    if (!path) {
+        return 0;
+    }
+
+    base = strrchr(path, '/');
+    if (base) {
+        base++;
+    } else {
+        base = path;
+    }
+
+    pattern = "mat.dat";
+    i = 0u;
+    while (pattern[i] != '\0') {
+        if (base[i] == '\0') {
+            return 0;
+        }
+        if ((char) tolower((unsigned char) base[i]) != pattern[i]) {
+            return 0;
+        }
+        i++;
+    }
+
+    return base[i] == '\0';
 }
