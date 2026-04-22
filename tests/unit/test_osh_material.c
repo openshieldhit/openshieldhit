@@ -230,6 +230,28 @@ static void test_valid_end_handling(void) {
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
 
+static void test_valid_hutable_permatassari(void) {
+    struct osh_material_workspace *wm = NULL;
+
+    load_workspace_from_fixture("valid/hutable_permatassari.dat", OSH_OK, &wm);
+    ASSERT_TRUE(wm->nmaterials == 42u);
+    ASSERT_TRUE(osh_material_by_name(wm, "permatassari2020_00") != NULL);
+    ASSERT_TRUE(osh_material_by_name(wm, "permatassari2020_39") != NULL);
+
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+}
+
+static void test_valid_matdat_fallback_schneider(void) {
+    struct osh_material_workspace *wm = NULL;
+
+    load_workspace_from_fixture("valid/mat.dat", OSH_OK, &wm);
+    ASSERT_TRUE(wm->nmaterials == 26u);
+    ASSERT_TRUE(osh_material_by_name(wm, "schneider_00") != NULL);
+    ASSERT_TRUE(osh_material_by_name(wm, "schneider_23") != NULL);
+
+    ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
+}
+
 static void test_invalid_key_outside_material(void) {
     struct osh_material_workspace *wm = NULL;
     load_workspace_from_fixture("invalid/key_outside_material.dat", OSH_EPARSE, &wm);
@@ -255,6 +277,16 @@ static void test_invalid_mixed_icru_and_elements(void) {
     load_workspace_from_fixture("invalid/mixed_icru_and_elements.dat", OSH_EPARSE, &wm);
 }
 
+static void test_invalid_duplicate_hutable(void) {
+    struct osh_material_workspace *wm = NULL;
+    load_workspace_from_fixture("invalid/hutable_duplicate.dat", OSH_EPARSE, &wm);
+}
+
+static void test_invalid_hutable_inside_material(void) {
+    struct osh_material_workspace *wm = NULL;
+    load_workspace_from_fixture("invalid/hutable_inside_material.dat", OSH_EPARSE, &wm);
+}
+
 int main(void) {
     test_valid_icru_override();
     test_valid_explicit_composition();
@@ -262,11 +294,15 @@ int main(void) {
     test_material_dedx_set_replace_and_clear();
     test_valid_mass_fraction_and_isotope();
     test_valid_end_handling();
+    test_valid_hutable_permatassari();
+    test_valid_matdat_fallback_schneider();
 
     test_invalid_key_outside_material();
     test_invalid_conflicting_mee();
     test_invalid_end_arguments();
     test_invalid_elementi_before_element();
     test_invalid_mixed_icru_and_elements();
+    test_invalid_duplicate_hutable();
+    test_invalid_hutable_inside_material();
     return 0;
 }
