@@ -299,8 +299,14 @@ idx = ((ix>>3u) + Tx*((iy>>3u) + Ty*(iz>>3u))) * 512u
 ```
 LUTs: `_m3x={0,1,8,9,64,65,72,73}`, `_m3y={0,2,16,18,128,130,144,146}`, `_m3z={0,4,32,36,256,260,288,292}`
 
-**Layout B — Axis-permuted row-major (`tile_order=1..7`, future):**
-Permute storage axes so the beam-dominant direction is innermost (stride-1). Optimal for single-field treatments; set at load time from gantry angle. Implement after M3b benchmarks quantify Morton gain. The `tile_order` field already reserves space.
+**Layout B — Axis-permuted row-major (`tile_order=1..7`, "Bassler algorithm"):**
+Permute storage axes so the beam-dominant direction is innermost (stride-1). Optimal for near-axial rays: a ray within ~30° of the inner axis stays stride-1; Morton's worst-case for the same ray is ~8 voxels within a tile. For oblique rays (near 45°) Morton wins.
+
+**Runtime layout selection (future):** At geometry-compile time, when both the CT grid and the beam direction(s) are known, choose the layout automatically:
+- Beam angle within ~30° of a principal axis → Layout B (Bassler): rotate axis assignment so dominant direction is innermost
+- Beam angle near 45° or multi-angle arc → Layout A (Morton): balanced locality in all directions
+
+Selection lives in the geometry-compile step (`osh_gemca_compile` or DCM parse), not in the hot path. Requires passing gantry/couch angles to the reorder function. The `tile_order` field on `osh_raytrace_grid` carries the result into Jacobs with no runtime branching cost.
 
 **Shared infrastructure (CT + RTDOSE):**
 - New `src/common/osh_voxel_order.h` — `tile_order` constants + inline index helpers
