@@ -9,18 +9,14 @@
 /**
  * One voxel crossing within a transport step.
  *
- * ds      — path length through this voxel [cm].  Density is constant over
- *           this segment, so scoring may sub-step freely within it without
- *           losing density information.
- * rhocorr — density correction for this voxel: rho_voxel / rho_bin_nominal
- *           (≈ 1.0).  Exact per-voxel value — never averaged across voxels.
- *           Multiply the bin's nominal stopping power by rhocorr to get the
- *           actual stopping power.  For areal density: rhocorr · rho_bin_nominal · ds.
- *           Never an absolute density; the material tables own that.
+ * ds  — path length through this voxel [cm].
+ * rho — actual voxel density [g/cm³] from the HU calibration LUT.
+ *       Constant over ds.  Areal density contribution: rho × ds [g/cm²].
+ *       Never averaged across voxels.
  */
 struct gemca_rt_voxel_segment {
     double ds;
-    double rhocorr;
+    double rho;
 };
 
 /**
