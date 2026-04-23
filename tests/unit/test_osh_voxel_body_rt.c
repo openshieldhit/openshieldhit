@@ -21,6 +21,7 @@
  */
 
 #define GRID_N 3
+#define GRID_N_VOX ((size_t) GRID_N * (size_t) GRID_N * (size_t) GRID_N)
 
 static uint8_t s_bin_lut[2601];
 static float s_rho_lut[2601];
@@ -45,8 +46,9 @@ static void build_runtime(struct osh_gemca_runtime *rt, struct gemca_rt_body *bo
     body->ct_grid.tile_order = 0; /* row-major */
     body->type = 5;               /* OSH_GEMCA_BODY_VOX */
 
-    for (i = 0; i < n_vox; i++)
+    for (i = 0; i < n_vox; i++) {
         hu[i] = 0; /* default: water-ish, bin 5 */
+    }
     body->hu = hu;
 
     osh_gemca_voxel_build_hu_lut(s_bin_lut);
@@ -82,7 +84,7 @@ static void test_ray_misses_returns_infinity(void) {
     int bin;
     double ds;
 
-    build_runtime(&rt, &body, hu, GRID_N * GRID_N * GRID_N);
+    build_runtime(&rt, &body, hu, GRID_N_VOX);
 
     /* Ray passes entirely beside the grid (y outside [0,3]). */
     r = make_x_ray();
@@ -100,11 +102,13 @@ static void test_uniform_grid_all_same_bin(void) {
     int16_t hu[GRID_N * GRID_N * GRID_N];
     struct gemca_rt_voxel_segment segs[16];
     struct ray r;
-    size_t n_segs, i;
+    size_t n_segs;
+    size_t i;
     int bin;
-    double ds, expected_rho;
+    double ds;
+    double expected_rho;
 
-    build_runtime(&rt, &body, hu, GRID_N * GRID_N * GRID_N);
+    build_runtime(&rt, &body, hu, GRID_N_VOX);
     /* All HU=0 → bin 5, rho ≈ 1.018 g/cm³. */
 
     r = make_x_ray();
@@ -133,7 +137,7 @@ static void test_bin_change_stops_traversal(void) {
     int bin;
     double ds;
 
-    build_runtime(&rt, &body, hu, GRID_N * GRID_N * GRID_N);
+    build_runtime(&rt, &body, hu, GRID_N_VOX);
 
     /* Make the second X-voxel (ix=1, iy=1, iz=1, flat idx=13) a different bin.
      * HU=1600 → bin 23 (dense bone). */
@@ -158,7 +162,7 @@ static void test_segs_cap_limits_output(void) {
     int bin;
     double ds;
 
-    build_runtime(&rt, &body, hu, GRID_N * GRID_N * GRID_N);
+    build_runtime(&rt, &body, hu, GRID_N_VOX);
     /* All same bin → would produce 3 segments, but cap = 1. */
 
     r = make_x_ray();
@@ -179,7 +183,7 @@ static void test_null_segs_distance_only(void) {
     int bin;
     double ds;
 
-    build_runtime(&rt, &body, hu, GRID_N * GRID_N * GRID_N);
+    build_runtime(&rt, &body, hu, GRID_N_VOX);
 
     r = make_x_ray();
     ds = dist_voxel_body_rt(&rt, 0, &r, NULL, 0, &n_segs, &bin);
@@ -194,14 +198,16 @@ static void test_rho_matches_lut(void) {
     int16_t hu[GRID_N * GRID_N * GRID_N];
     struct gemca_rt_voxel_segment segs[16];
     struct ray r;
-    size_t n_segs, i;
+    size_t n_segs;
+    size_t i;
     int bin;
 
-    build_runtime(&rt, &body, hu, GRID_N * GRID_N * GRID_N);
+    build_runtime(&rt, &body, hu, GRID_N_VOX);
 
     /* Use a non-zero HU so the density is clearly non-trivial. */
-    for (i = 0; i < (size_t) (GRID_N * GRID_N * GRID_N); i++)
+    for (i = 0; i < GRID_N_VOX; i++) {
         hu[i] = 200;
+    }
 
     r = make_x_ray();
     dist_voxel_body_rt(&rt, 0, &r, segs, 16, &n_segs, &bin);
