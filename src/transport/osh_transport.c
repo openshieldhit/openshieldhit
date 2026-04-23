@@ -12,8 +12,8 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
                                                  struct osh_transport_context *transport_ctx,
                                                  struct osh_beam_runtime *beam_rt,
                                                  struct osh_gemca_runtime const *geom_rt,
-                                                 struct osh_material_runtime const *tables,
-                                                 struct osh_scoring_runtime *scoring);
+                                                 struct osh_material_runtime const *material_rt,
+                                                 struct osh_scoring_runtime *score_rt);
 
 /*
  * Particle-type dispatcher for osh_transport_run_minimal().
@@ -37,8 +37,8 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
 enum osh_status osh_transport_run_minimal(struct osh_transport_context *transport_ctx,
                                           struct osh_beam_runtime *beam_rt,
                                           struct osh_gemca_runtime const *geom_rt,
-                                          struct osh_material_runtime const *tables,
-                                          struct osh_scoring_runtime *scoring) {
+                                          struct osh_material_runtime const *material_rt,
+                                          struct osh_scoring_runtime *score_rt) {
     struct osh_transport_scheduler scheduler;
     enum osh_transport_family family;
     enum osh_status rc;
@@ -55,7 +55,7 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
         return OSH_OK;
     }
 
-    return dispatch_transport_family(family, transport_ctx, beam_rt, geom_rt, tables, scoring);
+    return dispatch_transport_family(family, transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
 }
 
 /**
@@ -69,8 +69,8 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
  * @param[in]     family     Scheduled family to transport.
  * @param[in]     beam_rt    Hot beam runtime for primary generation.
  * @param[in]     geom_rt    Compiled geometry runtime.
- * @param[in]     tables     Hot material runtime tables.
- * @param[in,out] scoring    Scoring runtime.
+ * @param[in]     material_rt  Hot material runtime tables.
+ * @param[in,out] score_rt     Scoring runtime.
  *
  * @returns OSH_OK on success, OSH_ENOTSUP for a family without an
  *          implementation, or another OSH_E* from the family kernel.
@@ -79,15 +79,15 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
                                                  struct osh_transport_context *transport_ctx,
                                                  struct osh_beam_runtime *beam_rt,
                                                  struct osh_gemca_runtime const *geom_rt,
-                                                 struct osh_material_runtime const *tables,
-                                                 struct osh_scoring_runtime *scoring) {
+                                                 struct osh_material_runtime const *material_rt,
+                                                 struct osh_scoring_runtime *score_rt) {
     switch (family) {
     case OSH_TRANSPORT_FAMILY_ION:
-        return osh_transport_ion_run_minimal(transport_ctx, beam_rt, geom_rt, tables, scoring);
+        return osh_transport_ion_run_minimal(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
     case OSH_TRANSPORT_FAMILY_NEUTRON:
-        return osh_transport_neutron_run_minimal(transport_ctx, beam_rt, geom_rt, tables, scoring);
+        return osh_transport_neutron_run_minimal(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
     case OSH_TRANSPORT_FAMILY_PHOTON:
-        return osh_transport_photon_run_minimal(transport_ctx, beam_rt, geom_rt, tables, scoring);
+        return osh_transport_photon_run_minimal(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
     case OSH_TRANSPORT_FAMILY_ELECTRON:
     case OSH_TRANSPORT_FAMILY_COUNT:
         break;
