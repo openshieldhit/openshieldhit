@@ -15,10 +15,12 @@
 #define _CROSSINGS_CAP 2048
 
 static int clamp_hu(int16_t hu) {
-    if (hu < -1000)
+    if (hu < -1000) {
         return -1000;
-    if (hu > 1600)
+    }
+    if (hu > 1600) {
         return 1600;
+    }
     return (int) hu;
 }
 
@@ -32,14 +34,20 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
     struct gemca_rt_body const *body;
     struct osh_voxel_crossing crossings[_CROSSINGS_CAP];
     struct ray r_local;
-    size_t n_crossings, i, n_segs;
+    size_t n_crossings;
+    size_t i;
+    size_t n_segs;
     double total_ds;
-    int bin0, bini, hu_clamped;
+    int bin0;
+    int bini;
+    int hu_clamped;
 
-    if (n_out)
+    if (n_out) {
         *n_out = 0;
-    if (bin_out)
+    }
+    if (bin_out) {
         *bin_out = -1;
+    }
 
     if (!rt->hu_bin_lut || !rt->hu_rho_lut) {
         return OSH_GEMCA_INFINITY;
@@ -66,8 +74,9 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
         hu_clamped = clamp_hu(body->hu[crossings[i].idx]);
         bini = (int) rt->hu_bin_lut[hu_clamped + 1000];
 
-        if (bini != bin0)
+        if (bini != bin0) {
             break; /* bin change → new zone */
+        }
 
         if (segs && n_segs < segs_cap) {
             segs[n_segs].ds = crossings[i].path_len;
@@ -77,13 +86,16 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
         total_ds += crossings[i].path_len;
         n_segs++;
 
-        if (segs && n_segs >= segs_cap)
+        if (segs && n_segs >= segs_cap) {
             break; /* buffer full → transport re-enters */
+        }
     }
 
-    if (n_out)
+    if (n_out) {
         *n_out = n_segs;
-    if (bin_out)
+    }
+    if (bin_out) {
         *bin_out = bin0;
+    }
     return total_ds;
 }
