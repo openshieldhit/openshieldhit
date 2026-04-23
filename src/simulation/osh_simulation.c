@@ -5,6 +5,7 @@
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "gemca/voxel/osh_gemca2_voxel_hu.h"
 #include "material/runtime/osh_material_compile.h"
@@ -39,6 +40,22 @@ struct osh_simulation {
     unsigned long long completed_nstat;
     struct osh_results results;
 };
+
+static int prepared_has_voxel_body(struct osh_gemca_prepared const *gemca) {
+    size_t ib;
+
+    if (!gemca || !gemca->bodies) {
+        return 0;
+    }
+
+    for (ib = 0u; ib < gemca->nbodies; ++ib) {
+        if (gemca->bodies[ib] && gemca->bodies[ib]->type == OSH_GEMCA_BODY_VOX) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
 
 /* ---- Lifecycle ----------------------------------------------------------- */
 
@@ -87,6 +104,13 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     /* ---- 1. Zone → material index resolution ----------------------------- */
 
     gemca = geo->prepared;
+    if (prepared_has_voxel_body(gemca) && mat->hu_table_type == OSH_HU_TABLE_NONE) {
+        OSH_DIAG_ERRORF(
+            diag, "%s", "simulation: voxel geometry requires an explicit HUTABLE card in the material file");
+        rc = OSH_EPARSE;
+        goto fail;
+    }
+
     for (iz = 0u; iz < gemca->nzones; ++iz) {
         struct zone *z = gemca->zones[iz];
         struct osh_material const *m;

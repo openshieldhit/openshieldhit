@@ -241,13 +241,14 @@ static void test_valid_hutable_permatassari(void) {
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
 
-static void test_valid_matdat_fallback_schneider(void) {
+static void test_valid_matdat_no_hutable_default_none(void) {
     struct osh_material_workspace *wm = NULL;
 
     load_workspace_from_fixture("valid/mat.dat", OSH_OK, &wm);
-    ASSERT_TRUE(wm->nmaterials == 26u);
-    ASSERT_TRUE(osh_material_by_name(wm, "schneider_00") != NULL);
-    ASSERT_TRUE(osh_material_by_name(wm, "schneider_23") != NULL);
+    ASSERT_TRUE(wm->nmaterials == 2u);
+    ASSERT_TRUE(wm->hu_table_type == OSH_HU_TABLE_NONE);
+    ASSERT_TRUE(osh_material_by_name(wm, "schneider_00") == NULL);
+    ASSERT_TRUE(osh_material_by_name(wm, "schneider_23") == NULL);
 
     ASSERT_TRUE(osh_material_workspace_free(wm) == OSH_OK);
 }
@@ -295,7 +296,7 @@ int main(void) {
     test_valid_mass_fraction_and_isotope();
     test_valid_end_handling();
     test_valid_hutable_permatassari();
-    test_valid_matdat_fallback_schneider();
+    test_valid_matdat_no_hutable_default_none();
 
     test_invalid_key_outside_material();
     test_invalid_conflicting_mee();
