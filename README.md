@@ -52,8 +52,15 @@ cmake --preset debug   && cmake --build --preset debug     # debug symbols, -Og
 Available presets: `debug`, `release`, `relwithdebinfo`, `prof`.
 Requires CMake ≥ 3.21.  Binaries land in `build_rel/bin/` (release) or `build/bin/` (debug).
 
-> **Note:** There is no `cmake --install` target yet — the project is still under
-> heavy development.  Run the binaries directly from the build tree.
+Useful cache variables for development:
+
+```bash
+-DOSH_RAYTRACE_ALGORITHM=SIMPLE|SIDDON|JACOBS
+-DOSH_VOXEL_LAYOUT=ROW_MAJOR|MORTON8
+```
+
+`cmake --install` currently installs the main executable, documentation, and
+selected examples. Public library/header installation is still incomplete.
 
 ## Run a Minimal Example
 ```bash
@@ -111,27 +118,30 @@ build_rel/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 
 ## Status
 
-The first end-to-end transport loop is working: proton beams transport through
-geometry, accumulate dose in scoring detectors, and produce Bragg-peak depth-dose
-distributions.
+The current codebase has a working end-to-end ion transport path with:
 
-## TODO
-- [x] diagnostics sink
-- [x] vector library
-- [x] readline for tag and key parsing
-- [x] prng
-- [x] geometry parser
-- [x] beam parser
-- [x] material parser
-- [x] detector parser
-- [x] raytracer
-- [x] straight-line CSDA transport (no scattering)
-- [x] stopping power / CSDA range tables
-- [x] dose, fluence, LET scoring
-- [x] multiple Coulomb scattering
-- [x] energy straggling (Simple Gaussian)
-- [ ] nuclear interactions / secondaries
-- [ ] ...
+- text-input parsing through the `openshieldhit` application
+- cold-to-runtime compilation for beam, geometry, materials, and scoring
+- analytic GEMCA geometry plus DICOM CT-backed voxel body setup (`DCM`)
+- multiple raytrace implementations with a shared grid contract
+- dose / fluence scoring and BDO/text output
+
+Voxel CT transport infrastructure is in progress. The code now includes:
+
+- Schneider and Permatassari HU calibration/material registration
+- DICOM CT parsing into `OSH_GEOMETRY_BODY_VOX`
+- runtime propagation of CT grid metadata and borrowed HU storage
+- compile-time selectable voxel storage layout (`ROW_MAJOR` baseline, `MORTON8` optional)
+
+The detailed implementation roadmap lives in [TODO.md](TODO.md).
+
+## Repository layout
+
+- `include/openshieldhit/` — public headers
+- `src/apps/osh/` — CLI application, file parsing, app-side orchestration
+- `src/common/` — shared low-level utilities, math, raytrace, and helpers
+- `src/gemca/` — geometry preparation and runtime compilation
+- `src/material/`, `src/beam/`, `src/scoring/`, `src/transport/`, `src/simulation/` — core runtime modules
 
 
 # Disclaimer and License
