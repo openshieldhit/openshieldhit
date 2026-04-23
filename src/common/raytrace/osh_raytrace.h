@@ -19,6 +19,8 @@ extern "C" {
  * Voxel index convention is controlled by tile_order (OSH_VOXEL_ORDER_*):
  *   0 (ROW_MAJOR): idx = ix + n[0]*(iy + n[1]*iz)
  *   8 (MORTON8):   8×8×8 Morton-tiled — see osh_voxel_order.h
+ * The DCM/VOX loader's compiled default is OSH_VOXEL_LAYOUT_DEFAULT; callers
+ * may still set grid->tile_order explicitly per grid if needed.
  *
  * Both the CT transport grid and scoring mesh grids use this descriptor.
  * Callers construct it from their own geometry representation and pass it

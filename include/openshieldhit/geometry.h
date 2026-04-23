@@ -50,9 +50,12 @@ struct osh_gemca_prepared; /* defined in src/gemca/osh_gemca2.h */
  * The @p a array and @p name string are owned by this struct and freed by
  * @ref osh_geometry_workspace_free().
  *
- * For DCM-backed voxel bodies, @p hu points to a heap allocation of
- * `n_hu = nx*ny*nz` HU values [int16]. The workspace owns and frees this
- * memory. For non-voxel bodies, @p hu is NULL and @p n_hu is 0.
+ * For DCM-backed voxel bodies, @p hu points to a heap allocation of HU values
+ * [int16] in the compiled voxel layout. For row-major this is `nx*ny*nz`;
+ * for tiled layouts such as Morton-8 it may include zero-padded boundary
+ * slots, so @p n_hu is the storage length rather than the physical voxel
+ * count. The workspace owns and frees this memory. For non-voxel bodies,
+ * @p hu is NULL and @p n_hu is 0.
  */
 struct osh_geometry_body {
     char *name;  /**< User-given body name (null-terminated, unique within the workspace). */

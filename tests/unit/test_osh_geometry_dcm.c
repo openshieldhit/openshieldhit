@@ -61,10 +61,14 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
     ASSERT_TRUE(ws->bodies[0].a != NULL);
     ASSERT_TRUE(ws->bodies[0].hu != NULL);
     {
-        size_t Tx = ((size_t) ct.cols + 7u) >> 3u;
-        size_t Ty = ((size_t) ct.rows + 7u) >> 3u;
-        size_t Tz = ((size_t) ct.n_slices + 7u) >> 3u;
-        ASSERT_TRUE(ws->bodies[0].n_hu == Tx * Ty * Tz * 512u);
+        size_t expected_n_hu = (size_t) ct.cols * (size_t) ct.rows * (size_t) ct.n_slices;
+        if (OSH_VOXEL_LAYOUT_DEFAULT == OSH_VOXEL_ORDER_MORTON8) {
+            size_t Tx = ((size_t) ct.cols + 7u) >> 3u;
+            size_t Ty = ((size_t) ct.rows + 7u) >> 3u;
+            size_t Tz = ((size_t) ct.n_slices + 7u) >> 3u;
+            expected_n_hu = Tx * Ty * Tz * 512u;
+        }
+        ASSERT_TRUE(ws->bodies[0].n_hu == expected_n_hu);
     }
     ASSERT_TRUE(ws->bodies[0].na == 14);
 
@@ -148,15 +152,17 @@ static void test_dcm_prepare_compile_propagates_ct_grid(void) {
     ASSERT_TRUE(rt_body->ct_grid.n[2] == cold_body->ct_grid.n[2]);
     ASSERT_TRUE(rt_body->hu != NULL);
     ASSERT_TRUE(rt_body->hu == cold_body->hu);
-    /* hu[0] = Morton index 0 = voxel (0,0,0) — same as row-major index 0. */
+    ASSERT_TRUE(rt_body->ct_grid.tile_order == OSH_VOXEL_LAYOUT_DEFAULT);
     ASSERT_TRUE(rt_body->hu[0] == ct.pixels[0]);
-    /* Spot-check an interior voxel via its Morton index. */
     {
-        size_t Tx = ((size_t) ct.cols + 7u) >> 3u;
-        size_t Ty = ((size_t) ct.rows + 7u) >> 3u;
-        size_t mi = osh_voxel_tile_idx(1u, 2u, 3u, Tx, Ty);
         size_t ri = 1u + (size_t) ct.cols * (2u + (size_t) ct.rows * 3u);
-        ASSERT_TRUE(rt_body->hu[mi] == ct.pixels[ri]);
+        size_t hi = ri;
+        if (OSH_VOXEL_LAYOUT_DEFAULT == OSH_VOXEL_ORDER_MORTON8) {
+            size_t Tx = ((size_t) ct.cols + 7u) >> 3u;
+            size_t Ty = ((size_t) ct.rows + 7u) >> 3u;
+            hi = osh_voxel_tile_idx(1u, 2u, 3u, Tx, Ty);
+        }
+        ASSERT_TRUE(rt_body->hu[hi] == ct.pixels[ri]);
     }
 
     osh_gemca_runtime_free(&rt);

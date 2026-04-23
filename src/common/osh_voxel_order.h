@@ -26,6 +26,23 @@ extern "C" {
 #define OSH_VOXEL_ORDER_MORTON8 8u
 
 /*
+ * Build-time default voxel layout used by DCM/VOX setup when the caller does
+ * not override tile_order explicitly. Configure via CMake cache variable:
+ *   -DOSH_VOXEL_LAYOUT=ROW_MAJOR   (baseline, default)
+ *   -DOSH_VOXEL_LAYOUT=MORTON8
+ *
+ * TODO: add axis-permuted row-major layouts (tile_order 1..7) once their
+ * index contract and selection heuristic are ready.
+ */
+#ifndef OSH_VOXEL_LAYOUT_DEFAULT
+#define OSH_VOXEL_LAYOUT_DEFAULT OSH_VOXEL_ORDER_ROW_MAJOR
+#endif
+
+#if (OSH_VOXEL_LAYOUT_DEFAULT != OSH_VOXEL_ORDER_ROW_MAJOR) && (OSH_VOXEL_LAYOUT_DEFAULT != OSH_VOXEL_ORDER_MORTON8)
+#error "OSH_VOXEL_LAYOUT_DEFAULT must be OSH_VOXEL_ORDER_ROW_MAJOR or OSH_VOXEL_ORDER_MORTON8"
+#endif
+
+/*
  * 3-way bit-interleave LUTs for 3-bit intra-tile coordinates (0..7).
  *   x bits → positions 0,3,6 of the 9-bit Morton index
  *   y bits → positions 1,4,7

@@ -549,7 +549,7 @@ static enum osh_status _parse_dcm_body(char const *args,
                                             (size_t) ct.rows,
                                             (size_t) ct.n_slices,
                                             sizeof(int16_t),
-                                            OSH_VOXEL_ORDER_MORTON8,
+                                            OSH_VOXEL_LAYOUT_DEFAULT,
                                             n_hu_out);
     free(ct.pixels);
     ct.pixels = NULL;

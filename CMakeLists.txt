@@ -74,6 +74,18 @@ endif()
 
 add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
 
+set(OSH_VOXEL_LAYOUT "ROW_MAJOR" CACHE STRING
+    "Default voxel storage layout compiled into the DCM/VOX path (ROW_MAJOR or MORTON8)")
+set_property(CACHE OSH_VOXEL_LAYOUT PROPERTY STRINGS ROW_MAJOR MORTON8)
+if(OSH_VOXEL_LAYOUT STREQUAL "ROW_MAJOR")
+    add_compile_definitions(OSH_VOXEL_LAYOUT_DEFAULT=0)
+elseif(OSH_VOXEL_LAYOUT STREQUAL "MORTON8")
+    add_compile_definitions(OSH_VOXEL_LAYOUT_DEFAULT=8)
+else()
+    message(FATAL_ERROR "OSH_VOXEL_LAYOUT must be ROW_MAJOR or MORTON8")
+endif()
+message(STATUS "Voxel layout default: ${OSH_VOXEL_LAYOUT}")
+
 option(OSH_ENABLE_COVERAGE "Enable GCC/Clang coverage instrumentation" OFF)
 if(OSH_ENABLE_COVERAGE)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
