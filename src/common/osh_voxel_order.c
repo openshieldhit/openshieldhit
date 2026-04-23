@@ -21,8 +21,12 @@ void *osh_voxel_reorder(
     size_t nbytes;
     size_t tmp;
     void *dst;
-    size_t Tx, Ty, Tz;
-    size_t ix, iy, iz;
+    size_t Tx;
+    size_t Ty;
+    size_t Tz;
+    size_t ix;
+    size_t iy;
+    size_t iz;
 
     if (!out_len) {
         return NULL;
@@ -35,6 +39,9 @@ void *osh_voxel_reorder(
     if (tile_order == OSH_VOXEL_ORDER_ROW_MAJOR) {
         if (mul_size_overflow(nx, ny, &tmp) || mul_size_overflow(tmp, nz, &total)
             || mul_size_overflow(total, element_size, &nbytes)) {
+            return NULL;
+        }
+        if (nbytes == 0u) {
             return NULL;
         }
         dst = malloc(nbytes);
@@ -58,6 +65,9 @@ void *osh_voxel_reorder(
     Tz = (nz + 7u) >> 3u;
     if (mul_size_overflow(Tx, Ty, &tmp) || mul_size_overflow(tmp, Tz, &tmp) || mul_size_overflow(tmp, 512u, &total)
         || mul_size_overflow(total, element_size, &nbytes)) {
+        return NULL;
+    }
+    if (total == 0u) {
         return NULL;
     }
 
