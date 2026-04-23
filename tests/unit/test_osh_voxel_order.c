@@ -10,12 +10,18 @@ static void test_morton_lut_completeness(void);
 static void test_reorder_roundtrip(void);
 static void test_reorder_nonpower8_boundary(void);
 static void test_row_major_baseline(void);
+static void test_row_major_overflow_rejected(void);
+static void test_morton_overflow_rejected(void);
+static void test_invalid_inputs_zero_out_len(void);
 
 int main(void) {
     test_morton_lut_completeness();
     test_reorder_roundtrip();
     test_reorder_nonpower8_boundary();
     test_row_major_baseline();
+    test_row_major_overflow_rejected();
+    test_morton_overflow_rejected();
+    test_invalid_inputs_zero_out_len();
     return 0;
 }
 
@@ -28,7 +34,7 @@ static void test_morton_lut_completeness(void) {
     for (i = 0u; i < 8u; i++) {
         for (j = 0u; j < 8u; j++) {
             for (k = 0u; k < 8u; k++) {
-                idx = (size_t) _osh_m3x[i] | (size_t) _osh_m3y[j] | (size_t) _osh_m3z[k];
+                idx = (size_t) osh_voxel_m3x[i] | (size_t) osh_voxel_m3y[j] | (size_t) osh_voxel_m3z[k];
                 ASSERT_TRUE(idx < 512u);
                 ASSERT_TRUE(seen[idx] == 0u);
                 seen[idx] = 1u;
@@ -47,7 +53,7 @@ static void test_reorder_roundtrip(void) {
     int16_t *src;
     int16_t *dst;
     size_t out_len;
-    size_t Tx, Ty;
+    size_t Tx, Ty, Tz;
     size_t ix, iy, iz;
     size_t i;
 
@@ -62,7 +68,8 @@ static void test_reorder_roundtrip(void) {
 
     Tx = (nx + 7u) >> 3u; /* 2 */
     Ty = (ny + 7u) >> 3u; /* 2 */
-    ASSERT_TRUE(out_len == Tx * ((ny + 7u) >> 3u) * ((nz + 7u) >> 3u) * 512u);
+    Tz = (nz + 7u) >> 3u; /* 2 */
+    ASSERT_TRUE(out_len == Tx * Ty * Tz * 512u);
 
     for (iz = 0u; iz < nz; iz++) {
         for (iy = 0u; iy < ny; iy++) {
@@ -85,7 +92,7 @@ static void test_reorder_nonpower8_boundary(void) {
     int16_t *src;
     int16_t *dst;
     size_t out_len;
-    size_t Tx, Ty;
+    size_t Tx, Ty, Tz;
     size_t ix, iy, iz;
     size_t i;
 
@@ -100,7 +107,8 @@ static void test_reorder_nonpower8_boundary(void) {
 
     Tx = (nx + 7u) >> 3u; /* 2 */
     Ty = (ny + 7u) >> 3u; /* 2 */
-    ASSERT_TRUE(out_len == Tx * ((ny + 7u) >> 3u) * ((nz + 7u) >> 3u) * 512u);
+    Tz = (nz + 7u) >> 3u; /* 2 */
+    ASSERT_TRUE(out_len == Tx * Ty * Tz * 512u);
 
     for (iz = 0u; iz < nz; iz++) {
         for (iy = 0u; iy < ny; iy++) {
@@ -140,4 +148,36 @@ static void test_row_major_baseline(void) {
 
     free(src);
     free(dst);
+}
+
+static void test_row_major_overflow_rejected(void) {
+    size_t out_len = 123u;
+    void *dst;
+
+    dst = osh_voxel_reorder("", SIZE_MAX, 2u, 1u, sizeof(char), OSH_VOXEL_ORDER_ROW_MAJOR, &out_len);
+    ASSERT_TRUE(dst == NULL);
+    ASSERT_TRUE(out_len == 0u);
+}
+
+static void test_morton_overflow_rejected(void) {
+    size_t out_len = 123u;
+    void *dst;
+
+    dst = osh_voxel_reorder("", SIZE_MAX, 1u, 1u, sizeof(char), OSH_VOXEL_ORDER_MORTON8, &out_len);
+    ASSERT_TRUE(dst == NULL);
+    ASSERT_TRUE(out_len == 0u);
+}
+
+static void test_invalid_inputs_zero_out_len(void) {
+    size_t out_len = 123u;
+    void *dst;
+
+    dst = osh_voxel_reorder(NULL, 1u, 1u, 1u, sizeof(char), OSH_VOXEL_ORDER_ROW_MAJOR, &out_len);
+    ASSERT_TRUE(dst == NULL);
+    ASSERT_TRUE(out_len == 0u);
+
+    out_len = 123u;
+    dst = osh_voxel_reorder("", 1u, 1u, 1u, 0u, OSH_VOXEL_ORDER_ROW_MAJOR, &out_len);
+    ASSERT_TRUE(dst == NULL);
+    ASSERT_TRUE(out_len == 0u);
 }

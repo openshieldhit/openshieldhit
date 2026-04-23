@@ -32,6 +32,7 @@
 #include <float.h>
 #include <math.h>
 
+#include "common/osh_voxel_order.h"
 #include "common/raytrace/osh_raytrace.h"
 
 static int same_crossing(double a, double b) {
@@ -92,6 +93,13 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
     t = 0.0;
     n = 0;
 
+    /* Pre-compute tile counts for Morton layout (unused for row-major).
+     * Declared here (after statements) to keep them const and let the compiler
+     * see them as invariant across the traversal loop — intentional exception
+     * to the project's C89-style top-of-function declaration convention. */
+    size_t const Tx = (grid->n[0] + 7u) >> 3u;
+    size_t const Ty = (grid->n[1] + 7u) >> 3u;
+
     for (;;) {
         /* Choose the axis whose next boundary crossing comes first. */
         if (tmax[0] <= tmax[1] && tmax[0] <= tmax[2])
@@ -104,7 +112,9 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         /* Clip the crossing to the end of the requested step length. */
         t_next = (tmax[axis] < ds) ? tmax[axis] : ds;
 
-        crossings[n].idx = (size_t) vox[0] + grid->n[0] * ((size_t) vox[1] + grid->n[1] * (size_t) vox[2]);
+        crossings[n].idx = (grid->tile_order == OSH_VOXEL_ORDER_MORTON8)
+                               ? osh_voxel_tile_idx((size_t) vox[0], (size_t) vox[1], (size_t) vox[2], Tx, Ty)
+                               : (size_t) vox[0] + grid->n[0] * ((size_t) vox[1] + grid->n[1] * (size_t) vox[2]);
         crossings[n].path_len = t_next - t;
         ++n;
 
