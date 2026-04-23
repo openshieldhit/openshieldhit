@@ -3,9 +3,9 @@
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 #include "apps/osh/osh_geometry_parse_keys.h"
 #include "common/osh_diag.h"

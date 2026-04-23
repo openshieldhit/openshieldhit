@@ -1,8 +1,8 @@
 #include "common/osh_voxel_order.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 static int mul_size_overflow(size_t a, size_t b, size_t *out) {
     if (!out) {

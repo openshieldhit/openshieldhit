@@ -64,8 +64,7 @@ static uint16_t const osh_voxel_m3z[8] = {0, 4, 32, 36, 256, 260, 288, 292};
  */
 static inline size_t osh_voxel_tile_idx(size_t ix, size_t iy, size_t iz, size_t Tx, size_t Ty) {
     size_t tile_id = (ix >> 3u) + Tx * ((iy >> 3u) + Ty * (iz >> 3u));
-    size_t intra =
-        (size_t) osh_voxel_m3x[ix & 7u] | (size_t) osh_voxel_m3y[iy & 7u] | (size_t) osh_voxel_m3z[iz & 7u];
+    size_t intra = (size_t) osh_voxel_m3x[ix & 7u] | (size_t) osh_voxel_m3y[iy & 7u] | (size_t) osh_voxel_m3z[iz & 7u];
     return tile_id * 512u + intra;
 }
 
