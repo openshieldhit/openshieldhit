@@ -64,7 +64,7 @@
 struct ion_step_ctx {
     /* --- Set by ion_step_setup() ----------------------------------------- */
     struct particle const *part; /* shortcut: pool->species[slot]         */
-    size_t projectile_idx;       /* index into tables->projectile_*       */
+    size_t projectile_idx;       /* index into material_rt->projectile_*  */
     size_t zone_idx;             /* caller-provided zone index            */
     size_t zone_material_idx;    /* zone->material_idx                    */
     double e0;                   /* entry total kinetic energy [MeV]      */
@@ -113,7 +113,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
                            double boundary_ds,
                            struct osh_gemca_runtime const *geom_rt,
                            struct osh_transport_context const *transport_ctx,
-                           struct osh_material_runtime const *tables);
+                           struct osh_material_runtime const *material_rt);
 
 static void ion_step_vacuum(struct ion_step_ctx *ctx);
 
@@ -121,38 +121,38 @@ static void ion_step_length(struct ion_step_ctx *ctx,
                             struct osh_particle_pool *pool,
                             size_t slot,
                             struct osh_transport_context *transport_ctx,
-                            struct osh_material_runtime const *tables);
+                            struct osh_material_runtime const *material_rt);
 
 static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
                                                   struct osh_particle_pool *pool,
                                                   size_t slot,
                                                   struct osh_gemca_runtime const *geom_rt,
                                                   struct osh_transport_context const *transport_ctx,
-                                                  struct osh_material_runtime const *tables,
+                                                  struct osh_material_runtime const *material_rt,
                                                   struct osh_rng *rng);
 
 static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                                            struct osh_particle_pool *pool,
                                            size_t slot,
-                                           struct osh_material_runtime const *tables,
+                                           struct osh_material_runtime const *material_rt,
                                            struct osh_rng *rng);
 
 static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
                                        size_t slot,
                                        struct osh_transport_context const *transport_ctx,
-                                       struct osh_scoring_runtime *scoring);
+                                       struct osh_scoring_runtime *score_rt);
 
 /* Table helpers */
 static double cutoff_total_energy(struct osh_transport_params const *params,
-                                  struct osh_material_runtime const *tables,
+                                  struct osh_material_runtime const *material_rt,
                                   struct particle const *part);
-static double energy_from_residual_range(struct osh_material_runtime const *tables,
+static double energy_from_residual_range(struct osh_material_runtime const *material_rt,
                                          size_t material_idx,
                                          size_t projectile_idx,
                                          double residual_range);
-static double energy_grid_value(struct osh_material_runtime const *tables, size_t energy_idx);
-static enum osh_status find_projectile_index(struct osh_material_runtime const *tables,
+static double energy_grid_value(struct osh_material_runtime const *material_rt, size_t energy_idx);
+static enum osh_status find_projectile_index(struct osh_material_runtime const *material_rt,
                                              struct particle const *part,
                                              size_t *projectile_idx_out);
 static int is_blackhole_material(size_t material_idx);
@@ -180,14 +180,14 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
                                            double boundary_ds,
                                            struct osh_gemca_runtime const *geom_rt,
                                            struct osh_transport_context *transport_ctx,
-                                           struct osh_material_runtime const *tables,
-                                           struct osh_scoring_runtime *scoring,
+                                           struct osh_material_runtime const *material_rt,
+                                           struct osh_scoring_runtime *score_rt,
                                            struct osh_rng *rng) {
     struct ion_step_ctx ctx;
     enum osh_status rc;
 
     /* Phase 1 — identify particle, load material, handle early exits */
-    ion_step_setup(&ctx, pool, slot, zone_idx, boundary_ds, geom_rt, transport_ctx, tables);
+    ion_step_setup(&ctx, pool, slot, zone_idx, boundary_ds, geom_rt, transport_ctx, material_rt);
     if (ctx.done)
         return ctx.done_rc;
 
@@ -196,13 +196,13 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
         ion_step_vacuum(&ctx);
     } else {
         /* Phase 2b — determine step length (boundary / CSDA / θ limits) */
-        ion_step_length(&ctx, pool, slot, transport_ctx, tables);
+        ion_step_length(&ctx, pool, slot, transport_ctx, material_rt);
         if (ctx.done)
             return ctx.done_rc;
 
         /* Phase 3 — sample random hinge; MCS scatter for physics-limited steps;
          *           clip post-hinge leg against zone boundary */
-        rc = ion_step_hinge_and_scatter(&ctx, pool, slot, geom_rt, transport_ctx, tables, rng);
+        rc = ion_step_hinge_and_scatter(&ctx, pool, slot, geom_rt, transport_ctx, material_rt, rng);
         if (rc != OSH_OK)
             return rc;
         if (ctx.done)
@@ -210,13 +210,13 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
 
         /* Phase 4 — exit energy from CSDA residual range; Bohr straggling;
          *           end-of-step MCS for boundary-limited steps */
-        ion_step_energy_and_straggling(&ctx, pool, slot, tables, rng);
+        ion_step_energy_and_straggling(&ctx, pool, slot, material_rt, rng);
         if (ctx.done)
             return ctx.done_rc;
     }
 
     /* Phase 5 — score step, update pool position/energy/direction, nudge */
-    return ion_step_commit(&ctx, pool, slot, transport_ctx, scoring);
+    return ion_step_commit(&ctx, pool, slot, transport_ctx, score_rt);
 }
 
 /* ---- Phase 1: setup ------------------------------------------------------ */
@@ -236,7 +236,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
                            double boundary_ds,
                            struct osh_gemca_runtime const *geom_rt,
                            struct osh_transport_context const *transport_ctx,
-                           struct osh_material_runtime const *tables) {
+                           struct osh_material_runtime const *material_rt) {
     struct gemca_rt_zone const *zone;
     struct osh_transport_params const *params;
     enum osh_status rc;
@@ -254,14 +254,14 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
         ctx->demin_total = (double) params->demin * ctx->a_proj;
     }
 
-    rc = find_projectile_index(tables, ctx->part, &ctx->projectile_idx);
+    rc = find_projectile_index(material_rt, ctx->part, &ctx->projectile_idx);
     if (rc != OSH_OK) {
         pool->e[slot] = 0.0; /* unknown species — kill silently */
         ctx->done = 1;
         return;
     }
 
-    ctx->cutoff = cutoff_total_energy(params, tables, ctx->part);
+    ctx->cutoff = cutoff_total_energy(params, material_rt, ctx->part);
     if (ctx->e0 <= ctx->cutoff) {
         pool->e[slot] = 0.0;
         ctx->done = 1;
@@ -283,7 +283,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
         return;
     }
 
-    if (zone->material_idx >= tables->nmaterials) {
+    if (zone->material_idx >= material_rt->nmaterials) {
         ctx->done = 1;
         ctx->done_rc = OSH_ESTATE;
         return;
@@ -305,11 +305,11 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     }
 
     /* Load material scalars used by later phases */
-    ctx->rho = (double) tables->rho[zone->material_idx];
-    ctx->mat_z_mean = (double) tables->z_mean[zone->material_idx];
-    ctx->mat_z_over_a = (double) tables->z_over_a[zone->material_idx];
-    ctx->mat_x0_gcm2 = (double) tables->rad_length[zone->material_idx];
-    ctx->proj_mass_mev = tables->projectile_mass_mev[ctx->projectile_idx];
+    ctx->rho = (double) material_rt->rho[zone->material_idx];
+    ctx->mat_z_mean = (double) material_rt->z_mean[zone->material_idx];
+    ctx->mat_z_over_a = (double) material_rt->z_over_a[zone->material_idx];
+    ctx->mat_x0_gcm2 = (double) material_rt->rad_length[zone->material_idx];
+    ctx->proj_mass_mev = material_rt->projectile_mass_mev[ctx->projectile_idx];
     ctx->enable_mcs = (params && params->mcs_mode != OSH_TRANSPORT_MCS_OFF);
     ctx->enable_straggling = (params && params->straggling_mode != OSH_TRANSPORT_STRAGGLING_OFF);
     ctx->is_vacuum = (is_vacuum_material(zone->material_idx) || ctx->rho <= 0.0);
@@ -364,7 +364,7 @@ static void ion_step_length(struct ion_step_ctx *ctx,
                             struct osh_particle_pool *pool,
                             size_t slot,
                             struct osh_transport_context *transport_ctx,
-                            struct osh_material_runtime const *tables) {
+                            struct osh_material_runtime const *material_rt) {
     struct osh_transport_params const *params;
     double target_energy_loss;
     double r1_csda;
@@ -396,10 +396,10 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         return;
     }
 
-    ctx->r0 =
-        osh_material_runtime_range_lookup(tables, ctx->zone_material_idx, ctx->projectile_idx, ctx->e0 / ctx->a_proj);
+    ctx->r0 = osh_material_runtime_range_lookup(
+        material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e0 / ctx->a_proj);
     r1_csda = osh_material_runtime_range_lookup(
-        tables, ctx->zone_material_idx, ctx->projectile_idx, ctx->e1_target / ctx->a_proj);
+        material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e1_target / ctx->a_proj);
     ds_csda = (ctx->r0 - r1_csda) / ctx->rho;
     if (ds_csda <= 0.0) {
         pool->e[slot] = 0.0;
@@ -464,7 +464,7 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
                                                   size_t slot,
                                                   struct osh_gemca_runtime const *geom_rt,
                                                   struct osh_transport_context const *transport_ctx,
-                                                  struct osh_material_runtime const *tables,
+                                                  struct osh_material_runtime const *material_rt,
                                                   struct osh_rng *rng) {
     double residual_range;
     double proposed_exit_energy;
@@ -501,7 +501,7 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
         proposed_exit_energy = ctx->e1_target;
     } else {
         proposed_exit_energy =
-            energy_from_residual_range(tables, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
+            energy_from_residual_range(material_rt, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
             * ctx->a_proj;
         if (proposed_exit_energy > ctx->e0)
             proposed_exit_energy = ctx->e0;
@@ -570,7 +570,7 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
 static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                                            struct osh_particle_pool *pool,
                                            size_t slot,
-                                           struct osh_material_runtime const *tables,
+                                           struct osh_material_runtime const *material_rt,
                                            struct osh_rng *rng) {
     double residual_range;
     double e_mid;
@@ -594,7 +594,7 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
         ctx->exit_energy = ctx->e1_target;
     } else {
         ctx->exit_energy =
-            energy_from_residual_range(tables, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
+            energy_from_residual_range(material_rt, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
             * ctx->a_proj;
         if (ctx->exit_energy > ctx->e0)
             ctx->exit_energy = ctx->e0;
@@ -652,7 +652,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
                                        size_t slot,
                                        struct osh_transport_context const *transport_ctx,
-                                       struct osh_scoring_runtime *scoring) {
+                                       struct osh_scoring_runtime *score_rt) {
     double qx;
     double qy;
     double qz;
@@ -685,7 +685,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.w[1] = ctx->w_scat[1];
     st.w[2] = ctx->w_scat[2];
 
-    rc = osh_scoring_score_step(scoring, ctx->part, &st);
+    rc = osh_scoring_score_step(score_rt, ctx->part, &st);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(transport_ctx->diag,
                         "transport: scoring rejected step rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) q=(%.17g, %.17g, "
@@ -732,7 +732,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
 /* ---- Table helpers ------------------------------------------------------- */
 
 static double cutoff_total_energy(struct osh_transport_params const *params,
-                                  struct osh_material_runtime const *tables,
+                                  struct osh_material_runtime const *material_rt,
                                   struct particle const *part) {
     double a_proj;
     double cutoff_total;
@@ -747,14 +747,14 @@ static double cutoff_total_energy(struct osh_transport_params const *params,
             cutoff_total = cutoff_from_params;
         }
     }
-    cutoff_from_transport = tables->emin * a_proj;
+    cutoff_from_transport = material_rt->emin * a_proj;
     if (cutoff_from_transport > cutoff_total) {
         cutoff_total = cutoff_from_transport;
     }
     return cutoff_total;
 }
 
-static double energy_from_residual_range(struct osh_material_runtime const *tables,
+static double energy_from_residual_range(struct osh_material_runtime const *material_rt,
                                          size_t material_idx,
                                          size_t projectile_idx,
                                          double residual_range) {
@@ -771,17 +771,18 @@ static double energy_from_residual_range(struct osh_material_runtime const *tabl
     double e_hi;
     double frac;
 
-    range_col = tables->range_csda + (material_idx * tables->nprojectiles + projectile_idx) * tables->nenergy;
+    range_col =
+        material_rt->range_csda + (material_idx * material_rt->nprojectiles + projectile_idx) * material_rt->nenergy;
 
     if (residual_range <= (double) range_col[0]) {
-        return tables->emin;
+        return material_rt->emin;
     }
-    if (residual_range >= (double) range_col[tables->nenergy - 1u]) {
-        return tables->emax;
+    if (residual_range >= (double) range_col[material_rt->nenergy - 1u]) {
+        return material_rt->emax;
     }
 
     lo = 0u;
-    hi = tables->nenergy - 1u;
+    hi = material_rt->nenergy - 1u;
     while (hi - lo > 1u) {
         mid = lo + (hi - lo) / 2u;
         if ((double) range_col[mid] <= residual_range) {
@@ -793,8 +794,8 @@ static double energy_from_residual_range(struct osh_material_runtime const *tabl
 
     r_lo = (double) range_col[lo];
     r_hi = (double) range_col[hi];
-    e_lo = energy_grid_value(tables, lo);
-    e_hi = energy_grid_value(tables, hi);
+    e_lo = energy_grid_value(material_rt, lo);
+    e_hi = energy_grid_value(material_rt, hi);
     if (r_hi <= r_lo) {
         return e_lo;
     }
@@ -802,18 +803,18 @@ static double energy_from_residual_range(struct osh_material_runtime const *tabl
     return e_lo * (1.0 - frac) + e_hi * frac;
 }
 
-static double energy_grid_value(struct osh_material_runtime const *tables, size_t energy_idx) {
-    return exp(tables->log_emin + (double) energy_idx / tables->inv_dlog);
+static double energy_grid_value(struct osh_material_runtime const *material_rt, size_t energy_idx) {
+    return exp(material_rt->log_emin + (double) energy_idx / material_rt->inv_dlog);
 }
 
-static enum osh_status find_projectile_index(struct osh_material_runtime const *tables,
+static enum osh_status find_projectile_index(struct osh_material_runtime const *material_rt,
                                              struct particle const *part,
                                              size_t *projectile_idx_out) {
     unsigned int z_match;
     unsigned int a_match;
     size_t projectile_idx;
 
-    if (!tables || !part || !projectile_idx_out) {
+    if (!material_rt || !part || !projectile_idx_out) {
         return OSH_EINVAL;
     }
     z_match = part->z;
@@ -826,13 +827,13 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
         return OSH_ENOTSUP;
     }
     projectile_idx = (size_t) (z_match - 1u);
-    if (projectile_idx >= tables->nprojectiles) {
+    if (projectile_idx >= material_rt->nprojectiles) {
         return OSH_ENOTSUP;
     }
-    if (tables->projectile_z[projectile_idx] != z_match) {
+    if (material_rt->projectile_z[projectile_idx] != z_match) {
         return OSH_ESTATE;
     }
-    if (a_match != 0u && tables->projectile_a[projectile_idx] != a_match) {
+    if (a_match != 0u && material_rt->projectile_a[projectile_idx] != a_match) {
         /* Runtime columns are keyed primarily by Z; differing isotopes share the
          * representative projectile for that Z for now. */
     }
