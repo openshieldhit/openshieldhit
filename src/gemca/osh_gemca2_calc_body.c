@@ -574,7 +574,7 @@ static enum osh_status _setup_vox(struct body *b) {
     b->ct_grid.n[0] = nx;
     b->ct_grid.n[1] = ny;
     b->ct_grid.n[2] = nz;
-    b->ct_grid.tile_order = OSH_VOXEL_ORDER_MORTON8;
+    b->ct_grid.tile_order = OSH_VOXEL_LAYOUT_DEFAULT;
 
     /* ----------- Setup translation matrix */
     /* b->t maps universe -> voxel-local (BZALIGN). Translation terms are set

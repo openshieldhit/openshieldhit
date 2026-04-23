@@ -26,6 +26,7 @@
 #include <float.h>
 #include <math.h>
 
+#include "common/osh_voxel_order.h"
 #include "common/raytrace/osh_raytrace.h"
 
 static int same_crossing(double a, double b) {
@@ -130,6 +131,10 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
     t = t_entry;
     n = 0;
 
+    /* Pre-compute tile counts for Morton layout (unused for row-major). */
+    size_t const Tx = (grid->n[0] + 7u) >> 3u;
+    size_t const Ty = (grid->n[1] + 7u) >> 3u;
+
     for (;;) {
         if (tmax[0] <= tmax[1] && tmax[0] <= tmax[2])
             axis = 0;
@@ -143,7 +148,9 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
          * grid before the full step is exhausted. */
         t_next = (tmax[axis] < t_exit) ? tmax[axis] : t_exit;
 
-        crossings[n].idx = (size_t) vox[0] + grid->n[0] * ((size_t) vox[1] + grid->n[1] * (size_t) vox[2]);
+        crossings[n].idx = (grid->tile_order == OSH_VOXEL_ORDER_MORTON8)
+                               ? osh_voxel_tile_idx((size_t) vox[0], (size_t) vox[1], (size_t) vox[2], Tx, Ty)
+                               : (size_t) vox[0] + grid->n[0] * ((size_t) vox[1] + grid->n[1] * (size_t) vox[2]);
         crossings[n].path_len = t_next - t;
         ++n;
 
