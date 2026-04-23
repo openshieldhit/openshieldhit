@@ -703,7 +703,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     double ds_i;
     double ds_gcm2_i;
     double de_i;
-    double total_de;
+    double total_de;   /* fixed: full step energy loss, used as proportionality base */
+    double seg_entry_energy; /* tracks entry energy at start of each segment */
     double seg_px;
     double seg_py;
     double seg_pz;
@@ -726,22 +727,27 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     qy = pool->y[slot] + pool->uy[slot] * ctx->h + ctx->w_scat[1] * ctx->tail_len;
     qz = pool->z[slot] + pool->uz[slot] * ctx->h + ctx->w_scat[2] * ctx->tail_len;
 
+    /* total_de is fixed here and used as the proportionality base throughout the
+     * loop.  Each segment's share de_i = total_de × (rho_i·ds_i) / ds_gcm2_total.
+     * Keeping total_de constant ensures the per-segment shares sum to total_de
+     * regardless of the number of segments or their densities.  A running
+     * seg_entry_energy separately tracks the cumulative kinetic energy. */
     total_de = ctx->e0 - ctx->exit_energy;
     if (total_de < 0.0) {
         total_de = 0.0;
     }
+    seg_entry_energy = ctx->e0;
 
     /* Score each step segment that falls within step_len.
      *
      * For single-segment steps (analytic zones) this loop executes once and is
-     * equivalent to the old single call, except the exit position uses the
-     * straight-line endpoint along u0.  For multi-segment (voxel) steps each
+     * equivalent to the old single call.  For multi-segment (voxel) steps each
      * voxel is scored individually with its own density and energy share.
      *
      * Positions are tracked along the entry direction (straight-line approximation).
      * This introduces an O(θ²·step_len) positional error at the hinge, which is
-     * ≲10⁻⁵ cm for clinical steps and is negligible compared to voxel resolution.
-     * The pool's actual exit position is always set to the correct bent-path qx/qy/qz.
+     * ≲10⁻⁵ cm for clinical steps and negligible compared to voxel resolution.
+     * The pool's actual exit position is always the correct bent-path qx/qy/qz.
      */
     remaining = ctx->step_len;
     seg_px = pool->x[slot];
@@ -752,7 +758,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
         ds_i = (ctx->step_segments[si].ds < remaining) ? ctx->step_segments[si].ds : remaining;
         remaining -= ds_i;
 
-        /* Areal density and proportional energy deposit for this segment. */
+        /* Proportional energy deposit: de_i / total_de == (rho_i·ds_i) / ds_gcm2 */
         ds_gcm2_i = ctx->step_segments[si].rho * ds_i;
         de_i = (ctx->ds_gcm2 > 0.0) ? (total_de * ds_gcm2_i / ctx->ds_gcm2) : 0.0;
 
@@ -760,26 +766,26 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                        pool,
                        slot,
                        ds_i,
-                       ctx->exit_energy + (total_de - de_i), /* entry energy for segment */
+                       seg_entry_energy - de_i, /* exit energy of this segment */
                        ctx->step_segments[si].rho,
                        (int) ctx->zone_material_idx,
                        (int) ctx->zone_idx);
-        /* Segment runs from seg_p along entry direction for ds_i */
+        /* Override positions and energy with segment-accurate values */
         st.p[0] = seg_px;
         st.p[1] = seg_py;
         st.p[2] = seg_pz;
-        st.p[3] = ctx->e0 - (total_de - de_i) * ((double) (si) / (double) ctx->n_step_segments); /* approx */
+        st.p[3] = seg_entry_energy;
         st.q[0] = seg_px + pool->ux[slot] * ds_i;
         st.q[1] = seg_py + pool->uy[slot] * ds_i;
         st.q[2] = seg_pz + pool->uz[slot] * ds_i;
-        st.q[3] = ctx->exit_energy + (total_de - de_i);
+        st.q[3] = seg_entry_energy - de_i;
         st.ds = ds_i;
         st.de = de_i;
         st.w[0] = ctx->w_scat[0];
         st.w[1] = ctx->w_scat[1];
         st.w[2] = ctx->w_scat[2];
 
-        /* For the last segment in the step, use the actual bent-path endpoint */
+        /* For the last segment snap the endpoint to the correct bent-path position */
         if (remaining <= 0.0) {
             st.q[0] = qx;
             st.q[1] = qy;
@@ -804,12 +810,11 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
             return rc;
         }
 
-        /* Advance straight-line tracking position for next segment */
+        /* Advance straight-line tracking position and cumulative energy */
         seg_px = st.q[0];
         seg_py = st.q[1];
         seg_pz = st.q[2];
-
-        total_de -= de_i;
+        seg_entry_energy -= de_i;
     }
 
     /* Write the updated particle state — always use the bent-path exit position */
