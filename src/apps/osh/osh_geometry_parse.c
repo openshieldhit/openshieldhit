@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "apps/osh/osh_geometry_parse_keys.h"
 #include "common/osh_diag.h"
@@ -33,6 +34,7 @@ static enum osh_status _parse_dcm_body(char const *args,
                                        int16_t **hu_out,
                                        size_t *n_hu_out);
 static int _ct_orientation_is_axial(struct osh_dicom_ct const *ct);
+static int _mul_size_overflow(size_t a, size_t b, size_t *out);
 
 /**
  * @brief Map a body-type key string to an OSH_GEOMETRY_BODY_* code.
@@ -360,6 +362,17 @@ static int _ct_orientation_is_axial(struct osh_dicom_ct const *ct) {
     return 1;
 }
 
+static int _mul_size_overflow(size_t a, size_t b, size_t *out) {
+    if (!out) {
+        return 1;
+    }
+    if (a != 0u && b > SIZE_MAX / a) {
+        return 1;
+    }
+    *out = a * b;
+    return 0;
+}
+
 /**
  * @brief Parse one DCM card and convert CT metadata into VOX raw parameters.
  *
@@ -544,18 +557,30 @@ static enum osh_status _parse_dcm_body(char const *args,
     par_out[12] = ty_cm - 0.5 * par_out[4];
     par_out[13] = tz_cm - 0.5 * par_out[5];
     *npar_out = 14;
-    *hu_out = (int16_t *) osh_voxel_reorder(ct.pixels,
-                                            (size_t) ct.cols,
-                                            (size_t) ct.rows,
-                                            (size_t) ct.n_slices,
-                                            sizeof(int16_t),
-                                            OSH_VOXEL_LAYOUT_DEFAULT,
-                                            n_hu_out);
-    free(ct.pixels);
-    ct.pixels = NULL;
-    if (!*hu_out) {
-        rc = OSH_ENOMEM;
-        goto done;
+    if (OSH_VOXEL_LAYOUT_DEFAULT == OSH_VOXEL_ORDER_ROW_MAJOR) {
+        size_t nxy;
+        if (_mul_size_overflow((size_t) ct.cols, (size_t) ct.rows, &nxy)
+            || _mul_size_overflow(nxy, (size_t) ct.n_slices, n_hu_out)) {
+            rc = OSH_ENOMEM;
+            goto done;
+        }
+        /* Row-major baseline: transfer ownership directly and avoid a full-volume copy. */
+        *hu_out = ct.pixels;
+        ct.pixels = NULL;
+    } else {
+        *hu_out = (int16_t *) osh_voxel_reorder(ct.pixels,
+                                                (size_t) ct.cols,
+                                                (size_t) ct.rows,
+                                                (size_t) ct.n_slices,
+                                                sizeof(int16_t),
+                                                OSH_VOXEL_LAYOUT_DEFAULT,
+                                                n_hu_out);
+        free(ct.pixels);
+        ct.pixels = NULL;
+        if (!*hu_out) {
+            rc = OSH_ENOMEM;
+            goto done;
+        }
     }
     rc = OSH_OK;
 

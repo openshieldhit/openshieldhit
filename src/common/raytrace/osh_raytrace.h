@@ -8,6 +8,9 @@
 extern "C" {
 #endif
 
+/* Default flat-index layout for grids that do not explicitly request tiling. */
+#define OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT ((uint8_t) 0u)
+
 /**
  * @brief Uniform voxel grid descriptor for raytrace traversal.
  *
@@ -20,7 +23,9 @@ extern "C" {
  *   0 (ROW_MAJOR): idx = ix + n[0]*(iy + n[1]*iz)
  *   8 (MORTON8):   8×8×8 Morton-tiled — see osh_voxel_order.h
  * The DCM/VOX loader's compiled default is OSH_VOXEL_LAYOUT_DEFAULT; callers
- * may still set grid->tile_order explicitly per grid if needed.
+ * may still set grid->tile_order explicitly per grid if needed. Other grid
+ * producers should set tile_order deterministically; use
+ * OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT for row-major grids.
  *
  * Both the CT transport grid and scoring mesh grids use this descriptor.
  * Callers construct it from their own geometry representation and pass it
@@ -30,7 +35,7 @@ struct osh_raytrace_grid {
     double origin[3];   /* position of the corner of voxel [0,0,0] [cm] */
     double spacing[3];  /* voxel size along each axis [cm] */
     size_t n[3];        /* number of voxels along each axis */
-    uint8_t tile_order; /* OSH_VOXEL_ORDER_* — controls flat index formula */
+    uint8_t tile_order; /* OSH_VOXEL_ORDER_*; default row-major via OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT */
 };
 
 /**
