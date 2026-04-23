@@ -10,6 +10,7 @@
 #include "common/osh_vect.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
+#include "gemca/runtime/osh_gemca_runtime_voxel.h"
 
 /* ---- Local constants ----------------------------------------------------- */
 
@@ -1713,18 +1714,26 @@ eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z,
             break;
 
         case GEMCA_RT_PUSH_BODY:
+            if (sp >= OSH_GEMCA_RT_MAX_STACK) {
+                *is_inside = 0;
+                return 0.0;
+            }
+            stack[sp].is_inside = in_body_rt(rt, insn->operand, r);
+            stack[sp].dist = dist_body_rt(rt, insn->operand, r);
+            sp++;
+            break;
+
         case GEMCA_RT_PUSH_VOXEL_BODY:
             if (sp >= OSH_GEMCA_RT_MAX_STACK) {
                 *is_inside = 0;
                 return 0.0;
             }
-            /*
-             * TODO: for PUSH_VOXEL_BODY and z->voxel_body_idx >= 0, dispatch to
-             * the Jacobs voxel traversal algorithm here instead of the RPP
-             * boundary distance.  Current fallback: treat as a regular body.
-             */
             stack[sp].is_inside = in_body_rt(rt, insn->operand, r);
-            stack[sp].dist = dist_body_rt(rt, insn->operand, r);
+            /* segs=NULL: CSG evaluator only needs the distance scalar.
+             * Transport calls dist_voxel_body_rt() directly with its own
+             * stack buffer (OSH_GEMCA_VOXEL_SEGS_STACK) to get per-voxel
+             * segments for energy loss and scoring (M4/M5). */
+            stack[sp].dist = dist_voxel_body_rt(rt, insn->operand, r, NULL, 0, NULL, NULL);
             sp++;
             break;
 
