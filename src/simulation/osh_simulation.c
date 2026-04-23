@@ -6,6 +6,7 @@
 #include "common/osh_diag.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "gemca/voxel/osh_gemca2_voxel_hu.h"
 #include "material/runtime/osh_material_compile.h"
 #include "openshieldhit/beam_defs.h"
 #include "openshieldhit/simulation.h"
@@ -109,6 +110,30 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 2. Geometry runtime -------------------------------------------- */
 
+    if (mat->hu_table_type != OSH_HU_TABLE_NONE) {
+        gemca->hu_bin_lut = (uint8_t *) malloc(2601u * sizeof(uint8_t));
+        gemca->hu_rho_lut = (float *) malloc(2601u * sizeof(float));
+        if (!gemca->hu_bin_lut || !gemca->hu_rho_lut) {
+            rc = OSH_ENOMEM;
+            goto fail;
+        }
+        switch (mat->hu_table_type) {
+        case OSH_HU_TABLE_SCHNEIDER:
+            osh_gemca_voxel_build_hu_lut(gemca->hu_bin_lut);
+            osh_gemca_voxel_build_rho_lut_schneider2000(gemca->hu_rho_lut);
+            break;
+        case OSH_HU_TABLE_PERMATASSARI:
+            osh_gemca_voxel_build_hu_lut_permatassari2020(gemca->hu_bin_lut);
+            osh_gemca_voxel_build_rho_lut_permatassari2020(gemca->hu_rho_lut);
+            break;
+        default:
+            free(gemca->hu_bin_lut);
+            free(gemca->hu_rho_lut);
+            gemca->hu_bin_lut = NULL;
+            gemca->hu_rho_lut = NULL;
+            break;
+        }
+    }
     rc = osh_gemca_compile(gemca, diag, &sim->geom_rt);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile geometry runtime");

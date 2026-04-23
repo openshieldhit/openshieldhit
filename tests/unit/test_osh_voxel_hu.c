@@ -162,6 +162,45 @@ static void test_permatassari_hu2rho_reference_point(void) {
     ASSERT_TRUE(osh_gemca_voxel_hu2rho_permatassari2020(-1000, 0) >= 0.0001f);
 }
 
+static void test_rho_lut_schneider_values(void) {
+    float lut[2601];
+
+    osh_gemca_voxel_build_rho_lut_schneider2000(lut);
+
+    /* air at HU=-1000: Eq.20 gives 1.03091 + 0.0010297*(-1000) ≈ 0.00121 */
+    ASSERT_TRUE(lut[(-1000) + 1000] < 0.002f);
+    ASSERT_TRUE(lut[(-1000) + 1000] > 0.0f);
+
+    /* water at HU=0: Eq.21 gives 1.018 + 0.000893*0 = 1.018 */
+    ASSERT_TRUE(lut[0 + 1000] > 0.99f && lut[0 + 1000] < 1.05f);
+
+    /* dense bone at HU=1600: Eq.24 gives 1.017 + 0.000592*1600 ≈ 1.964 */
+    ASSERT_TRUE(lut[1600 + 1000] > 1.5f);
+
+    /* LUT matches the scalar function at every point */
+    {
+        int hu;
+        for (hu = -1000; hu <= 1600; hu++) {
+            ASSERT_TRUE(lut[hu + 1000] == osh_gemca_voxel_hu2rho((int16_t) hu, 0));
+        }
+    }
+}
+
+static void test_rho_lut_permatassari_values(void) {
+    float lut[2601];
+
+    osh_gemca_voxel_build_rho_lut_permatassari2020(lut);
+
+    /* water at HU=0, bin 14: factor[14]*(1000+0) ≈ 0.998 */
+    ASSERT_TRUE(lut[0 + 1000] > 0.997f && lut[0 + 1000] < 0.999f);
+
+    /* air at HU=-1000 is clamped to >= 0.0001 */
+    ASSERT_TRUE(lut[(-1000) + 1000] >= 0.0001f);
+
+    /* dense bone at HU=1600 should have density > 1.5 */
+    ASSERT_TRUE(lut[1600 + 1000] > 1.5f);
+}
+
 static void test_permatassari_registration_count(void) {
     struct osh_material_workspace *wm = NULL;
     enum osh_status rc;
@@ -222,5 +261,7 @@ int main(void) {
     test_permatassari_hu2rho_reference_point();
     test_permatassari_registration_count();
     test_permatassari_registration_names_and_properties();
+    test_rho_lut_schneider_values();
+    test_rho_lut_permatassari_values();
     return 0;
 }

@@ -40,6 +40,8 @@ enum osh_status osh_gemca_prepared_free(struct osh_gemca_prepared *wg) {
     }
     free((void *) wg->zones);
 
+    free(wg->hu_bin_lut);
+    free(wg->hu_rho_lut);
     free(wg->filename);
     free(wg);
     return OSH_OK;
