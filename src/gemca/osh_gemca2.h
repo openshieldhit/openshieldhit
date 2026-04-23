@@ -2,6 +2,7 @@
 #define _OSH_GEMCA2
 
 #include <float.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 

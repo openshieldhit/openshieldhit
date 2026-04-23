@@ -7,8 +7,7 @@
 void test_dot_product(void) {
     double a[OSH_VECT_DIM] = {1.0, 2.0, 3.0};
     double b[OSH_VECT_DIM] = {4.0, -5.0, 6.0};
-    double result = osh_vect_dot(a, b);
-    assert(fabs(result - (1 * 4 + 2 * (-5) + 3 * 6)) < OSH_VECT_EPS);
+    assert(fabs(osh_vect_dot(a, b) - (1 * 4 + 2 * (-5) + 3 * 6)) < OSH_VECT_EPS);
 }
 
 void test_cross_product(void) {
@@ -22,17 +21,13 @@ void test_cross_product(void) {
 }
 
 void test_norm(void) {
-    double len2_after;
     double u[OSH_VECT_DIM] = {3.0, 4.0, 0.0};
     double v[OSH_VECT_DIM];
-
-    double len2_before = osh_vect_len2(u);
-    assert(fabs(len2_before - 25.0) < OSH_VECT_EPS); /* 3**2 + 4**2 = 25 */
+    assert(fabs(osh_vect_len2(u) - 25.0) < OSH_VECT_EPS); /* 3**2 + 4**2 = 25 */
 
     osh_vect_norm2(u, v); /* normalize u into v */
 
-    len2_after = osh_vect_len2(v);
-    assert(fabs(len2_after - 1.0) < OSH_VECT_EPS); /* should be unit vector */
+    assert(fabs(osh_vect_len2(v) - 1.0) < OSH_VECT_EPS); /* should be unit vector */
 }
 
 void test_affine_bzalign_transform(void) {

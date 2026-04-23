@@ -1163,6 +1163,8 @@ static enum osh_status setup_hu_luts(struct osh_gemca_prepared const *wg, struct
     }
     rt->hu_rho_lut = (float *) malloc(2601u * sizeof(float));
     if (!rt->hu_rho_lut) {
+        free(rt->hu_bin_lut);
+        rt->hu_bin_lut = NULL;
         return OSH_ENOMEM;
     }
 

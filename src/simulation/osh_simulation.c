@@ -110,10 +110,19 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 2. Geometry runtime -------------------------------------------- */
 
+    free(gemca->hu_bin_lut);
+    free(gemca->hu_rho_lut);
+    gemca->hu_bin_lut = NULL;
+    gemca->hu_rho_lut = NULL;
+
     if (mat->hu_table_type != OSH_HU_TABLE_NONE) {
         gemca->hu_bin_lut = (uint8_t *) malloc(2601u * sizeof(uint8_t));
         gemca->hu_rho_lut = (float *) malloc(2601u * sizeof(float));
         if (!gemca->hu_bin_lut || !gemca->hu_rho_lut) {
+            free(gemca->hu_bin_lut);
+            free(gemca->hu_rho_lut);
+            gemca->hu_bin_lut = NULL;
+            gemca->hu_rho_lut = NULL;
             rc = OSH_ENOMEM;
             goto fail;
         }
@@ -127,11 +136,13 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
             osh_gemca_voxel_build_rho_lut_permatassari2020(gemca->hu_rho_lut);
             break;
         default:
+            OSH_DIAG_ERRORF(diag, "simulation: unsupported HU table type '%d'", (int) mat->hu_table_type);
             free(gemca->hu_bin_lut);
             free(gemca->hu_rho_lut);
             gemca->hu_bin_lut = NULL;
             gemca->hu_rho_lut = NULL;
-            break;
+            rc = OSH_EINVAL;
+            goto fail;
         }
     }
     rc = osh_gemca_compile(gemca, diag, &sim->geom_rt);
