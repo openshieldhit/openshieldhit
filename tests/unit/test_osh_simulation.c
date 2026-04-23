@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
+#include "gemca/osh_gemca2.h"
+#include "gemca/osh_gemca2_defines.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/material.h"
 #include "openshieldhit/scoring.h"
@@ -164,6 +166,65 @@ static void test_create_free_lifecycle(void) {
     osh_scoring_workspace_free(scoring);
 }
 
+static void test_create_rejects_voxel_geometry_without_hutable(void) {
+    char beam_path[512];
+    char mat_path[256];
+    char scoring_path[512];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+    struct osh_gemca_prepared *prepared = NULL;
+    struct body *body = NULL;
+    struct zone *zone = NULL;
+    enum osh_status rc;
+
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/00_minimal/beam.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(scoring_path, sizeof(scoring_path), "%s/tests/cases/00_minimal/detect.dat", OSH_PROJECT_SOURCE_DIR);
+    write_temp_file(mat_path,
+                    sizeof(mat_path),
+                    "MATERIAL Water\n"
+                    "  ICRU 276\n");
+
+    ASSERT_TRUE(osh_geometry_workspace_create(&geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
+
+    prepared = (struct osh_gemca_prepared *) calloc(1, sizeof(*prepared));
+    body = (struct body *) calloc(1, sizeof(*body));
+    zone = (struct zone *) calloc(1, sizeof(*zone));
+    ASSERT_TRUE(prepared != NULL);
+    ASSERT_TRUE(body != NULL);
+    ASSERT_TRUE(zone != NULL);
+
+    prepared->bodies = (struct body **) calloc(1u, sizeof(*prepared->bodies));
+    prepared->zones = (struct zone **) calloc(1u, sizeof(*prepared->zones));
+    ASSERT_TRUE(prepared->bodies != NULL);
+    ASSERT_TRUE(prepared->zones != NULL);
+
+    body->type = OSH_GEMCA_BODY_VOX;
+    zone->material_name = strdup("Water");
+    ASSERT_TRUE(zone->material_name != NULL);
+
+    prepared->bodies[0] = body;
+    prepared->zones[0] = zone;
+    prepared->nbodies = 1u;
+    prepared->nzones = 1u;
+    geo->prepared = prepared;
+
+    rc = osh_simulation_create(beam, geo, mat, scoring, NULL, &sim);
+    ASSERT_TRUE(rc == OSH_EPARSE);
+    ASSERT_TRUE(sim == NULL);
+
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+    remove(mat_path);
+}
+
 /* ---- Entry point --------------------------------------------------------- */
 
 int main(void) {
@@ -171,5 +232,6 @@ int main(void) {
     test_create_rejects_unprepared_geometry();
     test_create_rejects_unknown_zone_material();
     test_create_free_lifecycle();
+    test_create_rejects_voxel_geometry_without_hutable();
     return 0;
 }

@@ -86,7 +86,6 @@ static enum osh_status material_push_element(struct osh_diag_sink const *diag,
                                              double mass_fraction);
 static enum osh_status copy_string(char **dst, char const *src);
 static enum osh_status parse_state_value(int *state_out, char const *token);
-static int is_matdat_path(char const *path);
 
 struct material_dispatch_entry {
     char const *key;
@@ -230,17 +229,6 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
             free(line);
             return OSH_EPARSE;
         }
-    }
-
-    /* Backward-compatibility: legacy mat.dat files have no HUTABLE card.
-     * Auto-register Schneider2000 so existing simulations keep working without
-     * modification.  An explicit HUTABLE card overrides this. */
-    if (!hutable_seen && is_matdat_path(oshf->filename)) {
-        rc = osh_gemca_voxel_register_schneider_materials(wm);
-        if (rc != OSH_OK) {
-            return rc;
-        }
-        wm->hu_table_type = OSH_HU_TABLE_SCHNEIDER;
     }
 
     return OSH_OK;
@@ -1104,36 +1092,4 @@ static enum osh_status parse_state_value(int *state_out, char const *token) {
     }
 
     return OSH_EPARSE;
-}
-
-static int is_matdat_path(char const *path) {
-    char const *base;
-    char const *pattern;
-    size_t i;
-
-    if (!path) {
-        return 0;
-    }
-
-    base = path;
-    while (*path) {
-        if (*path == '/' || *path == '\\') {
-            base = path + 1;
-        }
-        path++;
-    }
-
-    pattern = "mat.dat";
-    i = 0u;
-    while (pattern[i] != '\0') {
-        if (base[i] == '\0') {
-            return 0;
-        }
-        if ((char) tolower((unsigned char) base[i]) != pattern[i]) {
-            return 0;
-        }
-        i++;
-    }
-
-    return base[i] == '\0';
 }
