@@ -1,5 +1,6 @@
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
 
+#include <assert.h>
 #include <stddef.h>
 
 #include "common/osh_ray.h"
@@ -34,6 +35,7 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
     struct gemca_rt_body const *body;
     struct osh_voxel_crossing crossings[_CROSSINGS_CAP];
     struct ray r_local;
+    size_t crossings_needed;
     size_t n_crossings;
     size_t i;
     size_t n_segs;
@@ -49,11 +51,26 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
         *bin_out = -1;
     }
 
+    /* A valid voxel transport runtime must provide both LUTs. */
+    assert(rt->hu_bin_lut && rt->hu_rho_lut);
     if (!rt->hu_bin_lut || !rt->hu_rho_lut) {
         return OSH_GEMCA_INFINITY;
     }
 
     body = &rt->bodies[body_idx];
+
+    /* osh_raytrace_traverse() requires capacity >= n[0] + n[1] + n[2]. */
+    crossings_needed = body->ct_grid.n[0];
+    if (crossings_needed > _CROSSINGS_CAP) {
+        return OSH_GEMCA_INFINITY;
+    }
+    if (body->ct_grid.n[1] > _CROSSINGS_CAP - crossings_needed) {
+        return OSH_GEMCA_INFINITY;
+    }
+    crossings_needed += body->ct_grid.n[1];
+    if (body->ct_grid.n[2] > _CROSSINGS_CAP - crossings_needed) {
+        return OSH_GEMCA_INFINITY;
+    }
 
     /* Transform ray into body-local frame where ct_grid is defined. */
     osh_ray_transform(r, &r_local, body->t);
