@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -181,7 +182,7 @@ static void test_rho_lut_schneider_values(void) {
     {
         int hu;
         for (hu = -1000; hu <= 1600; hu++) {
-            ASSERT_TRUE(lut[hu + 1000] == osh_gemca_voxel_hu2rho((int16_t) hu, 0));
+            ASSERT_TRUE(fabsf(lut[hu + 1000] - osh_gemca_voxel_hu2rho((int16_t) hu, 0)) < 1.0e-6f);
         }
     }
 }

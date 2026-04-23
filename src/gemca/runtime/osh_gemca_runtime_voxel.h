@@ -38,6 +38,11 @@ struct gemca_rt_voxel_segment {
  *   - grid exit
  *   - segs_cap reached (acts as a step-length limiter; transport re-enters)
  *
+ * Precondition: the compiled runtime must provide both `hu_bin_lut` and
+ * `hu_rho_lut` for voxel transport. A debug build asserts this invariant.
+ * Release builds return `OSH_GEMCA_INFINITY` defensively if the LUTs are
+ * missing.
+ *
  * segs and segs_cap may be NULL/0 for callers that only need the distance
  * (e.g. the CSG distance evaluator).  n_out and bin_out may also be NULL.
  *
@@ -48,7 +53,7 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
                           struct ray const *r,
                           struct gemca_rt_voxel_segment *segs, /* caller-owned; may be NULL */
                           size_t segs_cap,                     /* 0 if segs is NULL */
-                          size_t *n_out,                       /* segments written; may be NULL */
-                          int *bin_out);                       /* material bin for all segments; may be NULL */
+                          size_t *n_out, /* voxel crossings traversed; may exceed segs_cap; may be NULL */
+                          int *bin_out); /* material bin for all segments; may be NULL */
 
 #endif /* OSH_GEMCA_RUNTIME_VOXEL_H */

@@ -7,6 +7,7 @@
 #include "common/osh_coord.h"
 #include "common/osh_ray.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
 #include "gemca/voxel/osh_gemca2_voxel_hu.h"
@@ -44,7 +45,7 @@ static void build_runtime(struct osh_gemca_runtime *rt, struct gemca_rt_body *bo
     body->ct_grid.n[1] = GRID_N;
     body->ct_grid.n[2] = GRID_N;
     body->ct_grid.tile_order = 0; /* row-major */
-    body->type = 5;               /* OSH_GEMCA_BODY_VOX */
+    body->type = OSH_GEMCA_BODY_VOX;
 
     for (i = 0; i < n_vox; i++) {
         hu[i] = 0; /* default: water-ish, bin 5 */
@@ -91,7 +92,12 @@ static void test_ray_misses_returns_infinity(void) {
     r.p[1] = 10.0; /* far outside */
 
     ds = dist_voxel_body_rt(&rt, 0, &r, segs, 16, &n_segs, &bin);
-    ASSERT_TRUE(ds >= 1e200);
+    if (isinf(OSH_GEMCA_INFINITY)) {
+        ASSERT_TRUE(isinf(ds));
+        ASSERT_TRUE(ds > 0.0);
+    } else {
+        ASSERT_TRUE(ds == OSH_GEMCA_INFINITY);
+    }
     ASSERT_TRUE(n_segs == 0);
     ASSERT_TRUE(bin == -1);
 }
@@ -192,6 +198,34 @@ static void test_null_segs_distance_only(void) {
     ASSERT_TRUE(fabs(ds - 3.0) < 1e-9);
 }
 
+static void test_oversized_grid_returns_infinity(void) {
+    struct osh_gemca_runtime rt;
+    struct gemca_rt_body body;
+    int16_t hu[GRID_N * GRID_N * GRID_N];
+    struct gemca_rt_voxel_segment segs[16];
+    struct ray r;
+    size_t n_segs;
+    int bin;
+    double ds;
+
+    build_runtime(&rt, &body, hu, GRID_N_VOX);
+    body.ct_grid.n[0] = 1024u;
+    body.ct_grid.n[1] = 1024u;
+    body.ct_grid.n[2] = 1024u; /* 3072 crossings required > _CROSSINGS_CAP */
+
+    r = make_x_ray();
+    ds = dist_voxel_body_rt(&rt, 0, &r, segs, 16, &n_segs, &bin);
+
+    if (isinf(OSH_GEMCA_INFINITY)) {
+        ASSERT_TRUE(isinf(ds));
+        ASSERT_TRUE(ds > 0.0);
+    } else {
+        ASSERT_TRUE(ds == OSH_GEMCA_INFINITY);
+    }
+    ASSERT_TRUE(n_segs == 0);
+    ASSERT_TRUE(bin == -1);
+}
+
 static void test_rho_matches_lut(void) {
     struct osh_gemca_runtime rt;
     struct gemca_rt_body body;
@@ -225,6 +259,7 @@ int main(void) {
     test_bin_change_stops_traversal();
     test_segs_cap_limits_output();
     test_null_segs_distance_only();
+    test_oversized_grid_returns_infinity();
     test_rho_matches_lut();
     return 0;
 }
