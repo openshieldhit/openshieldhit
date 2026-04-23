@@ -328,6 +328,12 @@ Verify: row-major baseline unchanged (`tile_order=0`); Morton round-trip correct
 
 Status: complete on this branch.
 
+Note: this is now considered a transitional ownership choice. The longer-term
+design target for M5+ is to keep GEMCA geometry-only and move HU→rho/property
+resolution into `material/runtime`, with GEMCA returning geometric medium
+identity (`zone_idx`, `material_idx`, optional `hu`) rather than physical
+material properties directly.
+
 **Result:** both runtime LUTs are now available in the hot path:
 
 ```c
@@ -384,43 +390,93 @@ Verify:
 
 ---
 
-### M5 — Unified `segs[]` in the transport kernel
-**Goal:** Integrate the `segs[]` list from M4 into `osh_transport_ion_step_one()` with a single dispatch branch, keeping the existing zone-stepping path entirely unchanged.
+### M5 — Transport-facing medium query, with GEMCA/material separation
+**Goal:** Finish voxel transport without leaking voxel-specific decisions into
+`transport/`. GEMCA remains geometry-only; `material/runtime` owns all physical
+property lookup (density, CSDA/range interpretation, radiation length, etc.).
 
-Status: not started (depends on M4).
+Status: redesign in progress (replaces the earlier unified `segs[]` plan).
 
-**Current direction:** keep one branch in `ion_step_setup()` on `zone->voxel_body_idx >= 0` and make the later phases consume a unified `segs[]` view:
+**Revised direction:**
 
-- analytic zone: wrap `boundary_ds` as one segment with `rho = tables->rho[material_idx]`
-- voxel zone: call `dist_voxel_body_rt()` and receive `{ds, rho}` directly per voxel crossing
+- GEMCA should answer geometry questions only:
+  - current `zone_idx`
+  - current `material_idx`
+  - optional current `hu`
+  - distance to the next geometric discontinuity relevant for the current step
+- transport remains a client of both GEMCA and `material/runtime`
+- `material/runtime` resolves the physical properties from the GEMCA return
+  value:
+  - nominal density for analytic zones
+  - HU→rho and any future HU-dependent property override for voxel zones
+  - stopping/range/radiation-length data keyed by `material_idx`
 
-The wavefront batch distance query is kept unchanged. For voxel particles its result is redundant (Jacobs already ran inside the step without segs during the batch call); eliminating this waste is a future wavefront optimization.
+**Key rule:** GEMCA must not depend on `material_rt`. The ownership boundary is:
 
-Physics notes for the next design pass:
-- **Step length (2b):** the voxel path still needs a clear transport limit contract versus the generic zone-boundary distance path.
-- **Step clipping:** after choosing the actual step, walk `segs[]` until the accumulated `ds` reaches that step and trim the final partial segment in-place.
-- **Effective areal density:** use `effective_ds_gcm2 = Σ(segs[i].rho * segs[i].ds)` over the traversed prefix.
-- **Energy loss / scoring:** use mass stopping power times local density, i.e. `S_mass(E) * rho_i`, per traversed segment.
-- **Straggling:** one call with the summed `effective_ds_gcm2` remains the intended model.
-- **Re-entry semantics:** whether M5 needs an explicit voxel-stop enum or can infer the needed behavior from `n_segs`, `segs_cap`, and the returned distance is still open and should be decided together with the transport integration.
+- GEMCA: geometry, voxel traversal, zone/material identity, optional HU sample
+- material/runtime: density/property lookup from `(material_idx, has_hu, hu)`
+- transport: combines the two to perform stepping physics
 
-Files:
-- `src/transport/osh_transport_ion_step.c`:
-  - Add `segs[OSH_GEMCA_VOXEL_SEGS_STACK]`, `n_segs`, and the voxel-step limit state to `struct ion_step_ctx`
-  - Update `ion_step_setup()` with the single voxel/non-voxel dispatch branch
-  - Update `ion_step_length()` to use the unified geometry limit
-  - Add segment-clipping step after step-length determination
-  - Update `ion_step_energy_and_straggling()` to compute and use `effective_ds_gcm2`
-  - Update `ion_step_commit()` to loop over traversed segments for scoring
+**Working model for now:** transport treats each voxel like a zone. One step sees
+exactly one current medium value (`rho` at the current point), not a segment
+list spanning multiple voxels. This is the simplest pipeline that still leaves
+room for future batch/SIMD work.
 
-Verify: two-tissue phantom (bone + soft tissue); WEPL matches analytical expectation. Variable-density single-material phantom: straggling width matches `sqrt(K · Σ ρ_i·ds_i)`. Non-voxel geometry: zero performance regression (n_segs=1, scoring called once).
+**Planned transport-facing data shape (name TBD):**
+
+```c
+struct osh_medium_ref {
+    size_t zone_idx;
+    size_t material_idx;
+    char has_hu;
+    int16_t hu;
+};
+```
+
+Interpretation:
+- analytic zone: `has_hu = 0`, `material_idx = zone material`
+- voxel zone: `has_hu = 1`, `material_idx = voxel-bin material`,
+  `hu = current voxel HU`
+
+Then `material/runtime` provides scalar and later batched lookup helpers such as:
+- density from `osh_medium_ref`
+- CSDA/range lookup from `osh_medium_ref`
+- radiation length / `Z_mean` / `Z/A` from `osh_medium_ref`
+
+This keeps the future batch path natural: GEMCA can return `N` medium refs for
+`N` particles, and material/runtime can evaluate `N` densities / ranges /
+scattering properties without transport branching on voxel-ness.
+
+**Immediate cleanup targets:**
+- Remove the voxel/non-voxel branch from `src/transport/osh_transport_ion.c`
+- Remove direct transport calls to `dist_voxel_body_rt()`
+- Keep only one transport-visible geometry query at the GEMCA runtime layer for
+  the current-step medium/boundary information
+- Rename the voxel helper eventually: it is really a zone/medium query helper,
+  not a transport-facing “body distance” API
+- Replace the `n_step_segments == 0` fallback-to-vacuum path with a relookup /
+  no-step outcome
+
+**Physics policy for the basic M5 pipeline:**
+- one current `rho` per step (the value at the entry point/current voxel)
+- CSDA and straggling use that one `rho`
+- if MCS remains enabled in voxel steps, the post-hinge tail must clip to the
+  current voxel exit, not the whole same-bin zone
+- more advanced multi-voxel / integrated-density algorithms are deferred until
+  the ownership boundary is stable
+
+Verify:
+- voxel step uses the current voxel’s HU/rho only
+- leaving a voxel volume triggers a clean relookup, not fake vacuum transport
+- non-voxel transport remains unchanged
+- transport has no voxel-specific knowledge; voxel handling stays entirely inside GEMCA/material
 
 ---
 
 ### M6 — RTDOSE scoring geometry (`OSH_SCORING_GEO_VOXEL`)
 **Goal:** Wire up `OSH_SCORING_GEO_VOXEL` (already in enum as type 4) to score onto RTDOSE grid via Jacobs raytrace with per-voxel density weighting.
 
-Status: not started (depends on M4/M5).
+Status: not started (depends on the revised M5 ownership split).
 
 Files:
 - `include/openshieldhit/scoring.h` — add `char *rtdose_path` to `struct osh_scoring_geometry_def` (for `kind == "Voxel"`)
@@ -431,17 +487,20 @@ Files:
   double transform[16];           /* same rotation as DCM body */
   ```
 - `src/scoring/runtime/osh_scoring_step.c` — new branch for `OSH_SCORING_GEO_VOXEL`:
-  - Receives the `segs[]` list produced by `dist_voxel_body_rt()` (same buffer, no second Jacobs call)
-  - For each segment `(ds_i, rho_i)`: intersect against the RTDOSE grid (1D interval scan along the ray)
-  - Accumulate dose per RTDOSE bin weighted by `rho_i × sub_ds_j`
-  - `rho_i` is constant within each segment so sub-stepping is always exact
+  - Basic M5-compatible version: score one current voxel step at a time
+  - Later extension: accept a batched/current-step medium representation rather
+    than calling voxel traversal from scoring
+  - Intersect the current transport step against the RTDOSE grid (1D interval
+    scan along the ray)
+  - Accumulate dose per RTDOSE bin weighted by local `rho × sub_ds`
 - `src/scoring/runtime/osh_scoring_compile.c` — populate `rtdose_grid` and `transform` from `osh_dicom_rtdose` struct; handle non-uniform z (frame_offsets array): treat as uniform if spacing is constant, otherwise use linear search for z-bin
 - `src/apps/osh/osh_scoring_parse_geometry.c` — parse `Voxel /path/to/rtdose.dcm` keyword; store path in `geometry_def.rtdose_path`
 - `src/apps/osh/osh_app_osh.c` — read RTDOSE via `osh_dicom_rtdose_read`, pass pointer into scoring compile
 
 Coordinate dependency: RTDOSE lives in the same IEC beam frame as the CT body. The rotation matrix from the DCM body's `t[]` is shared — pass it to the scoring geometry runtime at compile time (store on cold geometry or retrieve from the geometry workspace).
 
-Verify: known pencil-beam traversal; scored dose distribution matches analytical WEPL integral.
+Verify: known pencil-beam traversal; scored dose distribution matches
+analytical WEPL integral.
 
 ---
 
@@ -488,7 +547,11 @@ M1 and M2 are independent and can start in parallel on sub-branches.
 
 1. **Shared transform matrix between geometry and scoring**: Store `double vox_matrix[16]` on the cold `struct body`; pass it to scoring compile step via the app orchestration layer, not via a separate cold scoring struct.
 
-2. **LUT storage for hot path**: `uint8_t hu_bin_lut[2601]` and `float hu_rho_lut[2601]` live on `osh_gemca_runtime` (owned, freed by `osh_gemca_runtime_free()`). Built during `osh_gemca_compile()` from the registered HU table; NULL for non-VOX runs. See M3c for implementation details.
+2. **Transitional LUT storage for hot path**: `uint8_t hu_bin_lut[2601]` and
+   `float hu_rho_lut[2601]` currently live on `osh_gemca_runtime` (owned, freed
+   by `osh_gemca_runtime_free()`). This is good enough for M3c/M4, but the
+   target M5+ architecture is to move HU→rho/property resolution into
+   `material/runtime` and keep GEMCA geometry-only.
 
 ---
 

@@ -64,21 +64,16 @@
  */
 struct ion_step_ctx {
     /* --- Set by ion_step_setup() ----------------------------------------- */
-    struct particle const *part;                  /* shortcut: pool->species[slot]        */
-    struct osh_step_segment const *step_segments; /* caller-owned segment list        */
-    size_t n_step_segments;                       /* number of segments in the list       */
-    size_t projectile_idx;                        /* index into material_rt->projectile_* */
-    size_t zone_idx;                              /* caller-provided zone index           */
-    size_t zone_material_idx;                     /* zone->material_idx                   */
-    double e0;                                    /* entry total kinetic energy [MeV]     */
-    double a_proj;                                /* mass number (float cast, ≥ 1)        */
-    double cutoff;                                /* energy cutoff for this particle [MeV]*/
-    double demin_total;                           /* minimum energy loss per step [MeV]   */
-    double boundary_ds;                           /* Σ(segment.ds): total distance to zone boundary [cm]       */
-    double rho;                                   /* effective density = Σ(rho_i·ds_i)/boundary_ds [g/cm³];
-                                                   * used for step-length and MCS calculations where a single
-                                                   * scalar density is needed.  Energy-loss uses the exact
-                                                   * per-segment sum in ion_step_energy_and_straggling().      */
+    struct particle const *part;     /* shortcut: pool->species[slot]        */
+    size_t projectile_idx;          /* index into material_rt->projectile_* */
+    size_t zone_idx;                /* caller-provided zone index           */
+    size_t zone_material_idx;       /* zone->material_idx                   */
+    double e0;                      /* entry total kinetic energy [MeV]     */
+    double a_proj;                  /* mass number (float cast, ≥ 1)        */
+    double cutoff;                  /* energy cutoff for this particle [MeV]*/
+    double demin_total;             /* minimum energy loss per step [MeV]   */
+    double boundary_ds;             /* distance to zone boundary [cm]       */
+    double rho;                     /* segment density [g/cm³]              */
     double mat_z_mean;
     double mat_z_over_a;
     double mat_x0_gcm2;
@@ -248,9 +243,6 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
                            struct osh_material_runtime const *material_rt) {
     struct gemca_rt_zone const *zone;
     struct osh_transport_params const *params;
-    size_t si;
-    double ds_total;
-    double ds_gcm2_total;
     enum osh_status rc;
 
     params = transport_ctx ? &transport_ctx->params : NULL;
@@ -260,23 +252,10 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->a_proj = (ctx->part->a > 0u) ? (double) ctx->part->a : 1.0;
     ctx->e0 = pool->e[slot];
     ctx->zone_idx = zone_idx;
-    ctx->step_segments = step_segments;
-    ctx->n_step_segments = n_step_segments;
     ctx->demin_total = 0.0;
 
-    /* Derive boundary_ds and effective density from the segment list. */
-    ds_total = 0.0;
-    ds_gcm2_total = 0.0;
-    for (si = 0; si < n_step_segments; si++) {
-        ds_total += step_segments[si].ds;
-        ds_gcm2_total += step_segments[si].rho * step_segments[si].ds;
-    }
-    ctx->boundary_ds = ds_total;
-    /* Effective density for step-length and MCS calculations.
-     * For a single segment this equals the segment density exactly.
-     * For multiple voxel segments it is the path-length-weighted mean,
-     * which gives the correct ds_csda = (r0 - r1) / rho_eff on average. */
-    ctx->rho = (ds_total > 0.0) ? (ds_gcm2_total / ds_total) : 0.0;
+    ctx->boundary_ds = (n_step_segments > 0u) ? step_segments[0].ds : 0.0;
+    ctx->rho = (n_step_segments > 0u) ? step_segments[0].rho : 0.0;
     if (params && params->demin > 0.0f) {
         ctx->demin_total = (double) params->demin * ctx->a_proj;
     }
@@ -427,6 +406,7 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e0 / ctx->a_proj);
     r1_csda = osh_material_runtime_range_lookup(
         material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e1_target / ctx->a_proj);
+
     ds_csda = (ctx->r0 - r1_csda) / ctx->rho;
     if (ds_csda <= 0.0) {
         pool->e[slot] = 0.0;
@@ -434,7 +414,6 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         return;
     }
 
-    /* MCS substep criterion evaluated at entry energy */
     if (ctx->enable_mcs) {
         z_eff_0 = osh_physics_bethe_z_eff(ctx->e0 / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
         ds_theta = osh_physics_moliere_s_theta(
@@ -516,7 +495,8 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
     ctx->h = ctx->preclip_step_len * osh_rng_double(rng);
     ctx->tail_len = ctx->preclip_step_len - ctx->h;
 
-    residual_range = ctx->r0 - ctx->rho * ctx->preclip_step_len;
+    proposed_ds_gcm2 = ctx->rho * ctx->preclip_step_len;
+    residual_range = ctx->r0 - proposed_ds_gcm2;
     if (residual_range <= 0.0) {
         pool->e[slot] = 0.0;
         ctx->done = 1;
@@ -538,7 +518,6 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
 
     e_mid = 0.5 * (ctx->e0 + proposed_exit_energy);
     z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
-    proposed_ds_gcm2 = ctx->rho * ctx->preclip_step_len;
 
     if (ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
         theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, proposed_ds_gcm2, ctx->mat_x0_gcm2);
@@ -605,20 +584,8 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     double sigma_strag;
     double theta0;
     double v_in[3];
-    double remaining;
-    double ds_i;
-    size_t si;
 
-    /* Accumulate actual areal density from per-segment densities, clipping at
-     * step_len.  For a single analytic segment this is identical to rho*step_len.
-     * For voxel zones the per-voxel densities differ so we must sum them. */
-    ctx->ds_gcm2 = 0.0;
-    remaining = ctx->step_len;
-    for (si = 0; si < ctx->n_step_segments && remaining > 0.0; si++) {
-        ds_i = (ctx->step_segments[si].ds < remaining) ? ctx->step_segments[si].ds : remaining;
-        ctx->ds_gcm2 += ctx->step_segments[si].rho * ds_i;
-        remaining -= ds_i;
-    }
+    ctx->ds_gcm2 = ctx->rho * ctx->step_len;
 
     residual_range = ctx->r0 - ctx->ds_gcm2;
     if (residual_range <= 0.0) {
@@ -698,16 +665,6 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     double qz;
     struct step st;
     enum osh_status rc;
-    size_t si;
-    double remaining;
-    double ds_i;
-    double ds_gcm2_i;
-    double de_i;
-    double total_de;   /* fixed: full step energy loss, used as proportionality base */
-    double seg_entry_energy; /* tracks entry energy at start of each segment */
-    double seg_px;
-    double seg_py;
-    double seg_pz;
 
     if (ctx->step_len <= 0.0) {
         /* Zero-length step: update direction only, then nudge if at a boundary */
@@ -727,94 +684,30 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     qy = pool->y[slot] + pool->uy[slot] * ctx->h + ctx->w_scat[1] * ctx->tail_len;
     qz = pool->z[slot] + pool->uz[slot] * ctx->h + ctx->w_scat[2] * ctx->tail_len;
 
-    /* total_de is fixed here and used as the proportionality base throughout the
-     * loop.  Each segment's share de_i = total_de × (rho_i·ds_i) / ds_gcm2_total.
-     * Keeping total_de constant ensures the per-segment shares sum to total_de
-     * regardless of the number of segments or their densities.  A running
-     * seg_entry_energy separately tracks the cumulative kinetic energy. */
-    total_de = ctx->e0 - ctx->exit_energy;
-    if (total_de < 0.0) {
-        total_de = 0.0;
-    }
-    seg_entry_energy = ctx->e0;
+    step_from_pool(&st, pool, slot, ctx->step_len, ctx->exit_energy, ctx->rho,
+                   (int) ctx->zone_material_idx, (int) ctx->zone_idx);
+    st.q[0] = qx;
+    st.q[1] = qy;
+    st.q[2] = qz;
+    st.q[3] = ctx->exit_energy;
+    st.w[0] = ctx->w_scat[0];
+    st.w[1] = ctx->w_scat[1];
+    st.w[2] = ctx->w_scat[2];
 
-    /* Score each step segment that falls within step_len.
-     *
-     * For single-segment steps (analytic zones) this loop executes once and is
-     * equivalent to the old single call.  For multi-segment (voxel) steps each
-     * voxel is scored individually with its own density and energy share.
-     *
-     * Positions are tracked along the entry direction (straight-line approximation).
-     * This introduces an O(θ²·step_len) positional error at the hinge, which is
-     * ≲10⁻⁵ cm for clinical steps and negligible compared to voxel resolution.
-     * The pool's actual exit position is always the correct bent-path qx/qy/qz.
-     */
-    remaining = ctx->step_len;
-    seg_px = pool->x[slot];
-    seg_py = pool->y[slot];
-    seg_pz = pool->z[slot];
-
-    for (si = 0; si < ctx->n_step_segments && remaining > 0.0; si++) {
-        ds_i = (ctx->step_segments[si].ds < remaining) ? ctx->step_segments[si].ds : remaining;
-        remaining -= ds_i;
-
-        /* Proportional energy deposit: de_i / total_de == (rho_i·ds_i) / ds_gcm2 */
-        ds_gcm2_i = ctx->step_segments[si].rho * ds_i;
-        de_i = (ctx->ds_gcm2 > 0.0) ? (total_de * ds_gcm2_i / ctx->ds_gcm2) : 0.0;
-
-        step_from_pool(&st,
-                       pool,
-                       slot,
-                       ds_i,
-                       seg_entry_energy - de_i, /* exit energy of this segment */
-                       ctx->step_segments[si].rho,
-                       (int) ctx->zone_material_idx,
-                       (int) ctx->zone_idx);
-        /* Override positions and energy with segment-accurate values */
-        st.p[0] = seg_px;
-        st.p[1] = seg_py;
-        st.p[2] = seg_pz;
-        st.p[3] = seg_entry_energy;
-        st.q[0] = seg_px + pool->ux[slot] * ds_i;
-        st.q[1] = seg_py + pool->uy[slot] * ds_i;
-        st.q[2] = seg_pz + pool->uz[slot] * ds_i;
-        st.q[3] = seg_entry_energy - de_i;
-        st.ds = ds_i;
-        st.de = de_i;
-        st.w[0] = ctx->w_scat[0];
-        st.w[1] = ctx->w_scat[1];
-        st.w[2] = ctx->w_scat[2];
-
-        /* For the last segment snap the endpoint to the correct bent-path position */
-        if (remaining <= 0.0) {
-            st.q[0] = qx;
-            st.q[1] = qy;
-            st.q[2] = qz;
-        }
-
-        rc = osh_scoring_score_step(score_rt, ctx->part, &st);
-        if (rc != OSH_OK) {
-            OSH_DIAG_ERRORF(transport_ctx->diag,
-                            "transport: scoring rejected step segment %zu/%zu rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) "
-                            "q=(%.17g, %.17g, %.17g)",
-                            si + 1u,
-                            ctx->n_step_segments,
-                            (int) rc,
-                            st.ds,
-                            st.p[0],
-                            st.p[1],
-                            st.p[2],
-                            st.q[0],
-                            st.q[1],
-                            st.q[2]);
-            return rc;
-        }
-
-        /* Advance straight-line tracking position and cumulative energy */
-        seg_px = st.q[0];
-        seg_py = st.q[1];
-        seg_pz = st.q[2];
-        seg_entry_energy -= de_i;
+    rc = osh_scoring_score_step(score_rt, ctx->part, &st);
+    if (rc != OSH_OK) {
+        OSH_DIAG_ERRORF(transport_ctx->diag,
+                        "transport: scoring rejected step rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) "
+                        "q=(%.17g, %.17g, %.17g)",
+                        (int) rc,
+                        st.ds,
+                        st.p[0],
+                        st.p[1],
+                        st.p[2],
+                        st.q[0],
+                        st.q[1],
+                        st.q[2]);
+        return rc;
     }
 
     /* Write the updated particle state — always use the bent-path exit position */

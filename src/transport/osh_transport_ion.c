@@ -209,7 +209,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                 r.cp[2] = pool->uz[i];
                 r.system = OSH_COORD_UNIVERSE;
                 dist_voxel_body_rt(
-                    geom_rt, voxel_body_idx, &r, step_segments, OSH_STEP_SEGMENTS_MAX, &n_step_segments, NULL);
+                    geom_rt, voxel_body_idx, &r, step_segments, 1u, &n_step_segments, NULL);
                 if (n_step_segments == 0u) {
                     /* Jacobs returned no crossings — treat like a boundary nudge */
                     step_segments[0].ds = dist_batch[i];
