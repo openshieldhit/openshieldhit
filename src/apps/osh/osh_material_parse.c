@@ -240,6 +240,7 @@ osh_material_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struc
         if (rc != OSH_OK) {
             return rc;
         }
+        wm->hu_table_type = OSH_HU_TABLE_SCHNEIDER;
     }
 
     return OSH_OK;
@@ -716,8 +717,10 @@ static enum osh_status parse_hutable(struct osh_diag_sink const *diag,
 
     if (strcmp(table_name, "schneider2000") == 0) {
         rc = osh_gemca_voxel_register_schneider_materials(wm);
+        wm->hu_table_type = OSH_HU_TABLE_SCHNEIDER;
     } else if (strcmp(table_name, "permatassari2020") == 0) {
         rc = osh_gemca_voxel_register_permatassari_materials(wm);
+        wm->hu_table_type = OSH_HU_TABLE_PERMATASSARI;
     } else {
         OSH_DIAG_ERRORF(diag,
                         "in %s line %i: unknown HUTABLE '%s' (expected Schneider2000 or Permatassari2020)",
