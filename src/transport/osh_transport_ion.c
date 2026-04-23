@@ -5,7 +5,11 @@
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
+#include "common/osh_ray.h"
+#include "common/osh_step_segment.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "gemca/runtime/osh_gemca_runtime_voxel.h"
+#include "material/runtime/osh_material_runtime.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 #include "transport/osh_transport_ion_step.h"
@@ -57,7 +61,8 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  *   1. When the pool is empty and primaries remain, fill it from beam_runtime
  *      (up to OSH_TRANSPORT_POOL_CAPACITY primaries).
  *   2. Batch-query zone indices and boundary distances for all live slots.
- *   3. Call osh_transport_ion_step_one() for every live slot.  Particles that
+ *   3. Build step_segments[] (Jacobs for voxel zones, synthetic for analytic)
+ *      and call osh_transport_ion_step() for every live slot.  Particles that
  *      die (energy cutoff, geometry exit, blackhole) are marked by
  *      zeroing e[slot].
  *   4. Compact the pool, removing dead entries.
@@ -152,6 +157,11 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
 
         /* Advance every live particle by one step */
         for (i = 0u; i < pool->n; ++i) {
+            struct osh_step_segment step_segments[OSH_STEP_SEGMENTS_MAX];
+            size_t n_step_segments;
+            struct gemca_rt_zone const *zone_i;
+            int voxel_body_idx;
+
             if (steps_taken >= step_budget) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: step budget exceeded after %zu steps (pool slot %zu, primaries_done=%zu, "
@@ -170,8 +180,66 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                 rc = OSH_ESTATE;
                 goto cleanup;
             }
-            rc = osh_transport_ion_step_one(
-                pool, i, zone_batch[i], dist_batch[i], geom_rt, transport_ctx, material_rt, score_rt, &rng);
+
+            /* Build the step_segments[] list before calling the step function.
+             *
+             * For analytic (non-voxelised) zones: one synthetic segment with the
+             * full boundary distance and the nominal zone density.
+             *
+             * For CT voxel zones: call Jacobs (dist_voxel_body_rt()) to fill
+             * step_segments[] with per-voxel {ds, rho} pairs.  The traversal
+             * stops at a material-bin change, the grid boundary, or buffer cap,
+             * whichever comes first.  The transport step then handles at most
+             * OSH_STEP_SEGMENTS_MAX voxels; if the cap is hit the wavefront loop
+             * naturally re-enters the same zone on the next iteration. */
+            voxel_body_idx = -1;
+            if (zone_batch[i] != OSH_GEMCA_ZONE_INDEX_INVALID) {
+                zone_i = &geom_rt->zones[zone_batch[i]];
+                voxel_body_idx = zone_i->voxel_body_idx;
+            }
+
+            if (voxel_body_idx >= 0) {
+                /* CT voxel zone: Jacobs traversal fills step_segments */
+                struct ray r;
+                r.p[0] = pool->x[i];
+                r.p[1] = pool->y[i];
+                r.p[2] = pool->z[i];
+                r.cp[0] = pool->ux[i];
+                r.cp[1] = pool->uy[i];
+                r.cp[2] = pool->uz[i];
+                r.system = OSH_COORD_UNIVERSE;
+                dist_voxel_body_rt(
+                    geom_rt, voxel_body_idx, &r, step_segments, OSH_STEP_SEGMENTS_MAX, &n_step_segments, NULL);
+                if (n_step_segments == 0u) {
+                    /* Jacobs returned no crossings — treat like a boundary nudge */
+                    step_segments[0].ds = dist_batch[i];
+                    step_segments[0].rho = 0.0;
+                    n_step_segments = 1u;
+                }
+            } else {
+                /* Analytic zone: single segment with zone nominal density */
+                double zone_rho = 0.0;
+                if (zone_batch[i] != OSH_GEMCA_ZONE_INDEX_INVALID) {
+                    zone_i = &geom_rt->zones[zone_batch[i]];
+                    if (zone_i->material_idx < material_rt->nmaterials) {
+                        zone_rho = (double) material_rt->rho[zone_i->material_idx];
+                    }
+                }
+                step_segments[0].ds = dist_batch[i];
+                step_segments[0].rho = zone_rho;
+                n_step_segments = 1u;
+            }
+
+            rc = osh_transport_ion_step(pool,
+                                        i,
+                                        zone_batch[i],
+                                        step_segments,
+                                        n_step_segments,
+                                        geom_rt,
+                                        transport_ctx,
+                                        material_rt,
+                                        score_rt,
+                                        &rng);
             if (rc != OSH_OK) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, "

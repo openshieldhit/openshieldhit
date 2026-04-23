@@ -1764,10 +1764,10 @@ eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z,
                 return 0.0;
             }
             stack[sp].is_inside = in_body_rt(rt, insn->operand, r);
-            /* segs=NULL: CSG evaluator only needs the distance scalar.
+            /* step_segments=NULL: CSG evaluator only needs the distance scalar.
              * Transport calls dist_voxel_body_rt() directly with its own
-             * stack buffer (OSH_GEMCA_VOXEL_SEGS_STACK) to get per-voxel
-             * segments for energy loss and scoring (M4/M5). */
+             * OSH_STEP_SEGMENTS_MAX stack buffer to get per-voxel step_segments
+             * for energy loss and scoring. */
             stack[sp].dist = dist_voxel_body_rt(rt, insn->operand, r, NULL, 0, NULL, NULL);
             sp++;
             break;

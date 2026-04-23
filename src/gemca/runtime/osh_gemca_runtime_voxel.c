@@ -28,8 +28,8 @@ static int clamp_hu(int16_t hu) {
 double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
                           int body_idx,
                           struct ray const *r,
-                          struct gemca_rt_voxel_segment *segs,
-                          size_t segs_cap,
+                          struct osh_step_segment *step_segments,
+                          size_t step_segments_cap,
                           size_t *n_out,
                           int *bin_out) {
     struct gemca_rt_body const *body;
@@ -38,7 +38,7 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
     size_t crossings_needed;
     size_t n_crossings;
     size_t i;
-    size_t n_segs;
+    size_t n_step_segments;
     double total_ds;
     int bin0;
     int bini;
@@ -84,9 +84,9 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
     hu_clamped = clamp_hu(body->hu[crossings[0].idx]);
     bin0 = (int) rt->hu_bin_lut[hu_clamped + 1000];
 
-    /* Walk crossings: stop at bin change or segs_cap. */
+    /* Walk crossings: stop at bin change or step_segments_cap. */
     total_ds = 0.0;
-    n_segs = 0;
+    n_step_segments = 0;
     for (i = 0; i < n_crossings; i++) {
         hu_clamped = clamp_hu(body->hu[crossings[i].idx]);
         bini = (int) rt->hu_bin_lut[hu_clamped + 1000];
@@ -95,21 +95,21 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
             break; /* bin change → new zone */
         }
 
-        if (segs && n_segs < segs_cap) {
-            segs[n_segs].ds = crossings[i].path_len;
-            segs[n_segs].rho = (double) rt->hu_rho_lut[hu_clamped + 1000];
+        if (step_segments && n_step_segments < step_segments_cap) {
+            step_segments[n_step_segments].ds = crossings[i].path_len;
+            step_segments[n_step_segments].rho = (double) rt->hu_rho_lut[hu_clamped + 1000];
         }
 
         total_ds += crossings[i].path_len;
-        n_segs++;
+        n_step_segments++;
 
-        if (segs && n_segs >= segs_cap) {
-            break; /* buffer full → transport re-enters */
+        if (step_segments && n_step_segments >= step_segments_cap) {
+            break; /* buffer full → transport re-enters on next step */
         }
     }
 
     if (n_out) {
-        *n_out = n_segs;
+        *n_out = n_step_segments;
     }
     if (bin_out) {
         *bin_out = bin0;
