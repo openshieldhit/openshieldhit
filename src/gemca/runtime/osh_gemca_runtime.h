@@ -243,10 +243,12 @@ struct osh_gemca_runtime {
     struct gemca_rt_surface *surfaces;          /**< Flat surface array (owned). */
     struct gemca_rt_body *bodies;               /**< Flat body array (owned). */
     struct gemca_rt_zone *zones;                /**< Flat zone array; each zone owns its insns[]. */
-    size_t nsurfaces;                           /**< Number of entries in surfaces[]. */
-    size_t nbodies;                             /**< Number of entries in bodies[]. */
-    size_t nzones;                              /**< Number of entries in zones[]. */
-    int zone_batch_dispatch;                    /**< enum osh_gemca_zone_batch_dispatch */
+    uint8_t *hu_bin_lut;     /**< HU→bin index, 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
+    float *hu_rho_lut;       /**< HU→density [g/cm³], 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
+    size_t nsurfaces;        /**< Number of entries in surfaces[]. */
+    size_t nbodies;          /**< Number of entries in bodies[]. */
+    size_t nzones;           /**< Number of entries in zones[]. */
+    int zone_batch_dispatch; /**< enum osh_gemca_zone_batch_dispatch */
 };
 
 /* ---- Lifecycle ------------------------------------------------------------ */

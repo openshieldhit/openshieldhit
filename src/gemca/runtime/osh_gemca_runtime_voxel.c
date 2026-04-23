@@ -33,20 +33,21 @@
  * against their own scoring grid.  rhocorr is guaranteed constant over ds for
  * each segment, so dose weighting (rhocorr_i × sub_ds_j) is always exact.
  */
-double dist_voxel_body_rt(
-    struct osh_gemca_runtime const *rt,
-    int body_idx,
-    struct ray const *r,
-    struct gemca_rt_voxel_segment *segs,
-    size_t segs_cap,
-    size_t *n_out,
-    int *bin_out) {
+double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
+                          int body_idx,
+                          struct ray const *r,
+                          struct gemca_rt_voxel_segment *segs,
+                          size_t segs_cap,
+                          size_t *n_out,
+                          int *bin_out) {
     (void) rt;
     (void) body_idx;
     (void) r;
     (void) segs;
     (void) segs_cap;
-    if (n_out)   *n_out   = 0;
-    if (bin_out) *bin_out = -1;
+    if (n_out)
+        *n_out = 0;
+    if (bin_out)
+        *bin_out = -1;
     return OSH_GEMCA_INFINITY;
 }

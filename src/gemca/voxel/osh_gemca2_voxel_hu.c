@@ -214,6 +214,16 @@ void osh_gemca_voxel_build_hu_lut(uint8_t lut[2601]) {
     }
 }
 
+void osh_gemca_voxel_build_rho_lut_schneider2000(float lut[2601]) {
+    int hu;
+
+    hu = -1000;
+    while (hu <= 1600) {
+        lut[hu + 1000] = osh_gemca_voxel_hu2rho((int16_t) hu, 0);
+        hu++;
+    }
+}
+
 static int _hu2idx_slow(int16_t hu) {
     return (int) osh_binary_search_i2(hu, _ct_hu, (unsigned long int) _nmat + 1ul);
 }

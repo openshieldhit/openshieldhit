@@ -126,6 +126,18 @@ void osh_gemca_voxel_build_hu_lut_permatassari2020(uint8_t lut[2601]) {
     }
 }
 
+void osh_gemca_voxel_build_rho_lut_permatassari2020(float lut[2601]) {
+    int hu;
+    int bin;
+
+    hu = -1000;
+    while (hu <= 1600) {
+        bin = (int) hu_to_bin_from_breakpoints((int16_t) hu, _ct_hu, (size_t) _nmat + 1u);
+        lut[hu + 1000] = osh_gemca_voxel_hu2rho_permatassari2020((int16_t) hu, bin);
+        hu++;
+    }
+}
+
 float osh_gemca_voxel_hu2rho_permatassari2020(int16_t hu, int bin) {
     double rho;
 

@@ -47,13 +47,12 @@ struct gemca_rt_voxel_segment {
  *
  * Returns OSH_GEMCA_INFINITY if the ray misses the grid entirely.
  */
-double dist_voxel_body_rt(
-    struct osh_gemca_runtime const *rt,
-    int body_idx,
-    struct ray const *r,
-    struct gemca_rt_voxel_segment *segs, /* caller-owned; may be NULL */
-    size_t segs_cap,                     /* 0 if segs is NULL */
-    size_t *n_out,                       /* segments written; may be NULL */
-    int *bin_out);                       /* material bin for all segments; may be NULL */
+double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
+                          int body_idx,
+                          struct ray const *r,
+                          struct gemca_rt_voxel_segment *segs, /* caller-owned; may be NULL */
+                          size_t segs_cap,                     /* 0 if segs is NULL */
+                          size_t *n_out,                       /* segments written; may be NULL */
+                          int *bin_out);                       /* material bin for all segments; may be NULL */
 
 #endif /* OSH_GEMCA_RUNTIME_VOXEL_H */

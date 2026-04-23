@@ -40,6 +40,7 @@ static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struc
 static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 static enum osh_status
 setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt);
+static enum osh_status setup_hu_luts(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 static int detect_zone_batch_dispatch(void);
 
 /* Zone compilation */
@@ -180,6 +181,12 @@ osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_diag_sink cons
         return rc;
     }
 
+    rc = setup_hu_luts(wg, rt);
+    if (rc != OSH_OK) {
+        osh_gemca_runtime_free(rt);
+        return rc;
+    }
+
     return OSH_OK;
 }
 
@@ -230,6 +237,12 @@ void osh_gemca_runtime_free(struct osh_gemca_runtime *rt) {
 
     free(rt->surfaces);
     rt->surfaces = NULL;
+
+    free(rt->hu_bin_lut);
+    rt->hu_bin_lut = NULL;
+
+    free(rt->hu_rho_lut);
+    rt->hu_rho_lut = NULL;
 
     rt->nsurfaces = 0;
     rt->nbodies = 0;
@@ -1139,6 +1152,26 @@ static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struc
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
+static enum osh_status setup_hu_luts(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
+    if (!wg->hu_bin_lut || !wg->hu_rho_lut) {
+        return OSH_OK;
+    }
+
+    rt->hu_bin_lut = (uint8_t *) malloc(2601u * sizeof(uint8_t));
+    if (!rt->hu_bin_lut) {
+        return OSH_ENOMEM;
+    }
+    rt->hu_rho_lut = (float *) malloc(2601u * sizeof(float));
+    if (!rt->hu_rho_lut) {
+        return OSH_ENOMEM;
+    }
+
+    memcpy(rt->hu_bin_lut, wg->hu_bin_lut, 2601u * sizeof(uint8_t));
+    memcpy(rt->hu_rho_lut, wg->hu_rho_lut, 2601u * sizeof(float));
+
+    return OSH_OK;
+}
+
 static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
     size_t ib;
     size_t surf_offset;
