@@ -324,35 +324,48 @@ Verify: row-major baseline unchanged (`tile_order=0`); Morton round-trip correct
 ---
 
 ### M4 — Jacobs voxel traversal in transport hot path
-**Goal:** Activate `GEMCA_RT_PUSH_VOXEL_BODY` to split steps at material-bin boundaries using Jacobs raytrace.
+**Goal:** Implement `dist_voxel_body_rt()` to produce a per-voxel microstep list for one zone step.
 
-Status: not started (depends on M3b — `osh_raytrace_traverse` must switch on `grid->tile_order` before `hu[crossing.idx]` is valid for non-row-major layouts).
+Status: stub in place (`src/gemca/runtime/osh_gemca_runtime_voxel.c`); interface finalised.
+
+**Design:** one Jacobs traversal per zone step, returning an ordered list of `(ds_i, rhocorr_i)` segments via a caller-owned stack buffer. Stops at whichever limit comes first: bin change, grid exit, or buffer capacity. Buffer capacity acts as a step-length limiter — the transport re-enters naturally, exactly like any other step limit. This gives per-voxel correctness without re-entering GEMCA per voxel.
+
+```c
+/* Recommended caller pattern (transport step function): */
+struct gemca_rt_voxel_segment segs[OSH_GEMCA_VOXEL_SEGS_STACK];  /* 4 KB on stack */
+size_t n_segs;
+int bin;
+double dist = dist_voxel_body_rt(rt, body_idx, r, segs, OSH_GEMCA_VOXEL_SEGS_STACK, &n_segs, &bin);
+```
 
 Files:
-- `src/gemca/runtime/osh_gemca_runtime.c` — fill stub at line 1720:
-  1. Call `osh_raytrace_traverse()` on `body->ct_grid` to get `crossings[]`
-  2. Walk crossings; call `osh_gemca_voxel_hu2idx(hu[crossing.idx])` per voxel (O(1) LUT)
-  3. Return accumulated `path_len` up to (not including) the first bin change as the step boundary distance; if no bin change, return the full RPP boundary distance
-- New: `src/gemca/runtime/osh_gemca_runtime_voxel.c` — factor out `dist_voxel_body_rt()` to keep the main switch clean
+- `src/gemca/runtime/osh_gemca_runtime_voxel.c` — fill stub:
+  1. Transform ray to body-local frame.
+  2. Call `osh_raytrace_traverse()` on `body->ct_grid`; if 0 crossings return `OSH_GEMCA_INFINITY`.
+  3. Walk crossings up to `min(n_crossings, segs_cap)`:
+     - `bin0 = hu2idx(hu[crossings[0].idx])`
+     - for each crossing i: if bin changes → break; else fill `segs[i] = {path_len, hu2rho/rho_nominal}`
+  4. Write `n_out`, `bin_out`; return `total_ds`.
 
-Physics: density is continuous (`hu2rho`); bin index is the material identity. The stopping-power correction is `rho_voxel / rho_bin_nominal` × nominal dE/dx for the bin's material (standard density-scaling approach). This means the transport kernel must receive `rho_voxel` per sub-step.
+Physics: `rhocorr_i = rho_voxel_i / rho_bin_nominal` — exact per-voxel, never averaged. All segments in one call share the same bin. Density is constant within each segment, so any scoring sub-step within a segment has correct density by construction.
 
-Verify: pencil beam through uniform-HU phantom; step lengths sum to expected traversal; bin-boundary crossings produce truncated steps.
+Verify: pencil beam through uniform-HU phantom; `Σ ds_i` equals expected traversal; bin-boundary crossings truncate the list correctly; buffer-cap limit triggers re-entry and sum still converges.
 
 ---
 
 ### M5 — Per-voxel density to transport kernel
-**Goal:** Pass per-voxel density from the Jacobs traversal to the transport kernel for correct WEPL/range calculation.
+**Goal:** Wire the `segs[]` microstep list from M4 into the transport kernel for correct energy loss, WEPL, and straggling.
 
-Status: not started (depends on M4 voxel traversal dispatch).
+Status: not started (depends on M4).
 
 Files:
-- Introduce `struct gemca_rt_voxel_step { double dist; double rho; }` returned from `dist_voxel_body_rt()` (avoids mutating `struct step` which is transport-owned)
-- Wherever `osh_gemca_runtime_get_distance` result is consumed by the transport loop: use the returned `rho` to scale stopping power for WEPL accumulation instead of the zone material's nominal density
+- Transport step function: after calling `dist_voxel_body_rt()`, loop over `segs[0..n_segs-1]`:
+  - Energy loss per segment: `dE_i = S_nominal(E) × rho_bin_nominal × rhocorr_i × ds_i`
+  - Update energy after each segment (CSDA sub-step within the zone step)
+- Straggling: accumulate `d_total = Σ(rhocorr_i × rho_bin_nominal × ds_i)` across the segment list; call straggling **once** with `d_total`. This is exact: Bohr variance is additive (`σ²_total = K · Σ(ρ_i · ds_i)`), so one call equals per-segment calls combined in quadrature.
+- `osh_gemca_runtime_get_distance` scalar path unchanged — voxel zones bypass it and call `dist_voxel_body_rt()` directly with the stack buffer.
 
-**Straggling across same-material voxels:** The stepper splits at material-bin boundaries (M4), not at every density change. Within a single step (constant material bin, varying ρ), Jacobs returns per-voxel `(ds_i, ρ_i)` pairs. The transport kernel should accumulate `d_total = Σ(ρ_i · ds_i)` and call straggling **once** using `d_total`. This is physically exact: Bohr/Gaussian straggling variance is additive (`σ²_total = K · Σ(ρ_i · ds_i)`), so one call with the summed areal density is equivalent to per-voxel calls combined in quadrature. Calling straggling per voxel would be equivalent but wasteful.
-
-Verify: two-tissue phantom (bone + soft tissue); scored WEPL matches analytical expectation; single-material variable-density phantom: straggling width matches `sqrt(Σ ρ_i·ds_i)` expectation.
+Verify: two-tissue phantom (bone + soft tissue); scored WEPL matches analytical expectation. Single-material variable-density phantom: straggling width matches `sqrt(Σ ρ_i·ds_i)` expectation.
 
 ---
 
@@ -370,9 +383,10 @@ Files:
   double transform[16];           /* same rotation as DCM body */
   ```
 - `src/scoring/runtime/osh_scoring_step.c` — new branch for `OSH_SCORING_GEO_VOXEL`:
-  - Transform step coordinates using `geo->transform` (inverse of DCM body transform → RTDOSE frame)
-  - Call `osh_raytrace_traverse()` on `rtdose_grid`
-  - Accumulate dose per crossing bin, weighted by `hu2rho(ct_hu[idx])` × path_len
+  - Receives the `segs[]` list produced by `dist_voxel_body_rt()` (same buffer, no second Jacobs call)
+  - For each segment `(ds_i, rhocorr_i)`: intersect against the RTDOSE grid (1D interval scan along the ray)
+  - Accumulate dose per RTDOSE bin weighted by `rhocorr_i × rho_bin_nominal × sub_ds_j`
+  - `rhocorr_i` is constant within each segment so sub-stepping is always exact
 - `src/scoring/runtime/osh_scoring_compile.c` — populate `rtdose_grid` and `transform` from `osh_dicom_rtdose` struct; handle non-uniform z (frame_offsets array): treat as uniform if spacing is constant, otherwise use linear search for z-bin
 - `src/apps/osh/osh_scoring_parse_geometry.c` — parse `Voxel /path/to/rtdose.dcm` keyword; store path in `geometry_def.rtdose_path`
 - `src/apps/osh/osh_app_osh.c` — read RTDOSE via `osh_dicom_rtdose_read`, pass pointer into scoring compile
