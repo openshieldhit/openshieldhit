@@ -28,7 +28,10 @@ int main(void) {
 static void test_morton_lut_completeness(void) {
     /* Verify all 512 intra-tile indices are produced exactly once. */
     uint8_t seen[512];
-    size_t i, j, k, idx;
+    size_t i;
+    size_t j;
+    size_t k;
+    size_t idx;
 
     memset(seen, 0, sizeof(seen));
     for (i = 0u; i < 8u; i++) {
@@ -48,13 +51,19 @@ static void test_morton_lut_completeness(void) {
 
 static void test_reorder_roundtrip(void) {
     /* 16×16×16 volume: reorder to Morton-8, verify every voxel. */
-    size_t const nx = 16u, ny = 16u, nz = 16u;
+    size_t const nx = 16u;
+    size_t const ny = 16u;
+    size_t const nz = 16u;
     size_t const n = nx * ny * nz;
     int16_t *src;
     int16_t *dst;
     size_t out_len;
-    size_t Tx, Ty, Tz;
-    size_t ix, iy, iz;
+    size_t Tx;
+    size_t Ty;
+    size_t Tz;
+    size_t ix;
+    size_t iy;
+    size_t iz;
     size_t i;
 
     src = (int16_t *) malloc(n * sizeof(int16_t));
@@ -87,13 +96,19 @@ static void test_reorder_roundtrip(void) {
 
 static void test_reorder_nonpower8_boundary(void) {
     /* Non-multiples of 8: 10×11×9. Checks boundary tiles are handled correctly. */
-    size_t const nx = 10u, ny = 11u, nz = 9u;
+    size_t const nx = 10u;
+    size_t const ny = 11u;
+    size_t const nz = 9u;
     size_t const n = nx * ny * nz;
     int16_t *src;
     int16_t *dst;
     size_t out_len;
-    size_t Tx, Ty, Tz;
-    size_t ix, iy, iz;
+    size_t Tx;
+    size_t Ty;
+    size_t Tz;
+    size_t ix;
+    size_t iy;
+    size_t iz;
     size_t i;
 
     src = (int16_t *) malloc(n * sizeof(int16_t));
@@ -126,7 +141,9 @@ static void test_reorder_nonpower8_boundary(void) {
 
 static void test_row_major_baseline(void) {
     /* tile_order=ROW_MAJOR: output is a plain copy, same element order. */
-    size_t const nx = 4u, ny = 3u, nz = 2u;
+    size_t const nx = 4u;
+    size_t const ny = 3u;
+    size_t const nz = 2u;
     size_t const n = nx * ny * nz;
     int16_t *src;
     int16_t *dst;
