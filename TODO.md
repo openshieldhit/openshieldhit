@@ -323,49 +323,141 @@ Verify: row-major baseline unchanged (`tile_order=0`); Morton round-trip correct
 
 ---
 
-### M4 — Jacobs voxel traversal in transport hot path
-**Goal:** Implement `dist_voxel_body_rt()` to produce a per-voxel microstep list for one zone step.
+### M3c — HU density lookup table on `osh_gemca_runtime`
+**Goal:** Precompute a `float hu_rho_lut[2601]` at setup time so the Jacobs traversal hot path converts HU to density with a single array access — no formula, no branch, no function pointer.
 
-Status: stub in place (`src/gemca/runtime/osh_gemca_runtime_voxel.c`); interface finalised.
+Status: not started (depends on M1; must land before M4).
 
-**Design:** one Jacobs traversal per zone step, returning an ordered list of `(ds_i, rhocorr_i)` segments via a caller-owned stack buffer. Stops at whichever limit comes first: bin change, grid exit, or buffer capacity. Buffer capacity acts as a step-length limiter — the transport re-enters naturally, exactly like any other step limit. This gives per-voxel correctness without re-entering GEMCA per voxel.
+**Problem:** `dist_voxel_body_rt()` needs `rho_voxel_i` per crossing to compute `rhocorr_i`. The density formula differs between Schneider (piecewise-linear) and Permatassari (factor × HU), but the table choice is immutable after setup. Running the formula per voxel crossing wastes cycles; a function pointer prevents inlining; a switch is an unnecessary branch.
+
+**Design:** Precompute `float hu_rho_lut[2601]` during `osh_gemca_compile()` alongside the existing `uint8_t hu_bin_lut[2601]` from M1. Same indexing: `hu + 1000`, HU clamped to [-1000, 1600]. At traversal time:
 
 ```c
-/* Recommended caller pattern (transport step function): */
-struct gemca_rt_voxel_segment segs[OSH_GEMCA_VOXEL_SEGS_STACK];  /* 4 KB on stack */
-size_t n_segs;
-int bin;
-double dist = dist_voxel_body_rt(rt, body_idx, r, segs, OSH_GEMCA_VOXEL_SEGS_STACK, &n_segs, &bin);
+int   bin_i = rt->hu_bin_lut[hu + 1000];  /* uint8_t — material bin  */
+float rho_i = rt->hu_rho_lut[hu + 1000];  /* float   — density g/cm³ */
 ```
 
+Two array lookups, zero branching. For non-VOX runs both pointers are NULL — zero overhead.
+
 Files:
-- `src/gemca/runtime/osh_gemca_runtime_voxel.c` — fill stub:
-  1. Transform ray to body-local frame.
-  2. Call `osh_raytrace_traverse()` on `body->ct_grid`; if 0 crossings return `OSH_GEMCA_INFINITY`.
-  3. Walk crossings up to `min(n_crossings, segs_cap)`:
-     - `bin0 = hu2idx(hu[crossings[0].idx])`
-     - for each crossing i: if bin changes → break; else fill `segs[i] = {path_len, hu2rho/rho_nominal}`
-  4. Write `n_out`, `bin_out`; return `total_ds`.
+- `src/gemca/voxel/osh_gemca2_voxel_hu.h` — add declarations:
+  - `void osh_gemca_voxel_build_rho_lut_schneider2000(float *lut)` (2601 entries)
+  - `void osh_gemca_voxel_build_rho_lut_permatassari2020(float *lut)` (2601 entries)
+- `src/gemca/voxel/osh_gemca2_voxel_hu.c` — implement Schneider rho LUT builder: for HU in [-1000, 1600], call `osh_gemca_voxel_hu2rho_schneider2000(hu)`, store cast to `float`
+- `src/gemca/voxel/osh_gemca2_voxel_hu_permatassari.c` — implement Permatassari rho LUT builder (bin index computed internally per entry)
+- `src/gemca/runtime/osh_gemca_runtime.h` — add to `struct osh_gemca_runtime`:
+  ```c
+  uint8_t *hu_bin_lut; /* HU→bin, 2601 entries; NULL for non-VOX runs; owned */
+  float   *hu_rho_lut; /* HU→density [g/cm³], 2601 entries; NULL for non-VOX runs; owned */
+  ```
+- `src/gemca/runtime/osh_gemca_runtime.c`:
+  - `osh_gemca_compile()`: if any body is `OSH_GEMCA_BODY_VOX`, allocate and build both LUTs from the registered HU table
+  - `osh_gemca_runtime_free()`: free both LUT arrays if non-NULL
+  - Open question for implementation: how `osh_gemca_compile()` discovers which HU table is active. Two options: (a) add `int hu_table` enum to `osh_gemca_prepared`, set by the material parse layer; (b) pre-build LUTs in the app layer and store on `osh_gemca_prepared` for compile to copy. Both work without changing the runtime API.
+- `tests/unit/test_osh_voxel_hu.c` — add: `rho_lut[0 + 1000]` ≈ 0.998 g/cm³ (Schneider water); boundary entries at -1000 and 1600 match formula values; NULL for non-VOX geometry compile
 
-Physics: `rhocorr_i = rho_voxel_i / rho_bin_nominal` — exact per-voxel, never averaged. All segments in one call share the same bin. Density is constant within each segment, so any scoring sub-step within a segment has correct density by construction.
-
-Verify: pencil beam through uniform-HU phantom; `Σ ds_i` equals expected traversal; bin-boundary crossings truncate the list correctly; buffer-cap limit triggers re-entry and sum still converges.
+Verify: `hu_bin_lut` and `hu_rho_lut` correct for Schneider; NULL for a geometry with no VOX bodies; `osh_gemca_runtime_free()` releases both without leak.
 
 ---
 
-### M5 — Per-voxel density to transport kernel
-**Goal:** Wire the `segs[]` microstep list from M4 into the transport kernel for correct energy loss, WEPL, and straggling.
+### M4 — Jacobs voxel traversal in `dist_voxel_body_rt()`
+**Goal:** Implement the Jacobs traversal stub to produce a per-voxel segment list and a `stop_reason` for one transport step.
+
+Status: stub in place (`src/gemca/runtime/osh_gemca_runtime_voxel.c`); depends on M3c for LUT access.
+
+**Design:** one Jacobs traversal per call, returning an ordered `segs[]` list via a caller-owned stack buffer and a `stop_reason` indicating why traversal stopped. `stop_reason` is required for correct transport re-entry: `BUFFER_CAP` means stay in the same zone and call again; `BIN_CHANGE` or `GRID_EXIT` means do a fresh zone lookup on the next step.
+
+Density correction uses the precomputed LUTs from M3c — no calibration-table dispatch at traversal time:
+```c
+int   bin_i     = rt->hu_bin_lut[hu[crossing.idx] + 1000];
+float rho_i     = rt->hu_rho_lut[hu[crossing.idx] + 1000];
+float rhocorr_i = rho_i / rho_bin_nominal;  /* rho_bin_nominal from tables->rho[material_idx] */
+```
+
+Transport never sees the raw `bin` index — it receives `material_idx` (resolved from `bin0` at setup) and `rho_bin_nominal` from the material runtime tables.
+
+```c
+enum gemca_voxel_stop_reason {
+    GEMCA_VOXEL_STOP_BIN_CHANGE, /* first voxel of a different material bin */
+    GEMCA_VOXEL_STOP_GRID_EXIT,  /* ray left the voxel grid                 */
+    GEMCA_VOXEL_STOP_BUFFER_CAP, /* segs_cap reached; re-enter same zone    */
+    GEMCA_VOXEL_STOP_ZONE_EXIT,  /* zone RPP boundary reached before grid   */
+};
+
+/* Updated signature (replaces bin_out with stop_reason_out): */
+double dist_voxel_body_rt(
+    struct osh_gemca_runtime const *rt,
+    int body_idx,
+    struct ray const *r,
+    struct gemca_rt_voxel_segment *segs,
+    size_t segs_cap,
+    size_t *n_out,
+    enum gemca_voxel_stop_reason *stop_reason_out);
+```
+
+Files:
+- `src/gemca/runtime/osh_gemca_runtime_voxel.h` — add `enum gemca_voxel_stop_reason`; update `dist_voxel_body_rt()` signature (drop `bin_out`, add `stop_reason_out`)
+- `src/gemca/runtime/osh_gemca_runtime_voxel.c` — fill stub:
+  1. Transform ray to body-local frame (reuse `transform_to_local_rt` pattern).
+  2. Call `osh_raytrace_traverse()` on `body->ct_grid`; if 0 crossings → `*stop_reason_out = GRID_EXIT`; return `OSH_GEMCA_INFINITY`.
+  3. Record `bin0 = rt->hu_bin_lut[hu[crossings[0].idx] + 1000]`.
+  4. Walk crossings up to `min(n_crossings, segs_cap)`:
+     - `bin_i = rt->hu_bin_lut[hu[crossing.idx] + 1000]`
+     - if `bin_i != bin0` → `*stop_reason_out = BIN_CHANGE`; break
+     - else fill `segs[i] = {crossing.path_len, rt->hu_rho_lut[...] / rho_bin_nominal}`
+  5. If `segs_cap` reached → `*stop_reason_out = BUFFER_CAP`
+  6. If all crossings consumed and ray exited grid → `*stop_reason_out = GRID_EXIT`
+  7. Return `total_ds`.
+- Update the call site in `eval_distance` (RPP fallback) to pass `NULL` for `stop_reason_out`.
+
+Verify: pencil beam through uniform-HU phantom; `Σ ds_i` matches expected traversal; bin-boundary crossing sets `BIN_CHANGE` and truncates correctly; `BUFFER_CAP` re-entry converges to the same total; `GRID_EXIT` at far edge.
+
+---
+
+### M5 — Unified `segs[]` in the transport kernel
+**Goal:** Integrate the `segs[]` list from M4 into `osh_transport_ion_step_one()` with a single dispatch branch, keeping the existing zone-stepping path entirely unchanged.
 
 Status: not started (depends on M4).
 
-Files:
-- Transport step function: after calling `dist_voxel_body_rt()`, loop over `segs[0..n_segs-1]`:
-  - Energy loss per segment: `dE_i = S_nominal(E) × rho_bin_nominal × rhocorr_i × ds_i`
-  - Update energy after each segment (CSDA sub-step within the zone step)
-- Straggling: accumulate `d_total = Σ(rhocorr_i × rho_bin_nominal × ds_i)` across the segment list; call straggling **once** with `d_total`. This is exact: Bohr variance is additive (`σ²_total = K · Σ(ρ_i · ds_i)`), so one call equals per-segment calls combined in quadrature.
-- `osh_gemca_runtime_get_distance` scalar path unchanged — voxel zones bypass it and call `dist_voxel_body_rt()` directly with the stack buffer.
+**Design:** one branch in `ion_step_setup()` on `zone->voxel_body_idx >= 0` (field already present on `gemca_rt_zone`; no new flag needed). All subsequent physics phases (2b–5) operate generically on `ctx->segs[]` with `ctx->n_segs` entries. For `n_segs == 1` the loop body executes once and is equivalent to the current non-voxel path.
 
-Verify: two-tissue phantom (bone + soft tissue); scored WEPL matches analytical expectation. Single-material variable-density phantom: straggling width matches `sqrt(Σ ρ_i·ds_i)` expectation.
+Dispatch in `ion_step_setup()`:
+```c
+if (zone->voxel_body_idx >= 0) {
+    /* Voxel zone: run Jacobs; the pre-computed batch boundary_ds is redundant here */
+    ctx->limit_ds = dist_voxel_body_rt(rt, zone->voxel_body_idx, &ray,
+                                       ctx->segs, OSH_GEMCA_VOXEL_SEGS_STACK,
+                                       &ctx->n_segs, &ctx->stop_reason);
+} else {
+    /* Analytic zone: wrap pre-computed boundary_ds as a single unit-density segment */
+    ctx->segs[0].ds      = boundary_ds;
+    ctx->segs[0].rhocorr = 1.0;
+    ctx->n_segs          = 1;
+    ctx->limit_ds        = boundary_ds;
+    ctx->stop_reason     = GEMCA_VOXEL_STOP_ZONE_EXIT;
+}
+```
+
+The wavefront batch distance query is kept unchanged. For voxel particles its result is redundant (Jacobs already ran inside the step without segs during the batch call); eliminating this waste is a future wavefront optimization.
+
+Physics changes (phases 2b–5):
+- **Step length (2b):** `ctx->limit_ds` replaces `ctx->boundary_ds` as the geometry constraint in `min(limit_ds, ds_csda, ds_theta)`.
+- **Step clipping:** after determining `actual_step`, walk `segs[]` accumulating `ds` until the sum reaches `actual_step`; trim the final partial segment in-place.
+- **Effective areal density:** `effective_ds_gcm2 = Σ(segs[i].rhocorr × rho_nominal × segs[i].ds)` over the traversed prefix. Replaces `rho × step_len` in CSDA residual-range lookup and straggling.
+- **Straggling (phase 4):** one call with `effective_ds_gcm2`. Correct: Bohr variance is additive (`σ²_total = K · Σ(ρ_i · ds_i)`).
+- **Scoring (phase 5):** loop over traversed segments; call `osh_scoring_score_step()` once per segment. Energy partition: `de_i = (segs[i].rhocorr × segs[i].ds / effective_ds_gcm2) × de_total` (exact at CSDA level — stopping power is constant within a material bin).
+- **Re-entry:** `stop_reason == BUFFER_CAP` → particle stays in same zone, no zone re-lookup; all other `stop_reason` values → normal zone re-lookup on next wavefront round.
+
+Files:
+- `src/transport/osh_transport_ion_step.c`:
+  - Add `segs[OSH_GEMCA_VOXEL_SEGS_STACK]`, `n_segs`, `limit_ds`, `stop_reason` to `struct ion_step_ctx`
+  - Update `ion_step_setup()` with the dispatch branch above
+  - Update `ion_step_length()` to use `ctx->limit_ds` instead of `ctx->boundary_ds`
+  - Add segment-clipping step after step-length determination
+  - Update `ion_step_energy_and_straggling()` to compute and use `effective_ds_gcm2`
+  - Update `ion_step_commit()` to loop over traversed segments for scoring
+
+Verify: two-tissue phantom (bone + soft tissue); WEPL matches analytical expectation. Variable-density single-material phantom: straggling width matches `sqrt(K · Σ ρ_i·ds_i)`. Non-voxel geometry: zero performance regression (n_segs=1, scoring called once).
 
 ---
 
@@ -421,9 +513,11 @@ M1 (Schneider materials)     M2 (DCM parse + DICOM→body)
                                       │
                                    M3b (voxel array layout / Morton)
                                       │
-                              M4 (Jacobs hot path)
+                                   M3c (HU density LUT on osh_gemca_runtime)
                                       │
-                              M5 (per-voxel density)
+                              M4 (Jacobs + stop_reason in dist_voxel_body_rt)
+                                      │
+                              M5 (unified segs[] in transport kernel)
                                       │
 M1 ──────────────────────── M6 (RTDOSE scoring)
                                       │
@@ -438,7 +532,7 @@ M1 and M2 are independent and can start in parallel on sub-branches.
 
 1. **Shared transform matrix between geometry and scoring**: Store `double vox_matrix[16]` on the cold `struct body`; pass it to scoring compile step via the app orchestration layer, not via a separate cold scoring struct.
 
-2. **LUT storage for hot path**: `uint8_t hu_lut[2601]` should live on `osh_gemca_prepared` (one per run, zero overhead for non-VOX geometries). Avoids a global/module-level singleton and keeps it with the geometry runtime.
+2. **LUT storage for hot path**: `uint8_t hu_bin_lut[2601]` and `float hu_rho_lut[2601]` live on `osh_gemca_runtime` (owned, freed by `osh_gemca_runtime_free()`). Built during `osh_gemca_compile()` from the registered HU table; NULL for non-VOX runs. See M3c for implementation details.
 
 ---
 
