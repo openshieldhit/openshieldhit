@@ -48,12 +48,12 @@ extern "C" {
  *   y bits → positions 1,4,7
  *   z bits → positions 2,5,8
  *
- * Invariant: _osh_m3x[i] | _osh_m3y[j] | _osh_m3z[k]  for all i,j,k in
+ * Invariant: osh_voxel_m3x[i] | osh_voxel_m3y[j] | osh_voxel_m3z[k] for all i,j,k in
  * [0,7] yields all 512 distinct values 0..511 exactly once.
  */
-static uint16_t const _osh_m3x[8] = {0, 1, 8, 9, 64, 65, 72, 73};
-static uint16_t const _osh_m3y[8] = {0, 2, 16, 18, 128, 130, 144, 146};
-static uint16_t const _osh_m3z[8] = {0, 4, 32, 36, 256, 260, 288, 292};
+static uint16_t const osh_voxel_m3x[8] = {0, 1, 8, 9, 64, 65, 72, 73};
+static uint16_t const osh_voxel_m3y[8] = {0, 2, 16, 18, 128, 130, 144, 146};
+static uint16_t const osh_voxel_m3z[8] = {0, 4, 32, 36, 256, 260, 288, 292};
 
 /**
  * @brief Compute the Morton-tiled flat index for voxel (ix, iy, iz).
@@ -64,7 +64,8 @@ static uint16_t const _osh_m3z[8] = {0, 4, 32, 36, 256, 260, 288, 292};
  */
 static inline size_t osh_voxel_tile_idx(size_t ix, size_t iy, size_t iz, size_t Tx, size_t Ty) {
     size_t tile_id = (ix >> 3u) + Tx * ((iy >> 3u) + Ty * (iz >> 3u));
-    size_t intra = (size_t) _osh_m3x[ix & 7u] | (size_t) _osh_m3y[iy & 7u] | (size_t) _osh_m3z[iz & 7u];
+    size_t intra =
+        (size_t) osh_voxel_m3x[ix & 7u] | (size_t) osh_voxel_m3y[iy & 7u] | (size_t) osh_voxel_m3z[iz & 7u];
     return tile_id * 512u + intra;
 }
 

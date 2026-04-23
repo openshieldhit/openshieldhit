@@ -34,7 +34,7 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
     double voxel_volume;
     double score_dir[3];
     double score_len;
-    struct osh_raytrace_grid grid;
+    struct osh_raytrace_grid grid = {0};
     struct osh_voxel_crossing *crossings;
     enum osh_status rc;
     int hit;
@@ -205,6 +205,7 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
     grid->n[0] = (size_t) geo->axes[ix].nbins;
     grid->n[1] = (size_t) geo->axes[iy].nbins;
     grid->n[2] = (size_t) geo->axes[iz].nbins;
+    grid->tile_order = OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT;
     *voxel_volume_out = dx * dy * dz;
     return OSH_OK;
 }
