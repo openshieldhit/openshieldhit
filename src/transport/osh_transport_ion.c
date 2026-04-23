@@ -69,8 +69,8 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
 enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *transport_ctx,
                                               struct osh_beam_runtime *beam_rt,
                                               struct osh_gemca_runtime const *geom_rt,
-                                              struct osh_material_runtime const *tables,
-                                              struct osh_scoring_runtime *scoring) {
+                                              struct osh_material_runtime const *material_rt,
+                                              struct osh_scoring_runtime *score_rt) {
     struct osh_rng rng;
     struct osh_transport_params const *params;
     struct osh_particle_pool *pool = NULL;
@@ -90,7 +90,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     double t_last_report;
     enum osh_status rc = OSH_OK;
 
-    if (!transport_ctx || !beam_rt || !geom_rt || !tables || !scoring) {
+    if (!transport_ctx || !beam_rt || !geom_rt || !material_rt || !score_rt) {
         return OSH_EINVAL;
     }
     params = &transport_ctx->params;
@@ -171,7 +171,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                 goto cleanup;
             }
             rc = osh_transport_ion_step_one(
-                pool, i, zone_batch[i], dist_batch[i], geom_rt, transport_ctx, tables, scoring, &rng);
+                pool, i, zone_batch[i], dist_batch[i], geom_rt, transport_ctx, material_rt, score_rt, &rng);
             if (rc != OSH_OK) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, "

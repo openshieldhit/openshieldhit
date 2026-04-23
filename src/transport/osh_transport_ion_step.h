@@ -43,8 +43,8 @@ enum osh_status osh_transport_ion_step_one(struct osh_particle_pool *pool,
                                            double boundary_ds,
                                            struct osh_gemca_runtime const *geom_rt,
                                            struct osh_transport_context *transport_ctx,
-                                           struct osh_material_runtime const *tables,
-                                           struct osh_scoring_runtime *scoring,
+                                           struct osh_material_runtime const *material_rt,
+                                           struct osh_scoring_runtime *score_rt,
                                            struct osh_rng *rng);
 
 #endif /* OSH_TRANSPORT_ION_STEP_H */
