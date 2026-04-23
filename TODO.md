@@ -350,7 +350,9 @@ Files:
 - Introduce `struct gemca_rt_voxel_step { double dist; double rho; }` returned from `dist_voxel_body_rt()` (avoids mutating `struct step` which is transport-owned)
 - Wherever `osh_gemca_runtime_get_distance` result is consumed by the transport loop: use the returned `rho` to scale stopping power for WEPL accumulation instead of the zone material's nominal density
 
-Verify: two-tissue phantom (bone + soft tissue); scored WEPL matches analytical expectation.
+**Straggling across same-material voxels:** The stepper splits at material-bin boundaries (M4), not at every density change. Within a single step (constant material bin, varying ρ), Jacobs returns per-voxel `(ds_i, ρ_i)` pairs. The transport kernel should accumulate `d_total = Σ(ρ_i · ds_i)` and call straggling **once** using `d_total`. This is physically exact: Bohr/Gaussian straggling variance is additive (`σ²_total = K · Σ(ρ_i · ds_i)`), so one call with the summed areal density is equivalent to per-voxel calls combined in quadrature. Calling straggling per voxel would be equivalent but wasteful.
+
+Verify: two-tissue phantom (bone + soft tissue); scored WEPL matches analytical expectation; single-material variable-density phantom: straggling width matches `sqrt(Σ ρ_i·ds_i)` expectation.
 
 ---
 
