@@ -9,6 +9,7 @@
 #include <stddef.h> /* size_t */
 
 #include "common/osh_step_segment.h"
+#include "openshieldhit/geometry.h"
 #include "openshieldhit/status.h"
 
 struct osh_particle_pool;
@@ -48,7 +49,7 @@ struct osh_rng;
  */
 enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        size_t slot,
-                                       size_t zone_idx,
+                                       struct osh_zone_ref const *zone_ref,
                                        struct osh_step_segment const *step_segments,
                                        size_t n_step_segments,
                                        struct osh_gemca_runtime const *geom_rt,

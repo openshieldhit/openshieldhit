@@ -64,16 +64,16 @@
  */
 struct ion_step_ctx {
     /* --- Set by ion_step_setup() ----------------------------------------- */
-    struct particle const *part;     /* shortcut: pool->species[slot]        */
-    size_t projectile_idx;          /* index into material_rt->projectile_* */
-    size_t zone_idx;                /* caller-provided zone index           */
-    size_t zone_material_idx;       /* zone->material_idx                   */
-    double e0;                      /* entry total kinetic energy [MeV]     */
-    double a_proj;                  /* mass number (float cast, ≥ 1)        */
-    double cutoff;                  /* energy cutoff for this particle [MeV]*/
-    double demin_total;             /* minimum energy loss per step [MeV]   */
-    double boundary_ds;             /* distance to zone boundary [cm]       */
-    double rho;                     /* segment density [g/cm³]              */
+    struct particle const *part; /* shortcut: pool->species[slot]        */
+    size_t projectile_idx;       /* index into material_rt->projectile_* */
+    size_t zone_idx;             /* caller-provided zone index           */
+    size_t zone_material_idx;    /* zone->material_idx                   */
+    double e0;                   /* entry total kinetic energy [MeV]     */
+    double a_proj;               /* mass number (float cast, ≥ 1)        */
+    double cutoff;               /* energy cutoff for this particle [MeV]*/
+    double demin_total;          /* minimum energy loss per step [MeV]   */
+    double boundary_ds;          /* distance to zone boundary [cm]       */
+    double rho;                  /* segment density [g/cm³]              */
     double mat_z_mean;
     double mat_z_over_a;
     double mat_x0_gcm2;
@@ -110,7 +110,7 @@ struct ion_step_ctx {
 static void ion_step_setup(struct ion_step_ctx *ctx,
                            struct osh_particle_pool *pool,
                            size_t slot,
-                           size_t zone_idx,
+                           struct osh_zone_ref const *zone_ref,
                            struct osh_step_segment const *step_segments,
                            size_t n_step_segments,
                            struct osh_gemca_runtime const *geom_rt,
@@ -178,7 +178,7 @@ static void step_from_pool(struct step *st,
  */
 enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        size_t slot,
-                                       size_t zone_idx,
+                                       struct osh_zone_ref const *zone_ref,
                                        struct osh_step_segment const *step_segments,
                                        size_t n_step_segments,
                                        struct osh_gemca_runtime const *geom_rt,
@@ -190,7 +190,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
     enum osh_status rc;
 
     /* Phase 1 — identify particle, load material, handle early exits */
-    ion_step_setup(&ctx, pool, slot, zone_idx, step_segments, n_step_segments, geom_rt, transport_ctx, material_rt);
+    ion_step_setup(&ctx, pool, slot, zone_ref, step_segments, n_step_segments, geom_rt, transport_ctx, material_rt);
     if (ctx.done)
         return ctx.done_rc;
 
@@ -235,27 +235,26 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
 static void ion_step_setup(struct ion_step_ctx *ctx,
                            struct osh_particle_pool *pool,
                            size_t slot,
-                           size_t zone_idx,
+                           struct osh_zone_ref const *zone_ref,
                            struct osh_step_segment const *step_segments,
                            size_t n_step_segments,
                            struct osh_gemca_runtime const *geom_rt,
                            struct osh_transport_context const *transport_ctx,
                            struct osh_material_runtime const *material_rt) {
-    struct gemca_rt_zone const *zone;
     struct osh_transport_params const *params;
     enum osh_status rc;
 
+    (void) geom_rt;
     params = transport_ctx ? &transport_ctx->params : NULL;
     ctx->done = 0;
     ctx->done_rc = OSH_OK;
     ctx->part = pool->species[slot];
     ctx->a_proj = (ctx->part->a > 0u) ? (double) ctx->part->a : 1.0;
     ctx->e0 = pool->e[slot];
-    ctx->zone_idx = zone_idx;
+    ctx->zone_idx = zone_ref ? zone_ref->zone_idx : OSH_GEMCA_ZONE_INDEX_INVALID;
     ctx->demin_total = 0.0;
 
     ctx->boundary_ds = (n_step_segments > 0u) ? step_segments[0].ds : 0.0;
-    ctx->rho = (n_step_segments > 0u) ? step_segments[0].rho : 0.0;
     if (params && params->demin > 0.0f) {
         ctx->demin_total = (double) params->demin * ctx->a_proj;
     }
@@ -274,22 +273,22 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
         return;
     }
 
-    if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
+    if (!zone_ref || zone_ref->zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
         pool->e[slot] = 0.0; /* escaped geometry */
         ctx->done = 1;
         return;
     }
 
-    zone = &geom_rt->zones[zone_idx];
-    ctx->zone_material_idx = zone->material_idx;
+    ctx->zone_material_idx = zone_ref->material_idx;
+    ctx->rho = osh_material_runtime_get_rho(material_rt, zone_ref);
 
-    if (is_blackhole_material(zone->material_idx)) {
+    if (is_blackhole_material(zone_ref->material_idx)) {
         pool->e[slot] = 0.0;
         ctx->done = 1;
         return;
     }
 
-    if (zone->material_idx >= material_rt->nmaterials) {
+    if (zone_ref->material_idx >= material_rt->nmaterials) {
         ctx->done = 1;
         ctx->done_rc = OSH_ESTATE;
         return;
@@ -310,15 +309,14 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
         return;
     }
 
-    /* Load material scalars used by later phases.
-     * ctx->rho was already set from the segment list above. */
-    ctx->mat_z_mean = (double) material_rt->z_mean[zone->material_idx];
-    ctx->mat_z_over_a = (double) material_rt->z_over_a[zone->material_idx];
-    ctx->mat_x0_gcm2 = (double) material_rt->rad_length[zone->material_idx];
+    /* Load material scalars used by later phases. */
+    ctx->mat_z_mean = (double) material_rt->z_mean[zone_ref->material_idx];
+    ctx->mat_z_over_a = (double) material_rt->z_over_a[zone_ref->material_idx];
+    ctx->mat_x0_gcm2 = (double) material_rt->rad_length[zone_ref->material_idx];
     ctx->proj_mass_mev = material_rt->projectile_mass_mev[ctx->projectile_idx];
     ctx->enable_mcs = (params && params->mcs_mode != OSH_TRANSPORT_MCS_OFF);
     ctx->enable_straggling = (params && params->straggling_mode != OSH_TRANSPORT_STRAGGLING_OFF);
-    ctx->is_vacuum = (is_vacuum_material(zone->material_idx) || ctx->rho <= 0.0);
+    ctx->is_vacuum = (is_vacuum_material(zone_ref->material_idx) || ctx->rho <= 0.0);
 
     /* Default exit direction: incident direction (overwritten by MCS phases) */
     ctx->w_scat[0] = pool->ux[slot];
@@ -684,8 +682,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     qy = pool->y[slot] + pool->uy[slot] * ctx->h + ctx->w_scat[1] * ctx->tail_len;
     qz = pool->z[slot] + pool->uz[slot] * ctx->h + ctx->w_scat[2] * ctx->tail_len;
 
-    step_from_pool(&st, pool, slot, ctx->step_len, ctx->exit_energy, ctx->rho,
-                   (int) ctx->zone_material_idx, (int) ctx->zone_idx);
+    step_from_pool(
+        &st, pool, slot, ctx->step_len, ctx->exit_energy, ctx->rho, (int) ctx->zone_material_idx, (int) ctx->zone_idx);
     st.q[0] = qx;
     st.q[1] = qy;
     st.q[2] = qz;

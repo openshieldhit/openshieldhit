@@ -16,4 +16,5 @@ target_link_libraries(osh_material
         osh_common
         osh_particle
         osh_physics
+        osh_voxel
 )

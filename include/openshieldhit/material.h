@@ -5,6 +5,7 @@
 
 #include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
+#include "openshieldhit/voxel.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,21 +86,12 @@ struct osh_material {
  * rather than freeing individual fields such as @ref materials, @ref wdir,
  * @ref fname, or nested arrays/strings.
  */
-/**
- * HU calibration table selector stored on the material workspace.
- * Set by the HUTABLE parser card; read by the geometry compile step
- * to build the hot-path HU→density LUT.
- */
-#define OSH_HU_TABLE_NONE 0         /**< No HU table registered (non-CT runs). */
-#define OSH_HU_TABLE_SCHNEIDER 1    /**< Schneider 2000, 24 bins. */
-#define OSH_HU_TABLE_PERMATASSARI 2 /**< Permatassari 2020, 40 bins. */
-
 struct osh_material_workspace {
     struct osh_material *materials;
     char *wdir;
     char *fname;
     size_t nmaterials;
-    int hu_table_type; /**< OSH_HU_TABLE_* selector; 0 (NONE) for non-CT runs. */
+    int hu_table_type; /**< OSH_HU_TABLE_* selector (from openshieldhit/voxel.h); 0 (NONE) for non-CT runs. */
 };
 
 /**

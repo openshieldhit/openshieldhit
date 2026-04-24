@@ -42,6 +42,7 @@
 #include "material/osh_material_icru.h"
 #include "particle/osh_particle.h"
 #include "physics/osh_physics_bethe.h"
+#include "voxel/osh_voxel_hu_lut.h"
 
 /* ---- Helpers -------------------------------------------------------------- */
 
@@ -758,6 +759,20 @@ enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
         }
     }
 
+    if (wm->hu_table_type != OSH_HU_TABLE_NONE) {
+        /* Build the HU→density LUT; used by osh_material_runtime_get_rho() for voxel zones. */
+        t.hu_rho_lut = (float *) malloc(OSH_VOXEL_HU_LUT_SIZE * sizeof(float));
+        if (!t.hu_rho_lut) {
+            rc = OSH_ENOMEM;
+            goto fail;
+        }
+        if (wm->hu_table_type == OSH_HU_TABLE_PERMATASSARI) {
+            osh_voxel_build_hu_rho_lut_permatassari2020(t.hu_rho_lut);
+        } else {
+            osh_voxel_build_hu_rho_lut_schneider2000(t.hu_rho_lut);
+        }
+    }
+
     *tables = t;
     return OSH_OK;
 
@@ -778,5 +793,6 @@ void osh_material_runtime_free(struct osh_material_runtime *tables) {
     free(tables->z_mean);
     free(tables->z_over_a);
     free(tables->rad_length);
+    free(tables->hu_rho_lut);
     memset(tables, 0, sizeof(*tables));
 }
