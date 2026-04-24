@@ -51,9 +51,8 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
         *bin_out = -1;
     }
 
-    /* A valid voxel transport runtime must provide both LUTs. */
-    assert(rt->hu_bin_lut && rt->hu_rho_lut);
-    if (!rt->hu_bin_lut || !rt->hu_rho_lut) {
+    assert(rt->hu_bin_lut);
+    if (!rt->hu_bin_lut) {
         return OSH_GEMCA_INFINITY;
     }
 
@@ -97,7 +96,7 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
 
         if (step_segments && n_step_segments < step_segments_cap) {
             step_segments[n_step_segments].ds = crossings[i].path_len;
-            step_segments[n_step_segments].rho = (double) rt->hu_rho_lut[hu_clamped + 1000];
+            step_segments[n_step_segments].rho = 0.0;
         }
 
         total_ds += crossings[i].path_len;

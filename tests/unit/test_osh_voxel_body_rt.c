@@ -11,8 +11,8 @@
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
-#include "gemca/voxel/osh_gemca2_voxel_hu.h"
 #include "test_assert.h"
+#include "voxel/osh_voxel_hu_lut.h"
 
 /*
  * Test fixture: a 3×3×3 voxel grid, 1 cm voxels, origin at (0,0,0).
@@ -26,7 +26,6 @@
 #define GRID_N_VOX ((size_t) GRID_N * (size_t) GRID_N * (size_t) GRID_N)
 
 static uint8_t s_bin_lut[2601];
-static float s_rho_lut[2601];
 
 static void build_runtime(struct osh_gemca_runtime *rt, struct gemca_rt_body *body, int16_t *hu, size_t n_vox) {
     static double const identity[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
@@ -53,10 +52,8 @@ static void build_runtime(struct osh_gemca_runtime *rt, struct gemca_rt_body *bo
     }
     body->hu = hu;
 
-    osh_gemca_voxel_build_hu_lut(s_bin_lut);
-    osh_gemca_voxel_build_rho_lut_schneider2000(s_rho_lut);
+    osh_voxel_build_hu_bin_lut_schneider2000(s_bin_lut);
     rt->hu_bin_lut = s_bin_lut;
-    rt->hu_rho_lut = s_rho_lut;
     rt->bodies = body;
     rt->nbodies = 1;
 }
@@ -113,10 +110,9 @@ static void test_uniform_grid_all_same_bin(void) {
     size_t i;
     int bin;
     double ds;
-    double expected_rho;
 
     build_runtime(&rt, &body, hu, GRID_N_VOX);
-    /* All HU=0 → bin 5, rho ≈ 1.018 g/cm³. */
+    /* All HU=0 → bin 5. */
 
     r = make_x_ray();
     ds = dist_voxel_body_rt(&rt, 0, &r, step_segments, 16, &n_step_segments, &bin);
@@ -127,10 +123,9 @@ static void test_uniform_grid_all_same_bin(void) {
     /* Total distance = 3 × 1.0 cm. */
     ASSERT_TRUE(fabs(ds - 3.0) < 1e-9);
 
-    expected_rho = (double) s_rho_lut[0 + 1000];
     for (i = 0; i < n_step_segments; i++) {
         ASSERT_TRUE(fabs(step_segments[i].ds - 1.0) < 1e-9);
-        ASSERT_TRUE(fabs(step_segments[i].rho - expected_rho) < 1e-6);
+        ASSERT_TRUE(step_segments[i].rho == 0.0); /* rho no longer filled here */
     }
 }
 
@@ -227,7 +222,7 @@ static void test_oversized_grid_returns_infinity(void) {
     ASSERT_TRUE(bin == -1);
 }
 
-static void test_rho_matches_lut(void) {
+static void test_bin_assigned_for_nonzero_hu(void) {
     struct osh_gemca_runtime rt;
     struct gemca_rt_body body;
     int16_t hu[GRID_N * GRID_N * GRID_N];
@@ -239,7 +234,7 @@ static void test_rho_matches_lut(void) {
 
     build_runtime(&rt, &body, hu, GRID_N_VOX);
 
-    /* Use a non-zero HU so the density is clearly non-trivial. */
+    /* Use a non-zero HU to verify bin assignment. */
     for (i = 0; i < GRID_N_VOX; i++) {
         hu[i] = 200;
     }
@@ -248,9 +243,9 @@ static void test_rho_matches_lut(void) {
     dist_voxel_body_rt(&rt, 0, &r, step_segments, 16, &n_step_segments, &bin);
 
     ASSERT_TRUE(n_step_segments == 3);
+    ASSERT_TRUE(bin == (int) s_bin_lut[200 + 1000]);
     for (i = 0; i < n_step_segments; i++) {
-        double expected = (double) s_rho_lut[200 + 1000];
-        ASSERT_TRUE(fabs(step_segments[i].rho - expected) < 1e-6);
+        ASSERT_TRUE(step_segments[i].rho == 0.0); /* density lives in material_rt, not here */
     }
 }
 
@@ -261,6 +256,6 @@ int main(void) {
     test_step_segments_cap_limits_output();
     test_null_segs_distance_only();
     test_oversized_grid_returns_infinity();
-    test_rho_matches_lut();
+    test_bin_assigned_for_nonzero_hu();
     return 0;
 }

@@ -7,10 +7,37 @@
 #include "openshieldhit/diag.h"
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/status.h"
+#include "openshieldhit/voxel.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief Sentinel zone index returned when a ray is outside all zones.
+ */
+#define OSH_ZONE_INDEX_INVALID ((size_t) -1)
+
+/**
+ * @brief Geometry location of a particle: zone identity, material assignment,
+ *        and optional raw HU value for voxel zones.
+ *
+ * @details
+ * Filled by @ref osh_gemca_runtime_get_zone_ref_batch for each particle.
+ * For analytic zones @p has_hu is 0 and @p material_idx is the zone's
+ * ASSIGNMAT index.  For voxel zones @p has_hu is 1, @p hu holds the raw
+ * (clamped to [-1000, 1600]) Hounsfield value of the current voxel, and
+ * @p material_idx is resolved via the HU→bin LUT.
+ *
+ * @p zone_idx equals @ref OSH_ZONE_INDEX_INVALID when the particle is
+ * outside all defined zones.
+ */
+struct osh_zone_ref {
+    size_t zone_idx;     /**< Zone index; OSH_ZONE_INDEX_INVALID if outside geometry. */
+    size_t material_idx; /**< Resolved material index: ASSIGNMAT for analytic, HU-bin for voxel. */
+    int16_t hu;          /**< Clamped HU value [−1000, 1600]; meaningful only when has_hu != 0. */
+    char has_hu;         /**< Non-zero for voxel zones; zero for analytic zones. */
+};
 
 /**
  * @file geometry.h
@@ -108,6 +135,7 @@ struct osh_geometry_workspace {
     size_t nbodies;                      /**< Number of entries in @p bodies[]. */
     size_t nzones;                       /**< Number of entries in @p zones[]. */
     struct osh_gemca_prepared *prepared; /**< Internal prepared state; owned by core. */
+    int hu_table_type; /**< OSH_HU_TABLE_* selector; 0 (NONE) for non-CT runs. Mirrors mat->hu_table_type. */
 };
 
 /**
