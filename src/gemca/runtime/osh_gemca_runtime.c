@@ -8,6 +8,7 @@
 #include "common/osh_diag.h"
 #include "common/osh_ray.h"
 #include "common/osh_vect.h"
+#include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
@@ -43,6 +44,7 @@ static enum osh_status
 setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt);
 static enum osh_status setup_hu_luts(int hu_table_type, struct osh_gemca_runtime *rt);
 static int detect_zone_batch_dispatch(void);
+static size_t voxel_storage_index(struct gemca_rt_body const *body, size_t ix, size_t iy, size_t iz);
 
 /* Zone compilation */
 static enum osh_status compile_zone(struct zone const *z,
@@ -313,6 +315,10 @@ double osh_gemca_runtime_get_distance(struct osh_gemca_runtime const *rt, size_t
     }
     rr.system = r->system;
     osh_vect_norm(rr.cp);
+
+    if (rt->zones[zone_idx].voxel_body_idx >= 0) {
+        return dist_voxel_body_rt(rt, rt->zones[zone_idx].voxel_body_idx, &rr, NULL, 0u, NULL, NULL);
+    }
 
     total = 0.0;
 
@@ -1147,6 +1153,10 @@ void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
         }
 
         body = &rt->bodies[vb];
+        if (!body->hu) {
+            zone_ref_out[i].material_idx = z_rt->material_idx;
+            continue;
+        }
         osh_ray_transform(&rr, &r_local, body->t);
 
         ix = (int) floor((r_local.p[0] - body->ct_grid.origin[0]) / body->ct_grid.spacing[0]);
@@ -1159,7 +1169,7 @@ void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
             continue;
         }
 
-        voxel_idx = (size_t) ix + body->ct_grid.n[0] * ((size_t) iy + body->ct_grid.n[1] * (size_t) iz);
+        voxel_idx = voxel_storage_index(body, (size_t) ix, (size_t) iy, (size_t) iz);
         hu_raw = body->hu[voxel_idx];
 
         if (hu_raw < -1000) {
@@ -1276,6 +1286,15 @@ static enum osh_status setup_hu_luts(int hu_table_type, struct osh_gemca_runtime
     }
 
     return OSH_OK;
+}
+
+static size_t voxel_storage_index(struct gemca_rt_body const *body, size_t ix, size_t iy, size_t iz) {
+    if (body->ct_grid.tile_order == OSH_VOXEL_ORDER_MORTON8) {
+        size_t Tx = (body->ct_grid.n[0] + 7u) >> 3u;
+        size_t Ty = (body->ct_grid.n[1] + 7u) >> 3u;
+        return osh_voxel_tile_idx(ix, iy, iz, Tx, Ty);
+    }
+    return ix + body->ct_grid.n[0] * (iy + body->ct_grid.n[1] * iz);
 }
 
 static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
@@ -1461,7 +1480,7 @@ static enum osh_status compile_zone(struct zone const *z,
     }
     zrt->material_idx = z->material_idx;
 
-    /* Detect voxel bodies for future Jacobs dispatch. */
+    /* Detect voxel bodies so distance/material queries can use voxel traversal. */
     zrt->voxel_body_idx = -1;
     for (i = 0; i < zrt->ninsns; i++) {
         if (zrt->insns[i].op == GEMCA_RT_PUSH_VOXEL_BODY) {
@@ -1868,10 +1887,9 @@ eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z,
                 return 0.0;
             }
             stack[sp].is_inside = in_body_rt(rt, insn->operand, r);
-            /* step_segments=NULL: CSG evaluator only needs the distance scalar.
-             * Transport calls dist_voxel_body_rt() directly with its own
-             * OSH_STEP_SEGMENTS_MAX stack buffer to get per-voxel step_segments
-             * for energy loss and scoring. */
+            /* step_segments=NULL: CSG evaluator only needs the current voxel
+             * exit distance. Material properties are resolved from osh_zone_ref
+             * by the material runtime. */
             stack[sp].dist = dist_voxel_body_rt(rt, insn->operand, r, NULL, 0, NULL, NULL);
             sp++;
             break;

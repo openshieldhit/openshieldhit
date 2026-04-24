@@ -37,11 +37,7 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
     struct ray r_local;
     size_t crossings_needed;
     size_t n_crossings;
-    size_t i;
-    size_t n_step_segments;
-    double total_ds;
     int bin0;
-    int bini;
     int hu_clamped;
 
     if (n_out) {
@@ -79,39 +75,25 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
         return OSH_GEMCA_INFINITY;
     }
 
-    /* Determine the starting bin from the first voxel. */
+    if (!body->hu) {
+        return OSH_GEMCA_INFINITY;
+    }
+
+    /* Current M5 policy: one voxel is the current medium.  Stop at the first
+     * voxel boundary even if the next voxel belongs to the same material bin. */
     hu_clamped = clamp_hu(body->hu[crossings[0].idx]);
     bin0 = (int) rt->hu_bin_lut[hu_clamped + 1000];
 
-    /* Walk crossings: stop at bin change or step_segments_cap. */
-    total_ds = 0.0;
-    n_step_segments = 0;
-    for (i = 0; i < n_crossings; i++) {
-        hu_clamped = clamp_hu(body->hu[crossings[i].idx]);
-        bini = (int) rt->hu_bin_lut[hu_clamped + 1000];
-
-        if (bini != bin0) {
-            break; /* bin change → new zone */
-        }
-
-        if (step_segments && n_step_segments < step_segments_cap) {
-            step_segments[n_step_segments].ds = crossings[i].path_len;
-            step_segments[n_step_segments].rho = 0.0;
-        }
-
-        total_ds += crossings[i].path_len;
-        n_step_segments++;
-
-        if (step_segments && n_step_segments >= step_segments_cap) {
-            break; /* buffer full → transport re-enters on next step */
-        }
+    if (step_segments && step_segments_cap > 0u) {
+        step_segments[0].ds = crossings[0].path_len;
+        step_segments[0].rho = 0.0;
     }
 
     if (n_out) {
-        *n_out = n_step_segments;
+        *n_out = (!step_segments || step_segments_cap > 0u) ? 1u : 0u;
     }
     if (bin_out) {
         *bin_out = bin0;
     }
-    return total_ds;
+    return crossings[0].path_len;
 }

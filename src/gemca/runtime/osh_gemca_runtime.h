@@ -44,9 +44,8 @@ extern "C" {
  * Voxel bodies are represented as bounding RPP surfaces for zone-membership
  * purposes (@ref GEMCA_RT_PUSH_VOXEL_BODY).  A zone that contains a voxel body
  * records the body index in @ref gemca_rt_zone.voxel_body_idx; the distance
- * query will later dispatch to the Jacobs traversal algorithm rather than the
- * RPP boundary distance.  Jacobs is not yet implemented; the current fallback
- * is the same RPP distance used for normal bodies.
+ * query dispatches to the voxel traversal helper and returns the current voxel
+ * exit distance.
  *
  * @{
  */
@@ -78,10 +77,8 @@ extern "C" {
  *                         distance evaluator); push the result.
  *
  *   PUSH_VOXEL_BODY(idx) — Identical to PUSH_BODY for membership.  For
- *                         distance queries, the evaluator may later dispatch to
- *                         a specialised voxel traversal (Jacobs algorithm) once
- *                         zone membership is confirmed.  Currently falls back to
- *                         the RPP boundary distance.
+ *                         distance queries, dispatches to the voxel traversal
+ *                         helper and returns the current voxel-exit distance.
  *
  *   UNION               — Pop a, b (a=left, b=right); push (a || b).
  *   INTERSECT           — Pop a, b; push (a && b).
@@ -90,7 +87,7 @@ extern "C" {
 enum gemca_rt_op {
     GEMCA_RT_GUARD_BODY,      /**< Fast-reject guard: early exit if outside body[operand]. */
     GEMCA_RT_PUSH_BODY,       /**< Push body[operand] membership/distance result. */
-    GEMCA_RT_PUSH_VOXEL_BODY, /**< Push voxel body[operand]; future Jacobs dispatch point. */
+    GEMCA_RT_PUSH_VOXEL_BODY, /**< Push voxel body[operand]; distance queries use voxel traversal. */
     GEMCA_RT_UNION,           /**< Boolean OR of top two stack entries. */
     GEMCA_RT_INTERSECT,       /**< Boolean AND of top two stack entries. */
     GEMCA_RT_DIFF             /**< Boolean (left && !right) of top two stack entries. */
@@ -190,8 +187,7 @@ struct gemca_rt_insn {
  *
  * If `voxel_body_idx >= 0`, the zone contains a voxel body.  Zone membership
  * treats the voxel's surfaces as a regular body (RPP half-planes).  Distance
- * queries for this zone will eventually dispatch to Jacobs traversal once the
- * zone is confirmed occupied; currently falls back to RPP boundary distance.
+ * queries for this zone return the current voxel-exit distance.
  *
  * @note GPU migration: `insns` is a host heap pointer and cannot be followed
  * on a GPU device.  Before writing a GPU kernel, add a flat `insns_flat[]`
@@ -337,10 +333,10 @@ size_t osh_gemca_runtime_get_zone(struct osh_gemca_runtime const *rt, struct ray
  * accumulates the total path length.  This mirrors the step-loop in the cold
  * osh_gemca_get_distance() implementation.
  *
- * For zones with a voxel body (voxel_body_idx >= 0), the algorithm currently
- * falls back to the same RPP boundary distance used for normal bodies.  A
- * future revision will dispatch to the Jacobs traversal algorithm at this
- * point.
+ * For zones with a voxel body (voxel_body_idx >= 0), this returns the distance
+ * to the current voxel exit.  The current M5 transport policy treats each voxel
+ * as the active medium for one step and re-queries after crossing a voxel
+ * boundary.
  *
  * @param[in] rt        Compiled gemca runtime.
  * @param[in] zone_idx  Zone index returned by osh_gemca_runtime_get_zone().
@@ -490,7 +486,7 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
  * @brief Zone-reference query for a batch of @p n particles.
  *
  * @details
- * Combines zone lookup with per-voxel HU and material-index resolution into a
+ * Combines zone lookup with current-voxel HU and material-index resolution into a
  * single pass.  For analytic zones, @p has_hu is 0 and @p material_idx is the
  * zone's ASSIGNMAT index.  For voxel zones, @p has_hu is 1, @p hu holds the
  * clamped HU value of the current voxel, and @p material_idx is the HU-bin

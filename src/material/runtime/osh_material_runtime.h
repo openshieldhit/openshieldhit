@@ -178,7 +178,7 @@ static inline double osh_material_runtime_range_lookup(struct osh_material_runti
  * @details
  * For analytic zones (@p zr->has_hu == 0) returns the ASSIGNMAT density
  * tables->rho[zr->material_idx].  For voxel zones (@p zr->has_hu != 0)
- * returns the per-voxel density tables->hu_rho_lut[zr->hu + 1000].
+ * returns the current voxel density tables->hu_rho_lut[zr->hu + 1000].
  *
  * @param[in] tables  Material runtime tables.
  * @param[in] zr      Zone reference filled by osh_gemca_runtime_get_zone_ref_batch().

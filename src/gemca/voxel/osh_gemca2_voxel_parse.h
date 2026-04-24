@@ -1,8 +1,8 @@
 #ifndef _OSH_GEMCA2_VOXEL_PARSE
 #define _OSH_GEMCA2_VOXEL_PARSE
 
-#include <stdint.h>
+#include "gemca/voxel/osh_gemca2_voxel.h"
 
-float osh_gemca_voxel_hu2wepl(int16_t hu, char alg);
+int osh_gemca_voxel_load(char const *fname, struct voxelct *ct);
 
 #endif /* _OSH_GEMCA2_VOXEL_PARSE */
