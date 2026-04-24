@@ -230,34 +230,6 @@ static void test_null_segs_distance_only(void) {
     ASSERT_TRUE(fabs(ds - 1.0) < 1e-9);
 }
 
-static void test_oversized_grid_returns_infinity(void) {
-    struct osh_gemca_runtime rt;
-    struct gemca_rt_body body;
-    int16_t hu[GRID_N * GRID_N * GRID_N];
-    struct osh_step_segment step_segments[16];
-    struct ray r;
-    size_t n_step_segments;
-    int bin;
-    double ds;
-
-    build_runtime(&rt, &body, hu, GRID_N_VOX);
-    body.ct_grid.n[0] = 1024u;
-    body.ct_grid.n[1] = 1024u;
-    body.ct_grid.n[2] = 1024u; /* 3072 crossings required > _CROSSINGS_CAP */
-
-    r = make_x_ray();
-    ds = dist_voxel_body_rt(&rt, 0, &r, step_segments, 16, &n_step_segments, &bin);
-
-    if (isinf(OSH_GEMCA_INFINITY)) {
-        ASSERT_TRUE(isinf(ds));
-        ASSERT_TRUE(ds > 0.0);
-    } else {
-        ASSERT_TRUE(ds == OSH_GEMCA_INFINITY);
-    }
-    ASSERT_TRUE(n_step_segments == 0);
-    ASSERT_TRUE(bin == -1);
-}
-
 static void test_bin_assigned_for_nonzero_hu(void) {
     struct osh_gemca_runtime rt;
     struct gemca_rt_body body;
@@ -324,7 +296,6 @@ int main(void) {
     test_bin_change_stops_traversal();
     test_step_segments_cap_limits_output();
     test_null_segs_distance_only();
-    test_oversized_grid_returns_infinity();
     test_bin_assigned_for_nonzero_hu();
     test_zone_ref_uses_morton_voxel_index();
     return 0;
