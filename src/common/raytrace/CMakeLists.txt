@@ -4,6 +4,8 @@ set_property(CACHE OSH_RAYTRACE_ALGORITHM PROPERTY STRINGS SIMPLE SIDDON JACOBS)
 
 add_library(osh_raytrace STATIC)
 
+target_sources(osh_raytrace PRIVATE osh_raytrace_grid.c)
+
 if(OSH_RAYTRACE_ALGORITHM STREQUAL "SIMPLE")
     target_sources(osh_raytrace PRIVATE osh_raytrace_simple_msh.c)
 elseif(OSH_RAYTRACE_ALGORITHM STREQUAL "SIDDON")

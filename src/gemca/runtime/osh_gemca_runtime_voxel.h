@@ -11,10 +11,9 @@
  * Fill the current voxel crossing for a voxel body and return the current
  * voxel-exit distance.
  *
- * Traverses the voxel grid with Jacobs (Siddon-like incremental DDA) and uses
- * only the first crossing.  The current M5 transport policy treats each voxel
- * as the active medium for one step; transport re-enters GEMCA after each voxel
- * boundary.
+ * Uses the raytrace first-crossing helper.  The current M5 transport policy
+ * treats each voxel as the active medium for one step; transport re-enters
+ * GEMCA after each voxel boundary.
  *
  * Each filled entry has:
  *   ds  — path length through that voxel [cm]
