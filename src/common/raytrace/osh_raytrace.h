@@ -47,6 +47,45 @@ struct osh_voxel_crossing {
 };
 
 /**
+ * @brief Locate the voxel containing point @p p.
+ *
+ * @details
+ * Uses the same flat-index convention as @ref osh_raytrace_traverse.  The grid
+ * lower boundary is inclusive and the upper boundary is exclusive:
+ * [origin[i], origin[i] + n[i]*spacing[i]).
+ *
+ * @param[in]  grid     Grid descriptor.
+ * @param[in]  p        Point [cm].
+ * @param[out] idx_out  Flat voxel index in @p grid storage order.
+ *
+ * @returns 1 if @p p is inside the grid, 0 otherwise.
+ */
+int osh_raytrace_locate(struct osh_raytrace_grid const *grid, double const p[3], size_t *idx_out);
+
+/**
+ * @brief Compute only the first voxel crossing for a ray segment through a grid.
+ *
+ * @details
+ * Traverses the ray starting at @p p, travelling along unit direction @p v, for
+ * at most @p ds.  The returned crossing is identical to the first entry that
+ * @ref osh_raytrace_traverse would emit, but this helper avoids walking the
+ * rest of the grid and does not require a caller-owned crossing array.
+ *
+ * @param[in]  grid  Grid descriptor.
+ * @param[in]  p     Ray start point [cm].
+ * @param[in]  v     Unit direction vector (|v| == 1).
+ * @param[in]  ds    Total step length [cm].
+ * @param[out] out   First voxel crossing.
+ *
+ * @returns 1 if a crossing was found, 0 if the ray segment misses the grid.
+ */
+int osh_raytrace_first_crossing(struct osh_raytrace_grid const *grid,
+                                double const p[3],
+                                double const v[3],
+                                double ds,
+                                struct osh_voxel_crossing *out);
+
+/**
  * @brief Compute all voxel crossings for a ray segment through a grid.
  *
  * @details

@@ -8,7 +8,7 @@
 #include "common/osh_diag.h"
 #include "common/osh_ray.h"
 #include "common/osh_vect.h"
-#include "common/osh_voxel_order.h"
+#include "common/raytrace/osh_raytrace.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
@@ -44,7 +44,6 @@ static enum osh_status
 setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt);
 static enum osh_status setup_hu_luts(int hu_table_type, struct osh_gemca_runtime *rt);
 static int detect_zone_batch_dispatch(void);
-static size_t voxel_storage_index(struct gemca_rt_body const *body, size_t ix, size_t iy, size_t iz);
 
 /* Zone compilation */
 static enum osh_status compile_zone(struct zone const *z,
@@ -1113,9 +1112,6 @@ void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
     size_t i;
     size_t zi;
     int vb;
-    int ix;
-    int iy;
-    int iz;
     int hu_clamped;
     int16_t hu_raw;
     size_t voxel_idx;
@@ -1159,17 +1155,11 @@ void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
         }
         osh_ray_transform(&rr, &r_local, body->t);
 
-        ix = (int) floor((r_local.p[0] - body->ct_grid.origin[0]) / body->ct_grid.spacing[0]);
-        iy = (int) floor((r_local.p[1] - body->ct_grid.origin[1]) / body->ct_grid.spacing[1]);
-        iz = (int) floor((r_local.p[2] - body->ct_grid.origin[2]) / body->ct_grid.spacing[2]);
-
-        if (ix < 0 || iy < 0 || iz < 0 || ix >= (int) body->ct_grid.n[0] || iy >= (int) body->ct_grid.n[1]
-            || iz >= (int) body->ct_grid.n[2]) {
+        if (!osh_raytrace_locate(&body->ct_grid, r_local.p, &voxel_idx)) {
             zone_ref_out[i].material_idx = z_rt->material_idx;
             continue;
         }
 
-        voxel_idx = voxel_storage_index(body, (size_t) ix, (size_t) iy, (size_t) iz);
         hu_raw = body->hu[voxel_idx];
 
         if (hu_raw < -1000) {
@@ -1286,15 +1276,6 @@ static enum osh_status setup_hu_luts(int hu_table_type, struct osh_gemca_runtime
     }
 
     return OSH_OK;
-}
-
-static size_t voxel_storage_index(struct gemca_rt_body const *body, size_t ix, size_t iy, size_t iz) {
-    if (body->ct_grid.tile_order == OSH_VOXEL_ORDER_MORTON8) {
-        size_t Tx = (body->ct_grid.n[0] + 7u) >> 3u;
-        size_t Ty = (body->ct_grid.n[1] + 7u) >> 3u;
-        return osh_voxel_tile_idx(ix, iy, iz, Tx, Ty);
-    }
-    return ix + body->ct_grid.n[0] * (iy + body->ct_grid.n[1] * iz);
 }
 
 static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {

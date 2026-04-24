@@ -7,11 +7,13 @@ today and by voxel CT transport work in progress.
 
 - expose a small domain-neutral grid descriptor: `struct osh_raytrace_grid`
 - return voxel crossings as flat `(idx, path_len)` pairs
+- provide O(1) helpers for point location and first-voxel crossing queries
 - keep the traversal contract independent of GEMCA, scoring, or DICOM types
 
 ## Files
 
 - `osh_raytrace.h` — public interface for the raytrace submodule
+- `osh_raytrace_grid.c` — common point-location and first-crossing helpers
 - `osh_raytrace_simple_msh.c` — pedagogical 3-D DDA reference
 - `osh_raytrace_siddon_msh.c` — Siddon clip + DDA walk, current default
 - `osh_raytrace_jacobs_msh.c` — alpha-parametric Jacobs implementation
