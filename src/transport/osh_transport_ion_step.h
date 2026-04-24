@@ -24,17 +24,14 @@ struct osh_rng;
  *
  * @details
  * Reads the particle state from @p pool[slot] and executes one transport step:
- * CSDA energy loss (using the per-segment areal density Σ(rho_i × ds_i)),
- * optional Highland/Molière MCS via random hinge, optional Bohr straggling,
- * and per-segment scoring.  Writes the updated state back to the pool.
+ * CSDA energy loss (using rho × ds for the current medium), optional
+ * Highland/Molière MCS via random hinge, optional Bohr straggling, and scoring.
+ * Writes the updated state back to the pool.
  *
- * The step_segments array describes the constant-density pieces the step may
- * traverse.  For analytic (non-voxelised) zones the caller supplies exactly one
- * synthetic segment {ds = boundary_ds, rho = zone_rho}.  For CT voxel zones the
- * caller supplies the Jacobs traversal output from dist_voxel_body_rt(), which
- * may contain up to OSH_STEP_SEGMENTS_MAX segments.  Physics limits (CSDA,
- * theta) may shorten the step so that fewer than n_step_segments are actually
- * traversed; segments beyond the actual step length are ignored.
+ * The step_segments array currently contains exactly one current-medium segment:
+ * analytic zones use the zone boundary distance and CT voxel zones use the
+ * current voxel-exit distance.  Physics limits (CSDA, theta) may shorten the
+ * step before that boundary is reached.
  *
  * The random-hinge treatment follows Fippel & Soukup (Med Phys 2004).
  *
