@@ -58,9 +58,9 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  *
  *   1. When the pool is empty and primaries remain, fill it from beam_runtime
  *      (up to OSH_TRANSPORT_POOL_CAPACITY primaries).
- *   2. Batch-query zone indices and boundary distances for all live slots.
- *   3. Build step_segments[] (Jacobs for voxel zones, synthetic for analytic)
- *      and call osh_transport_ion_step() for every live slot.  Particles that
+ *   2. Batch-query zone refs and current-medium boundary distances for all live slots.
+ *   3. Build a one-segment current-medium step and call osh_transport_ion_step()
+ *      for every live slot.  Particles that
  *      die (energy cutoff, geometry exit, blackhole) are marked by
  *      zeroing e[slot].
  *   4. Compact the pool, removing dead entries.
@@ -147,8 +147,8 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             primaries_done += n_fill;
         }
 
-        /* Batch geometry: zone-ref lookup (zone + per-voxel HU/material) and
-         * boundary distance for all live particles */
+        /* Batch geometry: zone-ref lookup (zone + current HU/material) and
+         * current-medium boundary distance for all live particles. */
         osh_gemca_runtime_get_zone_ref_batch(
             geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, pool->n, zone_refs);
         osh_gemca_runtime_get_distance_batch(

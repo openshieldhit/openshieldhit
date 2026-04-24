@@ -59,8 +59,8 @@ Recent architectural cleanups already completed:
       `osh_gemca_runtime_get_distance_batch`
 - [ ] Flatten `insns_flat[]` + `insn_begin[]` in GEMCA runtime to remove
       per-zone heap-pointer layout
-- [ ] Add Jacobs voxel-traversal dispatch in `eval_distance`
-- [ ] Add voxel geometry support in the GEMCA / geometry layer
+- [ ] Rename the remaining voxel distance helper to reflect its current role as
+      a geometry/runtime current-voxel boundary query
 
 ## Transport
 
@@ -82,9 +82,10 @@ Recent architectural cleanups already completed:
 
 ## CT / Voxel Workflow
 
-- [ ] `HU -> material_idx` segmentation in the voxel / CT layer
-- [ ] `HU -> rho` density calibration as piecewise-linear table
-- [ ] `HU -> WEPL` calibration table
+- [ ] Finish legacy `VOX` card parser path if the old `.hed` / `.ctx` workflow
+      should remain user-facing
+- [ ] Add axis-permuted row-major voxel layouts once their index contract and
+      selection heuristic are settled
 - [ ] Prefer mass-normalized transport tables so local density scaling stays
       cheap
 
@@ -126,16 +127,16 @@ Recent architectural cleanups already completed:
 
 Adding full voxel CT transport to OpenShieldHIT for proton/ion therapy. The simulation must:
 - Load a DICOM CT series and build a geometry body from it
-- Track particles through the CT volume using Jacobs voxel traversal with per-voxel HU→density mapping
-- Split steps at material-bin boundaries (not density transitions) to satisfy the physics invariant that material index is immutable across a step
+- Track particles through the CT volume using Jacobs voxel traversal with current-voxel HU→density mapping
+- Stop voxel steps at the current voxel boundary for the basic M5 transport path; multi-voxel density integration is deferred
 - Score dose onto an RTDOSE grid using the same Jacobs raytrace
 - Apply gantry/couch rotation via a single precalculated 4×4 transform matrix; no IEC coordinate-system rewrite needed
 
 **Preliminary work already in place:**
 - `OSH_GEOMETRY_BODY_VOX` (type 5) reserved in `include/openshieldhit/geometry_defs.h`
-- `src/gemca/voxel/`: `struct voxelct`, HU→density (`osh_gemca_voxel_hu2rho`), HU→bin (`osh_gemca_voxel_hu2idx`), Schneider-2000 24-bin table
-- `_setup_vox()` skeleton in `src/gemca/osh_gemca2_calc_body.c:484` with TODOs at lines 501–532
-- `gemca_rt_zone.voxel_body_idx` + `GEMCA_RT_PUSH_VOXEL_BODY` opcode, stub at `src/gemca/runtime/osh_gemca_runtime.c:1720`
+- `src/voxel/`: HU table constants, Schneider/Permatassari material registration, HU→bin LUT builders, HU→rho LUT builders, and WEPL utility
+- DCM-backed voxel body setup in `src/apps/osh/` and `src/gemca/osh_gemca2_calc_body.c`
+- `gemca_rt_zone.voxel_body_idx` + `GEMCA_RT_PUSH_VOXEL_BODY` opcode with current-voxel distance dispatch
 - Jacobs raytrace fully implemented: `src/common/raytrace/osh_raytrace_jacobs_msh.c`
 - DICOM CT + RTDOSE readers complete in `src/dicom/`
 
@@ -173,7 +174,7 @@ or
 ```
 HUTABLE Permatassari2020
 ```
-This calls `osh_gemca_voxel_register_schneider_materials(wm)` or `osh_gemca_voxel_register_permatassari_materials(wm)`. A single `HUTABLE` card per material file; error on duplicate. The two-registration-function architecture avoids including both data headers in the same translation unit (variable name conflict: both define `_nmat`, `_nelm`, etc.). Each function lives in its own `.c` file.
+This calls `osh_voxel_register_schneider_materials(wm)` or `osh_voxel_register_permatassari_materials(wm)`. A single `HUTABLE` card per material file; error on duplicate. The two-registration-function architecture avoids including both data headers in the same translation unit.
 
 ---
 
@@ -182,54 +183,38 @@ This calls `osh_gemca_voxel_register_schneider_materials(wm)` or `osh_gemca_voxe
 ### M1 — Schneider material registration + HU→bin LUT ✅ COMPLETE
 **Goal:** Materialise all 24 Schneider bins into `osh_material_workspace` and build the O(1) HU→bin lookup table.
 
-Status: implemented and tested on branch `66-1_schneider_lut`. All 45 tests pass.
-- `_nelm` still set to 14 (should be 12 — fix in M1b below)
+Status: implemented. Schneider data and registration now live in `src/voxel/`; `_nelm` is 12.
 
 ### M1b — Permatassari 2020 data + HU table selection
 **Goal:** Add Permatassari 2020 as a second HU calibration table and a parser keyword to select it.
 
+Status: implemented in `src/voxel/`.
+
 Files:
-- `src/gemca/voxel/osh_voxel_mat_schneider2000.h`:
-  - Fix `_nelm = 14` → `_nelm = 12` (only 12 non-zero Z values in `_ct_elmz`)
-  - Add reference comment: Schneider W et al., PMB 45:459–478 (2000), Table 6 + Eqs. 20–24
-- `src/gemca/voxel/osh_voxel_mat_permatassari2020.h` (new):
-  - `_nmat = 40`, `_nelm = 25`, `unsigned int const _ct_elmz[25]` (Z=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,22,26,30,53,56)
-  - `int16_t const _ct_hu[41]` — HU section breakpoints from TOPAS (–1024…3072)
-  - `double const _ct_density_factor[40]` — density formula coefficients from TOPAS
-  - `double const _ct_mean_excitation_energy[40]` — mean excitation energies [eV] from TOPAS
-  - `float const _ct_relm[40][25]` — mass fractions (already 1.0-normalized in TOPAS source)
-  - Reference comment: Permatassari et al., PMB 65:ab9702 (2020), Method C; data from TOPAS `SPRtoMaterial__Brain.txt`
-- `src/gemca/voxel/osh_gemca2_voxel_hu_permatassari.c` (new, separate TU to avoid name conflicts):
-  - `osh_gemca_voxel_register_permatassari_materials(wm)` — same realloc pattern as Schneider; uses `mat->mean_excitation_energy` from table; normalizes fractions by actual row sum as safety guard; bin 0 → GAS, rest → CONDENSED
-  - `osh_gemca_voxel_build_hu_lut_permatassari2020(lut)` — same `build_hu_lut` helper as Schneider but with `_ct_hu[41]`, 41 breakpoints
-  - `osh_gemca_voxel_hu2rho_permatassari2020(int16_t hu, int bin)` — returns `_ct_density_factor[bin] * (1000.0 + hu)`; clamps result to `max(rho, 0.0001)` for the near-zero air case
-- `src/gemca/voxel/osh_gemca2_voxel_hu.h`: add declarations for all three new functions
-- `src/gemca/CMakeLists.txt`: add `voxel/osh_gemca2_voxel_hu_permatassari.c`
-- `src/apps/osh/osh_material_parse_keys.h`: add `OSH_MATERIAL_KEY_HUTABLE "hutable"`
-- `src/apps/osh/osh_material_parse.c`: add `parse_hutable()` handler; must be called at top level (not inside a `MATERIAL` block); parse one token ("schneider2000" or "permatassari2020", case-insensitive); call the matching register function; error on unknown table name or duplicate `HUTABLE`
-- `tests/unit/test_osh_voxel_hu.c`: add tests for Permatassari — registration count (42 = 2+40), LUT boundary values (`lut[-1000+1000]==0`, `lut[0+1000]==14`, `lut[1600+1000]==39`), `hu2rho_permatassari2020(0, 14) ≈ 0.998`
+- `src/voxel/osh_voxel_mat_schneider2000.h` — Schneider material data
+- `src/voxel/osh_voxel_mat_permatassari2020.h` — Permatassari material data
+- `src/voxel/osh_voxel_hu_lut.c` — Schneider registration, HU→bin, HU→rho, WEPL utility
+- `src/voxel/osh_voxel_hu_lut_permatassari.c` — Permatassari registration, HU→bin, HU→rho
+- `src/apps/osh/osh_material_parse.c` — top-level `HUTABLE` handler
+- `tests/unit/test_osh_voxel_hu.c` — registration and LUT checks for both calibration tables
 
 ---
 
 ### M2 — DCM parser card + DICOM → VOX body parameters
 **Goal:** Parse `DCM` card, read CT via DICOM, and fill the exact same VOX body fields that a hand-written `VOX` card would produce. No new body type needed — `OSH_GEOMETRY_BODY_VOX` is used throughout.
 
-Files:
-- `src/apps/osh/osh_geometry_parse.c` — in `_parse_bodies`, handle `"DCM"` keyword:
-  - Read one string token (CT dir path) + 5 doubles (`gantry_deg couch_deg tx ty tz`)
-  - Call `osh_dicom_ct_read(path, &ct, diag)` immediately (parse-time; DICOM is not deferred)
-  - Derive and store VOX grid args `{x0,y0,z0, dx,dy,dz, nx,ny,nz}` and transform args `{gantry,couch,tx,ty,tz}`
-  - For DCM, interpret tx/ty/tz as first-voxel-center and convert to corner-based placement by subtracting `0.5*spacing`
-  - Keep legacy `VOX` card parsing disabled for now with explicit TODO parse error
-- `src/gemca/osh_gemca2_calc_body.c` — complete the existing TODOs in `_setup_vox` (lines 501–532):
-  - Accept pre-filled voxel-grid args (already set by parser for DCM and future VOX cards)
-  - Build transform matrix from gantry + couch + isocenter using `osh_vect_rot_y` / `osh_vect_rot_z` (existing pattern); verify sign conventions match IEC 61217 once, document
-  - Build enclosing surfaces from `x0 + d*n` extents
-- `src/gemca/osh_gemca2.h` — add to `struct body`: `struct osh_raytrace_grid ct_grid; const int16_t *hu;`
+Status: implemented for DCM-backed voxel bodies. Legacy `VOX` card parsing
+still returns an explicit TODO parse error.
 
 HU ownership: the app layer (e.g. `osh_app_osh.c`) holds a `int16_t *` allocation for the CT volume. `b->hu` is a borrowed pointer into it. `struct body` does not own or free it.
 
-Progress on branch `66-2`:
+Files:
+- `src/apps/osh/osh_geometry_parse.c` — parses `DCM name dir gantry couch tx ty tz`, reads CT metadata, reorders HU storage, and fills VOX-compatible body fields
+- `src/gemca/osh_gemca2_calc_body.c` — consumes the VOX arg layout, builds the voxel enclosure surfaces, and builds the transform matrix
+- `src/gemca/osh_gemca2.h` — cold body stores `ct_grid`, borrowed `hu`, and `n_hu`
+- `tests/unit/test_osh_geometry_dcm.c` — parser, prepare/compile propagation, transform, and legacy VOX TODO coverage
+
+Completed:
 - [x] `DCM` body card wired in geometry parser
 - [x] DICOM CT read at parse-time from `DCM` card
 - [x] VOX arg model switched to `x0,y0,z0, dx,dy,dz, nx,ny,nz, gantry,couch, tx,ty,tz`
@@ -278,7 +263,8 @@ Verify: compile a geometry with one DCM body; assert `rt->bodies[i].ct_grid.n[2]
 ### M3b — Array layout for cache-friendly voxel traversal
 **Goal:** Make voxel array access cache-efficient for arbitrary ray directions, with infrastructure to compare layout strategies.
 
-Status: not started (depends on M3; must land before M4 locks the index contract).
+Status: implemented for row-major and Morton-8 layouts. Axis-permuted row-major
+layouts remain future work.
 
 **Problem:** Row-major layout gives 524 KB stride per z-step for a 512×512 CT — guaranteed L3 miss. Same problem applies to RTDOSE dose accumulation (read-modify-write per particle crossing).
 
@@ -288,7 +274,8 @@ Status: not started (depends on M3; must land before M4 locks the index contract
 uint8_t tile_order; /* 0=row-major (default/baseline), 8=Morton-8×8×8, 1..7=axis-perm (future) */
 ```
 
-Jacobs line 146 switches on this — perfectly predicted branch, zero hot-path cost. Row-major stays available as benchmark baseline.
+Raytrace implementations switch on this layout field while emitting flat voxel
+indices. Row-major stays available as benchmark baseline.
 
 **Layout A — Morton-tiled (`tile_order=8`, primary candidate):**
 `Tx×Ty×Tz` tiles of 512 voxels in row-major tile order, 3-way Morton order within each tile. Worst-case locality: ~1 KB per 8-voxel run in any axis.
@@ -309,13 +296,13 @@ Permute storage axes so the beam-dominant direction is innermost (stride-1). Opt
 Selection lives in the geometry-compile step (`osh_gemca_compile` or DCM parse), not in the hot path. Requires passing gantry/couch angles to the reorder function. The `tile_order` field on `osh_raytrace_grid` carries the result into Jacobs with no runtime branching cost.
 
 **Shared infrastructure (CT + RTDOSE):**
-- New `src/common/osh_voxel_order.h` — `tile_order` constants + inline index helpers
-- New `src/common/osh_voxel_order.c` — `osh_voxel_reorder(src, nx, ny, nz, element_size, tile_order, out_len)`: generic reorder for any element size; used at CT load and RTDOSE array init
-- `src/common/raytrace/osh_raytrace.h` — add `uint8_t tile_order` to `struct osh_raytrace_grid`
-- `src/common/raytrace/osh_raytrace_jacobs_msh.c` line 146 — switch on `grid->tile_order`
-- `src/apps/osh/osh_geometry_parse.c` — call `osh_voxel_reorder()` after pinning CT pixels; set `ct_grid.tile_order`; update `b->n_hu`
-- New `tests/unit/test_osh_voxel_order.c` — LUT completeness; round-trip 16×16×16; non-power-of-8 dims
-- `tests/unit/test_osh_geometry_dcm.c` — replace `hu[n_hu-1]` with interior voxel spot-check
+- `src/common/osh_voxel_order.h` — `tile_order` constants + inline index helpers
+- `src/common/osh_voxel_order.c` — `osh_voxel_reorder(src, nx, ny, nz, element_size, tile_order, out_len)`: generic reorder for any element size
+- `src/common/raytrace/osh_raytrace.h` — `uint8_t tile_order` on `struct osh_raytrace_grid`
+- `src/common/raytrace/osh_raytrace_*_msh.c` — emit row-major or Morton indices according to `grid->tile_order`
+- `src/apps/osh/osh_geometry_parse.c` — reorder CT pixels, set `ct_grid.tile_order`, and update `b->n_hu`
+- `tests/unit/test_osh_voxel_order.c` — LUT completeness; round-trip 16×16×16; non-power-of-8 dims
+- `tests/unit/test_osh_geometry_dcm.c` — interior voxel spot-check for reordered CT storage
 
 Note: RTDOSE dose array (M6) uses same `osh_voxel_reorder` — defer to M6 but design the function generically now.
 
@@ -323,70 +310,65 @@ Verify: row-major baseline unchanged (`tile_order=0`); Morton round-trip correct
 
 ---
 
-### M3c — HU density lookup table on `osh_gemca_runtime`
-**Goal:** Precompute a `float hu_rho_lut[2601]` at setup time so the Jacobs traversal hot path converts HU to density with a single array access — no formula, no branch, no function pointer.
+### M3c — HU runtime lookup tables
+**Goal:** Precompute HU lookup tables so voxel transport uses array lookups instead of formula calls in the hot path.
 
-Status: complete on this branch.
+Status: complete.
 
-Note: this is now considered a transitional ownership choice. The longer-term
-design target for M5+ is to keep GEMCA geometry-only and move HU→rho/property
-resolution into `material/runtime`, with GEMCA returning geometric medium
-identity (`zone_idx`, `material_idx`, optional `hu`) rather than physical
-material properties directly.
+Ownership after the M5 cleanup:
+- GEMCA runtime owns `hu_bin_lut[2601]` because it resolves current voxel HU to
+  material-bin identity.
+- Material runtime owns `hu_rho_lut[2601]` because it resolves physical density
+  from the current medium reference.
 
-**Result:** both runtime LUTs are now available in the hot path:
+**Result:** both runtime LUTs are available in the hot path:
 
 ```c
-int   bin_i = rt->hu_bin_lut[hu + 1000];  /* uint8_t — material bin  */
-float rho_i = rt->hu_rho_lut[hu + 1000];  /* float   — density g/cm³ */
+int   bin_i = geom_rt->hu_bin_lut[hu + 1000];      /* uint8_t — material bin */
+float rho_i = material_rt->hu_rho_lut[hu + 1000];  /* float — density g/cm³ */
 ```
 
 Same indexing for both tables: `hu + 1000`, with HU clamped to `[-1000, 1600]`. For non-VOX runs both pointers remain `NULL`.
 
 Files:
-- `src/gemca/voxel/osh_gemca2_voxel_hu.h` — rho LUT builders for Schneider and Permatassari
-- `src/gemca/voxel/osh_gemca2_voxel_hu.c` / `osh_gemca2_voxel_hu_permatassari.c` — LUT construction
-- `src/gemca/runtime/osh_gemca_runtime.h` / `.c` — owned `hu_bin_lut` and `hu_rho_lut` on the compiled runtime
-- `src/simulation/osh_simulation.c` — build the active LUT pair from the selected `HUTABLE`
+- `src/voxel/osh_voxel_hu_lut.h` / `.c` — Schneider builders and public voxel calibration API
+- `src/voxel/osh_voxel_hu_lut_permatassari.c` — Permatassari builders
+- `src/gemca/runtime/osh_gemca_runtime.h` / `.c` — owned `hu_bin_lut` on the compiled geometry runtime
+- `src/material/runtime/osh_material_runtime.h` and `osh_material_compile.c` — owned `hu_rho_lut` on material runtime tables
+- `src/simulation/osh_simulation.c` — passes the selected `HUTABLE` into both compile steps
 - `tests/unit/test_osh_voxel_hu.c` — LUT checks for both calibration tables
 
-Verify: LUT values match the calibration functions; runtime copies/free paths are covered; both Schneider and Permatassari tables are exercised.
+Verify: LUT values match the calibration functions; runtime allocation/free paths are covered; both Schneider and Permatassari tables are exercised.
 
 ---
 
 ### M4 — Jacobs voxel traversal in `dist_voxel_body_rt()`
-**Goal:** Implement the Jacobs traversal stub to produce a per-voxel segment list for one transport step.
+**Goal:** Implement voxel traversal and expose the current voxel boundary distance for one transport step.
 
-Status: complete on this branch.
+Status: complete.
 
 **Result:** `dist_voxel_body_rt()` now:
 
 - transforms the ray to body-local coordinates via `osh_ray_transform()`
 - calls `osh_raytrace_traverse()` on `body->ct_grid`
-- walks the crossings in order until one of:
-  - material-bin change (`bin_i != bin0`)
-  - `segs_cap` reached
-  - grid exit
-- writes one segment per voxel crossing:
-  - `ds` = path length through the voxel
-  - `rho` = absolute voxel density [g/cm³] from `hu_rho_lut`
-- returns the total traversed distance and the starting bin via `bin_out`
-
-The segment payload now uses absolute density, not `rhocorr`. That matches the intended downstream use better: transport and scoring can work directly with `mass_stopping_power * rho` and `rho * ds`.
+- uses only the first crossing for the current M5 transport policy
+- fills at most one step segment:
+  - `ds` = path length through the current voxel
+  - `rho` = 0.0; density is resolved by material/runtime from `osh_zone_ref`
+- returns the current voxel-exit distance and the current voxel bin via `bin_out`
 
 Files:
 - `src/gemca/runtime/osh_gemca_runtime_voxel.c` — Jacobs traversal implementation
-- `src/gemca/runtime/osh_gemca_runtime_voxel.h` — `gemca_rt_voxel_segment { ds, rho }`
+- `src/gemca/runtime/osh_gemca_runtime_voxel.h` — current voxel distance helper
 - `src/gemca/runtime/CMakeLists.txt` — link against `osh_raytrace`
 - `tests/unit/test_osh_voxel_body_rt.c` — direct unit coverage of the runtime voxel traversal
 
 Verify:
 - miss → `OSH_GEMCA_INFINITY`
-- uniform grid → expected multi-voxel segment list
-- bin change → early stop at first differing voxel
-- `segs_cap` → truncation at caller capacity
+- uniform grid → one current-voxel segment
+- bin change in the next voxel does not affect the current step distance
 - `segs == NULL` → distance-only path still works
-- per-segment `rho` matches the LUT exactly
+- Morton-backed HU storage is honored by zone-ref lookup
 
 ---
 
@@ -395,7 +377,8 @@ Verify:
 `transport/`. GEMCA remains geometry-only; `material/runtime` owns all physical
 property lookup (density, CSDA/range interpretation, radiation length, etc.).
 
-Status: redesign in progress (replaces the earlier unified `segs[]` plan).
+Status: basic M5 behavior implemented; remaining work is cleanup/naming and
+future integrated-density design.
 
 **Revised direction:**
 
@@ -447,21 +430,25 @@ This keeps the future batch path natural: GEMCA can return `N` medium refs for
 `N` particles, and material/runtime can evaluate `N` densities / ranges /
 scattering properties without transport branching on voxel-ness.
 
-**Immediate cleanup targets:**
-- Remove the voxel/non-voxel branch from `src/transport/osh_transport_ion.c`
-- Remove direct transport calls to `dist_voxel_body_rt()`
-- Keep only one transport-visible geometry query at the GEMCA runtime layer for
-  the current-step medium/boundary information
-- Rename the voxel helper eventually: it is really a zone/medium query helper,
-  not a transport-facing “body distance” API
-- Replace the `n_step_segments == 0` fallback-to-vacuum path with a relookup /
-  no-step outcome
+**Completed cleanup:**
+- Transport no longer calls `dist_voxel_body_rt()` directly.
+- Transport asks GEMCA for current medium reference and current-medium boundary
+  distance, then asks material/runtime for density.
+- Voxel distance now stops at the current voxel boundary.
+- `osh_gemca_runtime_get_zone_ref_batch()` resolves HU through the same
+  layout-aware storage indexing used by raytrace.
+
+**Remaining cleanup targets:**
+- Rename the voxel helper eventually; it is really a geometry/runtime
+  current-voxel boundary helper, not a transport-facing body API.
+- Consider combining current medium reference and boundary distance into one
+  GEMCA batch query once the interface stabilizes.
 
 **Physics policy for the basic M5 pipeline:**
 - one current `rho` per step (the value at the entry point/current voxel)
 - CSDA and straggling use that one `rho`
 - if MCS remains enabled in voxel steps, the post-hinge tail must clip to the
-  current voxel exit, not the whole same-bin zone
+  current voxel exit
 - more advanced multi-voxel / integrated-density algorithms are deferred until
   the ownership boundary is stable
 
@@ -476,7 +463,7 @@ Verify:
 ### M6 — RTDOSE scoring geometry (`OSH_SCORING_GEO_VOXEL`)
 **Goal:** Wire up `OSH_SCORING_GEO_VOXEL` (already in enum as type 4) to score onto RTDOSE grid via Jacobs raytrace with per-voxel density weighting.
 
-Status: not started (depends on the revised M5 ownership split).
+Status: not started (basic M5 ownership split is now in place).
 
 Files:
 - `include/openshieldhit/scoring.h` — add `char *rtdose_path` to `struct osh_scoring_geometry_def` (for `kind == "Voxel"`)
@@ -507,7 +494,7 @@ analytical WEPL integral.
 ### M7 — Integration & CLI plumbing
 **Goal:** End-to-end pipeline: user specifies `DCM` in geo.dat and `Geometry Voxel` in detect.dat.
 
-Status: not started (depends on M2–M6 core pieces).
+Status: not started (mostly depends on M6 scoring).
 
 Files:
 - `src/apps/osh/osh_geometry_parse.c` — ensure `DCM` keyword triggers M2 path:
@@ -528,30 +515,30 @@ M1 (Schneider materials)     M2 (DCM parse + DICOM→body)
                                       │
                                    M3b (voxel array layout / Morton)
                                       │
-                                   M3c (HU density LUT on osh_gemca_runtime)
+                                   M3c (HU runtime LUTs)
                                       │
-                              M4 (Jacobs + stop_reason in dist_voxel_body_rt)
+                              M4 (current voxel boundary distance)
                                       │
-                              M5 (unified segs[] in transport kernel)
+                              M5 (current-medium transport)
                                       │
 M1 ──────────────────────── M6 (RTDOSE scoring)
                                       │
                     M2 + M6 ── M7 (CLI plumbing)
 ```
 
-M1 and M2 are independent and can start in parallel on sub-branches.
+M1/M2/M3/M4 and the basic M5 path are now in place; M6/M7 remain the main
+voxel-workflow milestones.
 
 ---
 
-## Open Design Questions (resolve before M2/M6)
+## Open Design Questions
 
 1. **Shared transform matrix between geometry and scoring**: Store `double vox_matrix[16]` on the cold `struct body`; pass it to scoring compile step via the app orchestration layer, not via a separate cold scoring struct.
 
-2. **Transitional LUT storage for hot path**: `uint8_t hu_bin_lut[2601]` and
-   `float hu_rho_lut[2601]` currently live on `osh_gemca_runtime` (owned, freed
-   by `osh_gemca_runtime_free()`). This is good enough for M3c/M4, but the
-   target M5+ architecture is to move HU→rho/property resolution into
-   `material/runtime` and keep GEMCA geometry-only.
+2. **Future integrated-density voxel transport**: The basic M5 path treats one
+   voxel as the current medium for one step. A later design can restore
+   multi-voxel density integration, but it should do so without putting
+   material/runtime ownership back into GEMCA.
 
 ---
 
@@ -560,7 +547,9 @@ M1 and M2 are independent and can start in parallel on sub-branches.
 - [src/gemca/osh_gemca2_calc_body.c](src/gemca/osh_gemca2_calc_body.c)
 - [src/gemca/runtime/osh_gemca_runtime.c](src/gemca/runtime/osh_gemca_runtime.c)
 - [src/gemca/runtime/osh_gemca_runtime.h](src/gemca/runtime/osh_gemca_runtime.h)
-- [src/gemca/voxel/osh_gemca2_voxel_hu.c](src/gemca/voxel/osh_gemca2_voxel_hu.c)
+- [src/gemca/runtime/osh_gemca_runtime_voxel.c](src/gemca/runtime/osh_gemca_runtime_voxel.c)
+- [src/voxel/osh_voxel_hu_lut.h](src/voxel/osh_voxel_hu_lut.h)
+- [src/material/runtime/osh_material_runtime.h](src/material/runtime/osh_material_runtime.h)
 - [src/scoring/runtime/osh_scoring_step.c](src/scoring/runtime/osh_scoring_step.c)
 - [src/scoring/runtime/osh_scoring_compile.c](src/scoring/runtime/osh_scoring_compile.c)
 - [src/apps/osh/osh_geometry_parse.c](src/apps/osh/osh_geometry_parse.c)
