@@ -69,7 +69,6 @@ struct osh_gemca_prepared {
     size_t nbodies;       /**< Number of entries in bodies[] */
     size_t nzones;        /**< Number of entries in zones[] */
     char *filename;       /**< Optional source filename kept only for diagnostics during the migration */
-    int hu_table_type;    /**< OSH_HU_TABLE_* selector; copied from osh_geometry_workspace.hu_table_type. */
 };
 
 /**

@@ -24,10 +24,11 @@ Public constants (`OSH_HU_TABLE_*`, `OSH_VOXEL_HU_LUT_SIZE`) live in
 
 - **Parse time** (`src/apps/osh/`): the application parser calls
   `osh_voxel_register_*_materials()` to add CT tissue bins to the material
-  workspace, and sets `hu_table_type` on both cold workspaces.
+  workspace, and sets `hu_table_type` on the material workspace.
 - **Geometry compile** (`src/gemca/runtime/`): calls
   `osh_voxel_build_hu_bin_lut_*()` to build the HU→bin LUT inside the
-  geometry runtime.
+  geometry runtime when `simulation_create()` passes a non-`NONE` HU table
+  selector.
 - **Material compile** (`src/material/runtime/`): calls
   `osh_voxel_build_hu_rho_lut_*()` to build the HU→density LUT inside the
   material runtime.
