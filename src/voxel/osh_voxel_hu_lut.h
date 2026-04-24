@@ -16,8 +16,8 @@
  *  3. Build the HU→density LUT used by the material runtime (transport).
  *
  * Callers (geometry compile, material compile, app parser) select the
- * appropriate pair of build functions based on the hu_table_type field
- * stored on the cold workspaces.
+ * appropriate pair of build functions based on the hu_table_type field stored
+ * on the material workspace and passed through the simulation compile boundary.
  */
 
 /* ---- Schneider 2000 (24 bins) -------------------------------------------- */

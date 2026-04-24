@@ -271,22 +271,27 @@ struct osh_gemca_runtime {
  *      where a suitable guard body can be identified.  The resolved material
  *      index is copied from the cold zone.
  *
- * Zone material indices must be fully resolved before this function is called
- * (i.e., the zone-name-to-material-index resolution in openshieldhit_run()
- * must have completed).  Passing unresolved indices produces a runtime whose
- * material lookups will be incorrect.
+ * Zone material indices must be fully resolved before this function is called.
+ * Passing unresolved indices produces a runtime whose material lookups will be
+ * incorrect.
  *
- * @param[in]  wg  Fully loaded and material-resolved cold workspace.
- * @param[out] rt  Receives the compiled runtime.  The caller owns the inner
- *                 allocations; call osh_gemca_runtime_free() to release them.
- *                 The struct may be stack-allocated; zero-initialise it before
- *                 calling this function.
+ * @param[in]  wg             Fully loaded and material-resolved cold workspace.
+ * @param[in]  hu_table_type  OSH_HU_TABLE_* selector used to build the optional
+ *                            voxel HU→material-bin LUT. Pass
+ *                            OSH_HU_TABLE_NONE for non-CT geometry.
+ * @param[out] rt             Receives the compiled runtime.  The caller owns
+ *                            the inner allocations; call
+ *                            osh_gemca_runtime_free() to release them. The
+ *                            struct may be stack-allocated; zero-initialise it
+ *                            before calling this function.
  *
  * @returns OSH_OK on success, OSH_EINVAL if wg or rt is NULL, OSH_ENOMEM on
  *          allocation failure.
  */
-enum osh_status
-osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt);
+enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg,
+                                  int hu_table_type,
+                                  struct osh_diag_sink const *diag,
+                                  struct osh_gemca_runtime *rt);
 char const *osh_gemca_runtime_zone_batch_dispatch_name(struct osh_gemca_runtime const *rt);
 
 /**

@@ -33,8 +33,9 @@ extern "C" {
  * @brief Identify which CT-to-material calibration scheme is active.
  *
  * @details
- * Stored on both @ref osh_geometry_workspace and @ref osh_material_workspace
- * so each compile step can build its own LUT independently.
+ * Stored on @ref osh_material_workspace.  The simulation compile boundary
+ * passes this selector to the geometry runtime when voxel geometry needs an
+ * HU→material-bin lookup table.
  *
  * @p OSH_HU_TABLE_NONE is the default (0) so that zero-initialised workspaces
  * correctly indicate a non-CT run.

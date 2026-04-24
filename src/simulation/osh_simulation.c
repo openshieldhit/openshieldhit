@@ -68,6 +68,8 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     struct osh_gemca_prepared *gemca;
     unsigned int z_max;
     size_t iz;
+    int has_voxel_body;
+    int geometry_hu_table_type;
     enum osh_status rc;
 
     if (!beam || !geo || !mat || !scoring || !sim_out) {
@@ -103,12 +105,14 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     /* ---- 1. Zone → material index resolution ----------------------------- */
 
     gemca = geo->prepared;
-    if (prepared_has_voxel_body(gemca) && mat->hu_table_type == OSH_HU_TABLE_NONE) {
+    has_voxel_body = prepared_has_voxel_body(gemca);
+    if (has_voxel_body && mat->hu_table_type == OSH_HU_TABLE_NONE) {
         OSH_DIAG_ERRORF(
             diag, "%s", "simulation: voxel geometry requires an explicit HUTABLE card in the material file");
         rc = OSH_EPARSE;
         goto fail;
     }
+    geometry_hu_table_type = has_voxel_body ? mat->hu_table_type : OSH_HU_TABLE_NONE;
 
     for (iz = 0u; iz < gemca->nzones; ++iz) {
         struct zone *z = gemca->zones[iz];
@@ -133,7 +137,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 2. Geometry runtime -------------------------------------------- */
 
-    rc = osh_gemca_compile(gemca, diag, &sim->geom_rt);
+    rc = osh_gemca_compile(gemca, geometry_hu_table_type, diag, &sim->geom_rt);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile geometry runtime");
         goto fail;

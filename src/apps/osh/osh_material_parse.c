@@ -695,8 +695,9 @@ static enum osh_status parse_state(struct osh_diag_sink const *diag,
  *     are available for stopping-power table generation at compile time.
  *
  * Lookup table construction (HU→bin and HU→density) is deferred to compile
- * time: @c osh_gemca_compile builds the geometry-side LUT from @c hu_table_type,
- * and @c osh_material_compile builds the transport-side density LUT.
+ * time: @c osh_simulation_create passes @c hu_table_type to
+ * @c osh_gemca_compile for the geometry-side LUT, and @c osh_material_compile
+ * builds the transport-side density LUT from the material workspace.
  *
  * @param[in,out] wm    Material workspace; receives the registered tissue materials
  *                      and the updated @c hu_table_type.
