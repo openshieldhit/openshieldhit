@@ -110,17 +110,6 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         fprintf(out, "  Detect input     : %s\n", detect_path);
     }
 
-    if (osh_geometry_setup_from_path(geo_path, opt->diag, &geom) != OSH_OK) {
-        if (err) {
-            fprintf(err, "Error: failed to load geometry: %s\n", geo_path);
-        }
-        rc = OSH_EPARSE;
-        goto cleanup;
-    }
-    if (out) {
-        fprintf(out, "Loaded geometry: %s\n", geo_path);
-    }
-
     if (!run_file_exists(beam_path)) {
         if (err) {
             fprintf(err, "Error: beam file not found: %s\n", beam_path);
@@ -159,6 +148,17 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         }
     }
 
+    if (osh_geometry_parse_from_path(geo_path, opt->diag, &geom) != OSH_OK) {
+        if (err) {
+            fprintf(err, "Error: failed to load geometry: %s\n", geo_path);
+        }
+        rc = OSH_EPARSE;
+        goto cleanup;
+    }
+    if (out) {
+        fprintf(out, "Loaded geometry: %s\n", geo_path);
+    }
+
     if (!run_file_exists(mat_path)) {
         if (err) {
             fprintf(err, "Error: material file not found: %s\n", mat_path);
@@ -167,7 +167,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    if (osh_material_setup_from_path(mat_path, opt->diag, &mat) != OSH_OK) {
+    if (osh_material_parse_from_path(mat_path, opt->diag, &mat) != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to load materials: %s\n", mat_path);
         }
@@ -176,6 +176,25 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     }
     if (out) {
         fprintf(out, "Loaded materials: %s\n", mat_path);
+    }
+
+    /* geometry prepare reads hu_table_type; propagate from material before calling prepare. */
+    geom->hu_table_type = mat->hu_table_type;
+
+    if (osh_geometry_workspace_prepare(geom, opt->diag) != OSH_OK) {
+        if (err) {
+            fprintf(err, "Error: failed to prepare geometry\n");
+        }
+        rc = OSH_EPARSE;
+        goto cleanup;
+    }
+
+    if (osh_material_workspace_prepare(mat, opt->diag) != OSH_OK) {
+        if (err) {
+            fprintf(err, "Error: failed to prepare materials\n");
+        }
+        rc = OSH_EPARSE;
+        goto cleanup;
     }
 
     if (!run_file_exists(detect_path)) {

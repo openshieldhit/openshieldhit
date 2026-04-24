@@ -12,9 +12,6 @@ add_library(osh_gemca2
     prepare/osh_gemca_body_prepare.c
     prepare/osh_gemca_zone_compile.c
     prepare/osh_gemca_stack.c
-
-    voxel/osh_gemca2_voxel_hu.c
-    voxel/osh_gemca2_voxel_hu_permatassari.c
 )
 
 # Allow includes like "gemca/..." and "common/..." (src/) and
@@ -30,6 +27,7 @@ target_link_libraries(osh_gemca2
     PRIVATE
         osh_common
         osh_material
+        osh_voxel
 )
 
 # Link math library (Unix/Linux only - Windows has it in the C runtime)

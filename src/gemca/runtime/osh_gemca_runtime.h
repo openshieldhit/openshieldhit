@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "openshieldhit/geometry.h"
 #include "openshieldhit/status.h"
 
 /* Forward declaration: full definition is in common/osh_ray.h, included by
@@ -244,7 +245,6 @@ struct osh_gemca_runtime {
     struct gemca_rt_body *bodies;               /**< Flat body array (owned). */
     struct gemca_rt_zone *zones;                /**< Flat zone array; each zone owns its insns[]. */
     uint8_t *hu_bin_lut;     /**< HU→bin index, 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
-    float *hu_rho_lut;       /**< HU→density [g/cm³], 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
     size_t nsurfaces;        /**< Number of entries in surfaces[]. */
     size_t nbodies;          /**< Number of entries in bodies[]. */
     size_t nzones;           /**< Number of entries in zones[]. */
@@ -456,19 +456,19 @@ void osh_gemca_runtime_get_zone_batch(struct osh_gemca_runtime const *rt,
  *
  * @details
  * Equivalent to calling osh_gemca_runtime_get_distance() once per particle.
- * Particles whose zone index is @ref OSH_GEMCA_ZONE_INDEX_INVALID receive
+ * Particles whose zone_ref.zone_idx is @ref OSH_ZONE_INDEX_INVALID receive
  * a distance of 0.0 and are skipped without touching the geometry.
  *
- * @param[in]  rt           Compiled gemca runtime.
- * @param[in]  x            Particle x-positions, length @p n.
- * @param[in]  y            Particle y-positions, length @p n.
- * @param[in]  z            Particle z-positions, length @p n.
- * @param[in]  ux           Particle x-directions, length @p n.
- * @param[in]  uy           Particle y-directions, length @p n.
- * @param[in]  uz           Particle z-directions, length @p n.
- * @param[in]  zone_indices Zone index per particle (from get_zone_batch), length @p n.
- * @param[in]  n            Number of particles.
- * @param[out] dist_out     Receives the boundary distance for each particle, length @p n.
+ * @param[in]  rt        Compiled gemca runtime.
+ * @param[in]  x         Particle x-positions, length @p n.
+ * @param[in]  y         Particle y-positions, length @p n.
+ * @param[in]  z         Particle z-positions, length @p n.
+ * @param[in]  ux        Particle x-directions, length @p n.
+ * @param[in]  uy        Particle y-directions, length @p n.
+ * @param[in]  uz        Particle z-directions, length @p n.
+ * @param[in]  zone_refs Zone references from osh_gemca_runtime_get_zone_ref_batch(), length @p n.
+ * @param[in]  n         Number of particles.
+ * @param[out] dist_out  Receives the boundary distance for each particle, length @p n.
  */
 void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
                                           double const *x,
@@ -477,9 +477,43 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
                                           double const *ux,
                                           double const *uy,
                                           double const *uz,
-                                          size_t const *zone_indices,
+                                          struct osh_zone_ref const *zone_refs,
                                           size_t n,
                                           double *dist_out);
+
+/**
+ * @brief Zone-reference query for a batch of @p n particles.
+ *
+ * @details
+ * Combines zone lookup with per-voxel HU and material-index resolution into a
+ * single pass.  For analytic zones, @p has_hu is 0 and @p material_idx is the
+ * zone's ASSIGNMAT index.  For voxel zones, @p has_hu is 1, @p hu holds the
+ * clamped HU value of the current voxel, and @p material_idx is the HU-bin
+ * index from the HU→bin LUT.
+ *
+ * Particles outside all zones receive @ref OSH_ZONE_INDEX_INVALID in
+ * zone_ref_out[i].zone_idx.
+ *
+ * @param[in]  rt           Compiled gemca runtime.
+ * @param[in]  x            Particle x-positions, length @p n.
+ * @param[in]  y            Particle y-positions, length @p n.
+ * @param[in]  z            Particle z-positions, length @p n.
+ * @param[in]  ux           Particle x-directions, length @p n.
+ * @param[in]  uy           Particle y-directions, length @p n.
+ * @param[in]  uz           Particle z-directions, length @p n.
+ * @param[in]  n            Number of particles.
+ * @param[out] zone_ref_out Receives the zone reference for each particle,
+ *                          length @p n.
+ */
+void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
+                                          double const *x,
+                                          double const *y,
+                                          double const *z,
+                                          double const *ux,
+                                          double const *uy,
+                                          double const *uz,
+                                          size_t n,
+                                          struct osh_zone_ref *zone_ref_out);
 
 /** @} */ /* end defgroup osh_gemca_runtime */
 

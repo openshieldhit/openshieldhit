@@ -10,7 +10,7 @@
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
 #include "common/osh_readline.h"
-#include "gemca/voxel/osh_gemca2_voxel_hu.h"
+#include "voxel/osh_voxel_hu_lut.h"
 
 static enum osh_status parse_density(struct osh_diag_sink const *diag,
                                      struct osh_material_workspace *wm,
@@ -683,6 +683,28 @@ static enum osh_status parse_state(struct osh_diag_sink const *diag,
     return OSH_OK;
 }
 
+/**
+ * @brief Handle the HUTABLE card; register CT tissue bins and set the table type.
+ *
+ * @details
+ * The HUTABLE card selects which CT-to-material calibration scheme is used for
+ * voxel geometries.  This handler:
+ *
+ *  1. Sets @c wm->hu_table_type to the matching @c OSH_HU_TABLE_* constant.
+ *  2. Registers the scheme's tissue bins as material workspace entries so they
+ *     are available for stopping-power table generation at compile time.
+ *
+ * Lookup table construction (HU→bin and HU→density) is deferred to compile
+ * time: @c osh_gemca_compile builds the geometry-side LUT from @c hu_table_type,
+ * and @c osh_material_compile builds the transport-side density LUT.
+ *
+ * @param[in,out] wm    Material workspace; receives the registered tissue materials
+ *                      and the updated @c hu_table_type.
+ * @param[in]     oshf  Open input file (used for error location).
+ * @param[in]     args  Remainder of the input line after the key.
+ *
+ * @returns OSH_OK on success, or OSH_EPARSE / OSH_ENOMEM on failure.
+ */
 static enum osh_status parse_hutable(struct osh_diag_sink const *diag,
                                      struct osh_material_workspace *wm,
                                      struct oshfile *oshf,
@@ -704,11 +726,11 @@ static enum osh_status parse_hutable(struct osh_diag_sink const *diag,
     }
 
     if (strcmp(table_name, "schneider2000") == 0) {
-        rc = osh_gemca_voxel_register_schneider_materials(wm);
         wm->hu_table_type = OSH_HU_TABLE_SCHNEIDER;
+        rc = osh_voxel_register_schneider_materials(wm);
     } else if (strcmp(table_name, "permatassari2020") == 0) {
-        rc = osh_gemca_voxel_register_permatassari_materials(wm);
         wm->hu_table_type = OSH_HU_TABLE_PERMATASSARI;
+        rc = osh_voxel_register_permatassari_materials(wm);
     } else {
         OSH_DIAG_ERRORF(diag,
                         "in %s line %i: unknown HUTABLE '%s' (expected Schneider2000 or Permatassari2020)",

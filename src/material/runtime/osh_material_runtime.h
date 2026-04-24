@@ -4,6 +4,8 @@
 #include <math.h>
 #include <stddef.h>
 
+#include "openshieldhit/geometry.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -62,6 +64,7 @@ struct osh_material_runtime {
     float *z_mean;     /* [nmaterials] effective atomic number. */
     float *z_over_a;   /* [nmaterials] Z/A [mol/g]. */
     float *rad_length; /* [nmaterials] radiation length X0 [g/cm^2]. */
+    float *hu_rho_lut; /* [2601] HU→density [g/cm³] indexed by hu+1000; NULL for non-CT runs. */
 
     size_t nmaterials;
     size_t nprojectiles;
@@ -167,6 +170,27 @@ static inline double osh_material_runtime_range_lookup(struct osh_material_runti
     frac = x - (double) idx;
     base = (mat_idx * tables->nprojectiles + proj_idx) * tables->nenergy;
     return (double) tables->range_csda[base + idx] * (1.0 - frac) + (double) tables->range_csda[base + idx + 1u] * frac;
+}
+
+/**
+ * @brief Return the density [g/cm³] for the zone described by @p zr.
+ *
+ * @details
+ * For analytic zones (@p zr->has_hu == 0) returns the ASSIGNMAT density
+ * tables->rho[zr->material_idx].  For voxel zones (@p zr->has_hu != 0)
+ * returns the per-voxel density tables->hu_rho_lut[zr->hu + 1000].
+ *
+ * @param[in] tables  Material runtime tables.
+ * @param[in] zr      Zone reference filled by osh_gemca_runtime_get_zone_ref_batch().
+ *
+ * @returns Density [g/cm³].
+ */
+static inline double osh_material_runtime_get_rho(struct osh_material_runtime const *tables,
+                                                  struct osh_zone_ref const *zr) {
+    if (zr->has_hu) {
+        return (double) tables->hu_rho_lut[zr->hu + 1000];
+    }
+    return (double) tables->rho[zr->material_idx];
 }
 
 #ifdef __cplusplus

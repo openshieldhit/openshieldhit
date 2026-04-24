@@ -11,6 +11,7 @@
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
+#include "voxel/osh_voxel_hu_lut.h"
 
 /* ---- Local constants ----------------------------------------------------- */
 
@@ -240,9 +241,6 @@ void osh_gemca_runtime_free(struct osh_gemca_runtime *rt) {
 
     free(rt->hu_bin_lut);
     rt->hu_bin_lut = NULL;
-
-    free(rt->hu_rho_lut);
-    rt->hu_rho_lut = NULL;
 
     rt->nsurfaces = 0;
     rt->nbodies = 0;
@@ -1030,7 +1028,7 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
                                           double const *ux,
                                           double const *uy,
                                           double const *uz,
-                                          size_t const *zone_indices,
+                                          struct osh_zone_ref const *zone_refs,
                                           size_t n,
                                           double *dist_out) {
     struct ray rr;
@@ -1041,7 +1039,7 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
     double total;
     int is_inside;
 
-    if (!rt || !x || !y || !z || !ux || !uy || !uz || !zone_indices || !dist_out) {
+    if (!rt || !x || !y || !z || !ux || !uy || !uz || !zone_refs || !dist_out) {
         if (dist_out && n) {
             size_t _k;
             for (_k = 0; _k < n; ++_k)
@@ -1051,7 +1049,7 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
     }
 
     for (i = 0; i < n; ++i) {
-        zone_idx = zone_indices[i];
+        zone_idx = zone_refs[i].zone_idx;
         if (zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID || zone_idx >= rt->nzones) {
             dist_out[i] = 0.0;
             continue;
@@ -1066,6 +1064,11 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
         rr.cp[2] = uz[i];
         rr.system = OSH_COORD_UNIVERSE;
         osh_vect_norm(rr.cp);
+
+        if (rt->zones[zone_idx].voxel_body_idx >= 0) {
+            dist_out[i] = dist_voxel_body_rt(rt, rt->zones[zone_idx].voxel_body_idx, &rr, NULL, 0u, NULL, NULL);
+            continue;
+        }
 
         total = 0.0;
         while (1) {
@@ -1082,6 +1085,91 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
             }
         }
         dist_out[i] = total;
+    }
+}
+
+void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
+                                          double const *x,
+                                          double const *y,
+                                          double const *z,
+                                          double const *ux,
+                                          double const *uy,
+                                          double const *uz,
+                                          size_t n,
+                                          struct osh_zone_ref *zone_ref_out) {
+    struct ray rr;
+    struct gemca_rt_zone const *z_rt;
+    struct gemca_rt_body const *body;
+    struct ray r_local;
+    size_t i;
+    size_t zi;
+    int vb;
+    int ix;
+    int iy;
+    int iz;
+    int hu_clamped;
+    int16_t hu_raw;
+    size_t voxel_idx;
+
+    if (!rt || !x || !y || !z || !ux || !uy || !uz || !zone_ref_out) {
+        return;
+    }
+
+    for (i = 0; i < n; i++) {
+        rr.p[0] = x[i];
+        rr.p[1] = y[i];
+        rr.p[2] = z[i];
+        rr.cp[0] = ux[i];
+        rr.cp[1] = uy[i];
+        rr.cp[2] = uz[i];
+        rr.system = OSH_COORD_UNIVERSE;
+
+        zi = osh_gemca_runtime_get_zone(rt, &rr);
+
+        zone_ref_out[i].zone_idx = zi;
+        zone_ref_out[i].has_hu = 0;
+        zone_ref_out[i].hu = 0;
+        zone_ref_out[i].material_idx = (size_t) -1;
+
+        if (zi == OSH_GEMCA_ZONE_INDEX_INVALID || zi >= rt->nzones) {
+            continue;
+        }
+
+        z_rt = &rt->zones[zi];
+        vb = z_rt->voxel_body_idx;
+
+        if (vb < 0 || !rt->hu_bin_lut) {
+            zone_ref_out[i].material_idx = z_rt->material_idx;
+            continue;
+        }
+
+        body = &rt->bodies[vb];
+        osh_ray_transform(&rr, &r_local, body->t);
+
+        ix = (int) floor((r_local.p[0] - body->ct_grid.origin[0]) / body->ct_grid.spacing[0]);
+        iy = (int) floor((r_local.p[1] - body->ct_grid.origin[1]) / body->ct_grid.spacing[1]);
+        iz = (int) floor((r_local.p[2] - body->ct_grid.origin[2]) / body->ct_grid.spacing[2]);
+
+        if (ix < 0 || iy < 0 || iz < 0 || ix >= (int) body->ct_grid.n[0] || iy >= (int) body->ct_grid.n[1]
+            || iz >= (int) body->ct_grid.n[2]) {
+            zone_ref_out[i].material_idx = z_rt->material_idx;
+            continue;
+        }
+
+        voxel_idx = (size_t) ix + body->ct_grid.n[0] * ((size_t) iy + body->ct_grid.n[1] * (size_t) iz);
+        hu_raw = body->hu[voxel_idx];
+
+        if (hu_raw < -1000) {
+            hu_clamped = -1000;
+        } else if (hu_raw > 1600) {
+            hu_clamped = 1600;
+        } else {
+            hu_clamped = (int) hu_raw;
+        }
+
+        zone_ref_out[i].has_hu = 1;
+        zone_ref_out[i].hu = (int16_t) hu_clamped;
+        zone_ref_out[i].material_idx = (size_t) rt->hu_bin_lut[hu_clamped + 1000];
     }
 }
 
@@ -1152,24 +1240,35 @@ static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struc
  *
  * @returns OSH_OK or OSH_ENOMEM.
  */
+/**
+ * @brief Build the HU→bin-index LUT for the geometry runtime.
+ *
+ * @details
+ * Allocates and fills @c rt->hu_bin_lut using the calibration scheme
+ * identified by @c wg->hu_table_type.  Does nothing for non-CT runs
+ * (@c OSH_HU_TABLE_NONE).
+ *
+ * @param[in]  wg  Prepared geometry workspace (carries hu_table_type).
+ * @param[out] rt  Geometry runtime (receives the allocated LUT).
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
+ */
 static enum osh_status setup_hu_luts(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
-    if (!wg->hu_bin_lut || !wg->hu_rho_lut) {
+    if (wg->hu_table_type == OSH_HU_TABLE_NONE) {
         return OSH_OK;
     }
 
-    rt->hu_bin_lut = (uint8_t *) malloc(2601u * sizeof(uint8_t));
+    rt->hu_bin_lut = (uint8_t *) malloc(OSH_VOXEL_HU_LUT_SIZE * sizeof(uint8_t));
     if (!rt->hu_bin_lut) {
         return OSH_ENOMEM;
     }
-    rt->hu_rho_lut = (float *) malloc(2601u * sizeof(float));
-    if (!rt->hu_rho_lut) {
-        free(rt->hu_bin_lut);
-        rt->hu_bin_lut = NULL;
-        return OSH_ENOMEM;
-    }
 
-    memcpy(rt->hu_bin_lut, wg->hu_bin_lut, 2601u * sizeof(uint8_t));
-    memcpy(rt->hu_rho_lut, wg->hu_rho_lut, 2601u * sizeof(float));
+    if (wg->hu_table_type == OSH_HU_TABLE_PERMATASSARI) {
+        osh_voxel_build_hu_bin_lut_permatassari2020(rt->hu_bin_lut);
+    } else {
+        /* Default to Schneider 2000 for OSH_HU_TABLE_SCHNEIDER and any unknown value. */
+        osh_voxel_build_hu_bin_lut_schneider2000(rt->hu_bin_lut);
+    }
 
     return OSH_OK;
 }

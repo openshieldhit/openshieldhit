@@ -5,10 +5,8 @@
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
-#include "common/osh_ray.h"
 #include "common/osh_step_segment.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
-#include "gemca/runtime/osh_gemca_runtime_voxel.h"
 #include "material/runtime/osh_material_runtime.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
@@ -79,8 +77,8 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     struct osh_rng rng;
     struct osh_transport_params const *params;
     struct osh_particle_pool *pool = NULL;
-    size_t zone_batch[OSH_TRANSPORT_POOL_CAPACITY]; /* stack-safe: compile-time constant */
-    double dist_batch[OSH_TRANSPORT_POOL_CAPACITY]; /* ~32 KiB at 4096 doubles */
+    struct osh_zone_ref zone_refs[OSH_TRANSPORT_POOL_CAPACITY];
+    double dist_batch[OSH_TRANSPORT_POOL_CAPACITY];
     size_t capacity;
     size_t primaries_done;
     size_t primaries_completed;
@@ -149,18 +147,16 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             primaries_done += n_fill;
         }
 
-        /* Batch geometry: zone lookup and boundary distance for all live particles */
-        osh_gemca_runtime_get_zone_batch(
-            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, pool->n, zone_batch);
+        /* Batch geometry: zone-ref lookup (zone + per-voxel HU/material) and
+         * boundary distance for all live particles */
+        osh_gemca_runtime_get_zone_ref_batch(
+            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, pool->n, zone_refs);
         osh_gemca_runtime_get_distance_batch(
-            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, zone_batch, pool->n, dist_batch);
+            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, zone_refs, pool->n, dist_batch);
 
         /* Advance every live particle by one step */
         for (i = 0u; i < pool->n; ++i) {
-            struct osh_step_segment step_segments[OSH_STEP_SEGMENTS_MAX];
-            size_t n_step_segments;
-            struct gemca_rt_zone const *zone_i;
-            int voxel_body_idx;
+            struct osh_step_segment step_seg;
 
             if (steps_taken >= step_budget) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
@@ -169,7 +165,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                                 steps_taken,
                                 i,
                                 primaries_done,
-                                zone_batch[i],
+                                zone_refs[i].zone_idx,
                                 pool->e[i],
                                 pool->x[i],
                                 pool->y[i],
@@ -181,72 +177,18 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                 goto cleanup;
             }
 
-            /* Build the step_segments[] list before calling the step function.
-             *
-             * For analytic (non-voxelised) zones: one synthetic segment with the
-             * full boundary distance and the nominal zone density.
-             *
-             * For CT voxel zones: call Jacobs (dist_voxel_body_rt()) to fill
-             * step_segments[] with per-voxel {ds, rho} pairs.  The traversal
-             * stops at a material-bin change, the grid boundary, or buffer cap,
-             * whichever comes first.  The transport step then handles at most
-             * OSH_STEP_SEGMENTS_MAX voxels; if the cap is hit the wavefront loop
-             * naturally re-enters the same zone on the next iteration. */
-            voxel_body_idx = -1;
-            if (zone_batch[i] != OSH_GEMCA_ZONE_INDEX_INVALID) {
-                zone_i = &geom_rt->zones[zone_batch[i]];
-                voxel_body_idx = zone_i->voxel_body_idx;
-            }
+            step_seg.ds = dist_batch[i];
+            step_seg.rho = 0.0;
 
-            if (voxel_body_idx >= 0) {
-                /* CT voxel zone: Jacobs traversal fills step_segments */
-                struct ray r;
-                r.p[0] = pool->x[i];
-                r.p[1] = pool->y[i];
-                r.p[2] = pool->z[i];
-                r.cp[0] = pool->ux[i];
-                r.cp[1] = pool->uy[i];
-                r.cp[2] = pool->uz[i];
-                r.system = OSH_COORD_UNIVERSE;
-                dist_voxel_body_rt(
-                    geom_rt, voxel_body_idx, &r, step_segments, 1u, &n_step_segments, NULL);
-                if (n_step_segments == 0u) {
-                    /* Jacobs returned no crossings — treat like a boundary nudge */
-                    step_segments[0].ds = dist_batch[i];
-                    step_segments[0].rho = 0.0;
-                    n_step_segments = 1u;
-                }
-            } else {
-                /* Analytic zone: single segment with zone nominal density */
-                double zone_rho = 0.0;
-                if (zone_batch[i] != OSH_GEMCA_ZONE_INDEX_INVALID) {
-                    zone_i = &geom_rt->zones[zone_batch[i]];
-                    if (zone_i->material_idx < material_rt->nmaterials) {
-                        zone_rho = (double) material_rt->rho[zone_i->material_idx];
-                    }
-                }
-                step_segments[0].ds = dist_batch[i];
-                step_segments[0].rho = zone_rho;
-                n_step_segments = 1u;
-            }
-
-            rc = osh_transport_ion_step(pool,
-                                        i,
-                                        zone_batch[i],
-                                        step_segments,
-                                        n_step_segments,
-                                        geom_rt,
-                                        transport_ctx,
-                                        material_rt,
-                                        score_rt,
-                                        &rng);
+            rc = osh_transport_ion_step(
+                pool, i, &zone_refs[i], &step_seg, 1u, geom_rt, transport_ctx, material_rt, score_rt, &rng);
             if (rc != OSH_OK) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, "
                                 "%.17g, %.17g) dir=(%.17g, %.17g, %.17g)",
                                 i,
                                 (int) rc,
-                                zone_batch[i],
+                                zone_refs[i].zone_idx,
                                 dist_batch[i],
                                 pool->e[i],
                                 pool->x[i],

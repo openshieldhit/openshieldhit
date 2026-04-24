@@ -20,12 +20,12 @@
  *
  * Each filled entry has:
  *   ds  — path length through that voxel [cm]
- *   rho — actual density from the HU calibration LUT [g/cm³]
+ *   rho — 0.0 (density is resolved later by the material runtime via
+ *          osh_material_runtime_get_rho(), which uses its own HU→density LUT)
  *
- * Precondition: the compiled runtime must provide both `hu_bin_lut` and
- * `hu_rho_lut` for voxel transport. A debug build asserts this invariant.
- * Release builds return `OSH_GEMCA_INFINITY` defensively if the LUTs are
- * missing.
+ * Precondition: the compiled runtime must provide `hu_bin_lut` for voxel
+ * transport.  A debug build asserts this invariant.  Release builds return
+ * `OSH_GEMCA_INFINITY` defensively if the LUT is missing.
  *
  * step_segments and step_segments_cap may be NULL/0 for callers that only need
  * the distance (e.g. the CSG distance evaluator).  n_out and bin_out may also

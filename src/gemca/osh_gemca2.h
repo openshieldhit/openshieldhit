@@ -66,13 +66,10 @@
 struct osh_gemca_prepared {
     struct body **bodies; /**< Array of pointers to all body primitives */
     struct zone **zones;  /**< Array of pointers to all zones */
-    uint8_t
-        *hu_bin_lut;   /**< [2601] HU→bin index LUT; NULL for non-CT runs. Owned, freed by osh_gemca_prepared_free(). */
-    float *hu_rho_lut; /**< [2601] HU→density [g/cm³] LUT; NULL for non-CT runs. Owned, freed by
-                          osh_gemca_prepared_free(). */
-    size_t nbodies;    /**< Number of entries in bodies[] */
-    size_t nzones;     /**< Number of entries in zones[] */
-    char *filename;    /**< Optional source filename kept only for diagnostics during the migration */
+    size_t nbodies;       /**< Number of entries in bodies[] */
+    size_t nzones;        /**< Number of entries in zones[] */
+    char *filename;       /**< Optional source filename kept only for diagnostics during the migration */
+    int hu_table_type;    /**< OSH_HU_TABLE_* selector; copied from osh_geometry_workspace.hu_table_type. */
 };
 
 /**
