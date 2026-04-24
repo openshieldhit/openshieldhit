@@ -7,7 +7,6 @@
 #include "openshieldhit/diag.h"
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/status.h"
-#include "openshieldhit/voxel.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -135,7 +134,6 @@ struct osh_geometry_workspace {
     size_t nbodies;                      /**< Number of entries in @p bodies[]. */
     size_t nzones;                       /**< Number of entries in @p zones[]. */
     struct osh_gemca_prepared *prepared; /**< Internal prepared state; owned by core. */
-    int hu_table_type; /**< OSH_HU_TABLE_* selector; 0 (NONE) for non-CT runs. Mirrors mat->hu_table_type. */
 };
 
 /**

@@ -95,39 +95,7 @@ osh_beam_setup_from_path(char const *path, struct osh_diag_sink const *diag, str
     return OSH_OK;
 }
 
-/**
- * @brief Load, parse, and prepare a geometry workspace from @p path.
- *
- * @details
- * Convenience wrapper: calls @ref osh_geometry_parse_from_path() then
- * @ref osh_geometry_workspace_prepare().  Suitable when @c hu_table_type is
- * already set on the workspace or when no voxel body is present.
- */
 enum osh_status osh_geometry_setup_from_path(char const *path,
-                                             struct osh_diag_sink const *diag,
-                                             struct osh_geometry_workspace **ws_out) {
-    enum osh_status rc;
-    struct osh_geometry_workspace *ws = NULL;
-
-    rc = osh_geometry_parse_from_path(path, diag, &ws);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-
-    rc = osh_geometry_workspace_prepare(ws, diag);
-    if (rc != OSH_OK) {
-        osh_geometry_workspace_free(ws);
-        return rc;
-    }
-
-    *ws_out = ws;
-    return OSH_OK;
-}
-
-/**
- * @brief Parse a geometry workspace from @p path without preparing it.
- */
-enum osh_status osh_geometry_parse_from_path(char const *path,
                                              struct osh_diag_sink const *diag,
                                              struct osh_geometry_workspace **ws_out) {
     enum osh_status rc = OSH_OK;
@@ -157,46 +125,17 @@ enum osh_status osh_geometry_parse_from_path(char const *path,
         return rc;
     }
 
+    rc = osh_geometry_workspace_prepare(ws, diag);
+    if (rc != OSH_OK) {
+        osh_geometry_workspace_free(ws);
+        return rc;
+    }
+
     *ws_out = ws;
     return OSH_OK;
 }
 
-/**
- * @brief Load, parse, and prepare a material workspace from @p path.
- *
- * @details
- * Convenience wrapper: calls @ref osh_material_parse_from_path() then
- * @ref osh_material_workspace_prepare().
- */
 enum osh_status osh_material_setup_from_path(char const *path,
-                                             struct osh_diag_sink const *diag,
-                                             struct osh_material_workspace **wm_out) {
-    enum osh_status rc;
-    struct osh_material_workspace *wm = NULL;
-
-    rc = osh_material_parse_from_path(path, diag, &wm);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-
-    rc = osh_material_workspace_prepare(wm, diag);
-    if (rc != OSH_OK) {
-        osh_material_workspace_free(wm);
-        return rc;
-    }
-
-    *wm_out = wm;
-    return OSH_OK;
-}
-
-/**
- * @brief Parse a material workspace from @p path without preparing it.
- *
- * @details
- * Records the source path and base directory on the workspace because
- * `LOADDEDX` path resolution is file-relative during parsing.
- */
-enum osh_status osh_material_parse_from_path(char const *path,
                                              struct osh_diag_sink const *diag,
                                              struct osh_material_workspace **wm_out) {
     enum osh_status rc = OSH_OK;
@@ -232,6 +171,12 @@ enum osh_status osh_material_parse_from_path(char const *path,
 
     rc = osh_material_parse(sf, diag, wm);
     osh_fclose(sf);
+    if (rc != OSH_OK) {
+        osh_material_workspace_free(wm);
+        return rc;
+    }
+
+    rc = osh_material_workspace_prepare(wm, diag);
     if (rc != OSH_OK) {
         osh_material_workspace_free(wm);
         return rc;

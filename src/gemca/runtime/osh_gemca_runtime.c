@@ -41,7 +41,7 @@ static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struc
 static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
 static enum osh_status
 setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt);
-static enum osh_status setup_hu_luts(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt);
+static enum osh_status setup_hu_luts(int hu_table_type, struct osh_gemca_runtime *rt);
 static int detect_zone_batch_dispatch(void);
 
 /* Zone compilation */
@@ -148,13 +148,16 @@ static inline double _minpos(double a, double b);
  *
  * The workspace pointer is stored as a non-owning reference for diagnostic use.
  *
- * @param[in]  wg  Fully loaded and material-resolved cold workspace.
- * @param[out] rt  Zero-initialised runtime struct to populate.
+ * @param[in]  wg             Fully loaded and material-resolved cold workspace.
+ * @param[in]  hu_table_type  OSH_HU_TABLE_* selector for voxel HU→bin lookup.
+ * @param[out] rt             Zero-initialised runtime struct to populate.
  *
  * @returns OSH_OK on success, OSH_E* on failure.
  */
-enum osh_status
-osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt) {
+enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg,
+                                  int hu_table_type,
+                                  struct osh_diag_sink const *diag,
+                                  struct osh_gemca_runtime *rt) {
     enum osh_status rc;
 
     if (!wg || !rt) {
@@ -182,7 +185,7 @@ osh_gemca_compile(struct osh_gemca_prepared const *wg, struct osh_diag_sink cons
         return rc;
     }
 
-    rc = setup_hu_luts(wg, rt);
+    rc = setup_hu_luts(hu_table_type, rt);
     if (rc != OSH_OK) {
         osh_gemca_runtime_free(rt);
         return rc;
@@ -1245,17 +1248,20 @@ static enum osh_status setup_surfaces(struct osh_gemca_prepared const *wg, struc
  *
  * @details
  * Allocates and fills @c rt->hu_bin_lut using the calibration scheme
- * identified by @c wg->hu_table_type.  Does nothing for non-CT runs
+ * identified by @p hu_table_type.  Does nothing for non-CT runs
  * (@c OSH_HU_TABLE_NONE).
  *
- * @param[in]  wg  Prepared geometry workspace (carries hu_table_type).
- * @param[out] rt  Geometry runtime (receives the allocated LUT).
+ * @param[in]  hu_table_type  OSH_HU_TABLE_* selector.
+ * @param[out] rt             Geometry runtime (receives the allocated LUT).
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-static enum osh_status setup_hu_luts(struct osh_gemca_prepared const *wg, struct osh_gemca_runtime *rt) {
-    if (wg->hu_table_type == OSH_HU_TABLE_NONE) {
+static enum osh_status setup_hu_luts(int hu_table_type, struct osh_gemca_runtime *rt) {
+    if (hu_table_type == OSH_HU_TABLE_NONE) {
         return OSH_OK;
+    }
+    if (hu_table_type != OSH_HU_TABLE_SCHNEIDER && hu_table_type != OSH_HU_TABLE_PERMATASSARI) {
+        return OSH_EINVAL;
     }
 
     rt->hu_bin_lut = (uint8_t *) malloc(OSH_VOXEL_HU_LUT_SIZE * sizeof(uint8_t));
@@ -1263,10 +1269,9 @@ static enum osh_status setup_hu_luts(struct osh_gemca_prepared const *wg, struct
         return OSH_ENOMEM;
     }
 
-    if (wg->hu_table_type == OSH_HU_TABLE_PERMATASSARI) {
+    if (hu_table_type == OSH_HU_TABLE_PERMATASSARI) {
         osh_voxel_build_hu_bin_lut_permatassari2020(rt->hu_bin_lut);
     } else {
-        /* Default to Schneider 2000 for OSH_HU_TABLE_SCHNEIDER and any unknown value. */
         osh_voxel_build_hu_bin_lut_schneider2000(rt->hu_bin_lut);
     }
 

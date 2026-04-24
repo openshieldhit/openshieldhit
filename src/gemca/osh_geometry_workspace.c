@@ -169,10 +169,6 @@ enum osh_status osh_geometry_workspace_prepare(struct osh_geometry_workspace *ws
         }
     }
 
-    /* Propagate the HU table selector so osh_gemca_compile can build its LUT
-     * without needing access to the material workspace. */
-    gemca->hu_table_type = ws->hu_table_type;
-
     ws->prepared = gemca;
     return OSH_OK;
 

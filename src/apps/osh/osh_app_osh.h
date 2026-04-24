@@ -27,33 +27,12 @@ enum osh_status
 osh_beam_setup_from_path(char const *path, struct osh_diag_sink const *diag, struct osh_beam_workspace **wb_out);
 
 /**
- * @brief Parse a geometry workspace from @p path without preparing it.
- *
- * @details
- * Opens @p path and parses body/zone/material-assignment sections into a cold
- * geometry workspace.  @ref osh_geometry_workspace_prepare() is NOT called; the
- * caller must do so explicitly after setting any fields that prepare reads (e.g.
- * @c hu_table_type). On success the caller owns the workspace and must release
- * it with @ref osh_geometry_workspace_free().
- *
- * @param[in]  path    Path to the geometry input file (geo.dat).
- * @param[in]  diag    Borrowed diagnostics sink for parser messages, or NULL.
- * @param[out] ws_out  Receives the unprepared workspace.
- *
- * @returns OSH_OK on success, or an OSH_E* code on failure.
- */
-enum osh_status osh_geometry_parse_from_path(char const *path,
-                                             struct osh_diag_sink const *diag,
-                                             struct osh_geometry_workspace **ws_out);
-
-/**
  * @brief Load, parse, and prepare a geometry workspace from @p path.
  *
  * @details
- * Convenience wrapper around @ref osh_geometry_parse_from_path() followed by
- * @ref osh_geometry_workspace_prepare().  Suitable for non-CT geometry where
- * @c hu_table_type does not need to be propagated before prepare. On success
- * the caller owns the workspace and must release it with
+ * Opens @p path, parses body/zone/material-assignment sections into a cold
+ * geometry workspace, and calls @ref osh_geometry_workspace_prepare(). On
+ * success the caller owns the workspace and must release it with
  * @ref osh_geometry_workspace_free().
  *
  * @param[in]  path    Path to the geometry input file (geo.dat).
@@ -67,31 +46,12 @@ enum osh_status osh_geometry_setup_from_path(char const *path,
                                              struct osh_geometry_workspace **ws_out);
 
 /**
- * @brief Parse a material workspace from @p path without preparing it.
- *
- * @details
- * Opens @p path, parses material definitions into a cold material workspace,
- * and returns without calling @ref osh_material_workspace_prepare(). The caller
- * must call prepare explicitly when ready. On success the caller owns the
- * workspace and must release it with @ref osh_material_workspace_free().
- *
- * @param[in]  path    Path to the material input file (mat.dat).
- * @param[in]  diag    Borrowed diagnostics sink for parser messages, or NULL.
- * @param[out] wm_out  Receives the unprepared workspace.
- *
- * @returns OSH_OK on success, or an OSH_E* code on failure.
- */
-enum osh_status osh_material_parse_from_path(char const *path,
-                                             struct osh_diag_sink const *diag,
-                                             struct osh_material_workspace **wm_out);
-
-/**
  * @brief Load, parse, and prepare a material workspace from @p path.
  *
  * @details
- * Convenience wrapper around @ref osh_material_parse_from_path() followed by
- * @ref osh_material_workspace_prepare(). On success the caller owns the
- * workspace and must release it with @ref osh_material_workspace_free().
+ * Opens @p path, parses material definitions into a cold material workspace,
+ * and calls @ref osh_material_workspace_prepare(). On success the caller owns
+ * the workspace and must release it with @ref osh_material_workspace_free().
  *
  * @param[in]  path    Path to the material input file (mat.dat).
  * @param[in]  diag    Borrowed diagnostics sink for parser/setup messages, or NULL.
