@@ -162,7 +162,6 @@ static void test_uniform_grid_all_same_bin(void) {
 
     ASSERT_TRUE(fabs(ds - 1.0) < 1e-9);
     ASSERT_TRUE(fabs(step_segments[0].ds - 1.0) < 1e-9);
-    ASSERT_TRUE(step_segments[0].rho == 0.0); /* rho no longer filled here */
 }
 
 static void test_bin_change_stops_traversal(void) {
@@ -252,7 +251,6 @@ static void test_bin_assigned_for_nonzero_hu(void) {
 
     ASSERT_TRUE(n_step_segments == 1);
     ASSERT_TRUE(bin == (int) s_bin_lut[200 + 1000]);
-    ASSERT_TRUE(step_segments[0].rho == 0.0); /* density lives in material_rt, not here */
 }
 
 static void test_zone_ref_uses_morton_voxel_index(void) {

@@ -1,6 +1,7 @@
 #ifndef OSH_MATERIAL_RUNTIME_H
 #define OSH_MATERIAL_RUNTIME_H
 
+#include <assert.h>
 #include <math.h>
 #include <stddef.h>
 
@@ -188,7 +189,13 @@ static inline double osh_material_runtime_range_lookup(struct osh_material_runti
 static inline double osh_material_runtime_get_rho(struct osh_material_runtime const *tables,
                                                   struct osh_zone_ref const *zr) {
     if (zr->has_hu) {
-        return (double) tables->hu_rho_lut[zr->hu + 1000];
+        int hu;
+        assert(tables->hu_rho_lut != NULL);
+        if (!tables->hu_rho_lut) {
+            return 0.0;
+        }
+        hu = zr->hu < -1000 ? -1000 : (zr->hu > 1600 ? 1600 : (int) zr->hu);
+        return (double) tables->hu_rho_lut[hu + 1000];
     }
     return (double) tables->rho[zr->material_idx];
 }

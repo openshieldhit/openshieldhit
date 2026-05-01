@@ -17,17 +17,12 @@ extern "C" {
  * use the current voxel-exit distance.
  *
  * The step function (osh_transport_ion_step) receives the segment list
- * produced by the geometry layer before the physics is evaluated.  It uses:
- *   ds  — to accumulate the geometric step length
- *   rho — to accumulate the areal density rho × ds for energy loss,
- *           straggling, and scoring
- *
- * The segment list is built in the wavefront outer loop from GEMCA's boundary
- * distance and material/runtime's density lookup.
+ * produced by the geometry layer before the physics is evaluated.  It uses
+ * ds to clip the step to the current medium boundary; density is resolved
+ * separately by material/runtime from the zone reference.
  */
 struct osh_step_segment {
-    double ds;  /* path length through this constant-density piece [cm] */
-    double rho; /* actual material density for this piece [g/cm³] */
+    double ds; /* path length through this constant-density piece [cm] */
 };
 
 #ifdef __cplusplus
