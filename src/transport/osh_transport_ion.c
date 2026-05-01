@@ -89,6 +89,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     size_t last_report_completed;
     size_t progress_chunk;
     size_t next_report_completed;
+    struct osh_step_segment step_seg;
     double t_start;
     double t_last_report;
     enum osh_status rc = OSH_OK;
@@ -156,8 +157,6 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
 
         /* Advance every live particle by one step */
         for (i = 0u; i < pool->n; ++i) {
-            struct osh_step_segment step_seg;
-
             if (steps_taken >= step_budget) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: step budget exceeded after %zu steps (pool slot %zu, primaries_done=%zu, "
@@ -178,7 +177,6 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             }
 
             step_seg.ds = dist_batch[i];
-            step_seg.rho = 0.0;
 
             rc = osh_transport_ion_step(
                 pool, i, &zone_refs[i], &step_seg, 1u, geom_rt, transport_ctx, material_rt, score_rt, &rng);

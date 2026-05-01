@@ -759,7 +759,11 @@ enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
         }
     }
 
-    if (wm->hu_table_type != OSH_HU_TABLE_NONE) {
+    switch (wm->hu_table_type) {
+    case OSH_HU_TABLE_NONE:
+        break;
+    case OSH_HU_TABLE_SCHNEIDER:
+    case OSH_HU_TABLE_PERMATASSARI:
         /* Build the HU→density LUT; used by osh_material_runtime_get_rho() for voxel zones. */
         t.hu_rho_lut = (float *) malloc(OSH_VOXEL_HU_LUT_SIZE * sizeof(float));
         if (!t.hu_rho_lut) {
@@ -771,6 +775,10 @@ enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
         } else {
             osh_voxel_build_hu_rho_lut_schneider2000(t.hu_rho_lut);
         }
+        break;
+    default:
+        rc = OSH_EINVAL;
+        goto fail;
     }
 
     *tables = t;
