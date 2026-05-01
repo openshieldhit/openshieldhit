@@ -199,8 +199,8 @@ static void test_create_rejects_voxel_geometry_without_hutable(void) {
     ASSERT_TRUE(body != NULL);
     ASSERT_TRUE(zone != NULL);
 
-    prepared->bodies = (struct body **) calloc(1u, sizeof(*prepared->bodies));
-    prepared->zones = (struct zone **) calloc(1u, sizeof(*prepared->zones));
+    prepared->bodies = (struct body **) calloc(1u, sizeof(struct body *));
+    prepared->zones = (struct zone **) calloc(1u, sizeof(struct zone *));
     ASSERT_TRUE(prepared->bodies != NULL);
     ASSERT_TRUE(prepared->zones != NULL);
 
