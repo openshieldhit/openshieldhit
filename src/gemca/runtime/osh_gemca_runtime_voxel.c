@@ -62,7 +62,6 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
 
     if (step_segments && step_segments_cap > 0u) {
         step_segments[0].ds = crossing.path_len;
-        step_segments[0].rho = 0.0;
     }
 
     if (n_out) {
