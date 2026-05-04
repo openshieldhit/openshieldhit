@@ -22,8 +22,14 @@ extern "C" {
 #define OSH_SCORING_BDO2019_PL_TYPE_LLSINT "i8"
 #define OSH_SCORING_BDO2019_PL_TYPE_DOUBLE "f8"
 
-#define OSH_SCORING_BDO2019_ENDIAN_BIG "MM"
+/* Preamble endian field (2 bytes): SH12A convention ("II" = Intel/LE, "MM" = Motorola/BE). */
+#define OSH_SCORING_BDO2019_ENDIAN_BIG    "MM"
 #define OSH_SCORING_BDO2019_ENDIAN_LITTLE "II"
+
+/* NumPy dtype endian prefix (1 char): prepended to pltype strings in token headers.
+ * Must use NumPy byte-order characters so np.fromfile(dtype=...) can parse them. */
+#define OSH_SCORING_BDO2019_DTYPE_ENDIAN_BIG    ">"
+#define OSH_SCORING_BDO2019_DTYPE_ENDIAN_LITTLE "<"
 
 #define OSH_SCORING_BDO2019_FORMAT_ID 2
 

@@ -1,0 +1,13 @@
+RNDSEED         89736501              # Random seed
+PRIMARY         1        1            # Proton (Z=1, A=1)
+TMAX0           126.0    0.0          # 126 MeV monoenergetic
+BEAMSIGMA      -2.5     -2.5          # 5x5 cm square field (half-width 2.5 cm)
+BEAMPOS         0.0      0.0    -15.0 # Beam start: centered, just before CT entry
+NSTAT           1000    -1            # 1000 primaries
+NEUTRLCUT       0.0
+MAKELN          0
+DELTAE          0.005
+DEMIN           0.025
+STRAGG          1                     # Gaussian straggling
+MSCAT           2                     # Moliere scattering
+NUCRE           1                     # Nuclear reactions on
