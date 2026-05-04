@@ -92,6 +92,8 @@ struct osh_material_workspace {
     char *fname;
     size_t nmaterials;
     int hu_table_type; /**< OSH_HU_TABLE_* selector (from openshieldhit/voxel.h); 0 (NONE) for non-CT runs. */
+    size_t
+        hu_first_material_idx; /**< Index of the first HU-table material in the runtime (set by register functions). */
 };
 
 /**

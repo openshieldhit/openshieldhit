@@ -137,7 +137,8 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 
     /* ---- 2. Geometry runtime -------------------------------------------- */
 
-    rc = osh_gemca_compile(gemca, geometry_hu_table_type, diag, &sim->geom_rt);
+    rc = osh_gemca_compile(
+        gemca, geometry_hu_table_type, has_voxel_body ? mat->hu_first_material_idx : 0u, diag, &sim->geom_rt);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile geometry runtime");
         goto fail;

@@ -521,7 +521,7 @@ int main(int argc, char *argv[]) {
 
     /* ---- Compile runtime -------------------------------------------------- */
 
-    if (osh_gemca_compile(g, OSH_HU_TABLE_NONE, &diag, &rt) != OSH_OK) {
+    if (osh_gemca_compile(g, OSH_HU_TABLE_NONE, 0u, &diag, &rt) != OSH_OK) {
         fprintf(stderr, "error: failed to compile gemca runtime\n");
         osh_geometry_workspace_free(geom);
         return 1;
