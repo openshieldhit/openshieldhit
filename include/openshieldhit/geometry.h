@@ -34,6 +34,7 @@ extern "C" {
 struct osh_zone_ref {
     size_t zone_idx;     /**< Zone index; OSH_ZONE_INDEX_INVALID if outside geometry. */
     size_t material_idx; /**< Resolved material index: ASSIGNMAT for analytic, HU-bin for voxel. */
+    size_t voxel_idx;    /**< Flat voxel index in the CT body's storage layout; valid when has_hu != 0. */
     int16_t hu;          /**< Clamped HU value [−1000, 1600]; meaningful only when has_hu != 0. */
     char has_hu;         /**< Non-zero for voxel zones; zero for analytic zones. */
 };

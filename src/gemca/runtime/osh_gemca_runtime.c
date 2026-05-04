@@ -1172,6 +1172,7 @@ void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
 
         zone_ref_out[i].has_hu = 1;
         zone_ref_out[i].hu = (int16_t) hu_clamped;
+        zone_ref_out[i].voxel_idx = voxel_idx;
         zone_ref_out[i].material_idx = (size_t) rt->hu_bin_lut[hu_clamped + 1000];
     }
 }
