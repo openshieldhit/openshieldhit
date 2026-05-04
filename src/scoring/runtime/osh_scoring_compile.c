@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "common/osh_diag.h"
+#include "common/raytrace/osh_raytrace.h"
 
 struct prepared_page_ref {
     size_t output_idx;
@@ -42,9 +43,9 @@ static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
     size_t i;
     size_t nbins = 1u;
 
-    /* Voxel geometries: nbins is set by the app after the CT/RTDOSE grid is resolved. */
-    if (geo->vox_nbins > 0u) {
-        return geo->vox_nbins;
+    /* Voxel geometries: bin count is derived from explicit grid dimensions set by the app. */
+    if (geo->vox_nx > 0u && geo->vox_ny > 0u && geo->vox_nz > 0u) {
+        return geo->vox_nx * geo->vox_ny * geo->vox_nz;
     }
 
     if (geo->naxes > 0u) {
@@ -336,6 +337,18 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
     dst->nbins = geometry_nbins(src);
     if (dst->nbins == 0u) {
         return OSH_EINVAL;
+    }
+    if (dst->geo_kind == OSH_SCORING_GEO_DICOM_CT || dst->geo_kind == OSH_SCORING_GEO_DICOM_RTDOSE) {
+        dst->vox_grid.origin[0] = src->vox_origin[0];
+        dst->vox_grid.origin[1] = src->vox_origin[1];
+        dst->vox_grid.origin[2] = src->vox_origin[2];
+        dst->vox_grid.spacing[0] = src->vox_spacing[0];
+        dst->vox_grid.spacing[1] = src->vox_spacing[1];
+        dst->vox_grid.spacing[2] = src->vox_spacing[2];
+        dst->vox_grid.n[0] = src->vox_nx;
+        dst->vox_grid.n[1] = src->vox_ny;
+        dst->vox_grid.n[2] = src->vox_nz;
+        dst->vox_grid.tile_order = OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT;
     }
     return OSH_OK;
 }
