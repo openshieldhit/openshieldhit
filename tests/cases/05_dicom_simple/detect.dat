@@ -1,0 +1,27 @@
+# 05_dicom_simple — depth-dose along beam axis
+# CT centered at isocenter (origin), beam along +Z from z=-15 cm
+# 126 MeV protons stop around z=0 (Bragg peak ~13.2 cm in water from entry)
+
+Geometry Mesh
+    Name DepthDose
+    X -2.5  2.5    1
+    Y -2.5  2.5    1
+    Z -13.5 13.5  270
+
+
+Geometry Mesh
+    Name MyXZ
+    X -15.0  15.0    300
+    Y -0.5    0.5    1
+    Z -15.0  15.0    300
+
+Output
+    Filename depth_dose.dat
+    Fileformat TEXT
+    Geo DepthDose
+    Quantity Fluence
+
+Output
+    Filename depth_dose.bdo
+    Geo MyXZ
+    Quantity Fluence

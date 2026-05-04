@@ -1,0 +1,39 @@
+- TEST 05_DICOM_SIMPLE -
+
+- DESCRIPTION:
+Loads the DCPT_headphantom CT (512x512x177 voxels, 0.5859 mm pixel spacing,
+1.5 mm slice spacing) from tests/fixtures/dicom/DCPT_headphantom and places it
+centered at the isocenter (universe origin) with no rotation.
+
+A monoenergetic 126 MeV proton beam with a 5x5 cm square field enters from
+z=-15 cm along the +Z axis. The CT geometry is:
+
+  x, y : -15.0  to +15.0  cm  (30 cm FOV)
+  z    : -13.275 to +13.275 cm  (177 slices x 1.5 mm)
+
+The proton range in water-equivalent material is ~13.2 cm, so the Bragg peak
+lands close to the far face of the CT (around z=0).
+
+The scoring mesh covers z=-13.5 to +13.5 cm in 1 mm steps for a depth-dose
+profile along the beam axis.
+
+- PURPOSE:
+Debug end-to-end CT loading, HU-to-material mapping (Schneider2000), and
+simulation setup. Run with --dry-run by default (validates parsing + compile).
+
+To enable transport, add args.cmake in this directory:
+  set(OSH_ARGS "-v" "--outdir" "${WORK_DIR}")
+
+- GEOMETRY:
+  BHBOX : outer blackhole RPP  (-25..+25 cm all axes)
+  OUTER : vacuum buffer RPP    (-20..+20 x/y, -16..+15 z)
+  CTBOX : DCM head phantom     (gantry=0, couch=0)
+
+- MATERIAL:
+  HUTABLE Schneider2000 (24-bin CT calibration)
+  CT zone assigned schneider_00 as placeholder (HU LUT overrides at runtime)
+
+- BEAM:
+  126 MeV protons, monoenergetic
+  5x5 cm square field (BEAMSIGMA -2.5 -2.5)
+  Start position: (0, 0, -15) cm
