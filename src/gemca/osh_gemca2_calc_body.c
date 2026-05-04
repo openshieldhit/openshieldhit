@@ -594,10 +594,11 @@ static enum osh_status _setup_vox(struct body *b) {
         }
     }
 
-    /* world placement shift goes into translation part of transformation matrix */
-    b->t[3] = -tx_cm;
-    b->t[7] = -ty_cm;
-    b->t[11] = -tz_cm;
+    /* osh_ray_transform computes p_local[i] = sum_k p_universe[k]*tb[i][k] - t[i*4+3].
+     * For this to equal (p_universe - t_vec)·tb[i], we need t[i*4+3] = t_vec·tb[i]. */
+    b->t[3] = tx_cm * tb[0][0] + ty_cm * tb[0][1] + tz_cm * tb[0][2];
+    b->t[7] = tx_cm * tb[1][0] + ty_cm * tb[1][1] + tz_cm * tb[1][2];
+    b->t[11] = tx_cm * tb[2][0] + ty_cm * tb[2][1] + tz_cm * tb[2][2];
 
     /* ----------- Setup surfaces */
     osh_gemca2_add_surfaces(b, nsurfs);

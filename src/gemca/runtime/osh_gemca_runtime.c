@@ -157,6 +157,7 @@ static inline double _minpos(double a, double b);
  */
 enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg,
                                   int hu_table_type,
+                                  size_t hu_material_offset,
                                   struct osh_diag_sink const *diag,
                                   struct osh_gemca_runtime *rt) {
     enum osh_status rc;
@@ -167,6 +168,7 @@ enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg,
 
     rt->workspace = wg;
     rt->zone_batch_dispatch = detect_zone_batch_dispatch();
+    rt->hu_material_offset = hu_material_offset;
 
     rc = setup_surfaces(wg, rt);
     if (rc != OSH_OK) {
@@ -1173,7 +1175,7 @@ void osh_gemca_runtime_get_zone_ref_batch(struct osh_gemca_runtime const *rt,
         zone_ref_out[i].has_hu = 1;
         zone_ref_out[i].hu = (int16_t) hu_clamped;
         zone_ref_out[i].voxel_idx = voxel_idx;
-        zone_ref_out[i].material_idx = (size_t) rt->hu_bin_lut[hu_clamped + 1000];
+        zone_ref_out[i].material_idx = (size_t) rt->hu_bin_lut[hu_clamped + 1000] + rt->hu_material_offset;
     }
 }
 

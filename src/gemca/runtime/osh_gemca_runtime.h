@@ -240,11 +240,12 @@ struct osh_gemca_runtime {
     struct gemca_rt_surface *surfaces;          /**< Flat surface array (owned). */
     struct gemca_rt_body *bodies;               /**< Flat body array (owned). */
     struct gemca_rt_zone *zones;                /**< Flat zone array; each zone owns its insns[]. */
-    uint8_t *hu_bin_lut;     /**< HU→bin index, 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
-    size_t nsurfaces;        /**< Number of entries in surfaces[]. */
-    size_t nbodies;          /**< Number of entries in bodies[]. */
-    size_t nzones;           /**< Number of entries in zones[]. */
-    int zone_batch_dispatch; /**< enum osh_gemca_zone_batch_dispatch */
+    uint8_t *hu_bin_lut;       /**< HU→bin index, 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
+    size_t hu_material_offset; /**< Added to hu_bin_lut entries to get actual material runtime index. */
+    size_t nsurfaces;          /**< Number of entries in surfaces[]. */
+    size_t nbodies;            /**< Number of entries in bodies[]. */
+    size_t nzones;             /**< Number of entries in zones[]. */
+    int zone_batch_dispatch;   /**< enum osh_gemca_zone_batch_dispatch */
 };
 
 /* ---- Lifecycle ------------------------------------------------------------ */
@@ -272,20 +273,25 @@ struct osh_gemca_runtime {
  * incorrect.
  *
  * @param[in]  wg             Fully loaded and material-resolved cold workspace.
- * @param[in]  hu_table_type  OSH_HU_TABLE_* selector used to build the optional
- *                            voxel HU→material-bin LUT. Pass
- *                            OSH_HU_TABLE_NONE for non-CT geometry.
- * @param[out] rt             Receives the compiled runtime.  The caller owns
- *                            the inner allocations; call
- *                            osh_gemca_runtime_free() to release them. The
- *                            struct may be stack-allocated; zero-initialise it
- *                            before calling this function.
+ * @param[in]  hu_table_type      OSH_HU_TABLE_* selector used to build the optional
+ *                                voxel HU→material-bin LUT. Pass
+ *                                OSH_HU_TABLE_NONE for non-CT geometry.
+ * @param[in]  hu_material_offset Added to each hu_bin_lut entry when resolving
+ *                                zone_ref->material_idx, so that raw bin indices
+ *                                (0-based) map to actual material runtime indices.
+ *                                Pass 0 for non-CT geometry.
+ * @param[out] rt                 Receives the compiled runtime.  The caller owns
+ *                                the inner allocations; call
+ *                                osh_gemca_runtime_free() to release them. The
+ *                                struct may be stack-allocated; zero-initialise it
+ *                                before calling this function.
  *
  * @returns OSH_OK on success, OSH_EINVAL if wg or rt is NULL, OSH_ENOMEM on
  *          allocation failure.
  */
 enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg,
                                   int hu_table_type,
+                                  size_t hu_material_offset,
                                   struct osh_diag_sink const *diag,
                                   struct osh_gemca_runtime *rt);
 char const *osh_gemca_runtime_zone_batch_dispatch_name(struct osh_gemca_runtime const *rt);

@@ -2,11 +2,12 @@
 .claude
 .claude*/
 _temp*/
-NB*.dat
+NB*
 *.bdo
 build-*/
 build_*/
 perf*
+*.pyc
 
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,cmake,linux
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,cmake,linux

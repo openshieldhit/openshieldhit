@@ -16,12 +16,12 @@ Geometry Mesh
     Z -15.0  15.0    300
 
 Output
-    Filename depth_dose.dat
+    Filename NB_ddc.dat
     Fileformat TEXT
     Geo DepthDose
     Quantity Fluence
 
 Output
-    Filename depth_dose.bdo
+    Filename NB_XZ.bdo
     Geo MyXZ
-    Quantity Fluence
+    Quantity Energy
