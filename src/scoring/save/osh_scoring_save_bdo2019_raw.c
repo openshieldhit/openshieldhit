@@ -6,6 +6,7 @@
 static enum osh_status write_bytes(FILE *fp, void const *data, size_t size, size_t count);
 static int host_is_big_endian(void);
 static char const *host_endian_prefix(void);
+static char const *host_dtype_prefix(void);
 static void init_tag(struct osh_scoring_bdo2019_tag *tag, uint64_t tag_id, char const *pltype, uint64_t len);
 static size_t padded_string_len(char const *str);
 
@@ -76,7 +77,7 @@ osh_scoring_bdo2019_write_token_llint(FILE *fp, uint64_t tag_id, long long int c
     }
 
     init_tag(&tag, tag_id, "", (uint64_t) nvalues);
-    nchar = snprintf(tag.pltype, sizeof(tag.pltype), "%s%s", host_endian_prefix(), OSH_SCORING_BDO2019_PL_TYPE_LLSINT);
+    nchar = snprintf(tag.pltype, sizeof(tag.pltype), "%s%s", host_dtype_prefix(), OSH_SCORING_BDO2019_PL_TYPE_LLSINT);
     if (nchar < 0 || (size_t) nchar >= sizeof(tag.pltype)) {
         return OSH_ESTATE;
     }
@@ -125,7 +126,7 @@ osh_scoring_bdo2019_write_token_double(FILE *fp, uint64_t tag_id, double const *
     }
 
     init_tag(&tag, tag_id, "", (uint64_t) nvalues);
-    nchar = snprintf(tag.pltype, sizeof(tag.pltype), "%s%s", host_endian_prefix(), OSH_SCORING_BDO2019_PL_TYPE_DOUBLE);
+    nchar = snprintf(tag.pltype, sizeof(tag.pltype), "%s%s", host_dtype_prefix(), OSH_SCORING_BDO2019_PL_TYPE_DOUBLE);
     if (nchar < 0 || (size_t) nchar >= sizeof(tag.pltype)) {
         return OSH_ESTATE;
     }
@@ -181,6 +182,10 @@ static int host_is_big_endian(void) {
 
 static char const *host_endian_prefix(void) {
     return host_is_big_endian() ? OSH_SCORING_BDO2019_ENDIAN_BIG : OSH_SCORING_BDO2019_ENDIAN_LITTLE;
+}
+
+static char const *host_dtype_prefix(void) {
+    return host_is_big_endian() ? OSH_SCORING_BDO2019_DTYPE_ENDIAN_BIG : OSH_SCORING_BDO2019_DTYPE_ENDIAN_LITTLE;
 }
 
 static void init_tag(struct osh_scoring_bdo2019_tag *tag, uint64_t tag_id, char const *pltype, uint64_t len) {

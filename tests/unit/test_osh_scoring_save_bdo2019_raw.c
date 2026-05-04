@@ -15,6 +15,7 @@
 
 static FILE *osh_test_tmpfile(void);
 static char const *host_endian_prefix(void);
+static char const *host_dtype_prefix(void);
 
 static void test_tag_layout_is_24_bytes(void) {
     ASSERT_TRUE(sizeof(struct osh_scoring_bdo2019_tag) == 24u);
@@ -76,7 +77,7 @@ static void test_write_token_int_writes_all_values_as_signed_64bit(void) {
     ASSERT_TRUE(fread(&tag, sizeof(tag), 1u, fp) == 1u);
     ASSERT_TRUE(fread(payload, sizeof(payload), 1u, fp) == 1u);
 
-    snprintf(pltype, sizeof(pltype), "%s%s", host_endian_prefix(), OSH_SCORING_BDO2019_PL_TYPE_LLSINT);
+    snprintf(pltype, sizeof(pltype), "%s%s", host_dtype_prefix(), OSH_SCORING_BDO2019_PL_TYPE_LLSINT);
     ASSERT_TRUE(tag.tag == (uint64_t) OSHBDO_EST_NPAGES);
     ASSERT_TRUE(tag.len == 3u);
     ASSERT_TRUE(strcmp(tag.pltype, pltype) == 0);
@@ -103,6 +104,12 @@ static char const *host_endian_prefix(void) {
     uint16_t value = 0x0102u;
     unsigned char const *bytes = (unsigned char const *) &value;
     return (bytes[0] == 0x01u) ? OSH_SCORING_BDO2019_ENDIAN_BIG : OSH_SCORING_BDO2019_ENDIAN_LITTLE;
+}
+
+static char const *host_dtype_prefix(void) {
+    uint16_t value = 0x0102u;
+    unsigned char const *bytes = (unsigned char const *) &value;
+    return (bytes[0] == 0x01u) ? OSH_SCORING_BDO2019_DTYPE_ENDIAN_BIG : OSH_SCORING_BDO2019_DTYPE_ENDIAN_LITTLE;
 }
 
 int main(void) {
