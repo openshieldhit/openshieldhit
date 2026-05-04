@@ -140,7 +140,11 @@ struct osh_scoring_geometry_def {
     /* ---- Voxel geometry fields (DicomCT / DicomRTDOSE) ------------------- */
     char *vox_rtdose_path; /* DicomRTDOSE only: path to RTDOSE DICOM file; read by app, never library. */
     char *vox_body_name;   /* Future multi-CT: explicit CT body reference. NULL = auto-detect single body. */
-    size_t vox_nbins;      /* Total voxel bin count (nx*ny*nz); set by app after grid is resolved. */
+    double vox_origin[3];  /* Voxel-grid corner [cm] in universe frame; set by app. */
+    double vox_spacing[3]; /* Voxel spacing [cm]; set by app. */
+    size_t vox_nx;         /* Grid dimension X; set by app. */
+    size_t vox_ny;         /* Grid dimension Y; set by app. */
+    size_t vox_nz;         /* Grid dimension Z; set by app. */
 };
 
 /**

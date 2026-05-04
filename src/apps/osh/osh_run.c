@@ -370,6 +370,7 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
                                                struct osh_scoring_workspace *scoring,
                                                struct osh_diag_sink const *diag) {
     struct osh_geometry_body const *b;
+    struct osh_scoring_geometry_def *g;
     char const *kind;
     size_t i;
     size_t nvox_geo = 0u;
@@ -415,9 +416,19 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
 
     for (i = 0; i < scoring->ngeometries; ++i) {
         kind = scoring->geometries[i].kind;
-        if (kind && (strcmp(kind, "dicomct") == 0 || strcmp(kind, "dicomrtdose") == 0)) {
-            scoring->geometries[i].vox_nbins = nx * ny * nz;
+        if (!kind || (strcmp(kind, "dicomct") != 0 && strcmp(kind, "dicomrtdose") != 0)) {
+            continue;
         }
+        g = &scoring->geometries[i];
+        g->vox_origin[0] = b->a[0];
+        g->vox_origin[1] = b->a[1];
+        g->vox_origin[2] = b->a[2];
+        g->vox_spacing[0] = b->a[3];
+        g->vox_spacing[1] = b->a[4];
+        g->vox_spacing[2] = b->a[5];
+        g->vox_nx = nx;
+        g->vox_ny = ny;
+        g->vox_nz = nz;
     }
 
     return OSH_OK;

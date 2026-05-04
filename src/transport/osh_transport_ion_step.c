@@ -68,6 +68,8 @@ struct ion_step_ctx {
     size_t projectile_idx;       /* index into material_rt->projectile_* */
     size_t zone_idx;             /* caller-provided zone index           */
     size_t zone_material_idx;    /* zone->material_idx                   */
+    size_t voxel_idx;            /* flat CT voxel index (from zone_ref)  */
+    char has_voxel;              /* non-zero when voxel_idx is valid     */
     double e0;                   /* entry total kinetic energy [MeV]     */
     double a_proj;               /* mass number (float cast, ≥ 1)        */
     double cutoff;               /* energy cutoff for this particle [MeV]*/
@@ -252,6 +254,8 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->a_proj = (ctx->part->a > 0u) ? (double) ctx->part->a : 1.0;
     ctx->e0 = pool->e[slot];
     ctx->zone_idx = zone_ref ? zone_ref->zone_idx : OSH_GEMCA_ZONE_INDEX_INVALID;
+    ctx->has_voxel = zone_ref ? zone_ref->has_hu : 0;
+    ctx->voxel_idx = (zone_ref && zone_ref->has_hu) ? zone_ref->voxel_idx : 0u;
     ctx->demin_total = 0.0;
 
     ctx->boundary_ds = (n_step_segments > 0u) ? step_segments[0].ds : 0.0;
@@ -691,6 +695,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.w[0] = ctx->w_scat[0];
     st.w[1] = ctx->w_scat[1];
     st.w[2] = ctx->w_scat[2];
+    st.voxel_idx = ctx->voxel_idx;
+    st.has_voxel = ctx->has_voxel;
 
     rc = osh_scoring_score_step(score_rt, ctx->part, &st);
     if (rc != OSH_OK) {
