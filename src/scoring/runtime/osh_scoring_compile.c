@@ -26,8 +26,11 @@ static enum osh_scoring_geo_kind geometry_kind_to_enum(char const *kind) {
     if (strcmp(kind, "zone") == 0) {
         return OSH_SCORING_GEO_ZONE;
     }
-    if (strcmp(kind, "voxel") == 0) {
-        return OSH_SCORING_GEO_VOXEL;
+    if (strcmp(kind, "dicomct") == 0) {
+        return OSH_SCORING_GEO_DICOM_CT;
+    }
+    if (strcmp(kind, "dicomrtdose") == 0) {
+        return OSH_SCORING_GEO_DICOM_RTDOSE;
     }
     if (strcmp(kind, "all") == 0) {
         return OSH_SCORING_GEO_ALL;
@@ -38,6 +41,11 @@ static enum osh_scoring_geo_kind geometry_kind_to_enum(char const *kind) {
 static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
     size_t i;
     size_t nbins = 1u;
+
+    /* Voxel geometries: nbins is set by the app after the CT/RTDOSE grid is resolved. */
+    if (geo->vox_nbins > 0u) {
+        return geo->vox_nbins;
+    }
 
     if (geo->naxes > 0u) {
         for (i = 0; i < geo->naxes; ++i) {

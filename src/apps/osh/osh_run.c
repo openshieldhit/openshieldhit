@@ -12,7 +12,11 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
+#include "common/osh_diag.h"
 #include "common/osh_file.h"
+#include "openshieldhit/geometry.h"
+#include "openshieldhit/geometry_defs.h"
+#include "openshieldhit/scoring.h"
 #include "openshieldhit/simulation.h"
 
 /* ---- Default file names -------------------------------------------------- */
@@ -28,6 +32,9 @@ static char const *const OSH_DETECT_FILENAME = "detect.dat";
 static char *run_resolve_path(char const *workdir, char const *override_path, char const *filename);
 static char *run_resolve_absolute_path(char const *path);
 static enum osh_status run_resolve_output_paths(struct osh_scoring_workspace *scoring, char const *out_dir);
+static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace const *geom,
+                                               struct osh_scoring_workspace *scoring,
+                                               struct osh_diag_sink const *diag);
 static int run_file_exists(char const *path);
 
 /* ---- Run ----------------------------------------------------------------- */
@@ -205,6 +212,14 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
+    rc = run_setup_voxel_scoring(geom, scoring, opt->diag);
+    if (rc != OSH_OK) {
+        if (err) {
+            fprintf(err, "Error: voxel scoring setup failed\n");
+        }
+        goto cleanup;
+    }
+
     if (opt->validate_only) {
         if (out) {
             fprintf(out, "Validation completed.\n");
@@ -330,6 +345,82 @@ static char *run_resolve_absolute_path(char const *path) {
     }
     osh_path_normalize(resolved);
     return resolved;
+}
+
+/**
+ * @brief Resolve voxel scoring geometry against the parsed geometry workspace.
+ *
+ * @details
+ * For each DicomCT or DicomRTDOSE scoring geometry found in @p scoring, this
+ * function verifies that exactly one CT (VOX) body exists in @p geom, then
+ * reads the grid dimensions from its raw argument array and writes
+ * @c vox_nbins = nx*ny*nz onto the cold scoring geometry definition so that
+ * the subsequent scoring compile step can allocate the correct data arrays.
+ *
+ * If no voxel scoring geometries are present this function is a no-op.
+ * If more or fewer than one CT body is found when a voxel scoring geometry
+ * exists, an error is returned.
+ *
+ * @note
+ * The VOX body arg layout is: a[0..2]=origin, a[3..5]=spacing, a[6..8]=nx,ny,nz.
+ * Grid population (transform matrix, raytrace grid) is deferred to the M6
+ * scoring hot-path implementation.
+ */
+static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace const *geom,
+                                               struct osh_scoring_workspace *scoring,
+                                               struct osh_diag_sink const *diag) {
+    struct osh_geometry_body const *b;
+    char const *kind;
+    size_t i;
+    size_t nvox_geo = 0u;
+    size_t nvox_body = 0u;
+    size_t vox_body_idx = 0u;
+    size_t nx, ny, nz;
+
+    if (!geom || !scoring) {
+        return OSH_EINVAL;
+    }
+
+    for (i = 0; i < scoring->ngeometries; ++i) {
+        kind = scoring->geometries[i].kind;
+        if (kind && (strcmp(kind, "dicomct") == 0 || strcmp(kind, "dicomrtdose") == 0)) {
+            ++nvox_geo;
+        }
+    }
+
+    if (nvox_geo == 0u) {
+        return OSH_OK;
+    }
+
+    for (i = 0; i < geom->nbodies; ++i) {
+        if (geom->bodies[i].type == OSH_GEOMETRY_BODY_VOX) {
+            vox_body_idx = i;
+            ++nvox_body;
+        }
+    }
+
+    if (nvox_body != 1u) {
+        OSH_DIAG_ERRORF(diag, "voxel scoring requires exactly one CT body in the geometry; found %zu", nvox_body);
+        return OSH_EPARSE;
+    }
+
+    b = &geom->bodies[vox_body_idx];
+    if (b->na < 9) {
+        OSH_DIAG_ERRORF(diag, "CT body '%s' has too few arguments to read grid dimensions", b->name);
+        return OSH_EPARSE;
+    }
+    nx = (size_t) b->a[6];
+    ny = (size_t) b->a[7];
+    nz = (size_t) b->a[8];
+
+    for (i = 0; i < scoring->ngeometries; ++i) {
+        kind = scoring->geometries[i].kind;
+        if (kind && (strcmp(kind, "dicomct") == 0 || strcmp(kind, "dicomrtdose") == 0)) {
+            scoring->geometries[i].vox_nbins = nx * ny * nz;
+        }
+    }
+
+    return OSH_OK;
 }
 
 /**

@@ -42,6 +42,8 @@ enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
         free(ws->geometries[i].kind);
         free(ws->geometries[i].name);
         free(ws->geometries[i].axes);
+        free(ws->geometries[i].vox_rtdose_path);
+        free(ws->geometries[i].vox_body_name);
     }
     free(ws->geometries);
 

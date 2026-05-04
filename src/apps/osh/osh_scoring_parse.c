@@ -287,8 +287,15 @@ static enum osh_status validate(struct osh_scoring_workspace const *ws, struct o
             OSH_DIAG_ERRORF(diag, "scoring: geometry %zu (%s) is missing a Name", i, ws->geometries[i].kind);
             return OSH_EPARSE;
         }
-        if (ws->geometries[i].naxes == 0u && strcmp(ws->geometries[i].kind, "zone") != 0) {
+        if (ws->geometries[i].naxes == 0u && strcmp(ws->geometries[i].kind, "zone") != 0
+            && strcmp(ws->geometries[i].kind, "dicomct") != 0 && strcmp(ws->geometries[i].kind, "dicomrtdose") != 0) {
             OSH_DIAG_WARNF(diag, "scoring: geometry '%s' has no axis definitions", ws->geometries[i].name);
+        }
+        if (strcmp(ws->geometries[i].kind, "dicomrtdose") == 0
+            && (!ws->geometries[i].vox_rtdose_path || ws->geometries[i].vox_rtdose_path[0] == '\0')) {
+            OSH_DIAG_ERRORF(
+                diag, "scoring: geometry '%s' (DicomRTDOSE) is missing an InputPath", ws->geometries[i].name);
+            return OSH_EPARSE;
         }
     }
 
