@@ -9,11 +9,13 @@ import re
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, TypeAlias, cast
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/openshieldhit-matplotlib")
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 
 
 OSHBDO_GEO_TYPE = 0xE000
@@ -25,32 +27,35 @@ OSHBDO_PAG_TYPE = 0xDD30
 OSHBDO_PAG_DATA = 0xDDBB
 OSHBDO_PAG_DATA_UNIT = 0xDDBC
 
+FloatArray: TypeAlias = npt.NDArray[np.float64]
+IntArray: TypeAlias = npt.NDArray[np.int_]
+
 
 @dataclass
 class BdoData:
     path: Path
     geo_type: str
     geo_name: str
-    p: np.ndarray
-    q: np.ndarray
-    n: np.ndarray
-    pages: list[np.ndarray]
+    p: FloatArray
+    q: FloatArray
+    n: IntArray
+    pages: list[FloatArray]
     page_types: list[int]
     page_units: list[str]
 
 
 @dataclass
 class CtVolume:
-    data_hu: np.ndarray
-    origin_cm: np.ndarray
-    spacing_cm: np.ndarray
+    data_hu: FloatArray
+    origin_cm: FloatArray
+    spacing_cm: FloatArray
 
 
 def _decode_c_string(payload: bytes) -> str:
     return payload.split(b"\0", 1)[0].decode("utf-8", errors="replace")
 
 
-def _payload_dtype(pltype: str) -> np.dtype | None:
+def _payload_dtype(pltype: str) -> np.dtype[np.generic] | None:
     pltype = pltype.strip("\0")
     if not pltype or pltype.startswith("S"):
         return None
@@ -58,7 +63,7 @@ def _payload_dtype(pltype: str) -> np.dtype | None:
 
 
 def read_bdo2019(path: Path) -> BdoData:
-    tokens: dict[int, list[object]] = {}
+    tokens: dict[int, list[Any]] = {}
     endian = "<"
 
     with path.open("rb") as fp:
@@ -96,13 +101,13 @@ def read_bdo2019(path: Path) -> BdoData:
             tokens.setdefault(tag, []).append(value)
 
     try:
-        p = np.asarray(tokens[OSHBDO_GEO_P][-1], dtype=float)
-        q = np.asarray(tokens[OSHBDO_GEO_Q][-1], dtype=float)
-        n = np.asarray(tokens[OSHBDO_GEO_N][-1], dtype=int)
+        p = cast(FloatArray, np.asarray(tokens[OSHBDO_GEO_P][-1], dtype=np.float64))
+        q = cast(FloatArray, np.asarray(tokens[OSHBDO_GEO_Q][-1], dtype=np.float64))
+        n = cast(IntArray, np.asarray(tokens[OSHBDO_GEO_N][-1], dtype=np.int_))
     except KeyError as exc:
         raise ValueError(f"{path}: missing required BDO geometry token") from exc
 
-    pages = [np.asarray(page, dtype=float) for page in tokens.get(OSHBDO_PAG_DATA, [])]
+    pages = [cast(FloatArray, np.asarray(page, dtype=np.float64)) for page in tokens.get(OSHBDO_PAG_DATA, [])]
     if not pages:
         raise ValueError(f"{path}: no page data found")
 
@@ -119,7 +124,7 @@ def read_bdo2019(path: Path) -> BdoData:
     )
 
 
-def _import_pydicom():
+def _import_pydicom() -> Any:
     try:
         import pydicom
     except ModuleNotFoundError as exc:
@@ -127,16 +132,17 @@ def _import_pydicom():
     return pydicom
 
 
-def _slice_position(ds: object) -> float:
-    if hasattr(ds, "ImagePositionPatient"):
-        return float(ds.ImagePositionPatient[2])
+def _slice_position(ds: Any) -> float:
+    image_position = getattr(ds, "ImagePositionPatient", None)
+    if image_position is not None:
+        return float(image_position[2])
     return float(getattr(ds, "SliceLocation", getattr(ds, "InstanceNumber", 0)))
 
 
-def read_ct_series(path: Path, origin_override_cm: np.ndarray | None = None) -> CtVolume:
+def read_ct_series(path: Path, origin_override_cm: FloatArray | None = None) -> CtVolume:
     pydicom = _import_pydicom()
     paths = [path] if path.is_file() else sorted(p for p in path.iterdir() if p.is_file())
-    slices = []
+    slices: list[Any] = []
     for candidate in paths:
         try:
             ds = pydicom.dcmread(str(candidate))
@@ -151,7 +157,7 @@ def read_ct_series(path: Path, origin_override_cm: np.ndarray | None = None) -> 
     if ct_slices:
         slices = ct_slices
     else:
-        groups: dict[tuple[int, int, str], list[object]] = {}
+        groups: dict[tuple[int, int, str], list[Any]] = {}
         for ds in slices:
             key = (
                 int(getattr(ds, "Rows", -1)),
@@ -170,28 +176,32 @@ def read_ct_series(path: Path, origin_override_cm: np.ndarray | None = None) -> 
     else:
         slice_spacing_mm = float(getattr(first, "SliceThickness", 1.0))
 
-    volume = []
+    volume: list[FloatArray] = []
     for ds in slices:
-        arr = ds.pixel_array.astype(np.float64)
+        arr = np.asarray(ds.pixel_array, dtype=np.float64)
         slope = float(getattr(ds, "RescaleSlope", 1.0))
         intercept = float(getattr(ds, "RescaleIntercept", 0.0))
         volume.append(arr * slope + intercept)
 
-    data_hu = np.stack(volume, axis=0)
-    spacing_cm = np.asarray([0.1 * spacing_mm[0], 0.1 * spacing_mm[1], 0.1 * abs(slice_spacing_mm)], dtype=float)
+    data_hu = cast(FloatArray, np.stack(volume, axis=0))
+    spacing_cm = cast(
+        FloatArray,
+        np.asarray([0.1 * spacing_mm[0], 0.1 * spacing_mm[1], 0.1 * abs(slice_spacing_mm)], dtype=np.float64),
+    )
 
     if origin_override_cm is not None:
-        origin_cm = origin_override_cm.astype(float)
-    elif hasattr(first, "ImagePositionPatient"):
-        ipp_cm = 0.1 * np.asarray(first.ImagePositionPatient, dtype=float)
+        origin_cm = cast(FloatArray, origin_override_cm.astype(np.float64))
+    elif getattr(first, "ImagePositionPatient", None) is not None:
+        ipp_cm = cast(FloatArray, 0.1 * np.asarray(first.ImagePositionPatient, dtype=np.float64))
         origin_cm = ipp_cm - 0.5 * spacing_cm
     else:
-        origin_cm = -0.5 * spacing_cm * np.asarray([data_hu.shape[2], data_hu.shape[1], data_hu.shape[0]])
+        shape_cm = cast(FloatArray, np.asarray([data_hu.shape[2], data_hu.shape[1], data_hu.shape[0]], dtype=np.float64))
+        origin_cm = -0.5 * spacing_cm * shape_cm
 
     return CtVolume(data_hu=data_hu, origin_cm=origin_cm, spacing_cm=spacing_cm)
 
 
-def parse_dcm_origin_from_geo(path: Path, dcm_path: Path | None) -> tuple[Path | None, np.ndarray] | None:
+def parse_dcm_origin_from_geo(path: Path, dcm_path: Path | None) -> tuple[Path, FloatArray] | None:
     pydicom = _import_pydicom()
     pattern = re.compile(r"^\s*DCM\s+\S+\s+(\S+)\s+\S+\s+\S+\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)")
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -209,20 +219,21 @@ def parse_dcm_origin_from_geo(path: Path, dcm_path: Path | None) -> tuple[Path |
         dx = 0.1 * float(ds.PixelSpacing[1])
         dy = 0.1 * float(ds.PixelSpacing[0])
         dz = 0.1 * float(getattr(ds, "SliceThickness", 1.0))
-        return geo_dcm_path, np.asarray([tx - 0.5 * dx, ty - 0.5 * dy, tz - 0.5 * dz], dtype=float)
+        origin_cm = cast(FloatArray, np.asarray([tx - 0.5 * dx, ty - 0.5 * dy, tz - 0.5 * dz], dtype=np.float64))
+        return geo_dcm_path, origin_cm
     return None
 
 
-def _centers(lo: float, hi: float, n: int) -> np.ndarray:
+def _centers(lo: float, hi: float, n: int) -> FloatArray:
     edges = np.linspace(lo, hi, n + 1)
-    return 0.5 * (edges[:-1] + edges[1:])
+    return cast(FloatArray, 0.5 * (edges[:-1] + edges[1:]))
 
 
-def _nearest_index(values: np.ndarray, target: float) -> int:
+def _nearest_index(values: FloatArray, target: float) -> int:
     return int(np.argmin(np.abs(values - target)))
 
 
-def extract_planes(ct: CtVolume, bdo: BdoData, page_idx: int) -> tuple[np.ndarray, np.ndarray, tuple[float, float, float, float], str]:
+def extract_planes(ct: CtVolume, bdo: BdoData, page_idx: int) -> tuple[FloatArray, FloatArray, tuple[float, float, float, float], str]:
     nx, ny, nz = (int(v) for v in bdo.n)
     score = bdo.pages[page_idx].reshape((nz, ny, nx))
     singleton_axes = [i for i, n in enumerate((nx, ny, nz)) if n == 1]
@@ -232,24 +243,24 @@ def extract_planes(ct: CtVolume, bdo: BdoData, page_idx: int) -> tuple[np.ndarra
     x_edges = (float(bdo.p[0]), float(bdo.q[0]))
     y_edges = (float(bdo.p[1]), float(bdo.q[1]))
     z_edges = (float(bdo.p[2]), float(bdo.q[2]))
-    x_ct = ct.origin_cm[0] + ct.spacing_cm[0] * (np.arange(ct.data_hu.shape[2]) + 0.5)
-    y_ct = ct.origin_cm[1] + ct.spacing_cm[1] * (np.arange(ct.data_hu.shape[1]) + 0.5)
-    z_ct = ct.origin_cm[2] + ct.spacing_cm[2] * (np.arange(ct.data_hu.shape[0]) + 0.5)
+    x_ct = cast(FloatArray, ct.origin_cm[0] + ct.spacing_cm[0] * (np.arange(ct.data_hu.shape[2]) + 0.5))
+    y_ct = cast(FloatArray, ct.origin_cm[1] + ct.spacing_cm[1] * (np.arange(ct.data_hu.shape[1]) + 0.5))
+    z_ct = cast(FloatArray, ct.origin_cm[2] + ct.spacing_cm[2] * (np.arange(ct.data_hu.shape[0]) + 0.5))
 
     if singleton_axes[0] == 1:
         y0 = _centers(*y_edges, ny)[0]
-        ct_plane = ct.data_hu[:, _nearest_index(y_ct, y0), :]
-        score_plane = score[:, 0, :]
+        ct_plane = cast(FloatArray, ct.data_hu[:, _nearest_index(y_ct, y0), :])
+        score_plane = cast(FloatArray, score[:, 0, :])
         return ct_plane, score_plane, (x_ct[0], x_ct[-1], z_ct[0], z_ct[-1]), "XZ"
     if singleton_axes[0] == 0:
         x0 = _centers(*x_edges, nx)[0]
-        ct_plane = ct.data_hu[:, :, _nearest_index(x_ct, x0)]
-        score_plane = score[:, :, 0]
+        ct_plane = cast(FloatArray, ct.data_hu[:, :, _nearest_index(x_ct, x0)])
+        score_plane = cast(FloatArray, score[:, :, 0])
         return ct_plane, score_plane, (y_ct[0], y_ct[-1], z_ct[0], z_ct[-1]), "YZ"
 
     z0 = _centers(*z_edges, nz)[0]
-    ct_plane = ct.data_hu[_nearest_index(z_ct, z0), :, :]
-    score_plane = score[0, :, :]
+    ct_plane = cast(FloatArray, ct.data_hu[_nearest_index(z_ct, z0), :, :])
+    score_plane = cast(FloatArray, score[0, :, :])
     return ct_plane, score_plane, (x_ct[0], x_ct[-1], y_ct[0], y_ct[-1]), "XY"
 
 
@@ -266,8 +277,8 @@ def main() -> int:
     parser.add_argument("--log", action="store_true", help="plot positive score values on a log10 scale")
     args = parser.parse_args()
 
-    dicom_path = args.dicom
-    origin = np.asarray(args.ct_origin, dtype=float) if args.ct_origin is not None else None
+    dicom_path = cast(Path, args.dicom)
+    origin = cast(FloatArray, np.asarray(args.ct_origin, dtype=np.float64)) if args.ct_origin is not None else None
     if args.geo is not None and origin is None:
         parsed = parse_dcm_origin_from_geo(args.geo, dicom_path)
         if parsed is not None:
