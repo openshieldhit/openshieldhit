@@ -137,6 +137,10 @@ struct osh_scoring_geometry_def {
     int zone_start;                    /* First zone (Zone geometry only). */
     int zone_stop;                     /* Last zone  (Zone geometry only). */
     unsigned char has_rotation;        /* Whether rot_* fields were set. */
+    /* ---- Voxel geometry fields (DicomCT / DicomRTDOSE) ------------------- */
+    char *vox_rtdose_path; /* DicomRTDOSE only: path to RTDOSE DICOM file; read by app, never library. */
+    char *vox_body_name;   /* Future multi-CT: explicit CT body reference. NULL = auto-detect single body. */
+    size_t vox_nbins;      /* Total voxel bin count (nx*ny*nz); set by app after grid is resolved. */
 };
 
 /**
