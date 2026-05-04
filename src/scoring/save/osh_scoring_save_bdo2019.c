@@ -256,7 +256,8 @@ static int legacy_geo_kind(struct osh_scoring_geometry_runtime const *geo) {
         return 2;
     case OSH_SCORING_GEO_ZONE:
         return 3;
-    case OSH_SCORING_GEO_VOXEL:
+    case OSH_SCORING_GEO_VOXEL: /* covers DICOM_CT (same value) */
+    case OSH_SCORING_GEO_DICOM_RTDOSE:
         return 5;
     default:
         return 0;

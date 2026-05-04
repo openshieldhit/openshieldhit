@@ -56,6 +56,18 @@ static enum osh_status geo_zones(struct osh_scoring_geometry_def *geo,
                                  int nwords,
                                  char const *path,
                                  unsigned int lineno);
+static enum osh_status geo_inputpath(struct osh_scoring_geometry_def *geo,
+                                     struct osh_diag_sink const *diag,
+                                     char **words,
+                                     int nwords,
+                                     char const *path,
+                                     unsigned int lineno);
+static enum osh_status geo_body(struct osh_scoring_geometry_def *geo,
+                                struct osh_diag_sink const *diag,
+                                char **words,
+                                int nwords,
+                                char const *path,
+                                unsigned int lineno);
 
 static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name},
                                                  {OSH_SCORING_KEY_GEO_X, geo_axis},
@@ -65,6 +77,8 @@ static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name
                                                  {OSH_SCORING_KEY_GEO_ROT, geo_rotation},
                                                  {"rot", geo_rotation},
                                                  {OSH_SCORING_KEY_GEO_ZONES, geo_zones},
+                                                 {OSH_SCORING_KEY_GEO_INPUTPATH, geo_inputpath},
+                                                 {OSH_SCORING_KEY_GEO_BODY, geo_body},
                                                  {NULL, NULL}};
 
 /**
@@ -189,4 +203,51 @@ static enum osh_status geo_zones(struct osh_scoring_geometry_def *geo,
     geo->zone_start = atoi(words[1]);
     geo->zone_stop = atoi(words[2]);
     return OSH_OK;
+}
+
+/**
+ * @brief Parse `InputPath <path>` for DicomRTDOSE geometry sections.
+ *
+ * @details
+ * The path is stored as-is on the cold geometry def.  The app layer reads the
+ * file at orchestration time and populates vox_nbins before scoring compile.
+ * The library never opens this path.
+ */
+static enum osh_status geo_inputpath(struct osh_scoring_geometry_def *geo,
+                                     struct osh_diag_sink const *diag,
+                                     char **words,
+                                     int nwords,
+                                     char const *path,
+                                     unsigned int lineno) {
+    if (nwords < 2) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry InputPath requires a file path", path, lineno);
+        return OSH_EPARSE;
+    }
+    free(geo->vox_rtdose_path);
+    geo->vox_rtdose_path = strdup(words[1]);
+    return geo->vox_rtdose_path ? OSH_OK : OSH_ENOMEM;
+}
+
+/**
+ * @brief Parse `Body <name>` for DicomCT / DicomRTDOSE geometry sections.
+ *
+ * @details
+ * Stores the referenced CT body name for future multi-CT support.  Currently
+ * the app auto-detects the single CT body in the geometry and ignores this
+ * field, but it is validated and preserved so users can prepare their input
+ * files for future use.
+ */
+static enum osh_status geo_body(struct osh_scoring_geometry_def *geo,
+                                struct osh_diag_sink const *diag,
+                                char **words,
+                                int nwords,
+                                char const *path,
+                                unsigned int lineno) {
+    if (nwords < 2) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Body requires a body name", path, lineno);
+        return OSH_EPARSE;
+    }
+    free(geo->vox_body_name);
+    geo->vox_body_name = strdup(words[1]);
+    return geo->vox_body_name ? OSH_OK : OSH_ENOMEM;
 }

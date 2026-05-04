@@ -25,12 +25,14 @@
 
 /* ---- Geometry section keys ----------------------------------------------- */
 /* OSH_SCORING_KEY_NAME shared */
-#define OSH_SCORING_KEY_GEO_X       "x"
-#define OSH_SCORING_KEY_GEO_Y       "y"
-#define OSH_SCORING_KEY_GEO_Z       "z"
-#define OSH_SCORING_KEY_GEO_R       "r"
-#define OSH_SCORING_KEY_GEO_ROT     "rotation"      /* canonical; "rot" is alias */
-#define OSH_SCORING_KEY_GEO_ZONES   "zones"
+#define OSH_SCORING_KEY_GEO_X         "x"
+#define OSH_SCORING_KEY_GEO_Y         "y"
+#define OSH_SCORING_KEY_GEO_Z         "z"
+#define OSH_SCORING_KEY_GEO_R         "r"
+#define OSH_SCORING_KEY_GEO_ROT       "rotation"    /* canonical; "rot" is alias */
+#define OSH_SCORING_KEY_GEO_ZONES     "zones"
+#define OSH_SCORING_KEY_GEO_INPUTPATH "inputpath"   /* DicomRTDOSE: path to RTDOSE DICOM file */
+#define OSH_SCORING_KEY_GEO_BODY      "body"        /* future multi-CT: explicit CT body reference */
 
 /* ---- Output section keys ------------------------------------------------- */
 #define OSH_SCORING_KEY_FILENAME    "filename"
