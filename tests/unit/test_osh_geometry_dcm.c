@@ -137,7 +137,7 @@ static void test_dcm_prepare_compile_propagates_ct_grid(void) {
     ASSERT_TRUE(cold_body->ct_grid.n[1] == (size_t) ct.rows);
     ASSERT_TRUE(cold_body->ct_grid.n[2] == (size_t) ct.n_slices);
 
-    rc = osh_gemca_compile(ws->prepared, OSH_HU_TABLE_SCHNEIDER, NULL, &rt);
+    rc = osh_gemca_compile(ws->prepared, OSH_HU_TABLE_SCHNEIDER, 0u, NULL, &rt);
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(rt.nbodies == 1u);
 

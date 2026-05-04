@@ -24,6 +24,18 @@ simulation setup. Run with --dry-run by default (validates parsing + compile).
 To enable transport, add args.cmake in this directory:
   set(OSH_ARGS "-v" "--outdir" "${WORK_DIR}")
 
+- PLOTTING:
+After transport has produced NB_XZ.bdo, overlay the scored XZ plane on the CT:
+
+  python3 tools/plot_dicom.py \
+    tests/fixtures/dicom/DCPT_headphantom \
+    tests/cases/05_dicom_simple/NB_XZ.bdo \
+    --geo tests/cases/05_dicom_simple/geo.dat \
+    --log \
+    -o tests/cases/05_dicom_simple/NB_XZ_overlay.png
+
+Requires Python packages: numpy, matplotlib, pydicom.
+
 - GEOMETRY:
   BHBOX : outer blackhole RPP  (-25..+25 cm all axes)
   OUTER : vacuum buffer RPP    (-20..+20 x/y, -16..+15 z)

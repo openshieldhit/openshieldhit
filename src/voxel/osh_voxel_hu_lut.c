@@ -100,6 +100,7 @@ enum osh_status osh_voxel_register_schneider_materials(struct osh_material_works
     }
     wm->materials = materials;
     wm->nmaterials = first_idx + (size_t) _nmat;
+    wm->hu_first_material_idx = first_idx;
 
     i = 0;
     while (i < (size_t) _nmat) {
