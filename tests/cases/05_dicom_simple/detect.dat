@@ -25,3 +25,16 @@ Output
     Filename NB_XZ.bdo
     Geo MyXZ
     Quantity Energy
+b
+# Score energy onto the RTDOSE grid from field 1 of the treatment plan.
+# The RTDOSE file is read as a Mesh geometry (app converts it); results are
+# written back to a DICOM RTDOSE file using the template's metadata.
+Geometry DicomRTDOSE
+    Name RtdoseGrid
+    InputPath ../../fixtures/dicom/DCPT_headphantom/RD.1.2.246.352.71.7.37402163639.2864312.20240227185700.dcm
+
+Output
+    Filename NB_rtdose
+    FileFormat RTDOSE
+    Geo RtdoseGrid
+    Quantity Energy

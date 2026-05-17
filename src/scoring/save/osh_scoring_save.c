@@ -4,6 +4,7 @@
 
 #include "scoring/save/osh_scoring_save_ascii.h"
 #include "scoring/save/osh_scoring_save_bdo2019.h"
+#include "scoring/save/osh_scoring_save_rtdose.h"
 
 static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
@@ -11,6 +12,7 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
                                        size_t output_idx);
 static int fileformat_is_ascii(char const *fileformat);
 static int fileformat_is_bdo2019(char const *fileformat);
+static int fileformat_is_rtdose(char const *fileformat);
 
 enum osh_status osh_scoring_save(struct osh_scoring_workspace const *ws,
                                  struct osh_scoring_runtime const *rt,
@@ -55,6 +57,9 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
     if (fileformat_is_bdo2019(fileformat)) {
         return osh_scoring_save_bdo2019_output(ws, rt, nstat, output_idx);
     }
+    if (fileformat_is_rtdose(fileformat)) {
+        return osh_scoring_save_rtdose_output(ws, rt, nstat, output_idx);
+    }
 
     return OSH_ENOTSUP;
 }
@@ -73,4 +78,11 @@ static int fileformat_is_bdo2019(char const *fileformat) {
     }
     return (strcmp(fileformat, "bdo") == 0) || (strcmp(fileformat, "bdo2019") == 0)
            || (strcmp(fileformat, "binary") == 0) || (strcmp(fileformat, "bin") == 0);
+}
+
+static int fileformat_is_rtdose(char const *fileformat) {
+    if (!fileformat) {
+        return 0;
+    }
+    return strcmp(fileformat, "rtdose") == 0 || strcmp(fileformat, "RTDOSE") == 0;
 }

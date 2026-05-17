@@ -14,6 +14,7 @@
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
+#include "openshieldhit/dicom.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/scoring.h"
@@ -34,6 +35,7 @@ static char *run_resolve_absolute_path(char const *path);
 static enum osh_status run_resolve_output_paths(struct osh_scoring_workspace *scoring, char const *out_dir);
 static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace const *geom,
                                                struct osh_scoring_workspace *scoring,
+                                               char const *detect_path,
                                                struct osh_diag_sink const *diag);
 static int run_file_exists(char const *path);
 
@@ -212,7 +214,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    rc = run_setup_voxel_scoring(geom, scoring, opt->diag);
+    rc = run_setup_voxel_scoring(geom, scoring, detect_path, opt->diag);
     if (rc != OSH_OK) {
         if (err) {
             fprintf(err, "Error: voxel scoring setup failed\n");
@@ -348,48 +350,213 @@ static char *run_resolve_absolute_path(char const *path) {
 }
 
 /**
+ * @brief Append one axis to a scoring geometry definition.
+ */
+static enum osh_status
+run_geo_append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, double hi, int nbins) {
+    size_t len;
+    struct osh_scoring_axis_def *tmp =
+        (struct osh_scoring_axis_def *) realloc(geo->axes, (geo->naxes + 1u) * sizeof(*tmp));
+    if (!tmp) {
+        return OSH_ENOMEM;
+    }
+    geo->axes = tmp;
+    memset(&geo->axes[geo->naxes], 0, sizeof(*tmp));
+    len = strlen(label);
+    if (len >= sizeof(geo->axes[0].label)) {
+        len = sizeof(geo->axes[0].label) - 1u;
+    }
+    memcpy(geo->axes[geo->naxes].label, label, len);
+    geo->axes[geo->naxes].label[len] = '\0';
+    geo->axes[geo->naxes].lo = lo;
+    geo->axes[geo->naxes].hi = hi;
+    geo->axes[geo->naxes].nbins = nbins;
+    geo->naxes++;
+    return OSH_OK;
+}
+
+/**
  * @brief Resolve voxel scoring geometry against the parsed geometry workspace.
  *
  * @details
- * For each DicomCT or DicomRTDOSE scoring geometry found in @p scoring, this
- * function verifies that exactly one CT (VOX) body exists in @p geom, then
- * reads the grid dimensions from its raw argument array and writes
- * @c vox_nbins = nx*ny*nz onto the cold scoring geometry definition so that
- * the subsequent scoring compile step can allocate the correct data arrays.
+ * DicomCT geometries: reads grid dimensions from the single VOX body in @p geom
+ * and populates vox_origin/spacing/nx/ny/nz on the cold geometry def so the
+ * scoring compile step can build the correct grid.
  *
- * If no voxel scoring geometries are present this function is a no-op.
- * If more or fewer than one CT body is found when a voxel scoring geometry
- * exists, an error is returned.
+ * DicomRTDOSE geometries: reads the RTDOSE DICOM file specified by InputPath,
+ * derives three Mesh axes (X, Y, Z) from the RTDOSE grid, appends them to the
+ * geometry def, and changes the geometry kind to "mesh".  This lets the scoring
+ * library treat RTDOSE grids as ordinary Mesh geometries with no DICOM awareness.
+ * The vox_rtdose_path field is preserved for the save step.
  *
- * @note
- * The VOX body arg layout is: a[0..2]=origin, a[3..5]=spacing, a[6..8]=nx,ny,nz.
- * Grid population (transform matrix, raytrace grid) is deferred to the M6
- * scoring hot-path implementation.
+ * If no DicomCT or DicomRTDOSE geometries are present this function is a no-op.
  */
 static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace const *geom,
                                                struct osh_scoring_workspace *scoring,
+                                               char const *detect_path,
                                                struct osh_diag_sink const *diag) {
     struct osh_geometry_body const *b;
     struct osh_scoring_geometry_def *g;
+    struct osh_dicom_rtdose rd;
     char const *kind;
+    char *detect_dir = NULL;
+    char *slash;
+    char *resolved = NULL;
+    char *new_kind = NULL;
     size_t i;
-    size_t nvox_geo = 0u;
+    size_t nct_geo = 0u;
     size_t nvox_body = 0u;
     size_t vox_body_idx = 0u;
     size_t nx, ny, nz;
+    double dx, dy, dz;
+    double lo_x, lo_y, lo_z;
+    double offset_x, offset_y, offset_z;
+    enum osh_status rc;
 
     if (!geom || !scoring) {
         return OSH_EINVAL;
     }
 
-    for (i = 0; i < scoring->ngeometries; ++i) {
-        kind = scoring->geometries[i].kind;
-        if (kind && (strcmp(kind, "dicomct") == 0 || strcmp(kind, "dicomrtdose") == 0)) {
-            ++nvox_geo;
+    /* Find the patient→world offset from the CT VOX body (a[14..16]).
+     * These are stored by _parse_dcm_body as (tx_cm - ct_origin_x_cm) etc.
+     * Falls back to zero if no CT body is present (RTDOSE in world coords). */
+    offset_x = offset_y = offset_z = 0.0;
+    for (i = 0; i < geom->nbodies; ++i) {
+        if (geom->bodies[i].type == OSH_GEOMETRY_BODY_VOX && geom->bodies[i].na >= 17) {
+            offset_x = geom->bodies[i].a[14];
+            offset_y = geom->bodies[i].a[15];
+            offset_z = geom->bodies[i].a[16];
+            break;
         }
     }
 
-    if (nvox_geo == 0u) {
+    /* --- Phase 1: DicomRTDOSE → Mesh conversion --------------------------- */
+
+    for (i = 0; i < scoring->ngeometries; ++i) {
+        kind = scoring->geometries[i].kind;
+        if (!kind || strcmp(kind, "dicomrtdose") != 0) {
+            continue;
+        }
+        g = &scoring->geometries[i];
+
+        if (!g->vox_rtdose_path || !g->vox_rtdose_path[0]) {
+            OSH_DIAG_ERRORF(
+                diag, "scoring geometry '%s': DicomRTDOSE requires InputPath", g->name ? g->name : "(unnamed)");
+            return OSH_EPARSE;
+        }
+
+        /* Resolve InputPath relative to detect.dat directory. */
+        detect_dir = strdup(detect_path ? detect_path : ".");
+        if (!detect_dir) {
+            return OSH_ENOMEM;
+        }
+        slash = strrchr(detect_dir, '/');
+        if (slash) {
+            *slash = '\0';
+        } else {
+            free(detect_dir);
+            detect_dir = strdup(".");
+            if (!detect_dir) {
+                return OSH_ENOMEM;
+            }
+        }
+
+        if (osh_relative_path_to_file(&resolved, detect_dir, g->vox_rtdose_path) != 0) {
+            free(detect_dir);
+            return OSH_ENOMEM;
+        }
+        osh_path_normalize(resolved);
+        free(detect_dir);
+        detect_dir = NULL;
+
+        /* Update vox_rtdose_path to the resolved absolute path so the save
+         * step can open it regardless of the process working directory. */
+        free(g->vox_rtdose_path);
+        g->vox_rtdose_path = resolved;
+        resolved = NULL;
+
+        rc = osh_dicom_rtdose_read(g->vox_rtdose_path, &rd, diag);
+        if (rc != OSH_OK) {
+            OSH_DIAG_ERRORF(
+                diag, "scoring geometry '%s': failed to read RTDOSE DICOM", g->name ? g->name : "(unnamed)");
+            return rc;
+        }
+
+        if (rd.rows < 1 || rd.cols < 1 || rd.n_frames < 1 || !rd.frame_offsets) {
+            OSH_DIAG_ERRORF(
+                diag, "scoring geometry '%s': RTDOSE has invalid dimensions", g->name ? g->name : "(unnamed)");
+            osh_dicom_rtdose_free(&rd);
+            return OSH_EPARSE;
+        }
+
+        nx = (size_t) rd.cols;
+        ny = (size_t) rd.rows;
+        nz = (size_t) rd.n_frames;
+        dx = rd.pixel_spacing[1] / 10.0; /* col spacing mm→cm */
+        dy = rd.pixel_spacing[0] / 10.0; /* row spacing mm→cm */
+        dz = (nz > 1u) ? (rd.frame_offsets[1] - rd.frame_offsets[0]) / 10.0 : dx;
+
+        if (!(dx > 0.0) || !(dy > 0.0) || !(dz > 0.0)) {
+            OSH_DIAG_ERRORF(
+                diag, "scoring geometry '%s': RTDOSE has non-positive voxel spacing", g->name ? g->name : "(unnamed)");
+            osh_dicom_rtdose_free(&rd);
+            return OSH_EPARSE;
+        }
+
+        /* Validate uniform z-spacing. */
+        if (nz > 2u) {
+            size_t iz;
+            double expected_dz = rd.frame_offsets[1] - rd.frame_offsets[0];
+            for (iz = 2u; iz < nz; ++iz) {
+                double actual = rd.frame_offsets[iz] - rd.frame_offsets[iz - 1u];
+                if (actual < expected_dz * 0.999 || actual > expected_dz * 1.001) {
+                    OSH_DIAG_WARNF(diag,
+                                   "scoring geometry '%s': RTDOSE z-spacing is non-uniform; using first interval",
+                                   g->name ? g->name : "(unnamed)");
+                    break;
+                }
+            }
+        }
+
+        /* DICOM origin is the center of the first voxel; convert to corner [cm].
+         * Apply patient→world offset so the RTDOSE grid is in simulation coords. */
+        lo_x = rd.origin[0] / 10.0 + offset_x - 0.5 * dx;
+        lo_y = rd.origin[1] / 10.0 + offset_y - 0.5 * dy;
+        lo_z = rd.origin[2] / 10.0 + rd.frame_offsets[0] / 10.0 + offset_z - 0.5 * dz;
+
+        osh_dicom_rtdose_free(&rd);
+
+        rc = run_geo_append_axis(g, "X", lo_x, lo_x + (double) nx * dx, (int) nx);
+        if (rc == OSH_OK) {
+            rc = run_geo_append_axis(g, "Y", lo_y, lo_y + (double) ny * dy, (int) ny);
+        }
+        if (rc == OSH_OK) {
+            rc = run_geo_append_axis(g, "Z", lo_z, lo_z + (double) nz * dz, (int) nz);
+        }
+        if (rc != OSH_OK) {
+            return rc;
+        }
+
+        new_kind = strdup("mesh");
+        if (!new_kind) {
+            return OSH_ENOMEM;
+        }
+        free(g->kind);
+        g->kind = new_kind;
+        new_kind = NULL;
+        /* vox_rtdose_path is preserved for the save step's RTDOSE writer. */
+    }
+
+    /* --- Phase 2: DicomCT → populate vox_origin/spacing/nx/ny/nz ---------- */
+
+    for (i = 0; i < scoring->ngeometries; ++i) {
+        kind = scoring->geometries[i].kind;
+        if (kind && strcmp(kind, "dicomct") == 0) {
+            ++nct_geo;
+        }
+    }
+
+    if (nct_geo == 0u) {
         return OSH_OK;
     }
 
@@ -401,7 +568,7 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
     }
 
     if (nvox_body != 1u) {
-        OSH_DIAG_ERRORF(diag, "voxel scoring requires exactly one CT body in the geometry; found %zu", nvox_body);
+        OSH_DIAG_ERRORF(diag, "DicomCT scoring requires exactly one CT body in the geometry; found %zu", nvox_body);
         return OSH_EPARSE;
     }
 
@@ -416,7 +583,7 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
 
     for (i = 0; i < scoring->ngeometries; ++i) {
         kind = scoring->geometries[i].kind;
-        if (!kind || (strcmp(kind, "dicomct") != 0 && strcmp(kind, "dicomrtdose") != 0)) {
+        if (!kind || strcmp(kind, "dicomct") != 0) {
             continue;
         }
         g = &scoring->geometries[i];
