@@ -531,8 +531,8 @@ static enum osh_status _setup_vox(struct body *b) {
     int i;
     int j;
 
-    /* All 14 VOX arguments are mandatory — no silent defaults. */
-    if (b->na != OSH_GEMCA_NARGS_VOX) {
+    /* First 14 VOX arguments are mandatory; extra args beyond 14 are ignored. */
+    if (b->na < OSH_GEMCA_NARGS_VOX) {
         return OSH_EINVAL;
     }
     dx = b->a[3];

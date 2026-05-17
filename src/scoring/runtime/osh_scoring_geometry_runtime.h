@@ -59,6 +59,7 @@ struct osh_scoring_geometry_runtime {
     int zone_stop;                                   /* Last zone  (Zone geometry only). */
     char has_rotation;                               /* Non-zero when rot_* fields are set. */
     struct osh_raytrace_grid vox_grid;               /* DicomCT/DicomRTDOSE: grid geometry (origin, spacing, n). */
+    char *rtdose_template_path; /* Non-NULL when FileFormat RTDOSE; owned; path to RTDOSE template. */
 };
 
 #ifdef __cplusplus
