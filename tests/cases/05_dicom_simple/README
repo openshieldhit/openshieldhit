@@ -39,6 +39,9 @@ To enable transport, add args.cmake in this directory:
 - SCORING OUTPUTS:
   NB_ddc.dat  — depth-dose profile along beam axis (Mesh, 1x1x270 bins, TEXT)
   NB_XZ.bdo   — XZ plane fluence/energy (Mesh, 300x1x300, BDO)
+  NB_ct.bdo   — energy scored onto the full CT voxel grid (DicomCT → Mesh,
+                512x512x177 bins, BDO; ~355 MB)
+                Current limitation: this path assumes zero CT rotation.
   NB_rtdose.dcm — energy scored onto the RTDOSE grid from fixture RD*.dcm
                   (DicomRTDOSE geometry → Mesh conversion at app level;
                    RTDOSE round-trip write: template metadata preserved,

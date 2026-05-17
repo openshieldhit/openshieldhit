@@ -32,14 +32,11 @@ extern "C" {
  * (common/raytrace/) for step-length decomposition.
  */
 enum osh_scoring_geo_kind {
-    OSH_SCORING_GEO_UNKNOWN = 0,      /* not yet resolved — should not reach score_step */
-    OSH_SCORING_GEO_MESH = 1,         /* Cartesian (X,Y,Z) mesh */
-    OSH_SCORING_GEO_CYL = 2,          /* cylindrical (R,Z) mesh */
-    OSH_SCORING_GEO_ZONE = 3,         /* GEMCA zone scoring */
-    OSH_SCORING_GEO_VOXEL = 4,        /* generic voxel grid; future non-DICOM sources share this base value */
-    OSH_SCORING_GEO_DICOM_CT = 4,     /* DicomCT: scores onto CT voxel grid (same grid as DCM body) */
-    OSH_SCORING_GEO_DICOM_RTDOSE = 5, /* DicomRTDOSE: scores onto RTDOSE grid from a DICOM file */
-    OSH_SCORING_GEO_ALL = 6           /* whole simulation universe */
+    OSH_SCORING_GEO_UNKNOWN = 0, /* not yet resolved — should not reach score_step */
+    OSH_SCORING_GEO_MESH = 1,    /* Cartesian (X,Y,Z) mesh */
+    OSH_SCORING_GEO_CYL = 2,     /* cylindrical (R,Z) mesh */
+    OSH_SCORING_GEO_ZONE = 3,    /* GEMCA zone scoring */
+    OSH_SCORING_GEO_ALL = 6      /* whole simulation universe */
 };
 
 /* ---- Postprocessing mode ------------------------------------------------ */

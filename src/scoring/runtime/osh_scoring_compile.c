@@ -38,11 +38,6 @@ static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
     size_t i;
     size_t nbins = 1u;
 
-    /* Voxel geometries: bin count is derived from explicit grid dimensions set by the app. */
-    if (geo->vox_nx > 0u && geo->vox_ny > 0u && geo->vox_nz > 0u) {
-        return geo->vox_nx * geo->vox_ny * geo->vox_nz;
-    }
-
     if (geo->naxes > 0u) {
         for (i = 0; i < geo->naxes; ++i) {
             if (geo->axes[i].nbins <= 0) {

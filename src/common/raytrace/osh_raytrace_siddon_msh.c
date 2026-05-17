@@ -130,7 +130,6 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
 
     t = t_entry;
     n = 0;
-
     /* Pre-compute tile counts for Morton layout (unused for row-major).
      * Declared here (after statements) to keep them const and let the compiler
      * see them as invariant across the traversal loop — intentional exception

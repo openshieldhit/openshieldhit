@@ -539,7 +539,7 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
         /* vox_rtdose_path is preserved for the save step's RTDOSE writer. */
     }
 
-    /* --- Phase 2: DicomCT → populate vox_origin/spacing/nx/ny/nz ---------- */
+    /* --- Phase 2: DicomCT → Mesh conversion -------------------------------- */
 
     for (i = 0; i < scoring->ngeometries; ++i) {
         kind = scoring->geometries[i].kind;
@@ -565,29 +565,39 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
     }
 
     b = &geom->bodies[vox_body_idx];
-    if (b->na < 9) {
+    if (b->na < 14) {
         OSH_DIAG_ERRORF(diag, "CT body '%s' has too few arguments to read grid dimensions", b->name);
         return OSH_EPARSE;
     }
-    nx = (size_t) b->a[6];
-    ny = (size_t) b->a[7];
-    nz = (size_t) b->a[8];
 
+    /* b->a[11..13] = world corner of first CT voxel [cm]  (tx - 0.5*d)
+     * b->a[3..5]   = dx, dy, dz [cm]
+     * b->a[6..8]   = nx, ny, nz                                        */
     for (i = 0; i < scoring->ngeometries; ++i) {
         kind = scoring->geometries[i].kind;
         if (!kind || strcmp(kind, "dicomct") != 0) {
             continue;
         }
         g = &scoring->geometries[i];
-        g->vox_origin[0] = b->a[0];
-        g->vox_origin[1] = b->a[1];
-        g->vox_origin[2] = b->a[2];
-        g->vox_spacing[0] = b->a[3];
-        g->vox_spacing[1] = b->a[4];
-        g->vox_spacing[2] = b->a[5];
-        g->vox_nx = nx;
-        g->vox_ny = ny;
-        g->vox_nz = nz;
+
+        rc = run_geo_append_axis(g, "X", b->a[11], b->a[11] + b->a[6] * b->a[3], (int) b->a[6]);
+        if (rc == OSH_OK) {
+            rc = run_geo_append_axis(g, "Y", b->a[12], b->a[12] + b->a[7] * b->a[4], (int) b->a[7]);
+        }
+        if (rc == OSH_OK) {
+            rc = run_geo_append_axis(g, "Z", b->a[13], b->a[13] + b->a[8] * b->a[5], (int) b->a[8]);
+        }
+        if (rc != OSH_OK) {
+            return rc;
+        }
+
+        new_kind = strdup("mesh");
+        if (!new_kind) {
+            return OSH_ENOMEM;
+        }
+        free(g->kind);
+        g->kind = new_kind;
+        new_kind = NULL;
     }
 
     return OSH_OK;

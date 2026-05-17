@@ -715,6 +715,7 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 rc = _finalize_body(ws, ibody, btype, nstr, par, npar);
                 if (rc != OSH_OK) {
                     free(body_hu);
+                    body_hu = NULL;
                     goto done;
                 }
                 ws->bodies[ibody].hu = body_hu;
@@ -734,6 +735,7 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
                 rc = _finalize_body(ws, ibody, btype, nstr, par, npar);
                 if (rc != OSH_OK) {
                     free(body_hu);
+                    body_hu = NULL;
                     goto done;
                 }
                 ws->bodies[ibody].hu = body_hu;
