@@ -54,11 +54,17 @@ awareness needed in the library hot path.
 gantry/couch angles require a coordinate transform in the scoring step before the
 Mesh bin lookup, which is deferred.
 
-### Phase 2 — DicomCT grid parameters
+### Phase 2 — DicomCT → Mesh conversion
 
-For scoring geometries with `kind == "dicomct"`, copy the voxel grid dimensions
-and spacing from the CT VOX body (`b->a[0..8]`) into the cold scoring geometry
-def so the compile step can build the correct `vox_grid`.
+For scoring geometries with `kind == "dicomct"`, read the world-corner
+(`b->a[11..13]`), spacing (`b->a[3..5]`), and bin counts (`b->a[6..8]`) from
+the CT VOX body and append X/Y/Z axes, then set `kind = "mesh"`.  The library
+therefore only ever sees `"mesh"` geometries.
+
+**Current limitation:** this conversion is axis-aligned.  It matches the
+transport CT body only when gantry/couch rotation is zero.  Rotated `DicomCT`
+scoring is deferred to a later follow-up that will apply the corresponding
+coordinate transform during scoring.
 
 ## DCM body parameters (`b->a[]`)
 

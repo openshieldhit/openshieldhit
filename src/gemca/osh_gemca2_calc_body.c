@@ -1,6 +1,8 @@
 #include "gemca/osh_gemca2_calc_body.h"
 
 #include <math.h>
+
+#define VOX_N_MAX 1.0e9 /* sanity cap on voxel count per axis; rejects Inf and overflow-risk values */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -541,9 +543,9 @@ static enum osh_status _setup_vox(struct body *b) {
     if (dx <= 0.0 || dy <= 0.0 || dz <= 0.0) {
         return OSH_EINVAL;
     }
-    /* Voxel counts must be exact positive integers within size_t range. */
-    if (b->a[6] < 1.0 || b->a[6] != floor(b->a[6]) || b->a[7] < 1.0 || b->a[7] != floor(b->a[7]) || b->a[8] < 1.0
-        || b->a[8] != floor(b->a[8])) {
+    /* Voxel counts must be exact positive integers in a sane range (rejects NaN, Inf, overflow). */
+    if (b->a[6] < 1.0 || b->a[6] > VOX_N_MAX || b->a[6] != floor(b->a[6]) || b->a[7] < 1.0 || b->a[7] > VOX_N_MAX
+        || b->a[7] != floor(b->a[7]) || b->a[8] < 1.0 || b->a[8] > VOX_N_MAX || b->a[8] != floor(b->a[8])) {
         return OSH_EINVAL;
     }
     x0 = b->a[0];

@@ -200,7 +200,7 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         return OSH_ESTATE;
     }
     geo = &rt->geometries[out->geometry_idx];
-    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_DICOM_CT) {
+    if (geo->geo_kind != OSH_SCORING_GEO_MESH) {
         return OSH_ENOTSUP;
     }
     if (geo->geo_kind == OSH_SCORING_GEO_MESH && geo->has_rotation) {
@@ -227,15 +227,6 @@ static void geometry_mesh_arrays(struct osh_scoring_geometry_runtime const *geo,
     p[0] = p[1] = p[2] = 0.0;
     q[0] = q[1] = q[2] = 0.0;
     n[0] = n[1] = n[2] = 1;
-
-    if (geo->geo_kind == OSH_SCORING_GEO_DICOM_CT) {
-        for (i = 0; i < 3u; ++i) {
-            p[i] = geo->vox_grid.origin[i];
-            n[i] = (int) geo->vox_grid.n[i];
-            q[i] = geo->vox_grid.origin[i] + (double) geo->vox_grid.n[i] * geo->vox_grid.spacing[i];
-        }
-        return;
-    }
 
     for (i = 0; i < geo->naxes; ++i) {
         if (strcmp(geo->axes[i].label, "X") == 0) {
@@ -269,9 +260,6 @@ static int legacy_geo_kind(struct osh_scoring_geometry_runtime const *geo) {
         return 2;
     case OSH_SCORING_GEO_ZONE:
         return 3;
-    case OSH_SCORING_GEO_VOXEL: /* covers DICOM_CT (same value) */
-    case OSH_SCORING_GEO_DICOM_RTDOSE:
-        return 5;
     default:
         return 0;
     }

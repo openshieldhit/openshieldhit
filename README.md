@@ -68,6 +68,38 @@ build_rel/bin/openshieldhit tests/cases/00_minimal/
 ```
 Produces a `.bdo` and `.txt` output file with scored dose vs. depth — a Bragg peak for a proton beam in water.
 
+## Run a CT Transport Example
+
+Case 05 transports 126 MeV protons through the DCPT head-phantom CT
+(512 × 512 × 177 voxels, Schneider 2000 HU calibration) and scores energy onto
+the full CT grid as well as an RTDOSE template file.
+
+Validate parsing and geometry compilation without transporting particles:
+
+```bash
+build_rel/bin/openshieldhit --dry-run tests/cases/05_dicom_simple/
+```
+
+Run 100 000 primaries with verbose output:
+
+```bash
+build_rel/bin/openshieldhit -vvv -n 100000 tests/cases/05_dicom_simple/
+```
+
+Output files are written next to the input case:
+
+| File | Content |
+|------|---------|
+| `NB_ddc.dat` | depth-dose profile along the beam axis (text) |
+| `NB_XZ.bdo` | XZ fluence/energy plane (BDO) |
+| `NB_ct.bdo` | energy scored onto the full CT voxel grid, ~355 MB (BDO) |
+| `NB_rtdose.dcm` | RTDOSE round-trip: scored energy replaces pixel data in the template `.dcm` |
+
+> **Note:** DicomCT and DicomRTDOSE scoring geometries are converted to axis-
+> aligned Cartesian meshes at the application layer.  Gantry and couch rotation
+> for these scoring geometries is not yet implemented and is deferred to a later
+> milestone.
+
 ## The `openshieldhit` application
 
 The main deliverable is the `openshieldhit` (or `openshieldhit.exe` on Windows)
@@ -124,14 +156,19 @@ The current codebase has a working end-to-end ion transport path with:
 - cold-to-runtime compilation for beam, geometry, materials, and scoring
 - analytic GEMCA geometry plus DICOM CT-backed voxel body setup (`DCM`)
 - multiple raytrace implementations with a shared grid contract
-- dose / fluence scoring and BDO/text output
+- dose / fluence scoring with BDO, text, and DICOM RTDOSE output
 
-Voxel CT transport infrastructure is in progress. The code now includes:
+CT voxel transport is working end-to-end:
 
 - Schneider and Permatassari HU calibration/material registration
-- DICOM CT parsing into `OSH_GEOMETRY_BODY_VOX`
-- runtime propagation of CT grid metadata and borrowed HU storage
+- DICOM CT parsed into a voxel body; HU table applied per-voxel at transport time
 - compile-time selectable voxel storage layout (`ROW_MAJOR` baseline, `MORTON8` optional)
+- `DicomCT` and `DicomRTDOSE` scoring geometries converted to Cartesian meshes at
+  the application layer; the transport library remains DICOM-agnostic
+- RTDOSE round-trip: read template file, score energy onto its grid, write back `.dcm`
+
+**Known limitation:** gantry and couch rotation for DicomCT/DicomRTDOSE scoring
+geometries is not yet implemented.  The conversion assumes axis-aligned grids.
 
 The detailed implementation roadmap lives in [TODO.md](TODO.md).
 

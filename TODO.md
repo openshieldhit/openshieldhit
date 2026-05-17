@@ -63,10 +63,14 @@ Completed (branches 66-1 … 66-6):
 - [x] `DicomRTDOSE` scoring geometry: app converts it to a plain Mesh using
       the RTDOSE grid dimensions and the patient→world coordinate offset
       stored in the CT body; library is agnostic
+- [x] `DicomCT` scoring geometry: app converts the CT voxel body extent to a
+      plain axis-aligned Mesh for unrotated cases; library is agnostic
 - [x] RTDOSE write-back: `FileFormat RTDOSE` in detect.dat reads the DICOM
       template, overwrites pixel data, and saves a modified `.dcm`
 
 Open:
+- [ ] `DicomCT` scoring with gantry/couch rotation support (current app-side
+      Mesh conversion is axis-aligned and only matches unrotated CT placement)
 - [ ] RTDOSE scoring with gantry/couch rotation support (the scoring Mesh axes
       are currently axis-aligned in the patient frame; rotation would require
       coordinate transforms in the scoring step)

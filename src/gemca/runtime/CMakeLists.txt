@@ -13,6 +13,7 @@ target_link_libraries(osh_gemca_runtime
         osh_gemca2
         osh_common
         osh_raytrace
+        osh_voxel
 )
 
 if(UNIX)

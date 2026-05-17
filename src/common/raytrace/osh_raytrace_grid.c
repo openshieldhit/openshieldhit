@@ -21,9 +21,11 @@ static int grid_is_valid(struct osh_raytrace_grid const *grid) {
 }
 
 static size_t grid_flat_index(struct osh_raytrace_grid const *grid, size_t ix, size_t iy, size_t iz) {
+    size_t Tx, Ty;
+
     if (grid->tile_order == OSH_VOXEL_ORDER_MORTON8) {
-        size_t Tx = (grid->n[0] + 7u) >> 3u;
-        size_t Ty = (grid->n[1] + 7u) >> 3u;
+        Tx = (grid->n[0] + 7u) >> 3u;
+        Ty = (grid->n[1] + 7u) >> 3u;
         return osh_voxel_tile_idx(ix, iy, iz, Tx, Ty);
     }
 

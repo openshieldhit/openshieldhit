@@ -128,15 +128,14 @@ int osh_raytrace_traverse(struct osh_raytrace_grid const *grid,
         }
     }
 
-    /* Pre-compute tile counts for Morton layout (unused for row-major).
-     * Declared here (after statements) to keep them const and let the compiler
-     * see them as invariant across the traversal loop — exception to the
-     * project's C89-style top-of-function declaration convention. */
-    size_t const Tx = (grid->n[0] + 7u) >> 3u;
-    size_t const Ty = (grid->n[1] + 7u) >> 3u;
-
     ac = alpha_entry;
     n = 0;
+    /* Pre-compute tile counts for Morton layout (unused for row-major).
+     * Declared here (after statements) to keep them const and let the compiler
+     * see them as invariant across the traversal loop — intentional exception
+     * to the project's C89-style top-of-function declaration convention. */
+    size_t const Tx = (grid->n[0] + 7u) >> 3u;
+    size_t const Ty = (grid->n[1] + 7u) >> 3u;
 
     /* --- Walk through the grid (Jacobs eq. 30-34) --------------------- */
     for (;;) {
