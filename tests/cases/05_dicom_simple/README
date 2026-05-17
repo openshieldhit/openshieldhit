@@ -14,27 +14,13 @@ z=-15 cm along the +Z axis. The CT geometry is:
 The proton range in water-equivalent material is ~13.2 cm, so the Bragg peak
 lands close to the far face of the CT (around z=0).
 
-The scoring mesh covers z=-13.5 to +13.5 cm in 1 mm steps for a depth-dose
-profile along the beam axis.
-
 - PURPOSE:
-Debug end-to-end CT loading, HU-to-material mapping (Schneider2000), and
-simulation setup. Run with --dry-run by default (validates parsing + compile).
+End-to-end validation of CT loading, HU-to-material mapping (Schneider2000),
+voxel transport, Mesh scoring, and RTDOSE scoring/write-back.  Run with
+--dry-run by default (validates parsing + compile only).
 
 To enable transport, add args.cmake in this directory:
   set(OSH_ARGS "-v" "--outdir" "${WORK_DIR}")
-
-- PLOTTING:
-After transport has produced NB_XZ.bdo, overlay the scored XZ plane on the CT:
-
-  python3 tools/plot_dicom.py \
-    tests/fixtures/dicom/DCPT_headphantom \
-    tests/cases/05_dicom_simple/NB_XZ.bdo \
-    --geo tests/cases/05_dicom_simple/geo.dat \
-    --log \
-    -o tests/cases/05_dicom_simple/NB_XZ_overlay.png
-
-Requires Python packages: numpy, matplotlib, pydicom.
 
 - GEOMETRY:
   BHBOX : outer blackhole RPP  (-25..+25 cm all axes)
@@ -49,3 +35,34 @@ Requires Python packages: numpy, matplotlib, pydicom.
   126 MeV protons, monoenergetic
   5x5 cm square field (BEAMSIGMA -2.5 -2.5)
   Start position: (0, 0, -15) cm
+
+- SCORING OUTPUTS:
+  NB_ddc.dat  — depth-dose profile along beam axis (Mesh, 1x1x270 bins, TEXT)
+  NB_XZ.bdo   — XZ plane fluence/energy (Mesh, 300x1x300, BDO)
+  NB_rtdose.dcm — energy scored onto the RTDOSE grid from fixture RD*.dcm
+                  (DicomRTDOSE geometry → Mesh conversion at app level;
+                   RTDOSE round-trip write: template metadata preserved,
+                   pixel data replaced with scored values / nstat /
+                   dose_grid_scaling)
+
+  Note: NB_rtdose.dcm stores energy-per-primary in dose_grid_scaling units,
+  not absorbed dose.  Proper DOSE scoring (with rho x ds weighting) is deferred.
+
+- RTDOSE FIXTURE:
+  RD.1.2.246.352.71.7.37402163639.2864312.20240227185700.dcm
+  300 cols x 144 rows x 354 frames, 1x1 mm pixel, 0.75 mm frame spacing
+  Origin: (-149.707, -261.793, -139.000) mm (DICOM patient coords)
+  In simulation world coords (after patient->world offset): x -15..+15 cm,
+  y -9.58..+4.82 cm, z -13.24..+13.31 cm — beam passes through this volume.
+
+- PLOTTING:
+  After transport has produced NB_XZ.bdo, overlay the scored XZ plane on the CT:
+
+    python3 tools/plot_dicom.py \
+      tests/fixtures/dicom/DCPT_headphantom \
+      tests/cases/05_dicom_simple/NB_XZ.bdo \
+      --geo tests/cases/05_dicom_simple/geo.dat \
+      --log \
+      -o tests/cases/05_dicom_simple/NB_XZ_overlay.png
+
+  Requires Python packages: numpy, matplotlib, pydicom.
