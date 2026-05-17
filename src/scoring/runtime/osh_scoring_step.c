@@ -55,35 +55,6 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         struct osh_scoring_geometry_runtime const *geo = &rt->geometries[i];
         size_t g;
 
-        /* --- DicomCT: deposit directly into the CT-voxel bin the particle
-         *     is currently in, using the flat index from zone_ref that
-         *     transport already computed.  No raytrace traversal needed. --- */
-        if (geo->geo_kind == OSH_SCORING_GEO_DICOM_CT) {
-            if (!st->has_voxel || st->voxel_idx >= geo->nbins) {
-                continue;
-            }
-            for (g = 0; g < geo->ngroups; ++g) {
-                size_t pg;
-                struct osh_scoring_geometry_score_group const *grp = &geo->groups[g];
-
-                for (pg = 0; pg < grp->npages; ++pg) {
-                    struct osh_scoring_page_runtime *page = &rt->pages[grp->first_page + pg];
-
-                    if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
-                        continue;
-                    }
-                    switch (grp->score_kind) {
-                    case OSH_SCORING_SCORE_ENERGY:
-                        page->data[st->voxel_idx] += st->de;
-                        break;
-                    default:
-                        break;
-                    }
-                }
-            }
-            continue;
-        }
-
         rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume);
         if (rc == OSH_ENOTSUP && geo->npages == 0u) {
             continue;

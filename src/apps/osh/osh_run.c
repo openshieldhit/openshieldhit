@@ -395,22 +395,21 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
                                                struct osh_scoring_workspace *scoring,
                                                char const *detect_path,
                                                struct osh_diag_sink const *diag) {
-    struct osh_geometry_body const *b;
-    struct osh_scoring_geometry_def *g;
-    struct osh_dicom_rtdose rd;
+    struct osh_geometry_body const *b;   /* VOX/DCM body from geo.dat */
+    struct osh_scoring_geometry_def *g;  /* current scoring geometry being mutated */
+    struct osh_dicom_rtdose rd;          /* RTDOSE metadata read from InputPath */
     char const *kind;
-    char *detect_dir = NULL;
-    char *slash;
-    char *resolved = NULL;
-    char *new_kind = NULL;
+    char *detect_dir = NULL;   /* directory of detect.dat; base for relative InputPath */
+    char *resolved = NULL;     /* absolute InputPath after joining with detect_dir */
+    char *new_kind = NULL;     /* "mesh" string allocated before overwriting g->kind */
     size_t i;
-    size_t nct_geo = 0u;
-    size_t nvox_body = 0u;
-    size_t vox_body_idx = 0u;
-    size_t nx, ny, nz;
-    double dx, dy, dz;
-    double lo_x, lo_y, lo_z;
-    double offset_x, offset_y, offset_z;
+    size_t nct_geo = 0u;       /* number of DicomCT scoring geometries found */
+    size_t nvox_body = 0u;     /* number of VOX bodies in the transport geometry */
+    size_t vox_body_idx = 0u;  /* index of the single VOX body (Phase 2) */
+    size_t nx, ny, nz;         /* RTDOSE grid dimensions: cols, rows, frames */
+    double dx, dy, dz;         /* voxel spacing [cm]: col, row, frame */
+    double lo_x, lo_y, lo_z;  /* corner of the first voxel in simulation world coords [cm] */
+    double offset_x, offset_y, offset_z; /* patient→world offset from the CT body [cm] */
     enum osh_status rc;
 
     if (!geom || !scoring) {
@@ -446,15 +445,8 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
         }
 
         /* Resolve InputPath relative to detect.dat directory. */
-        detect_dir = strdup(detect_path ? detect_path : ".");
+        detect_dir = detect_path ? osh_path_dirname(detect_path) : NULL;
         if (!detect_dir) {
-            return OSH_ENOMEM;
-        }
-        slash = strrchr(detect_dir, '/');
-        if (slash) {
-            *slash = '\0';
-        } else {
-            free(detect_dir);
             detect_dir = strdup(".");
             if (!detect_dir) {
                 return OSH_ENOMEM;
