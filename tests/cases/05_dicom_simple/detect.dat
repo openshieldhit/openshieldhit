@@ -8,12 +8,19 @@ Geometry Mesh
     Y -2.5  2.5    1
     Z -13.5 13.5  270
 
-
 Geometry Mesh
     Name MyXZ
     X -15.0  15.0    300
     Y -0.5    0.5    1
     Z -15.0  15.0    300
+
+# Score energy onto the RTDOSE grid from field 1 of the treatment plan.
+# The RTDOSE file is read as a Mesh geometry (app converts it); results are
+# written back to a DICOM RTDOSE file using the template's metadata.
+Geometry DicomRTDOSE
+    Name RtdoseGrid
+    InputPath ../../fixtures/dicom/DCPT_headphantom/RD.1.2.246.352.71.7.37402163639.2864312.20240227185700.dcm
+
 
 Output
     Filename NB_ddc.dat
@@ -25,13 +32,6 @@ Output
     Filename NB_XZ.bdo
     Geo MyXZ
     Quantity Energy
-b
-# Score energy onto the RTDOSE grid from field 1 of the treatment plan.
-# The RTDOSE file is read as a Mesh geometry (app converts it); results are
-# written back to a DICOM RTDOSE file using the template's metadata.
-Geometry DicomRTDOSE
-    Name RtdoseGrid
-    InputPath ../../fixtures/dicom/DCPT_headphantom/RD.1.2.246.352.71.7.37402163639.2864312.20240227185700.dcm
 
 Output
     Filename NB_rtdose

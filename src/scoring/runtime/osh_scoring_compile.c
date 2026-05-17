@@ -27,12 +27,7 @@ static enum osh_scoring_geo_kind geometry_kind_to_enum(char const *kind) {
     if (strcmp(kind, "zone") == 0) {
         return OSH_SCORING_GEO_ZONE;
     }
-    if (strcmp(kind, "dicomct") == 0) {
-        return OSH_SCORING_GEO_DICOM_CT;
-    }
-    if (strcmp(kind, "dicomrtdose") == 0) {
-        return OSH_SCORING_GEO_DICOM_RTDOSE;
-    }
+    /* For voxelised Cartesian structures (e.g. from DICOM), set kind to "mesh". */
     if (strcmp(kind, "all") == 0) {
         return OSH_SCORING_GEO_ALL;
     }
@@ -337,18 +332,6 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
     dst->nbins = geometry_nbins(src);
     if (dst->nbins == 0u) {
         return OSH_EINVAL;
-    }
-    if (dst->geo_kind == OSH_SCORING_GEO_DICOM_CT || dst->geo_kind == OSH_SCORING_GEO_DICOM_RTDOSE) {
-        dst->vox_grid.origin[0] = src->vox_origin[0];
-        dst->vox_grid.origin[1] = src->vox_origin[1];
-        dst->vox_grid.origin[2] = src->vox_origin[2];
-        dst->vox_grid.spacing[0] = src->vox_spacing[0];
-        dst->vox_grid.spacing[1] = src->vox_spacing[1];
-        dst->vox_grid.spacing[2] = src->vox_spacing[2];
-        dst->vox_grid.n[0] = src->vox_nx;
-        dst->vox_grid.n[1] = src->vox_ny;
-        dst->vox_grid.n[2] = src->vox_nz;
-        dst->vox_grid.tile_order = OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT;
     }
     if (src->vox_rtdose_path) {
         dst->rtdose_template_path = strdup(src->vox_rtdose_path);
