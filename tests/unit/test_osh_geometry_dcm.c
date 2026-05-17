@@ -71,7 +71,7 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
         }
         ASSERT_TRUE(ws->bodies[0].n_hu == expected_n_hu);
     }
-    ASSERT_TRUE(ws->bodies[0].na == 14);
+    ASSERT_TRUE(ws->bodies[0].na == 17);
 
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[0], 0.0, 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[1], 0.0, 1.0e-9));
@@ -87,6 +87,10 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[11], 1.25 - 0.5 * ws->bodies[0].a[3], 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[12], -2.5 - 0.5 * ws->bodies[0].a[4], 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[13], 3.75 - 0.5 * ws->bodies[0].a[5], 1.0e-9));
+    /* Patient→world offset: a[14..16] = tx/ty/tz_cm - ct_origin_cm */
+    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[14], 1.25 - ct.origin[0] * 0.1, 1.0e-6));
+    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[15], -2.5 - ct.origin[1] * 0.1, 1.0e-6));
+    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[16], 3.75 - ct.origin[2] * 0.1, 1.0e-6));
 
     osh_dicom_ct_free(&ct);
     osh_fclose(geo);

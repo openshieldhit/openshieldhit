@@ -8,6 +8,7 @@ add_library(osh_scoring
     save/osh_scoring_save_ascii.c
     save/osh_scoring_save_bdo2019_raw.c
     save/osh_scoring_save_bdo2019.c
+    save/osh_scoring_save_rtdose.c
 )
 
 target_include_directories(osh_scoring
@@ -19,5 +20,6 @@ target_include_directories(osh_scoring
 target_link_libraries(osh_scoring
     PUBLIC
         osh_common
+        osh_dicom
         osh_raytrace
 )

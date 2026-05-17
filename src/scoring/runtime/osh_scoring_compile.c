@@ -350,6 +350,12 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
         dst->vox_grid.n[2] = src->vox_nz;
         dst->vox_grid.tile_order = OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT;
     }
+    if (src->vox_rtdose_path) {
+        dst->rtdose_template_path = strdup(src->vox_rtdose_path);
+        if (!dst->rtdose_template_path) {
+            return OSH_ENOMEM;
+        }
+    }
     return OSH_OK;
 }
 
@@ -403,6 +409,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
             free(rt->geometries[i].name);
             free(rt->geometries[i].axes);
             free(rt->geometries[i].groups);
+            free(rt->geometries[i].rtdose_template_path);
         }
     }
     free(rt->geometries);

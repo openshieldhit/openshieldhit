@@ -556,7 +556,13 @@ static enum osh_status _parse_dcm_body(char const *args,
     par_out[11] = tx_cm - 0.5 * par_out[3];
     par_out[12] = ty_cm - 0.5 * par_out[4];
     par_out[13] = tz_cm - 0.5 * par_out[5];
-    *npar_out = 14;
+    /* Patient→world offset: user tx/ty/tz (world first-voxel center) minus
+     * DICOM origin (patient first-voxel center in cm).  Used by RTDOSE scoring
+     * geometry to convert DICOM patient coordinates to simulation world coords. */
+    par_out[14] = tx_cm - ct.origin[0] * 0.1;
+    par_out[15] = ty_cm - ct.origin[1] * 0.1;
+    par_out[16] = tz_cm - ct.origin[2] * 0.1;
+    *npar_out = 17;
     if (OSH_VOXEL_LAYOUT_DEFAULT == OSH_VOXEL_ORDER_ROW_MAJOR) {
         size_t nxy;
         if (_mul_size_overflow((size_t) ct.cols, (size_t) ct.rows, &nxy)
