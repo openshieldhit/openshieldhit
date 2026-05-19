@@ -13,24 +13,29 @@ placement; matching beam.dat files are TODO.
 - RTPLAN: Brain_fin2 (RN.1.2.246.352.71.5...265919....dcm)
 
   Isocenter PCS (all fields): (0.0, -170.159, -2.122) mm
-  RangeShifter (all fields):  WET 57.0 mm, Setting IN (not yet modelled)
+  RangeShifter (all fields):  WET 57.0 mm, ICRU 219 (polycarbonate/Lexan), Setting IN
+                              IsocenterToRangeShifterDistance = distance to RS midplane.
+                              Physical thickness 50 mm assumed (WET 57 mm at ~1.14 WER).
 
   Field 1
     GantryAngle: 0 deg   CouchAngle: 0 deg
     NominalEnergy: 186.197 MeV
     IsocenterToRangeShifter: 275.531 mm   SnoutPosition: 232.531 mm
+    RS midplane z: -27.553 cm   RS slab z: [-30.053, -25.053] cm
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864312.20240227185700.dcm
 
   Field 2
     GantryAngle: 0 deg   CouchAngle: 0 deg
     NominalEnergy: 156.92 MeV
     IsocenterToRangeShifter: 293.617 mm   SnoutPosition: 250.617 mm
+    RS midplane z: -29.362 cm   RS slab z: [-31.862, -26.862] cm
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864313.20240227185700.dcm
 
   Field 3
     GantryAngle: 0 deg   CouchAngle: 0 deg
     NominalEnergy: 154.114 MeV
     IsocenterToRangeShifter: 252.235 mm   SnoutPosition: 209.235 mm
+    RS midplane z: -25.223 cm   RS slab z: [-27.723, -22.723] cm
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864314.20240227185700.dcm
 
 - DCM PLACEMENT (geo_field*.dat):

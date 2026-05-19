@@ -1,12 +1,15 @@
  0 0 Brain_fin2 - Field 2, Gantry 0 deg, Couch 0 deg, 156.92 MeV
- RPP BHBOX -25.0 25.0 -25.0 25.0 -20.0 20.0
- RPP OUTER -20.0 20.0 -20.0 20.0 -16.0 15.0
+ RPP BHBOX -30.0 30.0 -30.0 30.0 -39.0 20.0
+ RPP OUTER -20.0 20.0 -20.0 20.0 -34.0 15.0
+ RPP RSLAB -15.0 15.0 -15.0 15.0 -31.861734009 -26.861734009
  DCM CTBOX ../../fixtures/dicom/DCPT_headphantom 0.0 0.0 -14.970703125 -14.604849466 -13.687804878
  END
  z001 +BHBOX -OUTER
- z002 +OUTER -CTBOX
+ z002 +OUTER -CTBOX -RSLAB
  z003 +CTBOX
+ z004 +RSLAB
  END
- ASSIGNMAT blackhole z001
- ASSIGNMAT vacuum    z002
- ASSIGNMAT schneider_00 z003
+ ASSIGNMAT blackhole      z001
+ ASSIGNMAT vacuum         z002
+ ASSIGNMAT schneider_00   z003
+ ASSIGNMAT polycarbonate  z004
