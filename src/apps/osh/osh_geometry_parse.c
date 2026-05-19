@@ -395,13 +395,13 @@ static int _mul_size_overflow(size_t a, size_t b, size_t *out) {
  * (interpreted as first-voxel-center coordinates) are converted to corner
  * coordinates by subtracting 0.5*dx, 0.5*dy, 0.5*dz.
  *
- * Coordinate-chain intent (manual RTPLAN replacement):
+ * Coordinate-chain:
  * - The CT reader gives geometry in DICOM patient coordinates.
- * - RTPLAN isocenter is not parsed yet; caller supplies placement through
- *   tx/ty/tz in the DCM card.
- * - In practice, callers should provide tx/ty/tz already expressed in the
- *   chosen universe frame (typically patient coordinates shifted so
- *   isocenter is at universe origin).
+ * - osh_sim is a generic transport engine; RTPLAN parsing belongs in a
+ *   higher-level study-recalculator app (see TODO.md).  The caller supplies
+ *   placement explicitly via gantry_deg, couch_deg, and tx/ty/tz.
+ * - tx/ty/tz should be set to -isocenter_PCS [cm] so the isocenter maps to
+ *   universe origin.
  * - Current limitation: only axial CT orientation is accepted. Non-axial
  *   datasets are rejected with a parse error until full orientation-cosine
  *   placement support is implemented.

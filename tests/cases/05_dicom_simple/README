@@ -2,17 +2,49 @@
 
 - DESCRIPTION:
 Loads the DCPT_headphantom CT (512x512x177 voxels, 0.5859 mm pixel spacing,
-1.5 mm slice spacing) from tests/fixtures/dicom/DCPT_headphantom and places it
-centered at the isocenter (universe origin) with no rotation.
+1.5 mm slice spacing) from tests/fixtures/dicom/DCPT_headphantom.
 
-A monoenergetic 126 MeV proton beam with a 5x5 cm square field enters from
-z=-15 cm along the +Z axis. The CT geometry is:
+The fixture is a real clinical proton plan (Brain_fin2) with three fields, all
+at gantry=0 / couch=0.  The default geo.dat / beam.dat are a simplified
+single-field approximation (126 MeV, square field).  Per-field geo.dat files
+(geo_field1.dat .. geo_field3.dat) carry the correct RTPLAN-derived isocenter
+placement; matching beam.dat files are TODO.
 
-  x, y : -15.0  to +15.0  cm  (30 cm FOV)
-  z    : -13.275 to +13.275 cm  (177 slices x 1.5 mm)
+- RTPLAN: Brain_fin2 (RN.1.2.246.352.71.5...265919....dcm)
 
-The proton range in water-equivalent material is ~13.2 cm, so the Bragg peak
-lands close to the far face of the CT (around z=0).
+  Isocenter PCS (all fields): (0.0, -170.159, -2.122) mm
+  RangeShifter (all fields):  WET 57.0 mm, Setting IN (not yet modelled)
+
+  Field 1
+    GantryAngle: 0 deg   CouchAngle: 0 deg
+    NominalEnergy: 186.197 MeV
+    IsocenterToRangeShifter: 275.531 mm   SnoutPosition: 232.531 mm
+    RTDOSE: RD.1.2.246.352.71.7.37402163639.2864312.20240227185700.dcm
+
+  Field 2
+    GantryAngle: 0 deg   CouchAngle: 0 deg
+    NominalEnergy: 156.92 MeV
+    IsocenterToRangeShifter: 293.617 mm   SnoutPosition: 250.617 mm
+    RTDOSE: RD.1.2.246.352.71.7.37402163639.2864313.20240227185700.dcm
+
+  Field 3
+    GantryAngle: 0 deg   CouchAngle: 0 deg
+    NominalEnergy: 154.114 MeV
+    IsocenterToRangeShifter: 252.235 mm   SnoutPosition: 209.235 mm
+    RTDOSE: RD.1.2.246.352.71.7.37402163639.2864314.20240227185700.dcm
+
+- DCM PLACEMENT (geo_field*.dat):
+  tx/ty/tz = (CT_origin_PCS - Isocenter_PCS) / 10 [cm]:
+    tx = (-149.707 - 0.0)    / 10 = -14.970703125 cm
+    ty = (-316.207 - -170.159) / 10 = -14.604849466 cm
+    tz = (-139.0   - -2.122)   / 10 = -13.687804878 cm
+  This maps the isocenter to the universe origin (0, 0, 0).
+  Gantry=0/Couch=0 means no rotation; the BZALIGN frame equals the universe frame.
+
+- CT universe extent (all three fields identical):
+    x: -14.971 to +15.029 cm   (512 x 0.5859 mm)
+    y: -14.605 to +15.395 cm   (512 x 0.5859 mm)
+    z: -13.688 to +12.862 cm   (177 x 1.5 mm)
 
 - PURPOSE:
 End-to-end validation of CT loading, HU-to-material mapping (Schneider2000),

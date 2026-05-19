@@ -69,11 +69,14 @@ Completed (branches 66-1 … 66-6):
       template, overwrites pixel data, and saves a modified `.dcm`
 
 Open:
-- [ ] `DicomCT` scoring with gantry/couch rotation support (current app-side
-      Mesh conversion is axis-aligned and only matches unrotated CT placement)
-- [ ] RTDOSE scoring with gantry/couch rotation support (the scoring Mesh axes
-      are currently axis-aligned in the patient frame; rotation would require
-      coordinate transforms in the scoring step)
+- [ ] `DicomCT` scoring with gantry/couch rotation: the Mesh geometry needs an
+      optional rotation matrix; `run_setup_voxel_scoring()` must copy the CT
+      body's gantry/couch rotation (from `b->a[9..10]`) onto the scoring Mesh
+      so the runtime maps universe → patient frame before binning.
+      Plain `Geometry Mesh` cards are never rotated (universe frame only).
+- [ ] `DicomRTDOSE` scoring with gantry/couch rotation: same rotation mechanism
+      as DicomCT; RTDOSE grid lives in patient frame, so the CT body rotation
+      applies here too.  Library stays DICOM-agnostic (rotated Mesh is general).
 - [ ] DOSE scoring with density weighting (current RTDOSE output is ENERGY
       per primary; proper absorbed dose needs `rho × ds` weighting per voxel)
 - [ ] Finish legacy `VOX` card parser path (`.hed`/`.ctx` workflow)
@@ -97,6 +100,26 @@ Open:
 
 - [ ] Revisit data-module structure (`material/`, `particle/`, embedded tables)
 - [ ] Rename `struct ray` to `struct ray_v` throughout
+
+## DICOM Study Recalculator (future app)
+
+A dedicated `apps/osh_dicom_study` (name TBD) will handle full-plan DICOM
+recalculation without the file-parse overhead of `osh_sim`:
+
+- Read CT + RTPLAN once; iterate over all beams/fields in RTPLAN.
+- For each field: extract isocenter position and gantry/couch angle from
+  RTPLAN, populate `beam_workspace` + geometry cold structs directly — no
+  geo.dat / beam.dat round-trip.
+- Spin up one `osh_sim` instance per field; merge dose results.
+
+Positioning in `osh_sim` (manual / current design):
+- The `DCM` card in geo.dat carries `gantry_deg couch_deg tx_cm ty_cm tz_cm`.
+- `tx/ty/tz` should be set to `−isocenter_PCS [cm]` so that the DICOM
+  isocenter maps to universe origin.
+- The caller computes these from RTPLAN manually (or the future recalculator
+  derives them automatically).
+- This is intentional: `osh_sim` is a generic transport engine; RTPLAN
+  semantics belong in the higher-level recalculator app.
 
 ## Notes
 
