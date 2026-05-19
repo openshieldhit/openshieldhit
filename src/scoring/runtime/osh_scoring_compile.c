@@ -179,9 +179,6 @@ static int runtime_supports_geometry(struct osh_scoring_geometry_runtime const *
     if (!geo) {
         return 0;
     }
-    if (geo->has_rotation) {
-        return 0;
-    }
     return geo->geo_kind == OSH_SCORING_GEO_MESH;
 }
 
@@ -318,8 +315,7 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
             dst->axes[i].nbins = src->axes[i].nbins;
         }
     }
-    dst->rot_theta_deg = src->rot_theta_deg;
-    dst->rot_phi_deg = src->rot_phi_deg;
+    memcpy(dst->t, src->t, sizeof(dst->t));
     dst->zone_start = src->zone_start;
     dst->zone_stop = src->zone_stop;
     dst->has_rotation = src->has_rotation;

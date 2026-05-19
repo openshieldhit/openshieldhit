@@ -1,6 +1,6 @@
 # 05_dicom_simple — depth-dose along beam axis
-# CT centered at isocenter (origin), beam along +Z from z=-15 cm
-# 126 MeV protons stop around z=0 (Bragg peak ~13.2 cm in water from entry)
+# CT centered at isocenter (origin), beam along -Z from universe z=+15 cm (nozzle convention)
+# 126 MeV protons enter at z~+13 cm, Bragg peak ~13 cm downstream (near z~0)
 
 Geometry Mesh
     Name DepthDose

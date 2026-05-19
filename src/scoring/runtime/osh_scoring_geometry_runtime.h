@@ -48,8 +48,7 @@ struct osh_scoring_geometry_runtime {
     struct osh_scoring_axis_runtime *axes;           /* Axis array (owned). */
     struct osh_scoring_geometry_score_group *groups; /* Score-kind groups (owned). */
     size_t naxes;                                    /* Number of axes. */
-    double rot_theta_deg;                            /* Rotation polar angle [deg]. */
-    double rot_phi_deg;                              /* Rotation azimuth angle [deg]. */
+    double t[16];                                    /* Universe→local affine transform (row-major 4×4). */
     size_t nbins;                                    /* Total number of bins (product of axes). */
     size_t first_page;                               /* Index of first page in the flat page array. */
     size_t npages;                                   /* Number of pages owned by this geometry. */
@@ -57,7 +56,7 @@ struct osh_scoring_geometry_runtime {
     enum osh_scoring_geo_kind geo_kind;              /* Resolved geometry kind enum. */
     int zone_start;                                  /* First zone (Zone geometry only). */
     int zone_stop;                                   /* Last zone  (Zone geometry only). */
-    char has_rotation;                               /* Non-zero when rot_* fields are set. */
+    char has_rotation;                               /* Non-zero when t[] is valid and axes are in local frame. */
     char *rtdose_template_path; /* Non-NULL when FileFormat RTDOSE; owned; path to RTDOSE template. */
 };
 

@@ -15,12 +15,15 @@
  */
 
 #include <ctype.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
 #include "common/osh_diag.h"
+#include "common/osh_vect.h"
+#include "openshieldhit/const.h"
 
 typedef enum osh_status (*geometry_handler_fn)(
     struct osh_scoring_geometry_def *, struct osh_diag_sink const *, char **, int, char const *, unsigned int);
@@ -170,6 +173,12 @@ static enum osh_status geo_axis(struct osh_scoring_geometry_def *geo,
 
 /**
  * @brief Parse optional geometry rotation (`theta phi` in degrees).
+ *
+ * @details
+ * Builds the universe→local 4×4 transform using the same Ry(theta)*Rz(phi)
+ * convention as the geometry body setup (couch then gantry).  Axis bounds
+ * in the geometry definition must be in local coordinates.  Translation
+ * terms are zero (user-defined rotation has no translation offset).
  */
 static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
                                     struct osh_diag_sink const *diag,
@@ -177,12 +186,29 @@ static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
                                     int nwords,
                                     char const *path,
                                     unsigned int lineno) {
+    double tb[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    double theta_rad;
+    double phi_rad;
+    int i;
+    int j;
+
     if (nwords < 3) {
         OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Rotation requires theta phi [deg]", path, lineno);
         return OSH_EPARSE;
     }
-    geo->rot_theta_deg = atof(words[1]);
-    geo->rot_phi_deg = atof(words[2]);
+    theta_rad = atof(words[1]) * (OSH_M_PI / 180.0);
+    phi_rad   = atof(words[2]) * (OSH_M_PI / 180.0);
+
+    for (i = 0; i < 3; i++) {
+        osh_vect_rot_y(theta_rad, tb[i]);
+        osh_vect_rot_z(phi_rad,   tb[i]);
+    }
+    for (i = 0; i < 3; i++) {
+        for (j = 0; j < 3; j++) {
+            geo->t[i * 4 + j] = tb[i][j];
+        }
+        geo->t[i * 4 + 3] = 0.0; /* no translation for user-defined rotation */
+    }
     geo->has_rotation = 1u;
     return OSH_OK;
 }

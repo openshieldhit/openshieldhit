@@ -203,9 +203,6 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
     if (geo->geo_kind != OSH_SCORING_GEO_MESH) {
         return OSH_ENOTSUP;
     }
-    if (geo->geo_kind == OSH_SCORING_GEO_MESH && geo->has_rotation) {
-        return OSH_ENOTSUP;
-    }
     for (ip = 0; ip < out->npages; ++ip) {
         struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
         if (!page->data || page->variance || page->has_data2 || page->divide) {

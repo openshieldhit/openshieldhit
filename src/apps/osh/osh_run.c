@@ -14,6 +14,8 @@
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
+#include "common/osh_vect.h"
+#include "openshieldhit/const.h"
 #include "openshieldhit/dicom.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
@@ -376,18 +378,51 @@ run_geo_append_axis(struct osh_scoring_geometry_def *geo, char const *label, dou
 }
 
 /**
+ * @brief Reconstruct the universe→local affine transform for a VOX body.
+ *
+ * @details
+ * Mirrors the _setup_vox() calculation using the public body arguments:
+ *   a[9]  = gantry angle [deg]
+ *   a[10] = couch angle [deg]
+ *   a[11..13] = universe position of local voxel-corner (x0,y0,z0) [cm]
+ *
+ * @param[in]  b  VOX body with na >= 14.
+ * @param[out] t  Receives the 4×4 row-major transform (same layout as body->t).
+ */
+static void _vox_body_build_transform(struct osh_geometry_body const *b, double t[16]) {
+    double tb[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    double gantry_rad = b->a[9] * OSH_M_PI_180;
+    double couch_rad  = b->a[10] * OSH_M_PI_180;
+    double tx         = b->a[11];
+    double ty         = b->a[12];
+    double tz         = b->a[13];
+    int i;
+    int j;
+
+    for (i = 0; i < 3; i++) {
+        osh_vect_rot_y(couch_rad, tb[i]);
+        osh_vect_rot_z(gantry_rad, tb[i]);
+    }
+    for (j = 0; j < 3; j++) {
+        for (i = 0; i < 3; i++) {
+            t[j * 4 + i] = tb[j][i];
+        }
+        t[j * 4 + 3] = tx * tb[j][0] + ty * tb[j][1] + tz * tb[j][2];
+    }
+}
+
+/**
  * @brief Resolve voxel scoring geometry against the parsed geometry workspace.
  *
  * @details
- * DicomCT geometries: reads grid dimensions from the single VOX body in @p geom
- * and populates vox_origin/spacing/nx/ny/nz on the cold geometry def so the
- * scoring compile step can build the correct grid.
+ * DicomCT and DicomRTDOSE scoring geometries are converted to Mesh geometries
+ * whose axes are expressed in the CT body's local (BZALIGN) frame, and the
+ * CT body's universe→local affine transform is stored on the scoring geometry.
+ * The scoring step then transforms each particle position to local frame before
+ * the raytrace bin lookup, so the result is correct for any gantry/couch angle.
  *
- * DicomRTDOSE geometries: reads the RTDOSE DICOM file specified by InputPath,
- * derives three Mesh axes (X, Y, Z) from the RTDOSE grid, appends them to the
- * geometry def, and changes the geometry kind to "mesh".  This lets the scoring
- * library treat RTDOSE grids as ordinary Mesh geometries with no DICOM awareness.
- * The vox_rtdose_path field is preserved for the save step.
+ * Plain Mesh geometries (has_rotation == 0) are unaffected; their axes and
+ * particle coordinates are both in universe frame.
  *
  * If no DicomCT or DicomRTDOSE geometries are present this function is a no-op.
  */
@@ -408,23 +443,33 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
     size_t vox_body_idx = 0u;            /* index of the single VOX body (Phase 2) */
     size_t nx, ny, nz;                   /* RTDOSE grid dimensions: cols, rows, frames */
     double dx, dy, dz;                   /* voxel spacing [cm]: col, row, frame */
-    double lo_x, lo_y, lo_z;             /* corner of the first voxel in simulation world coords [cm] */
+    double lo_x, lo_y, lo_z;             /* corner of the first voxel [cm] */
     double offset_x, offset_y, offset_z; /* patient→world offset from the CT body [cm] */
+    double ct_t[16];         /* universe→local transform reconstructed from CT body */
+    int ct_has_rotation = 0; /* set when gantry or couch angle is non-zero */
+    int k;
     enum osh_status rc;
 
     if (!geom || !scoring) {
         return OSH_EINVAL;
     }
 
-    /* Find the patient→world offset from the CT VOX body (a[14..16]).
-     * These are stored by _parse_dcm_body as (tx_cm - ct_origin_x_cm) etc.
-     * Falls back to zero if no CT body is present (RTDOSE in world coords). */
+    /* Find the CT VOX body: grab patient→world offset (a[14..16]) and
+     * reconstruct the universe→local affine transform from gantry/couch/tx.
+     * Both are used by the DicomRTDOSE and DicomCT scoring paths below.
+     * ct_has_rotation is set only when gantry or couch angle is non-zero;
+     * for pure translations the scoring axes stay in universe frame so that
+     * BDO output (which cannot represent a rotated frame) keeps working. */
     offset_x = offset_y = offset_z = 0.0;
     for (i = 0; i < geom->nbodies; ++i) {
         if (geom->bodies[i].type == OSH_GEOMETRY_BODY_VOX && geom->bodies[i].na >= 17) {
             offset_x = geom->bodies[i].a[14];
             offset_y = geom->bodies[i].a[15];
             offset_z = geom->bodies[i].a[16];
+            _vox_body_build_transform(&geom->bodies[i], ct_t);
+            if (geom->bodies[i].a[9] != 0.0 || geom->bodies[i].a[10] != 0.0) {
+                ct_has_rotation = 1;
+            }
             break;
         }
     }
@@ -511,10 +556,27 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
         }
 
         /* DICOM origin is the center of the first voxel; convert to corner [cm].
-         * Apply patient→world offset so the RTDOSE grid is in simulation coords. */
+         * Apply patient→world offset so the RTDOSE grid is in simulation coords.
+         * If the CT body is rotated, also transform the corner to CT local frame. */
         lo_x = rd.origin[0] / 10.0 + offset_x - 0.5 * dx;
         lo_y = rd.origin[1] / 10.0 + offset_y - 0.5 * dy;
         lo_z = rd.origin[2] / 10.0 + rd.frame_offsets[0] / 10.0 + offset_z - 0.5 * dz;
+
+        if (ct_has_rotation) {
+            double lo_uni[3];
+            double lo_loc[3];
+            lo_uni[0] = lo_x;
+            lo_uni[1] = lo_y;
+            lo_uni[2] = lo_z;
+            for (k = 0; k < 3; k++) {
+                int row = k * 4;
+                lo_loc[k] = lo_uni[0] * ct_t[row] + lo_uni[1] * ct_t[row + 1]
+                            + lo_uni[2] * ct_t[row + 2] - ct_t[row + 3];
+            }
+            lo_x = lo_loc[0];
+            lo_y = lo_loc[1];
+            lo_z = lo_loc[2];
+        }
 
         osh_dicom_rtdose_free(&rd);
 
@@ -527,6 +589,11 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
         }
         if (rc != OSH_OK) {
             return rc;
+        }
+
+        if (ct_has_rotation) {
+            memcpy(g->t, ct_t, sizeof(g->t));
+            g->has_rotation = 1;
         }
 
         new_kind = strdup("mesh");
@@ -570,9 +637,13 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
         return OSH_EPARSE;
     }
 
-    /* b->a[11..13] = world corner of first CT voxel [cm]  (tx - 0.5*d)
-     * b->a[3..5]   = dx, dy, dz [cm]
-     * b->a[6..8]   = nx, ny, nz                                        */
+    /* Axes and transform strategy depends on whether the CT body is rotated:
+     *  - Rotation present: axes in CT local frame [b->a[0..2]], has_rotation=1.
+     *    Scoring step transforms particle to local frame before raytrace.
+     *  - No rotation (pure translation, gantry=couch=0): axes stay in universe
+     *    frame [b->a[11..13]], has_rotation=0.  Scoring uses universe coords
+     *    directly, and BDO output (which cannot encode a rotated frame) works.
+     * b->a[3..5]  = dx, dy, dz [cm];  b->a[6..8]  = nx, ny, nz */
     for (i = 0; i < scoring->ngeometries; ++i) {
         kind = scoring->geometries[i].kind;
         if (!kind || strcmp(kind, "dicomct") != 0) {
@@ -580,15 +651,30 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
         }
         g = &scoring->geometries[i];
 
-        rc = run_geo_append_axis(g, "X", b->a[11], b->a[11] + b->a[6] * b->a[3], (int) b->a[6]);
-        if (rc == OSH_OK) {
-            rc = run_geo_append_axis(g, "Y", b->a[12], b->a[12] + b->a[7] * b->a[4], (int) b->a[7]);
-        }
-        if (rc == OSH_OK) {
-            rc = run_geo_append_axis(g, "Z", b->a[13], b->a[13] + b->a[8] * b->a[5], (int) b->a[8]);
+        if (ct_has_rotation) {
+            rc = run_geo_append_axis(g, "X", b->a[0], b->a[0] + b->a[6] * b->a[3], (int) b->a[6]);
+            if (rc == OSH_OK) {
+                rc = run_geo_append_axis(g, "Y", b->a[1], b->a[1] + b->a[7] * b->a[4], (int) b->a[7]);
+            }
+            if (rc == OSH_OK) {
+                rc = run_geo_append_axis(g, "Z", b->a[2], b->a[2] + b->a[8] * b->a[5], (int) b->a[8]);
+            }
+        } else {
+            rc = run_geo_append_axis(g, "X", b->a[11], b->a[11] + b->a[6] * b->a[3], (int) b->a[6]);
+            if (rc == OSH_OK) {
+                rc = run_geo_append_axis(g, "Y", b->a[12], b->a[12] + b->a[7] * b->a[4], (int) b->a[7]);
+            }
+            if (rc == OSH_OK) {
+                rc = run_geo_append_axis(g, "Z", b->a[13], b->a[13] + b->a[8] * b->a[5], (int) b->a[8]);
+            }
         }
         if (rc != OSH_OK) {
             return rc;
+        }
+
+        if (ct_has_rotation) {
+            memcpy(g->t, ct_t, sizeof(g->t));
+            g->has_rotation = 1;
         }
 
         new_kind = strdup("mesh");

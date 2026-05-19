@@ -21,21 +21,21 @@ placement; matching beam.dat files are TODO.
     GantryAngle: 0 deg   CouchAngle: 0 deg
     NominalEnergy: 186.197 MeV
     IsocenterToRangeShifter: 275.531 mm   SnoutPosition: 232.531 mm
-    RS midplane z: -27.553 cm   RS slab z: [-30.053, -25.053] cm
+    RS midplane z: +27.553 cm   RS slab z: [+25.053, +30.053] cm
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864312.20240227185700.dcm
 
   Field 2
     GantryAngle: 0 deg   CouchAngle: 0 deg
     NominalEnergy: 156.92 MeV
     IsocenterToRangeShifter: 293.617 mm   SnoutPosition: 250.617 mm
-    RS midplane z: -29.362 cm   RS slab z: [-31.862, -26.862] cm
+    RS midplane z: +29.362 cm   RS slab z: [+26.862, +31.862] cm
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864313.20240227185700.dcm
 
   Field 3
     GantryAngle: 0 deg   CouchAngle: 0 deg
     NominalEnergy: 154.114 MeV
     IsocenterToRangeShifter: 252.235 mm   SnoutPosition: 209.235 mm
-    RS midplane z: -25.223 cm   RS slab z: [-27.723, -22.723] cm
+    RS midplane z: +25.223 cm   RS slab z: [+22.723, +27.723] cm
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864314.20240227185700.dcm
 
 - DCM PLACEMENT (geo_field*.dat):
@@ -61,7 +61,7 @@ To enable transport, add args.cmake in this directory:
 
 - GEOMETRY:
   BHBOX : outer blackhole RPP  (-25..+25 cm all axes)
-  OUTER : vacuum buffer RPP    (-20..+20 x/y, -16..+15 z)
+  OUTER : vacuum buffer RPP    (-20..+20 x/y, -15..+16 z)
   CTBOX : DCM head phantom     (gantry=0, couch=0)
 
 - MATERIAL:
@@ -71,7 +71,8 @@ To enable transport, add args.cmake in this directory:
 - BEAM:
   126 MeV protons, monoenergetic
   5x5 cm square field (BEAMSIGMA -2.5 -2.5)
-  Start position: (0, 0, -15) cm
+  Direction: (0, 0, -1)  [BEAMDIR 180: nozzle at +Z, beam travels in -Z]
+  BEAMPOS -15 cm (local frame) = universe z=+15 cm start position
 
 - SCORING OUTPUTS:
   NB_ddc.dat  — depth-dose profile along beam axis (Mesh, 1x1x270 bins, TEXT)
@@ -96,13 +97,25 @@ To enable transport, add args.cmake in this directory:
   y -9.58..+4.82 cm, z -13.24..+13.31 cm — beam passes through this volume.
 
 - PLOTTING:
-  After transport has produced NB_XZ.bdo, overlay the scored XZ plane on the CT:
+  After transport, overlay scored outputs on the CT with plot_dicom.py.
+  The tool auto-detects BDO and DICOM RTDOSE formats; pass the CT series
+  directory (not a glob) as the first argument.
 
+  XZ scoring plane (BDO):
     python3 tools/plot_dicom.py \
       tests/fixtures/dicom/DCPT_headphantom \
       tests/cases/05_dicom_simple/NB_XZ.bdo \
       --geo tests/cases/05_dicom_simple/geo.dat \
       --log \
       -o tests/cases/05_dicom_simple/NB_XZ_overlay.png
+
+  RTDOSE output (central XZ slice through the RTDOSE grid):
+    python3 tools/plot_dicom.py \
+      tests/fixtures/dicom/DCPT_headphantom/ \
+      tests/cases/05_dicom_simple/NB_rtdose.dcm
+
+  Add -o <file.png> to save instead of displaying interactively.
+  Add --log for log10 scale.  Use --plane and --cut to choose a
+  different projection or slice position.
 
   Requires Python packages: numpy, matplotlib, pydicom.
