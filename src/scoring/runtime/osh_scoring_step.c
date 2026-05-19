@@ -53,7 +53,12 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
 
     for (i = 0; i < rt->ngeometries; ++i) {
         struct osh_scoring_geometry_runtime const *geo = &rt->geometries[i];
+        double p_local[3];
+        double dir_local[3];
+        double const *p_trace;
+        double const *dir_trace;
         size_t g;
+        int k;
 
         rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume);
         if (rc == OSH_ENOTSUP && geo->npages == 0u) {
@@ -72,7 +77,26 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
             return OSH_ENOMEM;
         }
 
-        hit = osh_raytrace_traverse(&grid, st->p, score_dir, score_len, crossings, &ncross);
+        /* For rotated scoring geometries, transform the step endpoints from
+         * universe frame to the geometry's local frame before raytracing.
+         * The same affine t[16] layout as the geometry body transform is used:
+         *   p_local[i] = sum_k p_universe[k]*t[i*4+k] - t[i*4+3]  */
+        if (geo->has_rotation) {
+            for (k = 0; k < 3; k++) {
+                int row = k * 4;
+                p_local[k] = st->p[0] * geo->t[row] + st->p[1] * geo->t[row + 1]
+                             + st->p[2] * geo->t[row + 2] - geo->t[row + 3];
+                dir_local[k] = score_dir[0] * geo->t[row] + score_dir[1] * geo->t[row + 1]
+                               + score_dir[2] * geo->t[row + 2];
+            }
+            p_trace   = p_local;
+            dir_trace = dir_local;
+        } else {
+            p_trace   = st->p;
+            dir_trace = score_dir;
+        }
+
+        hit = osh_raytrace_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
         if (!hit || ncross == 0u) {
             free(crossings);
             continue;
@@ -170,9 +194,6 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
         return OSH_EINVAL;
     }
     if (geo->geo_kind != OSH_SCORING_GEO_MESH) {
-        return OSH_ENOTSUP;
-    }
-    if (geo->has_rotation) {
         return OSH_ENOTSUP;
     }
     if (geo->naxes != 3u) {

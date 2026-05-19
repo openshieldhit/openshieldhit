@@ -1,6 +1,6 @@
  0 0 DCPT head phantom, 126 MeV protons, 5x5 cm square field
  RPP BHBOX -25.0 25.0 -25.0 25.0 -20.0 20.0
- RPP OUTER -20.0 20.0 -20.0 20.0 -16.0 15.0
+ RPP OUTER -20.0 20.0 -20.0 20.0 -15.0 16.0
  DCM CTBOX ../../fixtures/dicom/DCPT_headphantom 0.0 0.0 -14.970703125 -14.970703125 -13.2
  END
  z001 +BHBOX -OUTER

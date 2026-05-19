@@ -125,18 +125,19 @@ struct osh_scoring_page_def {
  *   Cyl   - two axes: R, Z.
  *   Zone  - zero axes; zone range is in @ref zone_start / @ref zone_stop.
  *
- * Rotation (theta, phi) is optional; @ref has_rotation is set when present.
+ * When @ref has_rotation is set, @ref t maps universe coordinates to the
+ * geometry's local frame (same 4×4 row-major layout as the geometry body
+ * transform).  Axis bounds are expressed in local coordinates.
  */
 struct osh_scoring_geometry_def {
     char *kind;                        /* Geometry type keyword. */
     char *name;                        /* User-visible geometry name. */
     struct osh_scoring_axis_def *axes; /* Axis definitions (owned). */
     size_t naxes;                      /* Number of entries in axes[]. */
-    double rot_theta_deg;              /* Rotation polar angle [deg]. */
-    double rot_phi_deg;                /* Rotation azimuth angle [deg]. */
+    double t[16];                      /* Universe→local affine transform (row-major 4×4). */
     int zone_start;                    /* First zone (Zone geometry only). */
     int zone_stop;                     /* Last zone  (Zone geometry only). */
-    unsigned char has_rotation;        /* Whether rot_* fields were set. */
+    unsigned char has_rotation;        /* When set, t[] is valid and axes are in local frame. */
     /* ---- Voxel geometry fields (DicomCT / DicomRTDOSE) ------------------- */
     char *vox_rtdose_path; /* DicomRTDOSE only: path to RTDOSE DICOM file; read by app, never library. */
     char *vox_body_name;   /* Future multi-CT: explicit CT body reference. NULL = auto-detect single body. */
