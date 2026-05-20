@@ -12,8 +12,10 @@
 #include "common/osh_file.h"
 #include "common/osh_patient_position.h"
 #include "common/osh_readline.h"
+#include "common/osh_vect.h"
 #include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2_defines.h"
+#include "openshieldhit/const.h"
 #include "openshieldhit/dicom.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
@@ -440,10 +442,12 @@ static enum osh_status _parse_dcm_body(char const *args,
     double tb[3][3]; /* base rotation: maps universe -> DICOM LPS (row i = DICOM axis i in universe) */
     double gantry_deg;
     double couch_deg;
-    double tx_cm;
-    double ty_cm;
-    double tz_cm;
+    double gantry_rad;
+    double couch_rad;
+    double iso_mm[3];       /* treatment isocenter in DICOM patient coordinate system (LPS, mm) */
+    double iso_ct_local[3]; /* isocenter in CT-local frame (cm, relative to CT corner) */
     int j;
+    int k;
 
     if (!args || !name_out || !par_out || !npar_out) {
         return OSH_EINVAL;
@@ -519,24 +523,24 @@ static enum osh_status _parse_dcm_body(char const *args,
         goto done;
     }
     tok = _next_token(&cursor);
-    if (!_parse_double_token(tok, &tx_cm)) {
-        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation X (universe cm)", geo_filename, lineno);
+    if (!_parse_double_token(tok, &iso_mm[0])) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM isocenter X (DICOM LPS mm)", geo_filename, lineno);
         goto done;
     }
     tok = _next_token(&cursor);
-    if (!_parse_double_token(tok, &ty_cm)) {
-        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Y (universe cm)", geo_filename, lineno);
+    if (!_parse_double_token(tok, &iso_mm[1])) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM isocenter Y (DICOM LPS mm)", geo_filename, lineno);
         goto done;
     }
     tok = _next_token(&cursor);
-    if (!_parse_double_token(tok, &tz_cm)) {
-        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Z (universe cm)", geo_filename, lineno);
+    if (!_parse_double_token(tok, &iso_mm[2])) {
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM isocenter Z (DICOM LPS mm)", geo_filename, lineno);
         goto done;
     }
     if (_next_token(&cursor) != NULL) {
         OSH_DIAG_ERRORF(diag,
                         "%s line %d: too many DCM arguments "
-                        "(expected: name dir patient_pos gantry couch tx ty tz)",
+                        "(expected: name dir patient_pos gantry couch iso_x_mm iso_y_mm iso_z_mm)",
                         geo_filename,
                         lineno);
         goto done;
@@ -596,13 +600,35 @@ static enum osh_status _parse_dcm_body(char const *args,
     par_out[8] = (double) ct.n_slices;
     par_out[9] = gantry_deg;
     par_out[10] = couch_deg;
-    /* DICOM ImagePositionPatient is center-based for the first voxel.
-     * VOX x0/y0/z0 + tx/ty/tz are corner-based in the current model.
-     * Shift by half a voxel to convert center -> corner before building the
-     * BZALIGN transform.  tx/ty/tz are in universe [cm]. */
-    par_out[11] = tx_cm - 0.5 * par_out[3];
-    par_out[12] = ty_cm - 0.5 * par_out[4];
-    par_out[13] = tz_cm - 0.5 * par_out[5];
+
+    /* Apply couch then gantry rotations to tb (same order as _setup_vox / _vox_body_build_transform). */
+    gantry_rad = gantry_deg * OSH_M_PI_180;
+    couch_rad = couch_deg * OSH_M_PI_180;
+    for (j = 0; j < 3; j++) {
+        osh_vect_rot_z(couch_rad, tb[j]);
+        osh_vect_rot_y(gantry_rad, tb[j]);
+    }
+
+    /* Compute isocenter in CT-local frame (cm, relative to CT corner).
+     * ct.origin[j] is the DICOM LPS position of the first voxel CENTER (mm).
+     * CT-local axis j corresponds to DICOM axis j with spacing par_out[3+j] cm.
+     * Adding spacing/2 converts DICOM center-based origin to corner-based local origin. */
+    for (j = 0; j < 3; j++) {
+        iso_ct_local[j] = (iso_mm[j] - ct.origin[j]) * 0.1 + par_out[3 + j] * 0.5;
+    }
+
+    /* t_corner = -R^T * iso_ct_local, where R = rotated tb matrix.
+     * The body transform maps universe -> local via p_local = R*(p_universe - t_corner),
+     * so t_corner is the universe position that maps to CT local origin (0,0,0).
+     * At gantry/couch=0 this equals the CT corner in universe; at non-zero angles
+     * it is computed correctly for any orientation.
+     * R^T[k][j] = tb[j][k], so t_corner[k] = -sum_j(tb[j][k] * iso_ct_local[j]). */
+    for (k = 0; k < 3; k++) {
+        par_out[11 + k] = 0.0;
+        for (j = 0; j < 3; j++) {
+            par_out[11 + k] -= tb[j][k] * iso_ct_local[j];
+        }
+    }
     /* CT DICOM origin offset [cm]: par_out[14+j] = -ct.origin[j]/10.
      *
      * WHY: RTDOSE/DicomCT scoring grids are expressed in CT-local coordinates,

@@ -609,7 +609,7 @@ static enum osh_status _setup_vox(struct body *b) {
      * Order matters: base first, then couch, then gantry (each row of tb is
      * rotated sequentially).  The prior code had these SWAPPED (rot_y for couch,
      * rot_z for gantry), which gave wrong results for any non-zero angle. */
-    pp = (b->na >= 18) ? (enum osh_patient_position) (int) b->a[17] : OSH_PP_HFS;
+    pp = (b->na >= 18) ? (enum osh_patient_position)(int) b->a[17] : OSH_PP_HFS;
     osh_patient_position_base_rotation(pp, tb);
 
     for (i = 0; i < 3; i++) {

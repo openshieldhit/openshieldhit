@@ -418,7 +418,7 @@ static void _vox_body_build_transform(struct osh_geometry_body const *b, double 
 
     /* Read patient position from a[17] (present when na >= 18); fall back to
      * HFS for old geo.dat files that produced only 17 arguments. */
-    pp = (b->na >= 18) ? (enum osh_patient_position) (int) b->a[17] : OSH_PP_HFS;
+    pp = (b->na >= 18) ? (enum osh_patient_position)(int) b->a[17] : OSH_PP_HFS;
     osh_patient_position_base_rotation(pp, tb);
 
     /* Apply couch then gantry rotations (IEC 61217 axis convention).

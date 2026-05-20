@@ -58,6 +58,7 @@ double dist_voxel_body_rt(struct osh_gemca_runtime const *rt,
     /* Current M5 policy: one voxel is the current medium.  Stop at the first
      * voxel boundary even if the next voxel belongs to the same material bin. */
     hu_clamped = clamp_hu(body->hu[crossing.idx]);
+
     bin0 = (int) rt->hu_bin_lut[hu_clamped + 1000];
 
     if (step_segments && step_segments_cap > 0u) {
