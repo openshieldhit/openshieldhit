@@ -71,7 +71,8 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
         }
         ASSERT_TRUE(ws->bodies[0].n_hu == expected_n_hu);
     }
-    ASSERT_TRUE(ws->bodies[0].na == 17);
+    /* na == 18: args 0..16 as before, plus a[17] = patient position code (HFS=0) */
+    ASSERT_TRUE(ws->bodies[0].na == 18);
 
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[0], 0.0, 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[1], 0.0, 1.0e-9));
@@ -87,10 +88,14 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[11], 1.25 - 0.5 * ws->bodies[0].a[3], 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[12], -2.5 - 0.5 * ws->bodies[0].a[4], 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[13], 3.75 - 0.5 * ws->bodies[0].a[5], 1.0e-9));
-    /* Patient→world offset: a[14..16] = tx/ty/tz_cm - ct_origin_cm */
-    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[14], 1.25 - ct.origin[0] * 0.1, 1.0e-6));
-    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[15], -2.5 - ct.origin[1] * 0.1, 1.0e-6));
-    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[16], 3.75 - ct.origin[2] * 0.1, 1.0e-6));
+    /* a[14..16] = -ct.origin[j]/10 [cm]: CT DICOM origin offset used to convert
+     * RTDOSE/DicomCT absolute DICOM coordinates to CT-local (DICOM-relative) coords.
+     * These values do NOT depend on tx/ty/tz or the patient-position rotation. */
+    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[14], -ct.origin[0] * 0.1, 1.0e-6));
+    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[15], -ct.origin[1] * 0.1, 1.0e-6));
+    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[16], -ct.origin[2] * 0.1, 1.0e-6));
+    /* a[17] = patient position code: HFS = 0 */
+    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[17], 0.0, 1.0e-9));
 
     osh_dicom_ct_free(&ct);
     osh_fclose(geo);
@@ -253,7 +258,9 @@ static void write_dcm_geo_with_angles(char const *geo_path, double gantry_deg, d
     FILE *fp = fopen(geo_path, "w");
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fprintf(fp, " 0 0 test\n") > 0);
-    ASSERT_TRUE(fprintf(fp, " DCM CTBOX %s %.12g %.12g 1.25 -2.5 3.75\n", CT_DIR, gantry_deg, couch_deg) > 0);
+    /* Patient position token "HFS" is required since the new DCM card format:
+     *   DCM name ct_dir patient_pos gantry couch tx ty tz   (8 tokens after DCM) */
+    ASSERT_TRUE(fprintf(fp, " DCM CTBOX %s HFS %.12g %.12g 1.25 -2.5 3.75\n", CT_DIR, gantry_deg, couch_deg) > 0);
     ASSERT_TRUE(fprintf(fp, " END\n") > 0);
     ASSERT_TRUE(fprintf(fp, " Z001 +CTBOX\n") > 0);
     ASSERT_TRUE(fprintf(fp, " END\n") > 0);

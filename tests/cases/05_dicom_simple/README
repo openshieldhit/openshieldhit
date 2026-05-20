@@ -39,17 +39,31 @@ placement; matching beam.dat files are TODO.
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864314.20240227185700.dcm
 
 - DCM PLACEMENT (geo_field*.dat):
-  tx/ty/tz = (CT_origin_PCS - Isocenter_PCS) / 10 [cm]:
-    tx = (-149.707 - 0.0)    / 10 = -14.970703125 cm
-    ty = (-316.207 - -170.159) / 10 = -14.604849466 cm
-    tz = (-139.0   - -2.122)   / 10 = -13.687804878 cm
-  This maps the isocenter to the universe origin (0, 0, 0).
-  Gantry=0/Couch=0 means no rotation; the BZALIGN frame equals the universe frame.
+  The simulation universe follows IEC 61217:
+    Universe X = patient left
+    Universe Y = cranial direction (head-first patients)
+    Universe Z = patient anterior = nozzle direction at gantry 0
+  The DCM card now requires an explicit patient position token (e.g. "HFS").
 
-- CT universe extent (all three fields identical):
-    x: -14.971 to +15.029 cm   (512 x 0.5859 mm)
-    y: -14.605 to +15.395 cm   (512 x 0.5859 mm)
-    z: -13.688 to +12.862 cm   (177 x 1.5 mm)
+  DICOM origin: (-149.707, -316.207, -139.0) mm  (LPS patient coords)
+  Isocenter PCS: (0.0, -170.159, -2.122) mm
+
+  For HFS: universe X = DICOM X, universe Y = DICOM Z, universe Z = -DICOM Y
+  tx/ty/tz in universe [cm] (maps isocenter to universe origin):
+    tx = (DICOM_origin_X - iso_X) / 10 = (-149.707 - 0.0)     / 10 = -14.970703125 cm
+    ty = (DICOM_origin_Z - iso_Z) / 10 = (-139.0   - (-2.122)) / 10 = -13.687804878 cm
+    tz = -(DICOM_origin_Y - iso_Y) / 10 = -((-316.207 - (-170.159)) / 10) = +14.604849466 cm
+
+  The sign on tz comes from the HFS base rotation:
+    universe Z = -DICOM Y  =>  tz = -(DICOM_Y_offset / 10)
+
+  Gantry=0/Couch=0: the BZALIGN frame = the universe frame rotated by the
+  HFS base rotation (universe Y = DICOM Z, universe Z = -DICOM Y).
+
+- CT universe extent (HFS, all three fields identical):
+    universe X: -14.971 to +15.029 cm   (512 x 0.5859 mm, along DICOM X = patient left-right)
+    universe Y: -13.688 to +12.862 cm   (177 x 1.5 mm, along DICOM Z = cranial-caudal)
+    universe Z: -15.395 to +14.605 cm   (512 x 0.5859 mm, along -DICOM Y = ant-post = beam dir)
 
 - PURPOSE:
 End-to-end validation of CT loading, HU-to-material mapping (Schneider2000),
@@ -60,9 +74,10 @@ To enable transport, add args.cmake in this directory:
   set(OSH_ARGS "-v" "--outdir" "${WORK_DIR}")
 
 - GEOMETRY:
-  BHBOX : outer blackhole RPP  (-25..+25 cm all axes)
-  OUTER : vacuum buffer RPP    (-20..+20 x/y, -15..+16 z)
-  CTBOX : DCM head phantom     (gantry=0, couch=0)
+  BHBOX : outer blackhole RPP  (universe X/Z: +-25 cm, Y: +-20 cm)
+  OUTER : vacuum buffer RPP    (universe X/Z: +-20 cm, Y: -14.5..+13.5 cm)
+  CTBOX : DCM head phantom     (HFS patient position, gantry=0, couch=0)
+  DCM card format: name ct_dir patient_pos gantry couch tx ty tz
 
 - MATERIAL:
   HUTABLE Schneider2000 (24-bin CT calibration)
@@ -71,8 +86,10 @@ To enable transport, add args.cmake in this directory:
 - BEAM:
   126 MeV protons, monoenergetic
   5x5 cm square field (BEAMSIGMA -2.5 -2.5)
-  Direction: (0, 0, -1)  [BEAMDIR 180: nozzle at +Z, beam travels in -Z]
-  BEAMPOS -15 cm (local frame) = universe z=+15 cm start position
+  Direction: (0, 0, -1)  [BEAMDIR 180: nozzle at universe +Z, beam travels in -Z]
+  BEAMPOS -15 cm (PZALIGN/beam-local frame) = universe z=+15 cm start position
+  Universe +Z is the nozzle direction at gantry 0 per IEC 61217 (anterior face
+  of the patient for HFS supine).  Beam enters the head phantom anteriorly.
 
 - SCORING OUTPUTS:
   NB_ddc.dat  — depth-dose profile along beam axis (Mesh, 1x1x270 bins, TEXT)
