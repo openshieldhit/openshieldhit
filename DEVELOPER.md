@@ -79,6 +79,15 @@ Rules:
 
 ### Design Decisions
 
+#### No Allocations on the Simulation Hot Path
+
+`malloc`, `calloc`, `realloc`, and `free` must not be called during simulation,
+i.e. inside `osh_scoring_score_step()`, `osh_transport_step()`, or anything they
+call. Per-step `calloc`/`free` of scratch buffers was found to dominate CPU time
+(zeroing via `memset` accounted for ~60 % of all instructions in a CT transport
+run). All scratch buffers must be pre-allocated at compile/setup time and stored
+in the corresponding runtime struct (e.g. `osh_scoring_runtime.crossing_buf`).
+
 #### API Stability
 
 The public API is still early and **not yet frozen**.

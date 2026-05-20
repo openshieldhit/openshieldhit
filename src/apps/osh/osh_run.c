@@ -392,10 +392,10 @@ run_geo_append_axis(struct osh_scoring_geometry_def *geo, char const *label, dou
 static void _vox_body_build_transform(struct osh_geometry_body const *b, double t[16]) {
     double tb[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     double gantry_rad = b->a[9] * OSH_M_PI_180;
-    double couch_rad  = b->a[10] * OSH_M_PI_180;
-    double tx         = b->a[11];
-    double ty         = b->a[12];
-    double tz         = b->a[13];
+    double couch_rad = b->a[10] * OSH_M_PI_180;
+    double tx = b->a[11];
+    double ty = b->a[12];
+    double tz = b->a[13];
     int i;
     int j;
 
@@ -445,8 +445,8 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
     double dx, dy, dz;                   /* voxel spacing [cm]: col, row, frame */
     double lo_x, lo_y, lo_z;             /* corner of the first voxel [cm] */
     double offset_x, offset_y, offset_z; /* patient→world offset from the CT body [cm] */
-    double ct_t[16];         /* universe→local transform reconstructed from CT body */
-    int ct_has_rotation = 0; /* set when gantry or couch angle is non-zero */
+    double ct_t[16];                     /* universe→local transform reconstructed from CT body */
+    int ct_has_rotation = 0;             /* set when gantry or couch angle is non-zero */
     int k;
     enum osh_status rc;
 
@@ -570,8 +570,8 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
             lo_uni[2] = lo_z;
             for (k = 0; k < 3; k++) {
                 int row = k * 4;
-                lo_loc[k] = lo_uni[0] * ct_t[row] + lo_uni[1] * ct_t[row + 1]
-                            + lo_uni[2] * ct_t[row + 2] - ct_t[row + 3];
+                lo_loc[k] =
+                    lo_uni[0] * ct_t[row] + lo_uni[1] * ct_t[row + 1] + lo_uni[2] * ct_t[row + 2] - ct_t[row + 3];
             }
             lo_x = lo_loc[0];
             lo_y = lo_loc[1];

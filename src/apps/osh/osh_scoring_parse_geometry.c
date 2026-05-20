@@ -197,11 +197,11 @@ static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
         return OSH_EPARSE;
     }
     theta_rad = atof(words[1]) * (OSH_M_PI / 180.0);
-    phi_rad   = atof(words[2]) * (OSH_M_PI / 180.0);
+    phi_rad = atof(words[2]) * (OSH_M_PI / 180.0);
 
     for (i = 0; i < 3; i++) {
         osh_vect_rot_y(theta_rad, tb[i]);
-        osh_vect_rot_z(phi_rad,   tb[i]);
+        osh_vect_rot_z(phi_rad, tb[i]);
     }
     for (i = 0; i < 3; i++) {
         for (j = 0; j < 3; j++) {
