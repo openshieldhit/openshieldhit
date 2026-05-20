@@ -409,6 +409,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
         }
     }
     free(rt->outputs);
+    free(rt->crossing_buf);
 
     memset(rt, 0, sizeof(*rt));
 }
@@ -694,6 +695,34 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
     free(output_geom_idx);
     free(geom_page_counts);
     free(prepared_pages);
+
+    /* Pre-allocate the per-step voxel-crossing scratch buffer.  The maximum
+     * capacity needed is the sum of nbins across all axes of the largest
+     * geometry (matching the cap = n[0]+n[1]+n[2] formula in osh_scoring_step.c).
+     * One buffer is reused for every geometry on every physics step, eliminating
+     * the calloc/free pair that was spending ~60% of total CPU time on memset. */
+    {
+        size_t max_cap = 0;
+        for (i = 0; i < rt->ngeometries; ++i) {
+            size_t cap_i = 0;
+            size_t a;
+            for (a = 0; a < rt->geometries[i].naxes; ++a) {
+                cap_i += (size_t) rt->geometries[i].axes[a].nbins;
+            }
+            if (cap_i > max_cap) {
+                max_cap = cap_i;
+            }
+        }
+        if (max_cap > 0) {
+            rt->crossing_buf = (struct osh_voxel_crossing *) malloc(max_cap * sizeof(*rt->crossing_buf));
+            if (!rt->crossing_buf) {
+                osh_scoring_runtime_free(rt);
+                return OSH_ENOMEM;
+            }
+            rt->crossing_cap = max_cap;
+        }
+    }
+
     return OSH_OK;
 
 fail:

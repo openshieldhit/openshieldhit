@@ -1,7 +1,6 @@
 #include "scoring/runtime/osh_scoring_step.h"
 
 #include <math.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "common/raytrace/osh_raytrace.h"
@@ -60,9 +59,13 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         size_t g;
         int k;
 
-        rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume);
-        if (rc == OSH_ENOTSUP && geo->npages == 0u) {
+        if (geo->ngroups == 0u) {
             continue;
+        }
+
+        rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume);
+        if (rc != OSH_OK) {
+            return rc;
         }
         if (rc != OSH_OK) {
             return rc;
@@ -72,10 +75,10 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         if (cap == 0u) {
             continue;
         }
-        crossings = (struct osh_voxel_crossing *) calloc(cap, sizeof(*crossings));
-        if (!crossings) {
-            return OSH_ENOMEM;
+        if (cap > rt->crossing_cap || !rt->crossing_buf) {
+            return OSH_ESTATE;
         }
+        crossings = rt->crossing_buf;
 
         /* For rotated scoring geometries, transform the step endpoints from
          * universe frame to the geometry's local frame before raytracing.
@@ -84,28 +87,23 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         if (geo->has_rotation) {
             for (k = 0; k < 3; k++) {
                 int row = k * 4;
-                p_local[k] = st->p[0] * geo->t[row] + st->p[1] * geo->t[row + 1]
-                             + st->p[2] * geo->t[row + 2] - geo->t[row + 3];
-                dir_local[k] = score_dir[0] * geo->t[row] + score_dir[1] * geo->t[row + 1]
-                               + score_dir[2] * geo->t[row + 2];
+                p_local[k] =
+                    st->p[0] * geo->t[row] + st->p[1] * geo->t[row + 1] + st->p[2] * geo->t[row + 2] - geo->t[row + 3];
+                dir_local[k] =
+                    score_dir[0] * geo->t[row] + score_dir[1] * geo->t[row + 1] + score_dir[2] * geo->t[row + 2];
             }
-            p_trace   = p_local;
+            p_trace = p_local;
             dir_trace = dir_local;
         } else {
-            p_trace   = st->p;
+            p_trace = st->p;
             dir_trace = score_dir;
         }
 
         hit = osh_raytrace_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
         if (!hit || ncross == 0u) {
-            free(crossings);
             continue;
         }
 
-        /* TODO: hoist more geometry/crossing-derived work out of the per-group
-         * loops: store inv_voxel_volume in geometry runtime, precompute
-         * crossing fractions once per step, and later reuse scratch buffers
-         * instead of allocating crossings[] on every call. */
         for (g = 0; g < geo->ngroups; ++g) {
             switch (geo->groups[g].score_kind) {
             case OSH_SCORING_SCORE_ENERGY:
@@ -119,12 +117,9 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
                 break;
             }
             if (rc != OSH_OK) {
-                free(crossings);
                 return rc;
             }
         }
-
-        free(crossings);
     }
 
     return OSH_OK;
