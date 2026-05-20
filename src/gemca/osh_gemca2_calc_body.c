@@ -9,6 +9,7 @@
 #include "common/osh_const.h"
 #include "common/osh_coord.h"
 #include "common/osh_diag.h"
+#include "common/osh_patient_position.h"
 #include "common/osh_vect.h"
 #include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2.h"
@@ -500,12 +501,16 @@ static enum osh_status _setup_vox(struct body *b) {
 
     int const nsurfs = 6;
     struct surface *sf; /* temporary surface */
-    /* define unit vectors along the axes */
-    double tb[3][3] = {
-        {1, 0, 0},
-        {0, 1, 0},
-        {0, 0, 1},
-    };
+    /* tb[3][3]: base rotation matrix encoding the patient position.
+     * Row i = DICOM axis i expressed in universe coordinates.
+     * Filled by osh_patient_position_base_rotation() below; declared here
+     * per C90-style declaration-at-top-of-block rule. */
+    double tb[3][3];
+    /* Patient position code: read from a[17] if present; default to HFS.
+     * The DCM parser always writes 18 args (na >= 18), but old geo.dat files
+     * produced 17 args and implicitly assumed HFS — defaulting to HFS keeps
+     * those files working unchanged. */
+    enum osh_patient_position pp;
 
     double couch_angle;
     double gantry_angle;
@@ -583,10 +588,33 @@ static enum osh_status _setup_vox(struct body *b) {
      * so the local voxel-corner (x0,y0,z0) is placed at tx/ty/tz in universe. */
     b->coord = OSH_COORD_BZALIGN;
 
-    /* rotate the base tb according to gantry / couch angles */
+    /* FULL TRANSFORM CHAIN (IEC 61217):
+     *
+     * Step 1: Base rotation (patient position on the table).
+     *   tb encodes how DICOM LPS axes relate to the IEC universe axes.
+     *   tb[i] = DICOM axis i in universe coords; DICOM[i] = tb[i] . p_universe.
+     *   This is set by osh_patient_position_base_rotation() and captures the
+     *   patient orientation (e.g. HFS: DICOM X = universe X, DICOM Z = universe Y).
+     *
+     * Step 2: Couch rotation around universe Z (vertical axis).
+     *   In IEC 61217, the treatment couch rotates around the vertical room axis,
+     *   which is universe Z (+Z points away from floor, toward nozzle at gantry 0).
+     *   osh_vect_rot_z applies this rotation.
+     *
+     * Step 3: Gantry rotation around universe Y (cranial-caudal axis).
+     *   The IEC gantry swings in the sagittal plane (anterior-posterior vs
+     *   superior-inferior), which is a rotation around the cranial axis = universe Y.
+     *   osh_vect_rot_y applies this rotation.
+     *
+     * Order matters: base first, then couch, then gantry (each row of tb is
+     * rotated sequentially).  The prior code had these SWAPPED (rot_y for couch,
+     * rot_z for gantry), which gave wrong results for any non-zero angle. */
+    pp = (b->na >= 18) ? (enum osh_patient_position) (int) b->a[17] : OSH_PP_HFS;
+    osh_patient_position_base_rotation(pp, tb);
+
     for (i = 0; i < 3; i++) {
-        osh_vect_rot_y(couch_angle, tb[i]);
-        osh_vect_rot_z(gantry_angle, tb[i]);
+        osh_vect_rot_z(couch_angle, tb[i]);  /* IEC couch: rotates around vertical (universe Z) */
+        osh_vect_rot_y(gantry_angle, tb[i]); /* IEC gantry: swings in sagittal plane (universe Y) */
     }
 
     /* copy transposed matrix into translation matrix */

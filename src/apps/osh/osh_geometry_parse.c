@@ -10,6 +10,7 @@
 #include "apps/osh/osh_geometry_parse_keys.h"
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
+#include "common/osh_patient_position.h"
 #include "common/osh_readline.h"
 #include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2_defines.h"
@@ -378,14 +379,23 @@ static int _mul_size_overflow(size_t a, size_t b, size_t *out) {
  *
  * @details
  * Expected card payload (after key):
- * `name ct_dir gantry_deg couch_deg tx_cm ty_cm tz_cm`
+ * `name ct_dir patient_pos gantry_deg couch_deg tx_cm ty_cm tz_cm`
  *
- * Generated VOX parameters:
- *   0..2   x0,y0,z0 voxel-grid corner [cm] in local voxel coordinates
- *   3..5   dx,dy,dz voxel spacing [cm]
- *   6..8   nx,ny,nz voxel counts
+ * Where @c patient_pos is an IEC 61217 patient position string such as
+ * "HFS", "HFP", "FFS", "FFP", "HFDL", "HFDR", "FFDL", or "FFDR".
+ *
+ * Generated VOX parameters (18 total):
+ *   0..2   x0,y0,z0  voxel-grid corner [cm] in local voxel coordinates
+ *   3..5   dx,dy,dz  voxel spacing [cm]
+ *   6..8   nx,ny,nz  voxel counts
  *   9..10  gantry,couch [deg]
  *   11..13 translation tx,ty,tz [cm] of the local voxel-corner in universe
+ *   14..16 -iso_DICOM[0..2]/10 [cm]: negative DICOM-space isocenter, used by
+ *          the RTDOSE scoring geometry to convert DICOM coordinates to CT-local
+ *          coordinates without any additional universe-frame transform.
+ *          Stored as (tb^T . t_universe)[j] - DICOM_origin[j]/10, where tb is
+ *          the patient-position base rotation.  See run_setup_voxel_scoring().
+ *   17     patient position code (enum osh_patient_position cast to double)
  *
  * On success this function also transfers ownership of the DICOM HU pixel
  * buffer to @p hu_out (workspace-level ownership).
@@ -395,16 +405,17 @@ static int _mul_size_overflow(size_t a, size_t b, size_t *out) {
  * (interpreted as first-voxel-center coordinates) are converted to corner
  * coordinates by subtracting 0.5*dx, 0.5*dy, 0.5*dz.
  *
- * Coordinate-chain:
- * - The CT reader gives geometry in DICOM patient coordinates.
- * - osh_sim is a generic transport engine; RTPLAN parsing belongs in a
- *   higher-level study-recalculator app (see TODO.md).  The caller supplies
- *   placement explicitly via gantry_deg, couch_deg, and tx/ty/tz.
- * - tx/ty/tz should be set to -isocenter_PCS [cm] so the isocenter maps to
- *   universe origin.
+ * Coordinate-chain (IEC 61217 universe):
+ * - The simulation universe follows IEC 61217: X=patient-left, Y=cranial
+ *   (head-first), Z=anterior/nozzle direction at gantry 0.
+ * - The CT reader gives geometry in DICOM LPS patient coordinates.
+ * - The patient-position base rotation tb (from osh_patient_position_base_rotation)
+ *   maps universe coords to DICOM coords: DICOM[i] = tb[i] . p_universe.
+ * - tx/ty/tz are in universe [cm] and should be set so the isocenter maps to
+ *   universe origin (0,0,0).  For HFS: tx=-iso_DICOM_X/10, ty=-iso_DICOM_Z/10,
+ *   tz=+iso_DICOM_Y/10 (the axis swaps come from the HFS base rotation).
  * - Current limitation: only axial CT orientation is accepted. Non-axial
- *   datasets are rejected with a parse error until full orientation-cosine
- *   placement support is implemented.
+ *   datasets are rejected with a parse error.
  *
  * See also docs/voxel_coordinates.md (single-source convention note).
  */
@@ -425,11 +436,14 @@ static enum osh_status _parse_dcm_body(char const *args,
     char *ct_dir_abs = NULL;
     struct osh_dicom_ct ct;
     enum osh_status rc = OSH_EPARSE;
+    enum osh_patient_position patient_pos;
+    double tb[3][3]; /* base rotation: maps universe -> DICOM LPS (row i = DICOM axis i in universe) */
     double gantry_deg;
     double couch_deg;
     double tx_cm;
     double ty_cm;
     double tz_cm;
+    int j;
 
     if (!args || !name_out || !par_out || !npar_out) {
         return OSH_EINVAL;
@@ -468,6 +482,32 @@ static enum osh_status _parse_dcm_body(char const *args,
         goto done;
     }
 
+    /* Patient position token (IEC 61217): "HFS", "HFP", "FFS", "FFP",
+     * "HFDL", "HFDR", "FFDL", or "FFDR".
+     * This determines the rotation from DICOM LPS patient coords to the IEC
+     * universe frame.  Without it, the voxel grid would be placed with the
+     * wrong axis orientation (e.g. beam entering from the cranial end instead
+     * of the anterior face for a standard brain treatment). */
+    tok = _next_token(&cursor);
+    if (!tok) {
+        OSH_DIAG_ERRORF(diag,
+                        "%s line %d: DCM card requires a patient position token "
+                        "(e.g. HFS, HFP, FFS, FFP, HFDL, HFDR, FFDL, FFDR)",
+                        geo_filename,
+                        lineno);
+        goto done;
+    }
+    patient_pos = osh_patient_position_from_str(tok);
+    if (patient_pos == OSH_PP_UNKNOWN) {
+        OSH_DIAG_ERRORF(diag,
+                        "%s line %d: unknown DCM patient position '%s' "
+                        "(expected one of: HFS HFP FFS FFP HFDL HFDR FFDL FFDR)",
+                        geo_filename,
+                        lineno,
+                        tok);
+        goto done;
+    }
+
     tok = _next_token(&cursor);
     if (!_parse_double_token(tok, &gantry_deg)) {
         OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM gantry angle", geo_filename, lineno);
@@ -480,22 +520,23 @@ static enum osh_status _parse_dcm_body(char const *args,
     }
     tok = _next_token(&cursor);
     if (!_parse_double_token(tok, &tx_cm)) {
-        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation X", geo_filename, lineno);
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation X (universe cm)", geo_filename, lineno);
         goto done;
     }
     tok = _next_token(&cursor);
     if (!_parse_double_token(tok, &ty_cm)) {
-        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Y", geo_filename, lineno);
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Y (universe cm)", geo_filename, lineno);
         goto done;
     }
     tok = _next_token(&cursor);
     if (!_parse_double_token(tok, &tz_cm)) {
-        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Z", geo_filename, lineno);
+        OSH_DIAG_ERRORF(diag, "%s line %d: invalid DCM translation Z (universe cm)", geo_filename, lineno);
         goto done;
     }
     if (_next_token(&cursor) != NULL) {
         OSH_DIAG_ERRORF(diag,
-                        "%s line %d: too many DCM arguments (expected: name dir gantry couch tx ty tz)",
+                        "%s line %d: too many DCM arguments "
+                        "(expected: name dir patient_pos gantry couch tx ty tz)",
                         geo_filename,
                         lineno);
         goto done;
@@ -535,6 +576,12 @@ static enum osh_status _parse_dcm_body(char const *args,
         goto done;
     }
 
+    /* Compute base rotation for the chosen patient position.
+     * tb[i] is the i-th DICOM axis expressed in universe coordinates.
+     * The mapping is DICOM_local[i] = tb[i] . p_universe.
+     * This embeds the IEC 61217 patient orientation into the transform chain. */
+    osh_patient_position_base_rotation(patient_pos, tb);
+
     /* Local voxel grid in cm plus transform terms consumed by _setup_vox().
      * Keep x0/y0/z0 explicit even for DCM: they are the generic VOX corner
      * parameters and may be non-zero for non-DCM VOX sources. */
@@ -552,17 +599,30 @@ static enum osh_status _parse_dcm_body(char const *args,
     /* DICOM ImagePositionPatient is center-based for the first voxel.
      * VOX x0/y0/z0 + tx/ty/tz are corner-based in the current model.
      * Shift by half a voxel to convert center -> corner before building the
-     * BZALIGN transform. */
+     * BZALIGN transform.  tx/ty/tz are in universe [cm]. */
     par_out[11] = tx_cm - 0.5 * par_out[3];
     par_out[12] = ty_cm - 0.5 * par_out[4];
     par_out[13] = tz_cm - 0.5 * par_out[5];
-    /* Patient→world offset: user tx/ty/tz (world first-voxel center) minus
-     * DICOM origin (patient first-voxel center in cm).  Used by RTDOSE scoring
-     * geometry to convert DICOM patient coordinates to simulation world coords. */
-    par_out[14] = tx_cm - ct.origin[0] * 0.1;
-    par_out[15] = ty_cm - ct.origin[1] * 0.1;
-    par_out[16] = tz_cm - ct.origin[2] * 0.1;
-    *npar_out = 17;
+    /* CT DICOM origin offset [cm]: par_out[14+j] = -ct.origin[j]/10.
+     *
+     * WHY: RTDOSE/DicomCT scoring grids are expressed in CT-local coordinates,
+     * i.e. DICOM physical space but relative to the CT's first voxel corner.
+     * The RTDOSE DICOM origin is an absolute DICOM coordinate (mm); adding
+     * par_out[14+j] converts it to CT-local:
+     *   CT_local[j] = (rd.origin[j] - ct.origin[j]) / 10
+     *               = rd.origin[j]/10 + par_out[14+j]
+     *
+     * No patient-position or gantry rotation terms appear here because the
+     * RTDOSE grid is already expressed in DICOM physical (LPS) space, which is
+     * the same coordinate system as the CT voxel grid.  The universe<->DICOM
+     * rotation is handled entirely at scoring time via the has_rotation/ct_t
+     * path in run_setup_voxel_scoring(), not at grid setup time. */
+    for (j = 0; j < 3; j++) {
+        par_out[14 + j] = -ct.origin[j] * 0.1;
+    }
+    /* Store patient position code for _setup_vox() and run_setup_voxel_scoring(). */
+    par_out[17] = (double) (int) patient_pos;
+    *npar_out = 18;
     if (OSH_VOXEL_LAYOUT_DEFAULT == OSH_VOXEL_ORDER_ROW_MAJOR) {
         size_t nxy;
         if (_mul_size_overflow((size_t) ct.cols, (size_t) ct.rows, &nxy)

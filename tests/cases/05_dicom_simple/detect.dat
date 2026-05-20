@@ -1,6 +1,8 @@
 # 05_dicom_simple — depth-dose along beam axis
-# CT centered at isocenter (origin), beam along -Z from universe z=+15 cm (nozzle convention)
-# 126 MeV protons enter at z~+13 cm, Bragg peak ~13 cm downstream (near z~0)
+# HFS patient in IEC 61217 universe convention:
+#   X = patient left-right, Y = cranial-caudal, Z = anterior-posterior (beam axis, nozzle at +Z)
+# Beam at gantry 0: nozzle at universe z=+15 cm, travels in -Z direction toward patient anterior face.
+# 126 MeV protons, Bragg peak approximately 13 cm downstream of skin entry.
 
 Geometry Mesh
     Name DepthDose

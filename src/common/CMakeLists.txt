@@ -6,6 +6,7 @@ add_library(osh_common
     osh_voxel_order.c
     osh_abort.c
     osh_diag.c
+    osh_patient_position.c
     osh_status.c
     osh_version.c
     osh_vect.c

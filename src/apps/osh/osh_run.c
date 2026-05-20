@@ -14,6 +14,7 @@
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
+#include "common/osh_patient_position.h"
 #include "common/osh_vect.h"
 #include "openshieldhit/const.h"
 #include "openshieldhit/dicom.h"
@@ -381,27 +382,50 @@ run_geo_append_axis(struct osh_scoring_geometry_def *geo, char const *label, dou
  * @brief Reconstruct the universe→local affine transform for a VOX body.
  *
  * @details
- * Mirrors the _setup_vox() calculation using the public body arguments:
+ * Mirrors the _setup_vox() calculation exactly, using the public body arguments:
  *   a[9]  = gantry angle [deg]
  *   a[10] = couch angle [deg]
  *   a[11..13] = universe position of local voxel-corner (x0,y0,z0) [cm]
+ *   a[17] = patient position code (enum osh_patient_position; present when na >= 18)
  *
- * @param[in]  b  VOX body with na >= 14.
- * @param[out] t  Receives the 4×4 row-major transform (same layout as body->t).
+ * The transform chain is identical to _setup_vox():
+ *   1. Base rotation from patient position (IEC 61217 DICOM→universe mapping).
+ *   2. Couch rotation around universe Z (vertical axis per IEC 61217).
+ *   3. Gantry rotation around universe Y (sagittal-plane axis per IEC 61217).
+ *
+ * This function is used by run_setup_voxel_scoring() to reconstruct the body
+ * transform for RTDOSE/DicomCT scoring geometries after parsing is complete.
+ *
+ * @param[in]  b  VOX body with na >= 14; a[17] read when na >= 18.
+ * @param[out] t  Receives the 4x4 row-major transform (same layout as body->t).
  */
 static void _vox_body_build_transform(struct osh_geometry_body const *b, double t[16]) {
-    double tb[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
-    double gantry_rad = b->a[9] * OSH_M_PI_180;
-    double couch_rad = b->a[10] * OSH_M_PI_180;
-    double tx = b->a[11];
-    double ty = b->a[12];
-    double tz = b->a[13];
+    double tb[3][3];
+    double gantry_rad;
+    double couch_rad;
+    double tx;
+    double ty;
+    double tz;
+    enum osh_patient_position pp;
     int i;
     int j;
 
+    gantry_rad = b->a[9] * OSH_M_PI_180;
+    couch_rad = b->a[10] * OSH_M_PI_180;
+    tx = b->a[11];
+    ty = b->a[12];
+    tz = b->a[13];
+
+    /* Read patient position from a[17] (present when na >= 18); fall back to
+     * HFS for old geo.dat files that produced only 17 arguments. */
+    pp = (b->na >= 18) ? (enum osh_patient_position) (int) b->a[17] : OSH_PP_HFS;
+    osh_patient_position_base_rotation(pp, tb);
+
+    /* Apply couch then gantry rotations (IEC 61217 axis convention).
+     * Must match _setup_vox() exactly to keep this reconstruction correct. */
     for (i = 0; i < 3; i++) {
-        osh_vect_rot_y(couch_rad, tb[i]);
-        osh_vect_rot_z(gantry_rad, tb[i]);
+        osh_vect_rot_z(couch_rad, tb[i]);  /* IEC couch: around universe Z (vertical) */
+        osh_vect_rot_y(gantry_rad, tb[i]); /* IEC gantry: around universe Y (cranial-caudal) */
     }
     for (j = 0; j < 3; j++) {
         for (i = 0; i < 3; i++) {
@@ -423,6 +447,14 @@ static void _vox_body_build_transform(struct osh_geometry_body const *b, double 
  *
  * Plain Mesh geometries (has_rotation == 0) are unaffected; their axes and
  * particle coordinates are both in universe frame.
+ *
+ * RTDOSE grid placement (two-stage):
+ *  Stage 1 here: a[14..16] = -iso_DICOM/10 [cm] are added to the RTDOSE
+ *   DICOM origin to give CT-local coordinates (isocenter-relative in DICOM axes).
+ *   No universe-frame transform is applied in this stage.
+ *  Stage 2 at score time: the scoring geometry's has_rotation flag and ct_t
+ *   matrix (copied to g->t) cause the scoring step to transform each particle
+ *   from universe to CT-local before the voxel bin lookup.
  *
  * If no DicomCT or DicomRTDOSE geometries are present this function is a no-op.
  */
@@ -446,30 +478,44 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
     double lo_x, lo_y, lo_z;             /* corner of the first voxel [cm] */
     double offset_x, offset_y, offset_z; /* patient→world offset from the CT body [cm] */
     double ct_t[16];                     /* universe→local transform reconstructed from CT body */
-    int ct_has_rotation = 0;             /* set when gantry or couch angle is non-zero */
-    int k;
+    int ct_has_rotation = 0;             /* set when patient position code is present (na >= 18) */
     enum osh_status rc;
 
     if (!geom || !scoring) {
         return OSH_EINVAL;
     }
 
-    /* Find the CT VOX body: grab patient→world offset (a[14..16]) and
-     * reconstruct the universe→local affine transform from gantry/couch/tx.
-     * Both are used by the DicomRTDOSE and DicomCT scoring paths below.
-     * ct_has_rotation is set only when gantry or couch angle is non-zero;
-     * for pure translations the scoring axes stay in universe frame so that
-     * BDO output (which cannot represent a rotated frame) keeps working. */
+    /* Find the CT VOX body: read the CT-origin offset (a[14..16]) and
+     * reconstruct the universe->local affine transform (used at score time).
+     *
+     * WHY ct_has_rotation is always set when na >= 18:
+     * The patient-position base rotation is ALWAYS non-trivial (except HFS at
+     * zero gantry/couch, which still has a different axis mapping than identity).
+     * Previously ct_has_rotation was only set when gantry or couch != 0, but
+     * that missed the base rotation.  Now: any DCM body with 18 arguments has
+     * a known patient position, so the transform is always needed for correct
+     * RTDOSE/DicomCT scoring.
+     *
+     * TWO-STAGE RTDOSE PLACEMENT:
+     * Stage 1 (here): a[14..16] = -ct.origin[j]/10 [cm] are added to the RTDOSE
+     *   DICOM absolute origin to give CT-local coordinates (DICOM-relative to CT
+     *   first voxel).  lo_x/y/z come out in the CT-local (DICOM) frame.
+     * Stage 2 (score time): the scoring geometry has has_rotation=1 and ct_t
+     *   copied into g->t.  The scoring step transforms each particle position
+     *   from universe to CT-local before the voxel bin lookup.
+     * No patient-position rotation is needed in Stage 1 because RTDOSE and CT
+     * are both in DICOM physical (LPS) space; the universe<->DICOM rotation is
+     * handled entirely by ct_t at scoring time. */
     offset_x = offset_y = offset_z = 0.0;
     for (i = 0; i < geom->nbodies; ++i) {
-        if (geom->bodies[i].type == OSH_GEOMETRY_BODY_VOX && geom->bodies[i].na >= 17) {
+        if (geom->bodies[i].type == OSH_GEOMETRY_BODY_VOX && geom->bodies[i].na >= 18) {
             offset_x = geom->bodies[i].a[14];
             offset_y = geom->bodies[i].a[15];
             offset_z = geom->bodies[i].a[16];
             _vox_body_build_transform(&geom->bodies[i], ct_t);
-            if (geom->bodies[i].a[9] != 0.0 || geom->bodies[i].a[10] != 0.0) {
-                ct_has_rotation = 1;
-            }
+            /* Patient position base rotation is always non-trivial: any DCM
+             * body with a patient position code always introduces a rotation. */
+            ct_has_rotation = 1;
             break;
         }
     }
@@ -555,28 +601,20 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
             }
         }
 
-        /* DICOM origin is the center of the first voxel; convert to corner [cm].
-         * Apply patient→world offset so the RTDOSE grid is in simulation coords.
-         * If the CT body is rotated, also transform the corner to CT local frame. */
+        /* Convert DICOM voxel-center origin to voxel-corner [cm] in CT-local frame.
+         *
+         * offset_{x,y,z} = a[14..16] = -ct.origin[j]/10 [cm].
+         * Adding these to the RTDOSE DICOM origin gives the RTDOSE position
+         * relative to the CT's first voxel, i.e. CT-local coordinates:
+         *   lo_j = (rd.origin[j] - ct.origin[j]) / 10 - half_pixel
+         *
+         * No universe-frame rotation is applied here because both the RTDOSE
+         * and the CT voxel grid are in DICOM physical (LPS) space.  The
+         * has_rotation flag and ct_t transform handle the universe->DICOM
+         * mapping at scoring time. */
         lo_x = rd.origin[0] / 10.0 + offset_x - 0.5 * dx;
         lo_y = rd.origin[1] / 10.0 + offset_y - 0.5 * dy;
         lo_z = rd.origin[2] / 10.0 + rd.frame_offsets[0] / 10.0 + offset_z - 0.5 * dz;
-
-        if (ct_has_rotation) {
-            double lo_uni[3];
-            double lo_loc[3];
-            lo_uni[0] = lo_x;
-            lo_uni[1] = lo_y;
-            lo_uni[2] = lo_z;
-            for (k = 0; k < 3; k++) {
-                int row = k * 4;
-                lo_loc[k] =
-                    lo_uni[0] * ct_t[row] + lo_uni[1] * ct_t[row + 1] + lo_uni[2] * ct_t[row + 2] - ct_t[row + 3];
-            }
-            lo_x = lo_loc[0];
-            lo_y = lo_loc[1];
-            lo_z = lo_loc[2];
-        }
 
         osh_dicom_rtdose_free(&rd);
 
