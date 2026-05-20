@@ -5,9 +5,12 @@
 
 #include "apps/osh/osh_geometry_parse.h"
 #include "common/osh_file.h"
+#include "common/osh_patient_position.h"
+#include "common/osh_vect.h"
 #include "common/osh_voxel_order.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "openshieldhit/const.h"
 #include "openshieldhit/dicom.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/geometry_defs.h"
@@ -85,12 +88,36 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[8], (double) ct.n_slices, 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[9], 30.0, 1.0e-9));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[10], -15.0, 1.0e-9));
-    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[11], 1.25 - 0.5 * ws->bodies[0].a[3], 1.0e-9));
-    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[12], -2.5 - 0.5 * ws->bodies[0].a[4], 1.0e-9));
-    ASSERT_TRUE(nearly_equal(ws->bodies[0].a[13], 3.75 - 0.5 * ws->bodies[0].a[5], 1.0e-9));
+    /* a[11..13] = t_corner: universe position mapping to CT local origin (0,0,0).
+     * Derived from iso_mm=(0,0,0) DICOM LPS mm via: t_corner = -R^T * iso_ct_local,
+     * where iso_ct_local[j] = (0 - ct.origin[j])/10 + spacing[j]/2 and R = rotated tb. */
+    {
+        double tb_exp[3][3];
+        double iso_ct_local[3];
+        double t_corner[3];
+        int j2;
+        int k2;
+        osh_patient_position_base_rotation(OSH_PP_HFS, tb_exp);
+        for (j2 = 0; j2 < 3; j2++) {
+            osh_vect_rot_z(-15.0 * OSH_M_PI_180, tb_exp[j2]);
+            osh_vect_rot_y(30.0 * OSH_M_PI_180, tb_exp[j2]);
+        }
+        for (j2 = 0; j2 < 3; j2++) {
+            iso_ct_local[j2] = (0.0 - ct.origin[j2]) * 0.1 + ws->bodies[0].a[3 + j2] * 0.5;
+        }
+        for (k2 = 0; k2 < 3; k2++) {
+            t_corner[k2] = 0.0;
+            for (j2 = 0; j2 < 3; j2++) {
+                t_corner[k2] -= tb_exp[j2][k2] * iso_ct_local[j2];
+            }
+        }
+        ASSERT_TRUE(nearly_equal(ws->bodies[0].a[11], t_corner[0], 1.0e-9));
+        ASSERT_TRUE(nearly_equal(ws->bodies[0].a[12], t_corner[1], 1.0e-9));
+        ASSERT_TRUE(nearly_equal(ws->bodies[0].a[13], t_corner[2], 1.0e-9));
+    }
     /* a[14..16] = -ct.origin[j]/10 [cm]: CT DICOM origin offset used to convert
      * RTDOSE/DicomCT absolute DICOM coordinates to CT-local (DICOM-relative) coords.
-     * These values do NOT depend on tx/ty/tz or the patient-position rotation. */
+     * These values do NOT depend on isocenter or the patient-position rotation. */
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[14], -ct.origin[0] * 0.1, 1.0e-6));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[15], -ct.origin[1] * 0.1, 1.0e-6));
     ASSERT_TRUE(nearly_equal(ws->bodies[0].a[16], -ct.origin[2] * 0.1, 1.0e-6));
@@ -258,9 +285,9 @@ static void write_dcm_geo_with_angles(char const *geo_path, double gantry_deg, d
     FILE *fp = fopen(geo_path, "w");
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fprintf(fp, " 0 0 test\n") > 0);
-    /* Patient position token "HFS" is required since the new DCM card format:
-     *   DCM name ct_dir patient_pos gantry couch tx ty tz   (8 tokens after DCM) */
-    ASSERT_TRUE(fprintf(fp, " DCM CTBOX %s HFS %.12g %.12g 1.25 -2.5 3.75\n", CT_DIR, gantry_deg, couch_deg) > 0);
+    /* DCM card format: name ct_dir patient_pos gantry couch iso_x_mm iso_y_mm iso_z_mm
+     * Isocenter given in DICOM LPS mm; t_corner computed internally by the parser. */
+    ASSERT_TRUE(fprintf(fp, " DCM CTBOX %s HFS %.12g %.12g 0.0 0.0 0.0\n", CT_DIR, gantry_deg, couch_deg) > 0);
     ASSERT_TRUE(fprintf(fp, " END\n") > 0);
     ASSERT_TRUE(fprintf(fp, " Z001 +CTBOX\n") > 0);
     ASSERT_TRUE(fprintf(fp, " END\n") > 0);

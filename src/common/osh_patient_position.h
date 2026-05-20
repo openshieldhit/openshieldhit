@@ -58,14 +58,14 @@ extern "C" {
  * files without the patient-position token).
  */
 enum osh_patient_position {
-    OSH_PP_HFS  =  0, /* Head First Supine       — standard brain/thorax position */
-    OSH_PP_HFP  =  1, /* Head First Prone        */
-    OSH_PP_FFS  =  2, /* Feet First Supine       */
-    OSH_PP_FFP  =  3, /* Feet First Prone        */
-    OSH_PP_HFDL =  4, /* Head First Decubitus Left  (lying on left side) */
-    OSH_PP_HFDR =  5, /* Head First Decubitus Right (lying on right side) */
-    OSH_PP_FFDL =  6, /* Feet First Decubitus Left  */
-    OSH_PP_FFDR =  7, /* Feet First Decubitus Right */
+    OSH_PP_HFS = 0,  /* Head First Supine       — standard brain/thorax position */
+    OSH_PP_HFP = 1,  /* Head First Prone        */
+    OSH_PP_FFS = 2,  /* Feet First Supine       */
+    OSH_PP_FFP = 3,  /* Feet First Prone        */
+    OSH_PP_HFDL = 4, /* Head First Decubitus Left  (lying on left side) */
+    OSH_PP_HFDR = 5, /* Head First Decubitus Right (lying on right side) */
+    OSH_PP_FFDL = 6, /* Feet First Decubitus Left  */
+    OSH_PP_FFDR = 7, /* Feet First Decubitus Right */
     OSH_PP_UNKNOWN = -1
 };
 

@@ -202,6 +202,11 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
         int rows = slices[0].rows;
         int cols = slices[0].cols;
         size_t slice_px = (size_t) rows * (size_t) cols;
+        int16_t *dst;
+        int16_t const *src;
+        double slope;
+        double intercept;
+        size_t j;
         int i;
 
         ct->rows = rows;
@@ -228,7 +233,13 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
         }
 
         for (i = 0; i < n; i++) {
-            memcpy(ct->pixels + ((size_t) i * slice_px), slices[i].pixels, slice_px * sizeof(int16_t));
+            dst = ct->pixels + ((size_t) i * slice_px);
+            src = slices[i].pixels;
+            slope = slices[i].rescale_slope;
+            intercept = slices[i].rescale_intercept;
+            for (j = 0; j < slice_px; j++) {
+                dst[j] = (int16_t) ((double) src[j] * slope + intercept);
+            }
             free(slices[i].pixels);
         }
     }

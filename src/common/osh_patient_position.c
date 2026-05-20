@@ -28,96 +28,96 @@ void osh_patient_position_base_rotation(enum osh_patient_position pp, double tb[
     }
 
     switch (pp) {
-        case OSH_PP_HFS:
-            /* Head First Supine: the most common clinical position.
-             * DICOM X = patient left  = universe  X
-             * DICOM Y = patient post. = universe -Z  (supine: back is down, -Z = toward table)
-             * DICOM Z = patient cran. = universe  Y  (head toward gantry = +Y) */
-            tb[0][0] =  1.0;  /* DICOM X -> universe +X */
-            tb[1][2] = -1.0;  /* DICOM Y -> universe -Z */
-            tb[2][1] =  1.0;  /* DICOM Z -> universe +Y */
-            break;
+    case OSH_PP_HFS:
+        /* Head First Supine: the most common clinical position.
+         * DICOM X = patient left  = universe  X
+         * DICOM Y = patient post. = universe -Z  (supine: back is down, -Z = toward table)
+         * DICOM Z = patient cran. = universe  Y  (head toward gantry = +Y) */
+        tb[0][0] = 1.0;  /* DICOM X -> universe +X */
+        tb[1][2] = -1.0; /* DICOM Y -> universe -Z */
+        tb[2][1] = 1.0;  /* DICOM Z -> universe +Y */
+        break;
 
-        case OSH_PP_HFP:
-            /* Head First Prone: patient face-down, head toward gantry.
-             * L-R is mirrored relative to HFS (left/right swap when prone).
-             * DICOM X = patient left  = universe -X
-             * DICOM Y = patient post. = universe +Z  (prone: back faces up = +Z)
-             * DICOM Z = patient cran. = universe  Y */
-            tb[0][0] = -1.0;  /* DICOM X -> universe -X */
-            tb[1][2] =  1.0;  /* DICOM Y -> universe +Z */
-            tb[2][1] =  1.0;  /* DICOM Z -> universe +Y */
-            break;
+    case OSH_PP_HFP:
+        /* Head First Prone: patient face-down, head toward gantry.
+         * L-R is mirrored relative to HFS (left/right swap when prone).
+         * DICOM X = patient left  = universe -X
+         * DICOM Y = patient post. = universe +Z  (prone: back faces up = +Z)
+         * DICOM Z = patient cran. = universe  Y */
+        tb[0][0] = -1.0; /* DICOM X -> universe -X */
+        tb[1][2] = 1.0;  /* DICOM Y -> universe +Z */
+        tb[2][1] = 1.0;  /* DICOM Z -> universe +Y */
+        break;
 
-        case OSH_PP_FFS:
-            /* Feet First Supine: patient on back, feet toward gantry.
-             * Feet-first swaps both L-R and cranial/caudal relative to HFS.
-             * DICOM X = patient left  = universe -X (L-R flip for feet-first)
-             * DICOM Y = patient post. = universe -Z  (supine: back down)
-             * DICOM Z = patient cran. = universe -Y  (cranial now points in -Y) */
-            tb[0][0] = -1.0;  /* DICOM X -> universe -X */
-            tb[1][2] = -1.0;  /* DICOM Y -> universe -Z */
-            tb[2][1] = -1.0;  /* DICOM Z -> universe -Y */
-            break;
+    case OSH_PP_FFS:
+        /* Feet First Supine: patient on back, feet toward gantry.
+         * Feet-first swaps both L-R and cranial/caudal relative to HFS.
+         * DICOM X = patient left  = universe -X (L-R flip for feet-first)
+         * DICOM Y = patient post. = universe -Z  (supine: back down)
+         * DICOM Z = patient cran. = universe -Y  (cranial now points in -Y) */
+        tb[0][0] = -1.0; /* DICOM X -> universe -X */
+        tb[1][2] = -1.0; /* DICOM Y -> universe -Z */
+        tb[2][1] = -1.0; /* DICOM Z -> universe -Y */
+        break;
 
-        case OSH_PP_FFP:
-            /* Feet First Prone: patient face-down, feet toward gantry.
-             * DICOM X = patient left  = universe +X
-             * DICOM Y = patient post. = universe +Z  (prone: back up)
-             * DICOM Z = patient cran. = universe -Y */
-            tb[0][0] =  1.0;  /* DICOM X -> universe +X */
-            tb[1][2] =  1.0;  /* DICOM Y -> universe +Z */
-            tb[2][1] = -1.0;  /* DICOM Z -> universe -Y */
-            break;
+    case OSH_PP_FFP:
+        /* Feet First Prone: patient face-down, feet toward gantry.
+         * DICOM X = patient left  = universe +X
+         * DICOM Y = patient post. = universe +Z  (prone: back up)
+         * DICOM Z = patient cran. = universe -Y */
+        tb[0][0] = 1.0;  /* DICOM X -> universe +X */
+        tb[1][2] = 1.0;  /* DICOM Y -> universe +Z */
+        tb[2][1] = -1.0; /* DICOM Z -> universe -Y */
+        break;
 
-        case OSH_PP_HFDL:
-            /* Head First Decubitus Left: patient's LEFT side faces down toward table.
-             * DICOM X = patient left  = universe -Z  (left side pressed to table = -Z)
-             * DICOM Y = patient post. = universe -X
-             * DICOM Z = patient cran. = universe  Y */
-            tb[0][2] = -1.0;  /* DICOM X -> universe -Z */
-            tb[1][0] = -1.0;  /* DICOM Y -> universe -X */
-            tb[2][1] =  1.0;  /* DICOM Z -> universe +Y */
-            break;
+    case OSH_PP_HFDL:
+        /* Head First Decubitus Left: patient's LEFT side faces down toward table.
+         * DICOM X = patient left  = universe -Z  (left side pressed to table = -Z)
+         * DICOM Y = patient post. = universe -X
+         * DICOM Z = patient cran. = universe  Y */
+        tb[0][2] = -1.0; /* DICOM X -> universe -Z */
+        tb[1][0] = -1.0; /* DICOM Y -> universe -X */
+        tb[2][1] = 1.0;  /* DICOM Z -> universe +Y */
+        break;
 
-        case OSH_PP_HFDR:
-            /* Head First Decubitus Right: patient's RIGHT side faces down toward table.
-             * DICOM X = patient left  = universe +Z
-             * DICOM Y = patient post. = universe +X
-             * DICOM Z = patient cran. = universe  Y */
-            tb[0][2] =  1.0;  /* DICOM X -> universe +Z */
-            tb[1][0] =  1.0;  /* DICOM Y -> universe +X */
-            tb[2][1] =  1.0;  /* DICOM Z -> universe +Y */
-            break;
+    case OSH_PP_HFDR:
+        /* Head First Decubitus Right: patient's RIGHT side faces down toward table.
+         * DICOM X = patient left  = universe +Z
+         * DICOM Y = patient post. = universe +X
+         * DICOM Z = patient cran. = universe  Y */
+        tb[0][2] = 1.0; /* DICOM X -> universe +Z */
+        tb[1][0] = 1.0; /* DICOM Y -> universe +X */
+        tb[2][1] = 1.0; /* DICOM Z -> universe +Y */
+        break;
 
-        case OSH_PP_FFDL:
-            /* Feet First Decubitus Left: patient's LEFT side down, feet toward gantry.
-             * DICOM X = patient left  = universe -Z
-             * DICOM Y = patient post. = universe +X
-             * DICOM Z = patient cran. = universe -Y */
-            tb[0][2] = -1.0;  /* DICOM X -> universe -Z */
-            tb[1][0] =  1.0;  /* DICOM Y -> universe +X */
-            tb[2][1] = -1.0;  /* DICOM Z -> universe -Y */
-            break;
+    case OSH_PP_FFDL:
+        /* Feet First Decubitus Left: patient's LEFT side down, feet toward gantry.
+         * DICOM X = patient left  = universe -Z
+         * DICOM Y = patient post. = universe +X
+         * DICOM Z = patient cran. = universe -Y */
+        tb[0][2] = -1.0; /* DICOM X -> universe -Z */
+        tb[1][0] = 1.0;  /* DICOM Y -> universe +X */
+        tb[2][1] = -1.0; /* DICOM Z -> universe -Y */
+        break;
 
-        case OSH_PP_FFDR:
-            /* Feet First Decubitus Right: patient's RIGHT side down, feet toward gantry.
-             * DICOM X = patient left  = universe +Z
-             * DICOM Y = patient post. = universe -X
-             * DICOM Z = patient cran. = universe -Y */
-            tb[0][2] =  1.0;  /* DICOM X -> universe +Z */
-            tb[1][0] = -1.0;  /* DICOM Y -> universe -X */
-            tb[2][1] = -1.0;  /* DICOM Z -> universe -Y */
-            break;
+    case OSH_PP_FFDR:
+        /* Feet First Decubitus Right: patient's RIGHT side down, feet toward gantry.
+         * DICOM X = patient left  = universe +Z
+         * DICOM Y = patient post. = universe -X
+         * DICOM Z = patient cran. = universe -Y */
+        tb[0][2] = 1.0;  /* DICOM X -> universe +Z */
+        tb[1][0] = -1.0; /* DICOM Y -> universe -X */
+        tb[2][1] = -1.0; /* DICOM Z -> universe -Y */
+        break;
 
-        default:
-            /* Unrecognised code: fall back to HFS to keep transport valid.
-             * The caller should have rejected OSH_PP_UNKNOWN at parse time;
-             * this branch guards against accidental integer cast errors. */
-            tb[0][0] =  1.0;
-            tb[1][2] = -1.0;
-            tb[2][1] =  1.0;
-            break;
+    default:
+        /* Unrecognised code: fall back to HFS to keep transport valid.
+         * The caller should have rejected OSH_PP_UNKNOWN at parse time;
+         * this branch guards against accidental integer cast errors. */
+        tb[0][0] = 1.0;
+        tb[1][2] = -1.0;
+        tb[2][1] = 1.0;
+        break;
     }
 }
 
@@ -147,19 +147,35 @@ enum osh_patient_position osh_patient_position_from_str(char const *s) {
     for (i = 0u; i < len; i++) {
         char c = s[i];
         if (c >= 'A' && c <= 'Z') {
-            c = (char)(c + ('a' - 'A'));
+            c = (char) (c + ('a' - 'A'));
         }
         buf[i] = c;
     }
     buf[len] = '\0';
 
-    if (strcmp(buf, "hfs")  == 0) { return OSH_PP_HFS;  }
-    if (strcmp(buf, "hfp")  == 0) { return OSH_PP_HFP;  }
-    if (strcmp(buf, "ffs")  == 0) { return OSH_PP_FFS;  }
-    if (strcmp(buf, "ffp")  == 0) { return OSH_PP_FFP;  }
-    if (strcmp(buf, "hfdl") == 0) { return OSH_PP_HFDL; }
-    if (strcmp(buf, "hfdr") == 0) { return OSH_PP_HFDR; }
-    if (strcmp(buf, "ffdl") == 0) { return OSH_PP_FFDL; }
-    if (strcmp(buf, "ffdr") == 0) { return OSH_PP_FFDR; }
+    if (strcmp(buf, "hfs") == 0) {
+        return OSH_PP_HFS;
+    }
+    if (strcmp(buf, "hfp") == 0) {
+        return OSH_PP_HFP;
+    }
+    if (strcmp(buf, "ffs") == 0) {
+        return OSH_PP_FFS;
+    }
+    if (strcmp(buf, "ffp") == 0) {
+        return OSH_PP_FFP;
+    }
+    if (strcmp(buf, "hfdl") == 0) {
+        return OSH_PP_HFDL;
+    }
+    if (strcmp(buf, "hfdr") == 0) {
+        return OSH_PP_HFDR;
+    }
+    if (strcmp(buf, "ffdl") == 0) {
+        return OSH_PP_FFDL;
+    }
+    if (strcmp(buf, "ffdr") == 0) {
+        return OSH_PP_FFDR;
+    }
     return OSH_PP_UNKNOWN;
 }
