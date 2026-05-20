@@ -119,3 +119,23 @@ To enable transport, add args.cmake in this directory:
   different projection or slice position.
 
   Requires Python packages: numpy, matplotlib, pydicom.
+
+- PROFILING (cache-miss comparison):
+  beam_pz.dat is a +Z reference beam (no BEAMDIR, BEAMPOS 0 0 -14) for
+  comparing transport speed and LLC miss rate against the default -Z beam.
+
+  The -b/-g/-m/-d short options override individual input files:
+    build/bin/openshieldhit -n 10000 tests/cases/05_dicom_simple/
+    build/bin/openshieldhit -n 10000 -b tests/cases/05_dicom_simple/beam_pz.dat \
+        tests/cases/05_dicom_simple/
+
+  With perf (requires linux-perf package):
+    perf stat -e LLC-loads,LLC-load-misses \
+        build/bin/openshieldhit -n 10000 tests/cases/05_dicom_simple/
+    perf stat -e LLC-loads,LLC-load-misses \
+        build/bin/openshieldhit -n 10000 -b tests/cases/05_dicom_simple/beam_pz.dat \
+        tests/cases/05_dicom_simple/
+
+  Expected: -Z beam (default) shows higher LLC-load-misses than +Z beam due to
+  backward traversal through the Z-major CT HU array (512x512x2 = 512 KB per
+  Z-slice stride, defeating the hardware prefetcher).

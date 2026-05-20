@@ -94,10 +94,10 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "  -N, --seedoffset <n>  Random seed offset override (max 9999)\n");
     fprintf(out, "      --dry-run         Parse/load inputs only, do not run transport\n");
     fprintf(out, "      --workdir <dir>   Working directory for default input/output files\n");
-    fprintf(out, "      --geo <file>      Override geometry input file\n");
-    fprintf(out, "      --beam <file>     Override beam input file\n");
-    fprintf(out, "      --mat <file>      Override material input file\n");
-    fprintf(out, "      --detect <file>   Override scoring input file\n");
+    fprintf(out, "  -g, --geo <file>      Override geometry input file\n");
+    fprintf(out, "  -b, --beam <file>     Override beam input file\n");
+    fprintf(out, "  -m, --mat <file>      Override material input file\n");
+    fprintf(out, "  -d, --detect <file>   Override scoring input file\n");
     fprintf(out, "  -o, --outdir <dir>    Override output directory\n");
     fprintf(out, "\n");
     fprintf(out, "Notes:\n");
@@ -339,6 +339,42 @@ parse_short_options(int argc, char *argv[], int *idx, struct osh_cli_options *op
                 return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--seedoffset");
             }
             opt->has_seed_offset = 1;
+            return 0;
+        case 'b':
+            value = &arg[pos + 1];
+            if (*value == '\0') {
+                if (!consume_option_arg(argc, argv, idx, arg, &value)) {
+                    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+                }
+            }
+            opt->beam_path = value;
+            return 0;
+        case 'g':
+            value = &arg[pos + 1];
+            if (*value == '\0') {
+                if (!consume_option_arg(argc, argv, idx, arg, &value)) {
+                    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+                }
+            }
+            opt->geo_path = value;
+            return 0;
+        case 'm':
+            value = &arg[pos + 1];
+            if (*value == '\0') {
+                if (!consume_option_arg(argc, argv, idx, arg, &value)) {
+                    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+                }
+            }
+            opt->mat_path = value;
+            return 0;
+        case 'd':
+            value = &arg[pos + 1];
+            if (*value == '\0') {
+                if (!consume_option_arg(argc, argv, idx, arg, &value)) {
+                    return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+                }
+            }
+            opt->detect_path = value;
             return 0;
         case 'o':
             value = &arg[pos + 1];
