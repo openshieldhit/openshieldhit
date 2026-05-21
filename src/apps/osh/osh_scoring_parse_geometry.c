@@ -175,10 +175,9 @@ static enum osh_status geo_axis(struct osh_scoring_geometry_def *geo,
  * @brief Parse optional geometry rotation (`theta phi` in degrees).
  *
  * @details
- * Builds the universe→local 4×4 transform using the same Ry(theta)*Rz(phi)
- * convention as the geometry body setup (couch then gantry).  Axis bounds
- * in the geometry definition must be in local coordinates.  Translation
- * terms are zero (user-defined rotation has no translation offset).
+ * Builds the universe→local 4×4 transform by applying rot_y(theta) then
+ * rot_z(phi) to each row of the identity matrix.  Axis bounds in the geometry
+ * definition must be in local coordinates.  Translation terms are zero.
  */
 static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
                                     struct osh_diag_sink const *diag,

@@ -381,41 +381,37 @@ static int _mul_size_overflow(size_t a, size_t b, size_t *out) {
  *
  * @details
  * Expected card payload (after key):
- * `name ct_dir patient_pos gantry_deg couch_deg tx_cm ty_cm tz_cm`
+ * `name ct_dir patient_pos gantry_deg couch_deg iso_x_mm iso_y_mm iso_z_mm`
  *
  * Where @c patient_pos is an IEC 61217 patient position string such as
  * "HFS", "HFP", "FFS", "FFP", "HFDL", "HFDR", "FFDL", or "FFDR".
+ * iso_{x,y,z}_mm is the treatment isocenter in DICOM LPS patient coordinates [mm].
  *
  * Generated VOX parameters (18 total):
- *   0..2   x0,y0,z0  voxel-grid corner [cm] in local voxel coordinates
+ *   0..2   x0,y0,z0  voxel-grid corner [cm] in local voxel coordinates (always zero)
  *   3..5   dx,dy,dz  voxel spacing [cm]
  *   6..8   nx,ny,nz  voxel counts
  *   9..10  gantry,couch [deg]
- *   11..13 translation tx,ty,tz [cm] of the local voxel-corner in universe
- *   14..16 -iso_DICOM[0..2]/10 [cm]: negative DICOM-space isocenter, used by
- *          the RTDOSE scoring geometry to convert DICOM coordinates to CT-local
- *          coordinates without any additional universe-frame transform.
- *          Stored as (tb^T . t_universe)[j] - DICOM_origin[j]/10, where tb is
- *          the patient-position base rotation.  See run_setup_voxel_scoring().
+ *   11..13 t_corner[0..2] [cm]: universe position of the CT voxel-grid corner,
+ *          computed as -(tb^T * iso_ct_local), where iso_ct_local is the isocenter
+ *          expressed in CT-local frame (cm from corner).
+ *   14..16 -ct.origin[0..2]/10 [cm]: negative DICOM origin offset, used by the
+ *          RTDOSE/DicomCT scoring geometry to convert absolute DICOM coordinates
+ *          to CT-local coordinates.  Independent of isocenter and rotation.
  *   17     patient position code (enum osh_patient_position cast to double)
  *
  * On success this function also transfers ownership of the DICOM HU pixel
  * buffer to @p hu_out (workspace-level ownership).
  *
- * Note: x0/y0/z0 here is the voxel-corner convention. DICOM Image Position
- * Patient is the voxel-center convention. Therefore user-given DCM tx/ty/tz
- * (interpreted as first-voxel-center coordinates) are converted to corner
- * coordinates by subtracting 0.5*dx, 0.5*dy, 0.5*dz.
- *
  * Coordinate-chain (IEC 61217 universe):
  * - The simulation universe follows IEC 61217: X=patient-left, Y=cranial
  *   (head-first), Z=anterior/nozzle direction at gantry 0.
  * - The CT reader gives geometry in DICOM LPS patient coordinates.
- * - The patient-position base rotation tb (from osh_patient_position_base_rotation)
- *   maps universe coords to DICOM coords: DICOM[i] = tb[i] . p_universe.
- * - tx/ty/tz are in universe [cm] and should be set so the isocenter maps to
- *   universe origin (0,0,0).  For HFS: tx=-iso_DICOM_X/10, ty=-iso_DICOM_Z/10,
- *   tz=+iso_DICOM_Y/10 (the axis swaps come from the HFS base rotation).
+ * - The patient-position base rotation tb maps universe coords to DICOM coords:
+ *   DICOM[i] = tb[i] . p_universe.  Couch and gantry rotations are then applied
+ *   to each row of tb (couch around universe Z, gantry around universe Y).
+ * - iso_ct_local[j] = (iso_mm[j] - ct.origin[j]) / 10 + spacing[j] / 2
+ * - t_corner[k] = -sum_j(tb[j][k] * iso_ct_local[j])  (maps iso to universe origin)
  * - Current limitation: only axial CT orientation is accepted. Non-axial
  *   datasets are rejected with a parse error.
  *

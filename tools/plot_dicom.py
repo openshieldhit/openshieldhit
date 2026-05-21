@@ -13,6 +13,7 @@ given all files with PixelData are loaded as a series.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import struct
@@ -256,9 +257,49 @@ def read_ct_series(path: Path, origin_override_cm: FloatArray | None = None) -> 
     return CtVolume(data_hu=data_hu, origin_cm=origin_cm, spacing_cm=spacing_cm)
 
 
+# IEC 61217 patient-position base rotation matrices (rows = DICOM LPS axes in universe coords).
+# Matches osh_patient_position_base_rotation() in src/common/osh_patient_position.c.
+_PP_BASE_ROTATION: dict[str, FloatArray] = {
+    "HFS":  cast(FloatArray, np.array([[ 1, 0, 0], [ 0, 0,-1], [ 0, 1, 0]], dtype=float)),
+    "HFP":  cast(FloatArray, np.array([[-1, 0, 0], [ 0, 0, 1], [ 0, 1, 0]], dtype=float)),
+    "FFS":  cast(FloatArray, np.array([[-1, 0, 0], [ 0, 0,-1], [ 0,-1, 0]], dtype=float)),
+    "FFP":  cast(FloatArray, np.array([[ 1, 0, 0], [ 0, 0, 1], [ 0,-1, 0]], dtype=float)),
+    "HFDL": cast(FloatArray, np.array([[ 0, 0,-1], [-1, 0, 0], [ 0, 1, 0]], dtype=float)),
+    "HFDR": cast(FloatArray, np.array([[ 0, 0, 1], [ 1, 0, 0], [ 0, 1, 0]], dtype=float)),
+    "FFDL": cast(FloatArray, np.array([[ 0, 0,-1], [ 1, 0, 0], [ 0,-1, 0]], dtype=float)),
+    "FFDR": cast(FloatArray, np.array([[ 0, 0, 1], [-1, 0, 0], [ 0,-1, 0]], dtype=float)),
+}
+
+
+def _c_rot_z(row: FloatArray, alpha: float) -> None:
+    """osh_vect_rot_z convention: x'=cos*x+sin*y, y'=-sin*x+cos*y (= Rz(-alpha))."""
+    c, s = math.cos(alpha), math.sin(alpha)
+    x, y = row[0], row[1]
+    row[0] = c * x + s * y
+    row[1] = -s * x + c * y
+
+
+def _c_rot_y(row: FloatArray, alpha: float) -> None:
+    """osh_vect_rot_y convention: x'=cos*x-sin*z, z'=sin*x+cos*z (= Ry(-alpha))."""
+    c, s = math.cos(alpha), math.sin(alpha)
+    x, z = row[0], row[2]
+    row[0] = c * x - s * z
+    row[2] = s * x + c * z
+
+
 def parse_dcm_origin_from_geo(path: Path, dcm_path: Path | None) -> tuple[Path, FloatArray] | None:
+    """Return (ct_dir, t_corner_cm) for the first matching DCM card in a geo.dat.
+
+    DCM card format (current):
+        DCM name ct_dir patient_pos gantry_deg couch_deg iso_x_mm iso_y_mm iso_z_mm
+    where iso_{x,y,z}_mm is the treatment isocenter in DICOM LPS patient coords [mm].
+    The CT corner in universe [cm] is computed using the same transform chain as the C parser.
+    """
     pydicom = _import_pydicom()
-    pattern = re.compile(r"^\s*DCM\s+\S+\s+(\S+)\s+\S+\s+\S+\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)")
+    _f = r"([-+0-9.eE]+)"
+    pattern = re.compile(
+        r"^\s*DCM\s+\S+\s+(\S+)\s+(\S+)\s+" + _f + r"\s+" + _f + r"\s+" + _f + r"\s+" + _f + r"\s+" + _f
+    )
     for line in path.read_text(encoding="utf-8").splitlines():
         match = pattern.match(line)
         if not match:
@@ -266,16 +307,38 @@ def parse_dcm_origin_from_geo(path: Path, dcm_path: Path | None) -> tuple[Path, 
         geo_dcm_path = (path.parent / match.group(1)).resolve()
         if dcm_path is not None and geo_dcm_path != dcm_path.resolve():
             continue
-        tx, ty, tz = (float(match.group(i)) for i in (2, 3, 4))
+
+        patient_pos = match.group(2).upper()
+        gantry_rad = math.radians(float(match.group(3)))
+        couch_rad = math.radians(float(match.group(4)))
+        iso_mm = np.array([float(match.group(i)) for i in (5, 6, 7)], dtype=float)
+
         sample = next((p for p in sorted(geo_dcm_path.iterdir()) if p.is_file()), None)
         if sample is None:
             raise ValueError(f"{geo_dcm_path}: no DICOM files found")
         ds = pydicom.dcmread(str(sample), stop_before_pixels=True)
-        dx = 0.1 * float(ds.PixelSpacing[1])
-        dy = 0.1 * float(ds.PixelSpacing[0])
-        dz = 0.1 * float(getattr(ds, "SliceThickness", 1.0))
-        origin_cm = cast(FloatArray, np.asarray([tx - 0.5 * dx, ty - 0.5 * dy, tz - 0.5 * dz], dtype=np.float64))
-        return geo_dcm_path, origin_cm
+        spacing_cm = cast(FloatArray, np.array([
+            0.1 * float(ds.PixelSpacing[1]),
+            0.1 * float(ds.PixelSpacing[0]),
+            0.1 * float(getattr(ds, "SliceThickness", 1.0)),
+        ], dtype=float))
+        ct_origin_mm = np.array([float(v) for v in ds.ImagePositionPatient], dtype=float)
+
+        # Replicate C transform chain exactly (osh_geometry_parse.c):
+        #   1. patient-position base rotation
+        #   2. rot_z(-couch_rad, row)  — negated because rot_z is CW
+        #   3. rot_y(gantry_rad, row)
+        tb = _PP_BASE_ROTATION.get(patient_pos, _PP_BASE_ROTATION["HFS"]).copy()
+        for row in tb:
+            _c_rot_z(row, -couch_rad)
+            _c_rot_y(row, gantry_rad)
+
+        # iso_ct_local[j] = (iso_mm[j] - ct_origin_mm[j]) / 10 + spacing_cm[j] / 2
+        iso_ct_local = (iso_mm - ct_origin_mm) * 0.1 + spacing_cm * 0.5
+
+        # t_corner[k] = -sum_j tb[j][k] * iso_ct_local[j]
+        t_corner = cast(FloatArray, -(tb.T @ iso_ct_local))
+        return geo_dcm_path, t_corner
     return None
 
 
