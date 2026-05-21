@@ -19,6 +19,7 @@ target_link_libraries(osh_transport
     PRIVATE
         osh_common
         osh_physics
+        osh_nuclear
         osh_random
         osh_beam
         osh_beam_runtime

@@ -50,6 +50,7 @@ foreach(test_src ${UNIT_SOURCES})
         osh_particle
         osh_scoring
         osh_physics
+        osh_nuclear
         osh_transport
         osh_simulation
         osh_dicom

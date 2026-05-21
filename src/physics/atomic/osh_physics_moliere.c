@@ -1,4 +1,4 @@
-#include "physics/osh_physics_moliere.h"
+#include "physics/atomic/osh_physics_moliere.h"
 
 #include <math.h>
 
