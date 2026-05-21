@@ -99,7 +99,7 @@ static void test_dcm_card_populates_vox_body_arguments(void) {
         int k2;
         osh_patient_position_base_rotation(OSH_PP_HFS, tb_exp);
         for (j2 = 0; j2 < 3; j2++) {
-            osh_vect_rot_z(-15.0 * OSH_M_PI_180, tb_exp[j2]);
+            osh_vect_rot_z(15.0 * OSH_M_PI_180, tb_exp[j2]); /* -couch_deg=-(-15)=+15; mirrors parser */
             osh_vect_rot_y(30.0 * OSH_M_PI_180, tb_exp[j2]);
         }
         for (j2 = 0; j2 < 3; j2++) {
