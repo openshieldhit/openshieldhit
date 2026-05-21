@@ -78,8 +78,9 @@ The **Tripathi formula** (NASA/TP-1999-209726) gives the total nuclear reaction
 cross section σ_R for any projectile–target pair as a function of energy.
 At each transport step, the survival probability `exp(−ds/λ)` is evaluated
 (where λ is the mean free path derived from σ_R) and compared to a uniform
-random draw.  If the primary is killed, its remaining kinetic energy is
-deposited locally for energy conservation.
+random draw.  If the primary is killed, its remaining kinetic energy escapes
+with the (untracked) nuclear fragments and is not scored locally; only the
+ionisation energy deposited along the step before the reaction is recorded.
 
 The formula is purely parametric (no nuclear data tables) and includes a
 natural Coulomb threshold: the cross section goes to zero below the Coulomb
