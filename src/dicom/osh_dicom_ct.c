@@ -238,7 +238,12 @@ enum osh_status osh_dicom_ct_read(char const *dir, struct osh_dicom_ct *ct, stru
             slope = slices[i].rescale_slope;
             intercept = slices[i].rescale_intercept;
             for (j = 0; j < slice_px; j++) {
-                dst[j] = (int16_t) ((double) src[j] * slope + intercept);
+                double hu = (double) src[j] * slope + intercept;
+                if (hu < -32768.0)
+                    hu = -32768.0;
+                if (hu > 32767.0)
+                    hu = 32767.0;
+                dst[j] = (int16_t) hu;
             }
             free(slices[i].pixels);
         }

@@ -449,9 +449,9 @@ static void _vox_body_build_transform(struct osh_geometry_body const *b, double 
  * particle coordinates are both in universe frame.
  *
  * RTDOSE grid placement (two-stage):
- *  Stage 1 here: a[14..16] = -iso_DICOM/10 [cm] are added to the RTDOSE
- *   DICOM origin to give CT-local coordinates (isocenter-relative in DICOM axes).
- *   No universe-frame transform is applied in this stage.
+ *  Stage 1 here: a[14..16] = -ct.origin[j]/10 [cm] are added to the RTDOSE
+ *   DICOM origin so the dose grid is expressed in the CT body's local
+ *   DICOM-aligned frame.  No universe-frame transform is applied in this stage.
  *  Stage 2 at score time: the scoring geometry's has_rotation flag and ct_t
  *   matrix (copied to g->t) cause the scoring step to transform each particle
  *   from universe to CT-local before the voxel bin lookup.

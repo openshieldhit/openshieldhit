@@ -67,9 +67,6 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         if (rc != OSH_OK) {
             return rc;
         }
-        if (rc != OSH_OK) {
-            return rc;
-        }
 
         cap = grid.n[0] + grid.n[1] + grid.n[2];
         if (cap == 0u) {
