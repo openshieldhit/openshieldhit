@@ -95,10 +95,17 @@ Output files are written next to the input case:
 | `NB_ct.bdo` | energy scored onto the full CT voxel grid, ~355 MB (BDO) |
 | `NB_rtdose.dcm` | RTDOSE round-trip: scored energy replaces pixel data in the template `.dcm` |
 
-> **Note:** DicomCT and DicomRTDOSE scoring geometries are converted to axis-
-> aligned Cartesian meshes at the application layer.  Gantry and couch rotation
-> for these scoring geometries is not yet implemented and is deferred to a later
-> milestone.
+Overlay the RTDOSE output on the CT with the bundled Python tool:
+
+```bash
+python3 tools/plot_dicom.py \
+    tests/fixtures/dicom/DCPT_headphantom/ \
+    tests/cases/05_dicom_simple/NB_rtdose.dcm
+```
+
+Add `-o result.png` to save instead of displaying interactively.
+Requires `numpy`, `matplotlib`, and `pydicom`.
+
 
 ## The `openshieldhit` application
 
@@ -166,9 +173,9 @@ CT voxel transport is working end-to-end:
 - `DicomCT` and `DicomRTDOSE` scoring geometries converted to Cartesian meshes at
   the application layer; the transport library remains DICOM-agnostic
 - RTDOSE round-trip: read template file, score energy onto its grid, write back `.dcm`
+- IEC 61217 gantry and couch rotation: patient body correctly rotated during
+  transport for any HFS/HFP/FFS/FFP/HFDL/HFDR/FFDL/FFDR position and angle
 
-**Known limitation:** gantry and couch rotation for DicomCT/DicomRTDOSE scoring
-geometries is not yet implemented.  The conversion assumes axis-aligned grids.
 
 The detailed implementation roadmap lives in [TODO.md](TODO.md).
 

@@ -38,27 +38,24 @@ placement; matching beam.dat files are TODO.
     RS midplane z: +25.223 cm   RS slab z: [+22.723, +27.723] cm
     RTDOSE: RD.1.2.246.352.71.7.37402163639.2864314.20240227185700.dcm
 
-- DCM PLACEMENT (geo_field*.dat):
+- DCM PLACEMENT (geo.dat and geo_field*.dat):
   The simulation universe follows IEC 61217:
     Universe X = patient left
     Universe Y = cranial direction (head-first patients)
     Universe Z = patient anterior = nozzle direction at gantry 0
-  The DCM card now requires an explicit patient position token (e.g. "HFS").
+
+  The DCM card takes the isocenter in DICOM LPS patient coordinates [mm]:
+    DCM CTBOX <ct_dir> HFS <gantry_deg> <couch_deg> <iso_x_mm> <iso_y_mm> <iso_z_mm>
 
   DICOM origin: (-149.707, -316.207, -139.0) mm  (LPS patient coords)
-  Isocenter PCS: (0.0, -170.159, -2.122) mm
+  Isocenter PCS (all fields): (0.0, -170.159, -2.122) mm
 
-  For HFS: universe X = DICOM X, universe Y = DICOM Z, universe Z = -DICOM Y
-  tx/ty/tz in universe [cm] (maps isocenter to universe origin):
-    tx = (DICOM_origin_X - iso_X) / 10 = (-149.707 - 0.0)     / 10 = -14.970703125 cm
-    ty = (DICOM_origin_Z - iso_Z) / 10 = (-139.0   - (-2.122)) / 10 = -13.687804878 cm
-    tz = -(DICOM_origin_Y - iso_Y) / 10 = -((-316.207 - (-170.159)) / 10) = +14.604849466 cm
+  geo.dat uses gantry=90 / couch=+30 as a non-trivial rotation smoke test:
+    DCM CTBOX ../../fixtures/dicom/DCPT_headphantom HFS 90.0 30.0 \
+        0.0 -170.15853658537 -2.1219512195122
 
-  The sign on tz comes from the HFS base rotation:
-    universe Z = -DICOM Y  =>  tz = -(DICOM_Y_offset / 10)
-
-  Gantry=0/Couch=0: the BZALIGN frame = the universe frame rotated by the
-  HFS base rotation (universe Y = DICOM Z, universe Z = -DICOM Y).
+  The app converts iso_mm to universe tx/ty/tz [cm] via the patient-position
+  base rotation; callers no longer need to do this conversion manually.
 
 - CT universe extent (HFS, all three fields identical):
     universe X: -14.971 to +15.029 cm   (512 x 0.5859 mm, along DICOM X = patient left-right)
@@ -76,8 +73,10 @@ To enable transport, add args.cmake in this directory:
 - GEOMETRY:
   BHBOX : outer blackhole RPP  (universe X/Z: +-25 cm, Y: +-20 cm)
   OUTER : vacuum buffer RPP    (universe X/Z: +-20 cm, Y: -14.5..+13.5 cm)
-  CTBOX : DCM head phantom     (HFS patient position, gantry=0, couch=0)
-  DCM card format: name ct_dir patient_pos gantry couch tx ty tz
+  CTBOX : DCM head phantom     (HFS patient position, gantry=90, couch=+30)
+  DCM card format: name ct_dir patient_pos gantry_deg couch_deg iso_x_mm iso_y_mm iso_z_mm
+    iso_{x,y,z}_mm: treatment isocenter in DICOM LPS patient coordinates [mm]
+    (app converts to universe tx/ty/tz internally via the patient-position base rotation)
 
 - MATERIAL:
   HUTABLE Schneider2000 (24-bin CT calibration)
