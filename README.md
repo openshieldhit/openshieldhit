@@ -122,6 +122,9 @@ python3 tools/plot_dicom.py \
 Add `-o result.png` to save instead of displaying interactively.
 Requires `numpy`, `matplotlib`, and `pydicom`.
 
+<img width="927" height="719" alt="signal-2026-05-21-130343_002" src="https://github.com/user-attachments/assets/df6ad7fd-18c5-426e-8f5e-f2c3429ca7aa" />
+
+
 ## Examples
 
 Interactive geometry viewers, the BNCT cell demo, and performance benchmarks
