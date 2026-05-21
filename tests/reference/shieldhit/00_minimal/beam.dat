@@ -1,5 +1,5 @@
 RNDSEED   	89736501	       # Random seed
-PRIMARY         1     1        # Proton
+JPART0         2               # Proton
 TMAX0		150.0 	0.0        # Incident energy; (MeV/nucl)
 BEAMSIGMA	  0.0   0.0	       # Pencil beam with no size
 BEAMPOS       0.0   0.0  -5.00 # Beam XYZ start pos

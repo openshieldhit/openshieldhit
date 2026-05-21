@@ -261,6 +261,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     params = transport_ctx ? &transport_ctx->params : NULL;
     ctx->done = 0;
     ctx->done_rc = OSH_OK;
+    ctx->nuclear_kill = 0;
     ctx->part = pool->species[slot];
     ctx->a_proj = (ctx->part->a > 0u) ? (double) ctx->part->a : 1.0;
     ctx->e0 = pool->e[slot];
@@ -749,12 +750,10 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.has_voxel = ctx->has_voxel;
 
     if (ctx->nuclear_kill) {
-        /* Primary destroyed by nuclear reaction: deposit remaining kinetic
-         * energy at the interaction point for energy conservation.
-         * The pool slot is zeroed below so the particle is collected on the
-         * next compact().  Secondary fragments are deferred to a later SMM
-         * implementation; the seam for that change is here. */
-        st.de += ctx->exit_energy;
+        /* Primary destroyed by nuclear reaction: remaining kinetic energy
+         * escapes with the (untracked) nuclear fragments — do not deposit it
+         * locally.  When SMM secondary transport is added, this is where the
+         * fragment pool push goes. */
         st.q[3] = 0.0;
     }
 
