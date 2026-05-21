@@ -1,0 +1,70 @@
+# 00_minimal — 150 MeV protons in water, electromagnetic physics only
+# OpenTOPAS cross-validation reference for OpenShieldHIT tests/cases/00_minimal
+#
+# Run:
+#   topas run.txt
+
+# ---- World ------------------------------------------------------------------
+
+s:Ge/World/Type     = "TsBox"
+s:Ge/World/Material = "Vacuum"
+d:Ge/World/HLX      = 15 cm
+d:Ge/World/HLY      = 15 cm
+d:Ge/World/HLZ      = 25 cm
+
+# ---- Water phantom (10x10x20 cm³, front face at z=0) -----------------------
+
+s:Ge/WaterPhantom/Type     = "TsBox"
+s:Ge/WaterPhantom/Parent   = "World"
+s:Ge/WaterPhantom/Material = "G4_WATER"
+d:Ge/WaterPhantom/HLX      = 5 cm
+d:Ge/WaterPhantom/HLY      = 5 cm
+d:Ge/WaterPhantom/HLZ      = 10 cm
+d:Ge/WaterPhantom/TransZ   = 10 cm
+i:Ge/WaterPhantom/XBins    = 1
+i:Ge/WaterPhantom/YBins    = 1
+i:Ge/WaterPhantom/ZBins    = 200
+
+# ---- Beam (pencil, 150 MeV protons, entering water at z=0) -----------------
+
+s:Ge/BeamPosition/Type   = "Group"
+s:Ge/BeamPosition/Parent = "World"
+d:Ge/BeamPosition/TransZ = 23 cm
+
+s:So/Beam/Type                     = "Beam"
+s:So/Beam/Component                = "BeamPosition"
+s:So/Beam/BeamParticle             = "proton"
+d:So/Beam/BeamEnergy               = 150 MeV
+u:So/Beam/BeamEnergySpread         = 0
+s:So/Beam/BeamPositionDistribution = "None"
+s:So/Beam/BeamAngularDistribution  = "None"
+i:So/Beam/NumberOfHistoriesInRun   = 100000
+
+# ---- Physics (EM only, no hadronic — nuclear reactions OFF) ----------------
+
+sv:Ph/Default/Modules = 1 "g4em-standard_opt3"
+
+# ---- Scoring ----------------------------------------------------------------
+
+s:Sc/EnergyScorer/Quantity              = "EnergyDeposit"
+s:Sc/EnergyScorer/Component             = "WaterPhantom"
+s:Sc/EnergyScorer/OutputFile            = "NB_energy"
+s:Sc/EnergyScorer/OutputType            = "csv"
+b:Sc/EnergyScorer/OutputToConsole       = "False"
+s:Sc/EnergyScorer/IfOutputFileAlreadyExists  = "Overwrite"
+s:Sc/EnergyScorer/OnlyIncludeParticlesOfGeneration = "Primary"
+
+s:Sc/FluenceScorer/Quantity             = "Fluence"
+s:Sc/FluenceScorer/Component            = "WaterPhantom"
+s:Sc/FluenceScorer/OutputFile           = "NB_fluence"
+s:Sc/FluenceScorer/OutputType           = "csv"
+b:Sc/FluenceScorer/OutputToConsole      = "False"
+s:Sc/FluenceScorer/IfOutputFileAlreadyExists = "Overwrite"
+sv:Sc/FluenceScorer/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/FluenceScorer/OnlyIncludeParticlesOfGeneration = "Primary"
+
+# ---- Verbosity --------------------------------------------------------------
+
+i:Ts/NumberOfThreads = 1
+i:Ts/ShowHistosAtEnd = 0
+i:Ts/Verbosity       = 0
