@@ -72,7 +72,7 @@ a working directory and produces scored output:
 
 ```bash
 openshieldhit path/to/case/          # reads geo.dat, beam.dat, mat.dat, detect.dat
-openshieldhit --validate path/to/case/   # parse and validate without running
+openshieldhit --dry-run path/to/case/    # parse and load inputs, skip transport
 openshieldhit --help
 ```
 
@@ -180,6 +180,14 @@ CT voxel transport is working end-to-end:
 - RTDOSE round-trip: read template file, score energy onto its grid, write back `.dcm`
 - IEC 61217 gantry and couch rotation: patient body correctly rotated during
   transport for any HFS/HFP/FFS/FFP/HFDL/HFDR/FFDL/FFDR position and angle
+
+Not yet implemented:
+
+- nuclear interactions and nuclear fragmentation
+- neutron transport
+- phase-space (PHSP) source and output support
+- ridge filter / range modulator support
+- RTSTRUCT import for structure-based scoring
 
 The detailed implementation roadmap lives in [TODO.md](TODO.md).
 
