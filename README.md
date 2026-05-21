@@ -40,7 +40,9 @@ and scoring accumulation are all open and traceable, without navigating millions
 of lines of framework infrastructure.
 
 ## Requirements
-[SDL2](https://www.libsdl.org/) is required for building examples (optional): `sudo apt-get install libsdl2-dev`
+
+CMake ≥ 3.21 is required to build.  SDL2 is required for the interactive
+examples (optional): `sudo apt-get install libsdl2-dev`.
 
 ## How to build
 
@@ -50,7 +52,7 @@ cmake --preset debug   && cmake --build --preset debug     # debug symbols, -Og
 ```
 
 Available presets: `debug`, `release`, `relwithdebinfo`, `prof`.
-Requires CMake ≥ 3.21.  Binaries land in `build_rel/bin/` (release) or `build/bin/` (debug).
+Binaries land in `build_rel/bin/` (release) or `build/bin/` (debug).
 
 Useful cache variables for development:
 
@@ -62,10 +64,24 @@ Useful cache variables for development:
 `cmake --install` currently installs the main executable, documentation, and
 selected examples. Public library/header installation is still incomplete.
 
-## Run a Minimal Example
+## The `openshieldhit` application
+
+The main deliverable is the `openshieldhit` (or `openshieldhit.exe` on Windows)
+executable built from `src/apps/osh/`.  It reads four plain-text input files from
+a working directory and produces scored output:
+
 ```bash
-build_rel/bin/openshieldhit tests/cases/00_minimal/
+openshieldhit path/to/case/          # reads geo.dat, beam.dat, mat.dat, detect.dat
+openshieldhit --validate path/to/case/   # parse and validate without running
+openshieldhit --help
 ```
+
+## Run a Minimal Example
+
+```bash
+build_rel/bin/openshieldhit -v tests/cases/00_minimal/
+```
+
 Produces a `.bdo` and `.txt` output file with scored dose vs. depth — a Bragg peak for a proton beam in water.
 
 ## Run a CT Transport Example
@@ -80,10 +96,10 @@ Validate parsing and geometry compilation without transporting particles:
 build_rel/bin/openshieldhit --dry-run tests/cases/05_dicom_simple/
 ```
 
-Run 100 000 primaries with verbose output:
+Run 100 000 primaries:
 
 ```bash
-build_rel/bin/openshieldhit -vvv -n 100000 tests/cases/05_dicom_simple/
+build_rel/bin/openshieldhit -v -n 100000 tests/cases/05_dicom_simple/
 ```
 
 Output files are written next to the input case:
@@ -106,18 +122,12 @@ python3 tools/plot_dicom.py \
 Add `-o result.png` to save instead of displaying interactively.
 Requires `numpy`, `matplotlib`, and `pydicom`.
 
+## Examples
 
-## The `openshieldhit` application
-
-The main deliverable is the `openshieldhit` (or `openshieldhit.exe` on Windows)
-executable built from `src/apps/osh/`.  It reads four plain-text input files from
-a working directory and produces scored output:
-
-```bash
-openshieldhit path/to/case/          # reads geo.dat, beam.dat, mat.dat, detect.dat
-openshieldhit --validate path/to/case/   # parse and validate without running
-openshieldhit --help
-```
+Interactive geometry viewers, the BNCT cell demo, and performance benchmarks
+live in `examples/`.  See [examples/README.md](examples/README.md) for build
+instructions and how to run each program.  SDL2 is required for the interactive
+examples (`sudo apt-get install libsdl2-dev`).
 
 ## Public C API
 
@@ -150,11 +160,6 @@ osh_beam_workspace_free(beam);
 The runtime representations are private to `src/simulation/` and never visible
 to calling code.
 
-## Try out the examples
-```bash
-build_rel/bin/bnct_sdl examples/02_bnct/geo_cell.dat
-```
-
 ## Status
 
 The current codebase has a working end-to-end ion transport path with:
@@ -175,7 +180,6 @@ CT voxel transport is working end-to-end:
 - RTDOSE round-trip: read template file, score energy onto its grid, write back `.dcm`
 - IEC 61217 gantry and couch rotation: patient body correctly rotated during
   transport for any HFS/HFP/FFS/FFP/HFDL/HFDR/FFDL/FFDR position and angle
-
 
 The detailed implementation roadmap lives in [TODO.md](TODO.md).
 
