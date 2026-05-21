@@ -62,6 +62,7 @@ struct osh_transport_params {
     int rndoffset;        /**< RNG seed offset (added on top of rndseed). */
     char mcs_mode;        /**< enum osh_transport_mcs_mode value. */
     char straggling_mode; /**< enum osh_transport_straggling_mode value. */
+    char nuclear;         /**< Non-zero to enable nuclear interaction sampling. */
 };
 
 /**
@@ -101,8 +102,7 @@ struct osh_transport_context {
  *   - Gaussian energy straggling (Bohr variance)
  *
  * Not yet implemented:
- *   - nuclear interactions
- *   - secondaries
+ *   - secondaries from nuclear interactions (SMM)
  *
  * DELTAE is treated as a maximum fractional energy-loss step criterion in
  * material. Boundary-limited steps are truncated and the exit energy is

@@ -195,6 +195,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
         sim->transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_OFF;
         break;
     }
+    sim->transport_ctx.params.nuclear = beam->nuclear ? 1 : 0;
     sim->transport_ctx.diag = diag;
 
     /* ---- 6. Beam runtime ------------------------------------------------- */

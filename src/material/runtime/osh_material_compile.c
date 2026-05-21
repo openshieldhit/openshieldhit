@@ -41,7 +41,7 @@
 #include "material/osh_material_atomic_data.h"
 #include "material/osh_material_icru.h"
 #include "particle/osh_particle.h"
-#include "physics/osh_physics_bethe.h"
+#include "physics/atomic/osh_physics_bethe.h"
 #include "voxel/osh_voxel_hu_lut.h"
 
 /* ---- Helpers -------------------------------------------------------------- */

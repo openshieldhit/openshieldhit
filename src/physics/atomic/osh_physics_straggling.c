@@ -1,4 +1,4 @@
-#include "physics/osh_physics_straggling.h"
+#include "physics/atomic/osh_physics_straggling.h"
 
 #include <math.h>
 

@@ -1,4 +1,4 @@
-#include "physics/osh_physics_bethe.h"
+#include "physics/atomic/osh_physics_bethe.h"
 
 #include <math.h>
 

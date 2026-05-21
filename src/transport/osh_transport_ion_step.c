@@ -12,9 +12,10 @@
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
-#include "physics/osh_physics_bethe.h"
-#include "physics/osh_physics_moliere.h"
-#include "physics/osh_physics_straggling.h"
+#include "physics/nuclear/osh_nuclear_tripathi.h"
+#include "physics/atomic/osh_physics_bethe.h"
+#include "physics/atomic/osh_physics_moliere.h"
+#include "physics/atomic/osh_physics_straggling.h"
 #include "random/osh_rng.h"
 #include "scoring/runtime/osh_scoring_step.h"
 #include "transport/osh_transport.h"
@@ -60,6 +61,7 @@
  *   ion_step_length()               — step-length limits (CSDA/theta/boundary)
  *   ion_step_hinge_and_scatter()    — hinge geometry + MCS direction
  *   ion_step_energy_and_straggling() — exit energy + straggling + boundary MCS
+ *   ion_step_nuclear()              — stochastic nuclear reaction kill
  *   ion_step_commit()               — scoring + pool update + nudge
  */
 struct ion_step_ctx {
@@ -105,6 +107,9 @@ struct ion_step_ctx {
     /* --- Set by ion_step_energy_and_straggling() ------------------------- */
     double exit_energy; /* exit total kinetic energy [MeV]       */
     double ds_gcm2;     /* areal density of actual step [g/cm²] */
+
+    /* --- Set by ion_step_nuclear() --------------------------------------- */
+    char nuclear_kill; /* 1 if primary killed by nuclear reaction */
 };
 
 /* ---- Forward declarations ------------------------------------------------ */
@@ -140,6 +145,9 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                                            size_t slot,
                                            struct osh_material_runtime const *material_rt,
                                            struct osh_rng *rng);
+
+static void
+ion_step_nuclear(struct ion_step_ctx *ctx, struct osh_transport_context const *transport_ctx, struct osh_rng *rng);
 
 static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
@@ -218,9 +226,12 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         ion_step_energy_and_straggling(&ctx, pool, slot, material_rt, rng);
         if (ctx.done)
             return ctx.done_rc;
+
+        /* Phase 5 — stochastic nuclear reaction kill (no-op when disabled) */
+        ion_step_nuclear(&ctx, transport_ctx, rng);
     }
 
-    /* Phase 5 — score step, update pool position/energy/direction, nudge */
+    /* Phase 6 — score step, update pool position/energy/direction, nudge */
     return ion_step_commit(&ctx, pool, slot, transport_ctx, score_rt);
 }
 
@@ -643,7 +654,46 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     }
 }
 
-/* ---- Phase 5: commit ----------------------------------------------------- */
+/* ---- Phase 5: nuclear reaction kill -------------------------------------- */
+
+/*
+ * Sample a nuclear reaction over the current step.  Sets ctx->nuclear_kill = 1
+ * if the primary is destroyed.  Does nothing when nuclear reactions are disabled,
+ * in vacuum, at a boundary, or when the step has zero areal density.
+ *
+ * Only physics-limited (non-boundary) steps are sampled: boundary steps are
+ * truncated at the geometry interface and the full material traversal is not yet
+ * known, so sampling here would bias the mean free path.
+ */
+static void
+ion_step_nuclear(struct ion_step_ctx *ctx, struct osh_transport_context const *transport_ctx, struct osh_rng *rng) {
+    double at;
+    double e_per_nucleon;
+    double sigma;
+    double lambda;
+    double p_survive;
+
+    if (!transport_ctx->params.nuclear)
+        return;
+    if (ctx->hit_boundary || ctx->ds_gcm2 <= 0.0 || ctx->mat_z_over_a <= 0.0)
+        return;
+
+    at = ctx->mat_z_mean / ctx->mat_z_over_a;
+    e_per_nucleon = ctx->e0 / ctx->a_proj; /* T/A [MeV/nucleon] */
+
+    sigma = osh_nuclear_tripathi_sigma(ctx->part->z, ctx->part->a, ctx->mat_z_mean, at, e_per_nucleon);
+
+    if (sigma <= 0.0)
+        return;
+
+    lambda = osh_nuclear_lambda_gcm2(at, sigma);
+    p_survive = osh_nuclear_survival_prob(ctx->ds_gcm2, lambda);
+
+    if (osh_rng_double(rng) > p_survive)
+        ctx->nuclear_kill = 1;
+}
+
+/* ---- Phase 6: commit ----------------------------------------------------- */
 
 /**
  * Finalise the step: compute the bent-path exit position, score the step,
@@ -698,6 +748,16 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.voxel_idx = ctx->voxel_idx;
     st.has_voxel = ctx->has_voxel;
 
+    if (ctx->nuclear_kill) {
+        /* Primary destroyed by nuclear reaction: deposit remaining kinetic
+         * energy at the interaction point for energy conservation.
+         * The pool slot is zeroed below so the particle is collected on the
+         * next compact().  Secondary fragments are deferred to a later SMM
+         * implementation; the seam for that change is here. */
+        st.de += ctx->exit_energy;
+        st.q[3] = 0.0;
+    }
+
     rc = osh_scoring_score_step(score_rt, ctx->part, &st);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(transport_ctx->diag,
@@ -718,7 +778,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     pool->x[slot] = qx;
     pool->y[slot] = qy;
     pool->z[slot] = qz;
-    pool->e[slot] = ctx->exit_energy;
+    pool->e[slot] = ctx->nuclear_kill ? 0.0 : ctx->exit_energy;
     pool->ux[slot] = ctx->w_scat[0];
     pool->uy[slot] = ctx->w_scat[1];
     pool->uz[slot] = ctx->w_scat[2];
