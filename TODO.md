@@ -39,7 +39,8 @@
 
 - [ ] Gaussian MCS mode
 - [ ] Vavilov energy straggling
-- [ ] Nuclear interactions and secondary particles
+- [x] Nuclear interactions — Tripathi total reaction cross section, primary attenuation (NUCRE flag)
+- [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
 - [ ] Batch ion-step phases around runtime lookup hot spots
 
 ## Scoring
