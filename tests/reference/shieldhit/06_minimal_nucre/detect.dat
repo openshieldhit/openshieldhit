@@ -1,0 +1,27 @@
+# Very simple test of new scoring system
+
+Geometry Mesh
+   Name MyMesh                    # geometry type
+    X -5.0    5.0    1
+    Y -5.0    5.0    1
+    Z  0.0   20.0  200   # 1 mm steps
+
+Filter
+    Name PrimProt
+    Z = 1
+    A = 1
+    Gen = 0
+
+Output
+         Filename NB_msh.dat
+         Fileformat TEXT
+         Geo MyMesh
+         Quantity Energy PrimProt
+         Quantity Fluence PrimProt
+
+# BDO format
+Output
+         Filename NB_msh.bdo
+         Geo MyMesh
+         Quantity Energy PrimProt
+         Quantity Fluence PrimProt
