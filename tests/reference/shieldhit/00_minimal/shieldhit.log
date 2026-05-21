@@ -7,7 +7,7 @@
   Version: v1.1.1-1-g5570161f
   Build date: Thu, 21 May 2026 17:17:55 +0200  
   
- Run started at : Thu, 21 May 2026 18:31:38 +0200 on host        : baslup by user        : bassler  See ./shieldhit --help for command line options.
+ Run started at : Thu, 21 May 2026 19:22:27 +0200 on host        : baslup by user        : bassler  See ./shieldhit --help for command line options.
   
   Working directory: ../openshieldhit/tests/reference/shieldhit/00_minimal/
 
@@ -109,7 +109,7 @@
     initialization has completed successfully.
   
 --- CG-GEOMETRY INPUT FILE ---
-    0    0           HI 200 MeV/A, H2O 20x30 cm, step 0.1, 300 zones
+    0    0  150 MeV protons in water, R=10 cm L=20 cm
   RCC    1       0.0       0.0       0.0       0.0       0.0      20.0
                 10.0
   RCC    2       0.0       0.0     -10.0       0.0       0.0      45.0
@@ -2541,8 +2541,8 @@ END OF SETUP
      Particle number overridden to     :       10000
      Primary particle no.           1
      Primary particle no.         100      ETR:   0 hours  1 minute  39 seconds     prim/sec:         100
-     Primary particle no.        1000      ETR:   0 hours  0 minutes 18 seconds     prim/sec:         900
-     Primary particle no.        2000      ETR:   0 hours  0 minutes 20 seconds     prim/sec:         333
+     Primary particle no.        1000      ETR:   0 hours  0 minutes 27 seconds     prim/sec:         450
+     Primary particle no.        2000      ETR:   0 hours  0 minutes 20 seconds     prim/sec:         500
      Primary particle no.        3000      ETR:   0 hours  0 minutes 16 seconds     prim/sec:         500
      Primary particle no.        4000      ETR:   0 hours  0 minutes 13 seconds     prim/sec:         500
      Primary particle no.        5000      ETR:   0 hours  0 minutes 11 seconds     prim/sec:         500
@@ -2550,10 +2550,10 @@ END OF SETUP
      Primary particle no.        7000      ETR:   0 hours  0 minutes  6 seconds     prim/sec:         500
      Primary particle no.        8000      ETR:   0 hours  0 minutes  4 seconds     prim/sec:         500
      Primary particle no.        9000      ETR:   0 hours  0 minutes  2 seconds     prim/sec:         500
-     Primary particle no.       10000      ETR:   0 hours  0 minutes  0 seconds     prim/sec:         500
+     Primary particle no.       10000      ETR:   0 hours  0 minutes  0 seconds     prim/sec:         333
      Saving estimator to '../openshieldhit/tests/reference/shieldhit/00_minimal/NB_msh.dat'
      Saving estimator to '../openshieldhit/tests/reference/shieldhit/00_minimal/NB_msh.bdo'
      Saved all 2 estimator(s)
   
   Transport completed.
-   Run time:   0 hours  0 minutes 21 seconds     prim/sec:         476
+   Run time:   0 hours  0 minutes 22 seconds     prim/sec:         454

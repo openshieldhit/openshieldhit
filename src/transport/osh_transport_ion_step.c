@@ -660,11 +660,12 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
 /*
  * Sample a nuclear reaction over the current step.  Sets ctx->nuclear_kill = 1
  * if the primary is destroyed.  Does nothing when nuclear reactions are disabled,
- * in vacuum, at a boundary, or when the step has zero areal density.
+ * in vacuum, or when the step has zero areal density.
  *
- * Only physics-limited (non-boundary) steps are sampled: boundary steps are
- * truncated at the geometry interface and the full material traversal is not yet
- * known, so sampling here would bias the mean free path.
+ * Applies the condensed survival probability exp(-ds/λ) to every material step,
+ * including boundary-limited steps.  ds_gcm2 = rho * step_len is well-defined
+ * regardless of why the step ended; skipping boundary steps would systematically
+ * under-sample reactions near geometry interfaces.
  */
 static void
 ion_step_nuclear(struct ion_step_ctx *ctx, struct osh_transport_context const *transport_ctx, struct osh_rng *rng) {
@@ -676,7 +677,7 @@ ion_step_nuclear(struct ion_step_ctx *ctx, struct osh_transport_context const *t
 
     if (!transport_ctx->params.nuclear)
         return;
-    if (ctx->hit_boundary || ctx->ds_gcm2 <= 0.0 || ctx->mat_z_over_a <= 0.0)
+    if (ctx->ds_gcm2 <= 0.0 || ctx->mat_z_over_a <= 0.0)
         return;
 
     at = ctx->mat_z_mean / ctx->mat_z_over_a;
@@ -750,10 +751,15 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.has_voxel = ctx->has_voxel;
 
     if (ctx->nuclear_kill) {
-        /* Primary destroyed by nuclear reaction: remaining kinetic energy
-         * escapes with the (untracked) nuclear fragments — do not deposit it
-         * locally.  When SMM secondary transport is added, this is where the
-         * fragment pool push goes. */
+        /* Primary destroyed by nuclear reaction.  st.de already holds the
+         * ionisation energy deposited along the step — that energy genuinely
+         * went into the material and must not be touched.  The remaining
+         * exit_energy escapes with the (untracked) nuclear fragments and is
+         * intentionally not added to st.de; this approximation is validated
+         * against SHIELD-HIT12A (see tests/reference/shieldhit/).
+         * st.q[3] = 0 signals that the primary exits this step dead.
+         * When SMM secondary transport is added, the fragment pool push goes
+         * here and the escaped energy is explicitly accounted for. */
         st.q[3] = 0.0;
     }
 

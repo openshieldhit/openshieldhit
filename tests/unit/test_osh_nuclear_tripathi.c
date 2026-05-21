@@ -8,7 +8,7 @@
 static void test_sigma_proton_oxygen(void);
 static void test_sigma_carbon_oxygen(void);
 static void test_sigma_below_coulomb(void);
-static void test_sigma_symmetry(void);
+static void test_sigma_c12_c12(void);
 static void test_survival_zero_step(void);
 static void test_survival_one_lambda(void);
 static void test_ecm_formula(void);
@@ -22,7 +22,7 @@ int main(void) {
     test_sigma_proton_oxygen();
     test_sigma_carbon_oxygen();
     test_sigma_below_coulomb();
-    test_sigma_symmetry();
+    test_sigma_c12_c12();
     test_survival_zero_step();
     test_survival_one_lambda();
     test_ecm_formula();
@@ -66,13 +66,15 @@ static void test_sigma_below_coulomb(void) {
 }
 
 /*
- * The formula is symmetric: swapping projectile and target (with equal Z/A ratios)
- * gives the same cross section.  Use identical nuclei: C-12 on C-12.
+ * Regression: C-12 on C-12 at 300 MeV/nucleon.  The Tripathi formula is a
+ * lab-frame expression (Ecm = E*At/(Ap+At)), so it is not symmetric under
+ * projectile/target swap for different species.  This pins the computed value
+ * at ~900 mb; accept 1 % tolerance.
  */
-static void test_sigma_symmetry(void) {
-    double s1 = osh_nuclear_tripathi_sigma(6u, 12u, 6.0, 12.0, 300.0);
-    double s2 = osh_nuclear_tripathi_sigma(6u, 12u, 6.0, 12.0, 300.0);
-    ASSERT_TRUE(nearly(s1, s2, 1e-12));
+static void test_sigma_c12_c12(void) {
+    double sigma = osh_nuclear_tripathi_sigma(6u, 12u, 6.0, 12.0, 300.0);
+    ASSERT_TRUE(sigma > 0.0);
+    ASSERT_TRUE(nearly(sigma, 9.027e-25, 0.01));
 }
 
 /* P_survive(ds=0) must equal 1.0 exactly. */
@@ -92,17 +94,16 @@ static void test_survival_one_lambda(void) {
 }
 
 /*
- * Spot-check the centre-of-mass energy calculation: for equal-mass
- * projectile and target the CM energy is half the lab energy per nucleon.
- * Verify by checking that sigma(E_lab) with equal Ap=At numerically matches
- * computing the same sigma manually with Ecm = E_lab/2.
+ * Verify the Ecm formula ecm = E_lab * At/(Ap+At) via the Coulomb threshold.
+ * For p on O-16: Bc = 1.44*1*8 / (1.29*(1+2.52)) ≈ 2.55 MeV.
+ * The threshold lab energy is E_thr = Bc * (Ap+At)/At = Bc * 17/16 ≈ 2.71 MeV/nucleon.
+ * Just below threshold sigma must be zero; just above it must be positive.
  */
 static void test_ecm_formula(void) {
-    /* C-12 on C-12: ecm = E_lab * 12 / (12+12) = E_lab/2 */
-    double sigma = osh_nuclear_tripathi_sigma(6u, 12u, 6.0, 12.0, 400.0);
-    /* Just verify it's positive and finite */
-    ASSERT_TRUE(sigma > 0.0);
-    ASSERT_TRUE(sigma < 1.0); /* sanity: < 1 cm^2 */
+    double s_below = osh_nuclear_tripathi_sigma(1u, 1u, 8.0, 16.0, 2.5);
+    double s_above = osh_nuclear_tripathi_sigma(1u, 1u, 8.0, 16.0, 3.5);
+    ASSERT_TRUE(s_below == 0.0);
+    ASSERT_TRUE(s_above > 0.0);
 }
 
 /* lambda must return a large value (no interaction) when sigma is zero. */

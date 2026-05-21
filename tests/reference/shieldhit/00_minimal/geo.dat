@@ -1,4 +1,4 @@
-    0    0           HI 200 MeV/A, H2O 20x30 cm, step 0.1, 300 zones
+    0    0  150 MeV protons in water, R=10 cm L=20 cm
   RCC    1       0.0       0.0       0.0       0.0       0.0      20.0
                 10.0
   RCC    2       0.0       0.0     -10.0       0.0       0.0      45.0
