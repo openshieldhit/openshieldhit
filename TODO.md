@@ -52,7 +52,7 @@
 
 ## CT / Voxel / RTDOSE Workflow
 
-Completed (branches 66-1 … 66-6):
+Completed (branches 66-1 … 66-6, 101):
 - [x] Schneider 2000 + Permatassari 2020 HU calibration tables
 - [x] `DCM` parser card: reads DICOM CT into a `VOX` body at parse time
 - [x] Morton-8 and row-major voxel array layouts; `tile_order` field on grid
@@ -60,26 +60,19 @@ Completed (branches 66-1 … 66-6):
 - [x] Jacobs voxel traversal in `dist_voxel_body_rt()`
 - [x] Current-medium transport: GEMCA returns zone/material/HU ref; transport
       queries material runtime for density and stopping power
-- [x] `DicomRTDOSE` scoring geometry: app converts it to a plain Mesh using
-      the RTDOSE grid dimensions and the patient→world coordinate offset
-      stored in the CT body; library is agnostic
+- [x] `DicomRTDOSE` scoring geometry: app converts it to a plain Mesh in
+      patient frame; co-rotates with the CT body; library is agnostic
 - [x] `DicomCT` scoring geometry: app converts the CT voxel body extent to a
-      plain axis-aligned Mesh for unrotated cases; library is agnostic
+      plain Mesh in patient frame; rotates with the CT body automatically
 - [x] RTDOSE write-back: `FileFormat RTDOSE` in detect.dat reads the DICOM
       template, overwrites pixel data, and saves a modified `.dcm`
+- [x] IEC 61217 gantry and couch rotation for transport: `DCM` card accepts
+      gantry/couch angles and isocenter in DICOM LPS (mm); patient body
+      correctly oriented for all eight IEC patient positions
 
 Open:
-- [ ] `DicomCT` scoring with gantry/couch rotation: the Mesh geometry needs an
-      optional rotation matrix; `run_setup_voxel_scoring()` must copy the CT
-      body's gantry/couch rotation (from `b->a[9..10]`) onto the scoring Mesh
-      so the runtime maps universe → patient frame before binning.
-      Plain `Geometry Mesh` cards are never rotated (universe frame only).
-- [ ] `DicomRTDOSE` scoring with gantry/couch rotation: same rotation mechanism
-      as DicomCT; RTDOSE grid lives in patient frame, so the CT body rotation
-      applies here too.  Library stays DICOM-agnostic (rotated Mesh is general).
 - [ ] DOSE scoring with density weighting (current RTDOSE output is ENERGY
       per primary; proper absorbed dose needs `rho × ds` weighting per voxel)
-- [ ] Finish legacy `VOX` card parser path (`.hed`/`.ctx` workflow)
 - [ ] Add axis-permuted row-major voxel layouts once index contract is settled
 - [ ] Prefer mass-normalised transport tables so local density scaling is cheap
 
