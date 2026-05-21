@@ -605,7 +605,7 @@ static enum osh_status _parse_dcm_body(char const *args,
     gantry_rad = gantry_deg * OSH_M_PI_180;
     couch_rad = couch_deg * OSH_M_PI_180;
     for (j = 0; j < 3; j++) {
-        osh_vect_rot_z(couch_rad, tb[j]);
+        osh_vect_rot_z(-couch_rad, tb[j]); /* IEC couch: CCW from above; rot_z is CW, so negate */
         osh_vect_rot_y(gantry_rad, tb[j]);
     }
 

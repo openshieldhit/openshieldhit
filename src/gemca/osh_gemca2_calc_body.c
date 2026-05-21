@@ -597,9 +597,8 @@ static enum osh_status _setup_vox(struct body *b) {
      *   patient orientation (e.g. HFS: DICOM X = universe X, DICOM Z = universe Y).
      *
      * Step 2: Couch rotation around universe Z (vertical axis).
-     *   In IEC 61217, the treatment couch rotates around the vertical room axis,
-     *   which is universe Z (+Z points away from floor, toward nozzle at gantry 0).
-     *   osh_vect_rot_z applies this rotation.
+     *   IEC 61217 positive couch angle = CCW from above (+Z). osh_vect_rot_z
+     *   is CW (Rz(-alpha)), so the couch angle is negated at the call site.
      *
      * Step 3: Gantry rotation around universe Y (cranial-caudal axis).
      *   The IEC gantry swings in the sagittal plane (anterior-posterior vs
@@ -613,7 +612,7 @@ static enum osh_status _setup_vox(struct body *b) {
     osh_patient_position_base_rotation(pp, tb);
 
     for (i = 0; i < 3; i++) {
-        osh_vect_rot_z(couch_angle, tb[i]);  /* IEC couch: rotates around vertical (universe Z) */
+        osh_vect_rot_z(-couch_angle, tb[i]); /* IEC couch: CCW from above; rot_z is CW, so negate */
         osh_vect_rot_y(gantry_angle, tb[i]); /* IEC gantry: swings in sagittal plane (universe Y) */
     }
 

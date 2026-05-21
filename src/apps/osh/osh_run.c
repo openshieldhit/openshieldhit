@@ -424,7 +424,7 @@ static void _vox_body_build_transform(struct osh_geometry_body const *b, double 
     /* Apply couch then gantry rotations (IEC 61217 axis convention).
      * Must match _setup_vox() exactly to keep this reconstruction correct. */
     for (i = 0; i < 3; i++) {
-        osh_vect_rot_z(couch_rad, tb[i]);  /* IEC couch: around universe Z (vertical) */
+        osh_vect_rot_z(-couch_rad, tb[i]); /* IEC couch: CCW from above; rot_z is CW, so negate */
         osh_vect_rot_y(gantry_rad, tb[i]); /* IEC gantry: around universe Y (cranial-caudal) */
     }
     for (j = 0; j < 3; j++) {
