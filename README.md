@@ -186,7 +186,7 @@ CT voxel transport is working end-to-end:
 
 Not yet implemented:
 
-- nuclear interactions and nuclear fragmentation
+- nuclear fragmentation — secondary particle transport (SMM)
 - neutron transport
 - phase-space (PHSP) source and output support
 - ridge filter / range modulator support
