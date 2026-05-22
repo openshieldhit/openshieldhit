@@ -1,0 +1,14 @@
+Geometry Mesh
+    Name G
+    X -0.5  0.5  1
+    Y -0.5  0.5  1
+    Z  0.0  3.0  3
+
+Output
+    Filename out.bdo
+    Geo G
+    Quantity Dose
+    Quantity DLET
+    Quantity TLET
+    Quantity DQEFF
+    Quantity TQEFF

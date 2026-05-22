@@ -80,7 +80,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].has_data2 == 0);
     ASSERT_TRUE(rt.pages[page_idx].divide == 0);
     ASSERT_TRUE(rt.pages[page_idx].data != NULL);
-    ASSERT_TRUE(rt.pages[page_idx].nfilters == 0u);
+    ASSERT_TRUE(rt.pages[page_idx].nflat_rules == 0u);
 
     ASSERT_TRUE(strcmp(rt.outputs[1].filename, "NB_msh_fluence.bdo") == 0);
     ASSERT_TRUE(strcmp(rt.outputs[1].fileformat, "BDO") == 0);
@@ -97,9 +97,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].output_idx == 1u);
     ASSERT_TRUE(rt.pages[page_idx].geometry_idx == 0u);
     ASSERT_TRUE(rt.pages[page_idx].len == 10u);
-    ASSERT_TRUE(rt.pages[page_idx].nfilters == 2u);
-    ASSERT_TRUE(rt.pages[page_idx].filters[0].filter_idx == 0u);
-    ASSERT_TRUE(rt.pages[page_idx].filters[1].filter_idx == 1u);
+    ASSERT_TRUE(rt.pages[page_idx].nflat_rules == 4u); /* MyFilter: 3 rules + Gen2: 1 rule */
     ASSERT_TRUE(rt.pages[page_idx].postproc == OSH_SCORING_POSTPROC_NORM);
     ASSERT_TRUE(rt.pages[page_idx].has_data2 == 0);
     ASSERT_TRUE(rt.pages[page_idx].divide == 0);
@@ -124,7 +122,7 @@ static void test_compile_fixture_test01_detect(void) {
     osh_scoring_workspace_free(ws);
 }
 
-static void test_prepare_rejects_dose_without_crashing(void) {
+static void test_prepare_compiles_dose_page(void) {
     char path[512];
     char const *text = "Geometry Mesh\n"
                        "    Name MyMesh\n"
@@ -148,7 +146,6 @@ static void test_prepare_rejects_dose_without_crashing(void) {
 
     memset(&rt, 0, sizeof(rt));
     rc = osh_scoring_compile(ws, NULL, &rt);
-    /* DOSE is now a supported scorer kind. */
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(rt.npages == 1u);
 
@@ -159,6 +156,6 @@ static void test_prepare_rejects_dose_without_crashing(void) {
 
 int main(void) {
     test_compile_fixture_test01_detect();
-    test_prepare_rejects_dose_without_crashing();
+    test_prepare_compiles_dose_page();
     return 0;
 }

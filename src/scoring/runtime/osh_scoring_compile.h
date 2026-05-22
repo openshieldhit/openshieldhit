@@ -25,6 +25,16 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                                     struct osh_scoring_runtime *rt);
 
 /**
+ * @brief Merge rt->settings[] into each page's embedded sset.
+ *
+ * @details
+ * Must be called after any post-compile mutation of rt->settings (e.g. after
+ * material-name resolution in the simulation layer sets has_medium).  Safe to
+ * call multiple times; each call rebuilds sset from scratch.
+ */
+void osh_scoring_runtime_finalize_ssets(struct osh_scoring_runtime *rt);
+
+/**
  * @brief Release a compiled scorer runtime and all owned memory.
  */
 void osh_scoring_runtime_free(struct osh_scoring_runtime *rt);
