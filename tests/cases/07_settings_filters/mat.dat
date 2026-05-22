@@ -3,3 +3,6 @@ Material Water
 
 Material PMMA
     ICRU 223
+
+Material Si
+    ICRU 16

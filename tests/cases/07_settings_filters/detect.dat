@@ -1,0 +1,51 @@
+# Very simple test of new scoring system
+
+Geometry Mesh
+   Name MyMesh                    # geometry type
+    X -10.5  10.5    1
+    Y -10.5  10.5    1
+    Z  0.0  40.0   800
+
+
+
+# ------- Define a few useful filters ----------
+Filter
+        Name Primary    # Only primary protons
+        GEN = 0
+        Z = 1
+        A = 1
+
+Filter
+        Name Protons    # Primary and secondary protons
+        Z = 1
+        A = 1
+
+# ------- Select for scoring using water stopping power ----------
+Settings
+        Name in_Water
+        Material Water
+
+Settings
+        Name in_Si
+        Material Si
+
+Output
+    Filename NB_msh.dat
+    Fileformat TEXT
+    Geo MyMesh
+    Quantity Dose
+    Quantity Dose inWater
+    Quantity Dose inSi
+    Quantity Fluence
+    Quantity Fluence Primary
+
+
+# BDO format
+Output
+    Filename NB_msh.bdo
+    Geo MyMesh
+    Quantity Dose
+    Quantity Dose inWater
+    Quantity Dose inSi
+    Quantity Fluence
+    Quantity Fluence Primary

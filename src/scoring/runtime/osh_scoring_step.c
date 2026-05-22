@@ -4,12 +4,14 @@
 #include <string.h>
 
 #include "common/raytrace/osh_raytrace.h"
+#include "material/runtime/osh_material_runtime.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
 static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out);
+static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out);
 static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                              struct osh_raytrace_grid *grid,
-                                             double *voxel_volume_out);
+                                             double *voxel_volume_inv_out);
 static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
                                           struct osh_scoring_geometry_score_group const *group,
                                           struct osh_voxel_crossing const *crossings,
@@ -23,14 +25,36 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            size_t ncross,
                                            struct particle const *part,
                                            struct step const *st,
-                                           double voxel_volume);
+                                           double voxel_volume_inv);
+static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
+                                        struct osh_scoring_geometry_score_group const *group,
+                                        struct osh_voxel_crossing const *crossings,
+                                        size_t ncross,
+                                        struct particle const *part,
+                                        struct step const *st,
+                                        double score_len,
+                                        double voxel_volume_inv);
+static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
+                                        struct osh_scoring_geometry_score_group const *group,
+                                        struct osh_voxel_crossing const *crossings,
+                                        size_t ncross,
+                                        struct particle const *part,
+                                        struct step const *st,
+                                        double score_len);
+static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
+                                        struct osh_scoring_geometry_score_group const *group,
+                                        struct osh_voxel_crossing const *crossings,
+                                        size_t ncross,
+                                        struct particle const *part,
+                                        struct step const *st,
+                                        double score_len);
 
 enum osh_status
 osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *part, struct step const *st) {
     size_t i;
     size_t cap;
     size_t ncross;
-    double voxel_volume;
+    double voxel_volume_inv;
     double score_dir[3];
     double score_len;
     struct osh_raytrace_grid grid = {0};
@@ -63,7 +87,7 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
             continue;
         }
 
-        rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume);
+        rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
         if (rc != OSH_OK) {
             return rc;
         }
@@ -107,7 +131,16 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
                 rc = score_group_energy(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_FLUENCE:
-                rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st, voxel_volume);
+                rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st, voxel_volume_inv);
+                break;
+            case OSH_SCORING_SCORE_DOSE:
+                rc = score_group_dose(rt, &geo->groups[g], crossings, ncross, part, st, score_len, voxel_volume_inv);
+                break;
+            case OSH_SCORING_SCORE_DLET:
+                rc = score_group_dlet(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                break;
+            case OSH_SCORING_SCORE_TLET:
+                rc = score_group_tlet(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             default:
                 rc = OSH_ENOTSUP;
@@ -161,6 +194,17 @@ static void step_scoring_segment(struct step const *st, double dir_out[3], doubl
     *len_out = st->ds;
 }
 
+static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out) {
+    size_t i;
+    for (i = 0; i < tables->nprojectiles; ++i) {
+        if (tables->projectile_z[i] == z) {
+            *proj_idx_out = i;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label) {
     size_t i;
 
@@ -174,7 +218,7 @@ static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const
 
 static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                              struct osh_raytrace_grid *grid,
-                                             double *voxel_volume_out) {
+                                             double *voxel_volume_inv_out) {
     int ix;
     int iy;
     int iz;
@@ -182,7 +226,7 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
     double dy;
     double dz;
 
-    if (!geo || !grid || !voxel_volume_out) {
+    if (!geo || !grid || !voxel_volume_inv_out) {
         return OSH_EINVAL;
     }
     if (geo->geo_kind != OSH_SCORING_GEO_MESH) {
@@ -219,7 +263,7 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
     grid->n[1] = (size_t) geo->axes[iy].nbins;
     grid->n[2] = (size_t) geo->axes[iz].nbins;
     grid->tile_order = OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT;
-    *voxel_volume_out = dx * dy * dz;
+    *voxel_volume_inv_out = 1.0 / (dx * dy * dz);
     return OSH_OK;
 }
 
@@ -244,6 +288,8 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
             if (crossings[j].idx >= page->len) {
                 return OSH_ESTATE;
             }
+            /* Distribute energy deposit proportionally to path length in voxel.
+             * Accumulates in [MeV]; save layer divides by nstat. */
             frac = crossings[j].path_len / score_len;
             page->data[crossings[j].idx] += st->de * frac;
         }
@@ -257,7 +303,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            size_t ncross,
                                            struct particle const *part,
                                            struct step const *st,
-                                           double voxel_volume) {
+                                           double voxel_volume_inv) {
     size_t i;
     size_t j;
     struct osh_scoring_page_runtime *page;
@@ -271,7 +317,216 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
             if (crossings[j].idx >= page->len) {
                 return OSH_ESTATE;
             }
-            page->data[crossings[j].idx] += crossings[j].path_len / voxel_volume;
+            /* Fluence = track length / voxel volume  [1/cm²].
+             * voxel_volume_inv is precomputed once per geometry. */
+            page->data[crossings[j].idx] += crossings[j].path_len * voxel_volume_inv;
+        }
+    }
+    return OSH_OK;
+}
+
+static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
+                                        struct osh_scoring_geometry_score_group const *group,
+                                        struct osh_voxel_crossing const *crossings,
+                                        size_t ncross,
+                                        struct particle const *part,
+                                        struct step const *st,
+                                        double score_len,
+                                        double voxel_volume_inv) {
+    size_t i;
+    size_t j;
+    double base_scale;
+    double dose_scale;
+    double mean_energy;
+    double e_per_nuc;
+    double sp_tr;
+    double sp_ovr;
+    size_t proj_idx;
+    int have_proj;
+    struct osh_scoring_page_runtime *page;
+    struct osh_material_runtime const *mat_tables = rt->mat_tables;
+
+    if (!(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+    /* base_scale = de / (voxel_volume * rho * score_len)
+     * Accumulates in [MeV/g]; postprocess converts to [Gy] (× OSH_MEVG2GY). */
+    base_scale = st->de * voxel_volume_inv / (score_len * st->rho);
+
+    /* Precompute projectile index once per step for SPR overrides. */
+    have_proj = 0;
+    proj_idx = 0;
+    if (mat_tables && part->z > 0 && part->a > 0 && st->medium >= 0) {
+        mean_energy = 0.5 * (st->p[3] + st->q[3]);
+        e_per_nuc = mean_energy / (double) part->a;
+        have_proj = find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx);
+    }
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+            continue;
+        }
+        dose_scale = base_scale;
+        if (have_proj && page->nsettings > 0) {
+            struct osh_scoring_settings_runtime const *sset = &rt->settings[page->settings[0].settings_idx];
+            if (sset->has_medium) {
+                /* Dose-to-medium: multiply by stopping-power ratio S(ovr)/S(tr). */
+                sp_tr = osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc);
+                sp_ovr = osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc);
+                dose_scale *= (sp_tr > 0.0) ? sp_ovr / sp_tr : 0.0;
+            }
+            /* Density-only override: Fano theorem — dose is density-independent,
+             * so no correction is needed for pure density overrides. */
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->len) {
+                return OSH_ESTATE;
+            }
+            page->data[crossings[j].idx] += crossings[j].path_len * dose_scale;
+        }
+    }
+    return OSH_OK;
+}
+
+static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
+                                        struct osh_scoring_geometry_score_group const *group,
+                                        struct osh_voxel_crossing const *crossings,
+                                        size_t ncross,
+                                        struct particle const *part,
+                                        struct step const *st,
+                                        double score_len) {
+    size_t i;
+    size_t j;
+    double let_default;
+    double let_step;
+    double mean_energy;
+    double e_per_nuc;
+    double w;
+    size_t proj_idx;
+    int have_proj;
+    struct osh_scoring_page_runtime *page;
+    struct osh_material_runtime const *mat_tables = rt->mat_tables;
+
+    /* LET is only defined for charged particles in a material (not vacuum). */
+    if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+
+    /* Compute table-based LET in the transport medium: S(medium,E)·ρ [MeV/cm].
+     * Fall back to geometric de/score_len when tables are unavailable. */
+    have_proj = 0;
+    proj_idx = 0;
+    let_default = st->de / score_len; /* geometric fallback */
+    if (mat_tables && st->medium >= 0) {
+        mean_energy = 0.5 * (st->p[3] + st->q[3]);
+        e_per_nuc = mean_energy / (double) part->a;
+        if (find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx)) {
+            have_proj = 1;
+            let_default =
+                osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc) * st->rho;
+        }
+    }
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+            continue;
+        }
+        let_step = let_default;
+        if (have_proj && page->nsettings > 0) {
+            struct osh_scoring_settings_runtime const *sset = &rt->settings[page->settings[0].settings_idx];
+            if (sset->has_medium) {
+                double rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
+                let_step =
+                    osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
+            } else if (sset->has_density_g_cm3) {
+                let_step = osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc)
+                           * sset->density_g_cm3;
+            }
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->len) {
+                return OSH_ESTATE;
+            }
+            /* Two-pass dose-averaged LET:
+             *   data  = sum(LET · dose_weight)   [MeV/cm · MeV]
+             *   data2 = sum(dose_weight)          [MeV]
+             * osh_scoring_postprocess() divides data by data2 to yield LETd. */
+            w = st->de * crossings[j].path_len / score_len;
+            page->data[crossings[j].idx] += let_step * w;
+            page->data2[crossings[j].idx] += w;
+        }
+    }
+    return OSH_OK;
+}
+
+static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
+                                        struct osh_scoring_geometry_score_group const *group,
+                                        struct osh_voxel_crossing const *crossings,
+                                        size_t ncross,
+                                        struct particle const *part,
+                                        struct step const *st,
+                                        double score_len) {
+    size_t i;
+    size_t j;
+    double let_default;
+    double let_step;
+    double mean_energy;
+    double e_per_nuc;
+    double ds_vox;
+    size_t proj_idx;
+    int have_proj;
+    struct osh_scoring_page_runtime *page;
+    struct osh_material_runtime const *mat_tables = rt->mat_tables;
+
+    /* LET is only defined for charged particles in a material (not vacuum). */
+    if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+
+    /* Table-based LET in transport medium; geometric fallback when unavailable. */
+    have_proj = 0;
+    proj_idx = 0;
+    let_default = st->de / score_len;
+    if (mat_tables && st->medium >= 0) {
+        mean_energy = 0.5 * (st->p[3] + st->q[3]);
+        e_per_nuc = mean_energy / (double) part->a;
+        if (find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx)) {
+            have_proj = 1;
+            let_default =
+                osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc) * st->rho;
+        }
+    }
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+            continue;
+        }
+        let_step = let_default;
+        if (have_proj && page->nsettings > 0) {
+            struct osh_scoring_settings_runtime const *sset = &rt->settings[page->settings[0].settings_idx];
+            if (sset->has_medium) {
+                double rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
+                let_step =
+                    osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
+            } else if (sset->has_density_g_cm3) {
+                let_step = osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc)
+                           * sset->density_g_cm3;
+            }
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->len) {
+                return OSH_ESTATE;
+            }
+            /* Two-pass track-averaged LET:
+             *   data  = sum(LET · ds_vox)   [MeV/cm · cm = MeV]
+             *   data2 = sum(ds_vox)         [cm]
+             * osh_scoring_postprocess() divides data by data2 to yield LETt. */
+            ds_vox = st->ds * crossings[j].path_len / score_len;
+            page->data[crossings[j].idx] += let_step * ds_vox;
+            page->data2[crossings[j].idx] += ds_vox;
         }
     }
     return OSH_OK;

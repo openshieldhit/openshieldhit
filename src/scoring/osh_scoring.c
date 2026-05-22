@@ -35,6 +35,7 @@ enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
 
     for (i = 0; i < ws->nsettings; ++i) {
         free(ws->settings[i].name);
+        free(ws->settings[i].material_name);
     }
     free(ws->settings);
 

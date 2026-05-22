@@ -7,6 +7,7 @@
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
+#include "material/osh_material.h"
 #include "material/runtime/osh_material_compile.h"
 #include "openshieldhit/beam_defs.h"
 #include "openshieldhit/simulation.h"
@@ -163,6 +164,27 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile scoring runtime");
         goto fail;
     }
+
+    /* ---- 4b. Resolve scoring settings material names and wire tables ------ */
+
+    for (iz = 0u; iz < sim->scoring_runtime.nsettings; ++iz) {
+        struct osh_scoring_settings_runtime *sset = &sim->scoring_runtime.settings[iz];
+        char const *mat_name = scoring->settings[iz].material_name;
+        if (mat_name) {
+            struct osh_material const *m = osh_material_by_name(mat, mat_name);
+            if (!m) {
+                OSH_DIAG_ERRORF(diag,
+                                "scoring settings '%s': unknown material '%s'",
+                                sset->name ? sset->name : "(unnamed)",
+                                mat_name);
+                rc = OSH_EPARSE;
+                goto fail;
+            }
+            sset->medium = (int) m->index;
+            sset->has_medium = 1;
+        }
+    }
+    sim->scoring_runtime.mat_tables = &sim->transport_tables;
 
     /* ---- 5. Transport parameters from beam ------------------------------- */
 

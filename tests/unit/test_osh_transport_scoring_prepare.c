@@ -148,10 +148,10 @@ static void test_prepare_rejects_dose_without_crashing(void) {
 
     memset(&rt, 0, sizeof(rt));
     rc = osh_scoring_compile(ws, NULL, &rt);
-    ASSERT_TRUE(rc == OSH_ENOTSUP);
+    /* DOSE is now a supported scorer kind. */
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 1u);
 
-    /* Prepare() already frees partial state on failure; this double-free check
-     * guards against future regressions in failure cleanup. */
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
     ASSERT_TRUE(remove(path) == 0);
