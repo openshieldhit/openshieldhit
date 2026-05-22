@@ -1,3 +1,27 @@
+/*
+ * Plain-text (ASCII) scorer output writer.
+ *
+ * Normalisation contract
+ * ----------------------
+ * Values are normalised per primary particle at write time, making the output
+ * immediately human-readable without post-processing:
+ *
+ *   NORM quantities (DOSE, FLUENCE, ENERGY, …):
+ *       value_per_primary = data / nstat
+ *
+ *   AVER quantities (DLET, TLET, …):
+ *       averaged_value = data     (already a physical mean after
+ *                                  osh_scoring_postprocess(); nstat division
+ *                                  would be incorrect here)
+ *
+ *   SUM quantities (COUNT, …):
+ *       total = data / nstat      (normalised count)
+ *
+ * ASCII output is intended for quick single-run inspection.  It is NOT suited
+ * for multi-run merging: once divided by nstat the absolute weight of each
+ * run is lost.  Use BDO format for production work and multi-run accumulation.
+ */
+
 #include "scoring/save/osh_scoring_save_ascii.h"
 
 #include <stdio.h>
@@ -106,7 +130,10 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                         z0 + dz * ((double) iz + 0.5));
                 for (ip = 0; ip < out->npages; ++ip) {
                     size_t page_idx = out->page_indices[ip];
-                    fprintf(fp, " %.12e", rt->pages[page_idx].data[idx] * inv_nstat);
+                    /* AVER pages (e.g. DLET/TLET) hold a physical mean after
+                     * postprocessing — do not normalise per primary. */
+                    double scale = (rt->pages[page_idx].postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
+                    fprintf(fp, " %.12e", rt->pages[page_idx].data[idx] * scale);
                 }
                 fprintf(fp, "\n");
             }

@@ -1,3 +1,33 @@
+/*
+ * BDO 2019 binary scorer output writer.
+ *
+ * Normalisation contract
+ * ----------------------
+ * Page data are written EXACTLY as accumulated in the runtime buffers (raw
+ * un-normalised sums over all transport steps and all primary histories).
+ * The total primary count is embedded as the OSHBDO_RT_NSTAT tag so that
+ * readers and merge tools can apply the correct post-hoc normalisation:
+ *
+ *   NORM quantities (DOSE, FLUENCE, ENERGY, …):
+ *       value_per_primary = data / nstat
+ *
+ *   AVER quantities (DLET, TLET, …):
+ *       averaged_value = data / nstat     (data already holds nstat-weighted sum
+ *                                          after osh_scoring_postprocess())
+ *
+ *   SUM quantities (COUNT, …):
+ *       total = data          (no normalisation)
+ *
+ * Multi-run merging: when combining several BDO files from independent runs
+ * (embarrassingly-parallel or multi-node setups) each file contributes its
+ * own nstat, so the merge tool must weight accordingly.  The OSHBDO_PAG_NORMALIZE
+ * tag records the postproc mode per page so a merge tool does not need to
+ * re-derive it from the scorer kind.
+ *
+ * DOSE is stored in Gy (osh_scoring_postprocess() has already applied the
+ * MeV/g → Gy conversion); DLET and TLET are stored in MeV/cm.
+ */
+
 #include "scoring/save/osh_scoring_save_bdo2019.h"
 
 #include <limits.h>
@@ -173,7 +203,10 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
     case OSH_SCORING_SCORE_FLUENCE:
         return "1/cm^2";
     case OSH_SCORING_SCORE_DOSE:
-        return "MeV/g";
+        return "Gy";
+    case OSH_SCORING_SCORE_DLET:
+    case OSH_SCORING_SCORE_TLET:
+        return "MeV/cm";
     default:
         return "arb";
     }

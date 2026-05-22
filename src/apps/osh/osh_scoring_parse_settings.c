@@ -43,6 +43,12 @@ static enum osh_status settings_offset(struct osh_scoring_settings_def *set,
                                        int nwords,
                                        char const *path,
                                        unsigned int lineno);
+static enum osh_status settings_material(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno);
 static enum osh_status settings_medium(struct osh_scoring_settings_def *set,
                                        struct osh_diag_sink const *diag,
                                        char **words,
@@ -77,6 +83,7 @@ static enum osh_status settings_maxcount(struct osh_scoring_settings_def *set,
 static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings_name},
                                                  {OSH_SCORING_KEY_RESCALE, settings_rescale},
                                                  {OSH_SCORING_KEY_OFFSET, settings_offset},
+                                                 {"material", settings_material},
                                                  {OSH_SCORING_KEY_MEDIUM, settings_medium},
                                                  {OSH_SCORING_KEY_NKMEDIUM, settings_nkmedium},
                                                  {OSH_SCORING_KEY_SITEDIAM, settings_sitediam},
@@ -166,7 +173,25 @@ static enum osh_status settings_offset(struct osh_scoring_settings_def *set,
 }
 
 /**
- * @brief Parse `Medium <id>`.
+ * @brief Parse `Material <name>` — store string name for later resolution against mat.dat.
+ */
+static enum osh_status settings_material(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno) {
+    if (nwords < 2) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Material requires a name", path, lineno);
+        return OSH_EPARSE;
+    }
+    free(set->material_name);
+    set->material_name = strdup(words[1]);
+    return set->material_name ? OSH_OK : OSH_ENOMEM;
+}
+
+/**
+ * @brief Parse `Medium <id>` — numeric material index alias (undocumented).
  */
 static enum osh_status settings_medium(struct osh_scoring_settings_def *set,
                                        struct osh_diag_sink const *diag,

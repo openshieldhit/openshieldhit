@@ -1,0 +1,24 @@
+07_settings_filters
+===================
+
+150 MeV proton pencil beam in a PMMA cylinder (R=10 cm, L=20 cm).
+100 primaries, Moliere scattering, Vavilov straggling, nuclear reactions off.
+
+Scoring: single mesh geometry (21x21x40 cm, 800 z-bins).
+
+Filters:
+  Primary  — generation 0 protons only
+  Protons  — all protons
+
+Settings (material overrides for dose-to-medium conversion):
+  in_Water — Water stopping power
+  in_Si    — Silicon stopping power
+
+Scored quantities per output:
+  Dose               — dose in transport medium (PMMA)
+  Dose inWater       — dose-to-water (SPR correction applied)
+  Dose inSi          — dose-to-silicon (SPR correction applied)
+  Fluence            — all particles
+  Fluence Primary    — primary protons only (filter applied)
+
+Output in both TEXT and BDO formats.

@@ -1,47 +1,17 @@
-- TEST 01_DETECT_SIMPLE -
-03.11.2010 / Niels Bassler <bassler@phys.au.dk> 
-05.01.2012 / Armin Luehr <luehr@phys.au.dk>, updating input files and results
+01_simple_detect
+================
 
-- DESCRIPTION:
-This example is a test of SHIELD-HIT's new detector capabilities. The setup is a 400 MeV/nucleon carbon ion beam hitting a 40 cm long water cylinder, radius 10 cm. The beam starts 2 cm before the cylinder. The scoring is realized in a cylinder of the same length but with a radius of 0.5 cm. The following hand calculated results refer to the entry position of the phantom, where the beam is still monoenergetic. LET is here both mass stopping power ( 1/rho * dE/dx ) and stopping power (dE/dx) since the density of water is set to 1 g/cm3.
+400 MeV/nucleon carbon-12 pencil beam in a water cylinder (R=10 cm, L=40 cm).
+10000 primaries, Moliere scattering, Vavilov straggling, nuclear reactions on.
 
-The postprocessing script shield_detect2ascii will convert all results to ASCII files, which can be read by e.g. xmgrace.
+Scoring covers mesh (MSH, 1x1x40 cm, 800 z-bins) and cylinder (CYL, R=11.85 cm,
+800 z-bins) geometries.  Scored quantities: Energy, Fluence.
 
-Statistics: 10000.
-Postprocessing results are in per primary particle.
+Filters defined (not active in current outputs):
+  Primary  — generation 0, Z=1 A=1 protons only
+  Protons  — all protons regardless of generation
 
-CYL: radius = 0.5 cm, all phi, z = 40 cm, in 400 bins = 1 bin per mm.
-MSH: 1 cm x 1 cm x 40 cm in 400 bins = 1 bin per mm.
+Settings defined (not active in current outputs):
+  in_Water — material override: Water
 
-- RESULTS:
-*** DOSE AVERAGE LET ***
-400 MeV/nucleon carbon : 108.86 MeV cm2/g  = 10.886 keV/µm  (ICRU73: 108.9 keV/µm)
-400 MeV   protons: 3.032  MeV cm2/g  = 0.3032 keV/µm  (pstar: 0.3031 keV/µm)
-
-*** TRACK AVERAGE LET ***
-Same as above since the beam is monoenergetic.
-
-
-*** FLUENCE PER PARTICLE ***
-  1 / (r*r*PI) = 1.2732 cm-2
-
-*** LET WEIGHTED FLUENCE ***
- same as fluence.
-
-*** CROSSING NUMBER OF PARTICLES PER PRIMARY ***
- One (one particle crossing the surface).
-
-*** ENERGY PER PARTICLE ***
- bin width * LET * rho = 0.1 cm * 108.86 MeV cm2 /g * 1 g/cm3 = 10.886 MeV
-
-*** DOSE ***
- LET * fluence = 108.86 MeV cm2 /g * 1.2732 cm-2 = 138.6 MeV/g
- 138.6 MeV/g * 1.60217646e-10 (g/MeV)(J/kg) = 2.220625e-8 Gy
-
-*** AVERAGE ENERGY ***
- 400 MeV/nucleon
-
-*** LETFLU ***
-Equals dose since medium is set to target.
-
-- REMARKS:
+Output in both TEXT and BDO formats.

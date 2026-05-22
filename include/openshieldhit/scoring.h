@@ -173,12 +173,13 @@ struct osh_scoring_axis_def {
  */
 struct osh_scoring_settings_def {
     char *name;              /* User-visible settings name. */
+    char *material_name;     /* Material name from "Material <name>"; NULL if not set. */
     double rescale;          /* Optional multiplicative output rescale. */
     double offset;           /* Optional additive output offset. */
     double site_diameter_um; /* Optional site diameter [um]. */
     double density_g_cm3;    /* Optional density override [g/cm^3]. */
     size_t npart;            /* Optional particle-count cap. */
-    int medium;              /* Optional medium override. */
+    int medium;              /* Optional medium override (dense material index). */
     int nkmedium;            /* Optional neutron-kerma medium override. */
     char has_rescale;
     char has_offset;

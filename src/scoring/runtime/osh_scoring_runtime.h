@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "common/raytrace/osh_raytrace.h"
+#include "material/runtime/osh_material_runtime.h"
 #include "scoring/runtime/osh_scoring_filter_runtime.h"
 #include "scoring/runtime/osh_scoring_geometry_runtime.h"
 #include "scoring/runtime/osh_scoring_output_runtime.h"
@@ -38,8 +39,9 @@ struct osh_scoring_runtime {
     size_t ngeometries;
     size_t npages;
     size_t noutputs;
-    struct osh_voxel_crossing *crossing_buf; /* reusable per-step scratch buffer */
-    size_t crossing_cap;                     /* allocated length of crossing_buf  */
+    struct osh_voxel_crossing *crossing_buf;       /* reusable per-step scratch buffer */
+    size_t crossing_cap;                           /* allocated length of crossing_buf */
+    struct osh_material_runtime const *mat_tables; /* SP tables; NULL until wired by simulation */
 };
 
 #ifdef __cplusplus

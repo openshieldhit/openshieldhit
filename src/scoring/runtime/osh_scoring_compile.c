@@ -6,6 +6,8 @@
 #include "common/osh_diag.h"
 #include "common/raytrace/osh_raytrace.h"
 
+/* Scratch record built during the first compile pass; sorted by geometry+kind
+ * so pages that share a geometry and scorer type end up in the same hot group. */
 struct prepared_page_ref {
     size_t output_idx;
     size_t src_page_idx;
@@ -67,6 +69,12 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     }
     if (strcmp(quantity, "dose") == 0) {
         return OSH_SCORING_SCORE_DOSE;
+    }
+    if (strcmp(quantity, "dlet") == 0) {
+        return OSH_SCORING_SCORE_DLET;
+    }
+    if (strcmp(quantity, "tlet") == 0) {
+        return OSH_SCORING_SCORE_TLET;
     }
     return OSH_SCORING_SCORE_UNKNOWN;
 }
@@ -150,6 +158,8 @@ static enum osh_scoring_filter_op filter_op_to_enum(char const *op) {
     return OSH_SCORING_FILTER_OP_INVALID;
 }
 
+/* LET scorers use a two-pass accumulator: data = weighted sum, data2 = weight sum.
+ * osh_scoring_postprocess() finalises the ratio data/data2 in-place. */
 static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
     switch (score_kind) {
     case OSH_SCORING_SCORE_DLET:
@@ -160,6 +170,8 @@ static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
     }
 }
 
+/* divide=1 means postproc divides data by data2 (LET average) → AVER mode.
+ * All other scorers default to NORM (÷nstat) except raw-count kinds. */
 static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind score_kind, char divide) {
     if (divide) {
         return OSH_SCORING_POSTPROC_AVER;
@@ -175,6 +187,7 @@ static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind
     }
 }
 
+/* Only Cartesian mesh geometry is wired to the hot-path scorer for now. */
 static int runtime_supports_geometry(struct osh_scoring_geometry_runtime const *geo) {
     if (!geo) {
         return 0;
@@ -186,12 +199,18 @@ static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
     switch (score_kind) {
     case OSH_SCORING_SCORE_ENERGY:
     case OSH_SCORING_SCORE_FLUENCE:
+    case OSH_SCORING_SCORE_DOSE:
+    case OSH_SCORING_SCORE_DLET:
+    case OSH_SCORING_SCORE_TLET:
         return 1;
     default:
         return 0;
     }
 }
 
+/* Sort key: geometry first (locality), then score_kind (groups same-kind pages
+ * together so the hot path can iterate a contiguous run), then original ordinal
+ * to preserve user-specified page order within a group. */
 static int compare_prepared_pages(void const *a, void const *b) {
     struct prepared_page_ref const *pa;
     struct prepared_page_ref const *pb;
@@ -355,6 +374,17 @@ static long find_filter_index(struct osh_scoring_runtime const *rt, char const *
     return -1;
 }
 
+static long find_settings_index(struct osh_scoring_runtime const *rt, char const *name) {
+    size_t i;
+
+    for (i = 0; i < rt->nsettings; ++i) {
+        if (rt->settings[i].name && strcmp(rt->settings[i].name, name) == 0) {
+            return (long) i;
+        }
+    }
+    return -1;
+}
+
 void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     size_t i;
 
@@ -422,15 +452,18 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
     size_t j;
     size_t k;
     size_t total_pages;
-    size_t ordinal;
+    size_t ordinal; /* insertion-order counter; preserved inside each sort group */
     size_t page_idx;
     size_t current_group;
-    long gidx;
-    long fidx;
+    long gidx; /* geometry index; -1 = not found */
+    long fidx; /* filter index;   -1 = not found */
+    long sidx; /* settings index; -1 = not found */
+    size_t nf; /* number of filter references on current page */
+    size_t ns; /* number of settings references on current page */
     enum osh_scoring_score_kind score_kind;
-    long *output_geom_idx = NULL;
-    size_t *geom_page_counts = NULL;
-    struct prepared_page_ref *prepared_pages = NULL;
+    long *output_geom_idx = NULL;                    /* per-output resolved geometry index */
+    size_t *geom_page_counts = NULL;                 /* how many pages each geometry owns */
+    struct prepared_page_ref *prepared_pages = NULL; /* scratch sort buffer */
     struct osh_scoring_output_runtime *out;
     struct osh_scoring_page_def const *src_page;
     struct osh_scoring_page_runtime *dst_page;
@@ -444,6 +477,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
     rt->nsettings = ws->nsettings;
     rt->ngeometries = ws->ngeometries;
     rt->noutputs = ws->noutputs;
+
+    /* --- Phase 1: copy filters, settings, and geometries into runtime arrays. --- */
 
     if (rt->nfilters > 0u) {
         rt->filters = (struct osh_scoring_filter_runtime *) calloc(rt->nfilters, sizeof(*rt->filters));
@@ -490,6 +525,9 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
     }
 
+    /* --- Phase 2: validate outputs — resolve geometry names, reject unsupported
+     *              score kinds, and count how many pages each geometry owns. --- */
+
     output_geom_idx = (long *) calloc(ws->noutputs ? ws->noutputs : 1u, sizeof(*output_geom_idx));
     geom_page_counts = (size_t *) calloc(rt->ngeometries ? rt->ngeometries : 1u, sizeof(*geom_page_counts));
     if (!output_geom_idx || !geom_page_counts) {
@@ -533,6 +571,9 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         total_pages += ws->outputs[i].npages;
     }
 
+    /* --- Phase 3: allocate flat page and output arrays; assign each geometry a
+     *              contiguous slice of the page array (first_page + npages). --- */
+
     rt->npages = total_pages;
     if (rt->npages > 0u) {
         rt->pages = (struct osh_scoring_page_runtime *) calloc(rt->npages, sizeof(*rt->pages));
@@ -556,6 +597,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         rt->geometries[i].npages = geom_page_counts[i];
         total_pages += geom_page_counts[i];
     }
+
+    /* --- Phase 4: build prepared_pages scratch array used for sorting. --- */
 
     ordinal = 0u;
     for (i = 0; i < ws->noutputs; ++i) {
@@ -592,9 +635,13 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
     }
 
+    /* Sort so pages with the same geometry+score_kind are contiguous, enabling
+     * the hot path to walk a single group in one tight inner loop. */
     if (rt->npages > 1u) {
         qsort(prepared_pages, rt->npages, sizeof(*prepared_pages), compare_prepared_pages);
     }
+
+    /* --- Phase 5: populate each runtime page from the sorted scratch records. --- */
 
     for (page_idx = 0; page_idx < rt->npages; ++page_idx) {
         out = &rt->outputs[prepared_pages[page_idx].output_idx];
@@ -632,27 +679,57 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
 
         if (src_page->nfilter_names > 0u) {
-            dst_page->filters =
-                (struct osh_scoring_page_filter_ref *) calloc(src_page->nfilter_names, sizeof(*dst_page->filters));
-            if (!dst_page->filters) {
-                rc = OSH_ENOMEM;
-                goto fail;
-            }
-            dst_page->nfilters = src_page->nfilter_names;
+            /* Pass 1: classify each trailing name as a filter or settings reference. */
+            nf = 0u;
+            ns = 0u;
             for (k = 0; k < src_page->nfilter_names; ++k) {
-                fidx = find_filter_index(rt, src_page->filter_names[k]);
-                if (fidx < 0) {
+                if (find_filter_index(rt, src_page->filter_names[k]) >= 0) {
+                    nf++;
+                } else if (find_settings_index(rt, src_page->filter_names[k]) >= 0) {
+                    ns++;
+                } else {
                     OSH_DIAG_ERRORF(diag,
-                                    "Scoring page '%s' references unknown filter '%s'",
+                                    "Scoring page '%s' references unknown filter or settings '%s'",
                                     src_page->quantity ? src_page->quantity : "(unnamed)",
                                     src_page->filter_names[k]);
                     rc = OSH_EINVAL;
                     goto fail;
                 }
-                dst_page->filters[k].filter_idx = (size_t) fidx;
+            }
+            /* Pass 2: allocate and fill both index arrays. */
+            if (nf > 0u) {
+                dst_page->filters = (struct osh_scoring_page_filter_ref *) calloc(nf, sizeof(*dst_page->filters));
+                if (!dst_page->filters) {
+                    rc = OSH_ENOMEM;
+                    goto fail;
+                }
+            }
+            if (ns > 0u) {
+                dst_page->settings = (struct osh_scoring_page_settings_ref *) calloc(ns, sizeof(*dst_page->settings));
+                if (!dst_page->settings) {
+                    rc = OSH_ENOMEM;
+                    goto fail;
+                }
+            }
+            dst_page->nfilters = nf;
+            dst_page->nsettings = ns;
+            nf = 0u;
+            ns = 0u;
+            for (k = 0; k < src_page->nfilter_names; ++k) {
+                fidx = find_filter_index(rt, src_page->filter_names[k]);
+                if (fidx >= 0) {
+                    dst_page->filters[nf++].filter_idx = (size_t) fidx;
+                } else {
+                    sidx = find_settings_index(rt, src_page->filter_names[k]);
+                    dst_page->settings[ns++].settings_idx = (size_t) sidx;
+                }
             }
         }
     }
+
+    /* --- Phase 6: build score groups — one group per contiguous run of pages
+     *              that share the same score_kind within a geometry.  The hot
+     *              path iterates groups so it can hoist per-kind setup once. --- */
 
     for (i = 0; i < rt->ngeometries; ++i) {
         if (rt->geometries[i].npages == 0u) {

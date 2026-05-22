@@ -47,7 +47,7 @@
 
 - [ ] Cylindrical `(R,Z)` mesh scoring
 - [ ] Zone scoring
-- [ ] LET scoring (`DLET`, `TLET`)
+- [x] LET scoring (`DLET`, `TLET`) — geometric (de/ds); table-based LET needs material runtime in scorer
 - [ ] Alanine detector response
 - [ ] MCPL phase-space output
 
@@ -72,8 +72,9 @@ Completed (branches 66-1 … 66-6, 101):
       correctly oriented for all eight IEC patient positions
 
 Open:
-- [ ] DOSE scoring with density weighting (current RTDOSE output is ENERGY
-      per primary; proper absorbed dose needs `rho × ds` weighting per voxel)
+- [ ] DOSE scoring with per-voxel density weighting for CT geometries (current
+      implementation uses `st->rho` = transport zone density; CT voxel-level
+      density correction requires per-voxel rho lookup in the scorer)
 - [ ] Add axis-permuted row-major voxel layouts once index contract is settled
 - [ ] Prefer mass-normalised transport tables so local density scaling is cheap
 
