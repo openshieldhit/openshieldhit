@@ -411,8 +411,14 @@ void osh_scoring_runtime_finalize_ssets(struct osh_scoring_runtime *rt) {
         page->has_sset = 1;
         for (k = 0; k < page->nsettings; ++k) {
             struct osh_scoring_settings_runtime const *s = &rt->settings[page->settings[k].settings_idx];
-            if (s->has_medium)        { page->sset.medium = s->medium; page->sset.has_medium = 1; }
-            if (s->has_density_g_cm3) { page->sset.density_g_cm3 = s->density_g_cm3; page->sset.has_density_g_cm3 = 1; }
+            if (s->has_medium) {
+                page->sset.medium = s->medium;
+                page->sset.has_medium = 1;
+            }
+            if (s->has_density_g_cm3) {
+                page->sset.density_g_cm3 = s->density_g_cm3;
+                page->sset.has_density_g_cm3 = 1;
+            }
         }
     }
 }
@@ -738,8 +744,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             }
             /* Pass 2: allocate flat_rules and settings, then fill them. */
             if (total_rules > 0u) {
-                dst_page->flat_rules = (struct osh_scoring_filter_runtime_rule *) calloc(
-                    total_rules, sizeof(*dst_page->flat_rules));
+                dst_page->flat_rules =
+                    (struct osh_scoring_filter_runtime_rule *) calloc(total_rules, sizeof(*dst_page->flat_rules));
                 if (!dst_page->flat_rules) {
                     rc = OSH_ENOMEM;
                     goto fail;
