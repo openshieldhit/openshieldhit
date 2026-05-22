@@ -11,8 +11,8 @@ Filters:
   Protons  — all protons
 
 Settings (material overrides for dose-to-medium conversion):
-  in_Water — Water stopping power
-  in_Si    — Silicon stopping power
+  inWater — Water stopping power
+  inSi    — Silicon stopping power
 
 Scored quantities per output:
   Dose               — dose in transport medium (PMMA)
