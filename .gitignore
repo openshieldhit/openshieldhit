@@ -4,6 +4,7 @@
 _temp*/
 NB*
 *.bdo
+*.log
 build-*/
 build_*/
 perf*
