@@ -22,11 +22,11 @@ Filter
 
 # ------- Select for scoring using water stopping power ----------
 Settings
-        Name in_Water
+        Name inWater
         Material Water
 
 Settings
-        Name in_Si
+        Name inSi
         Material Si
 
 Output
