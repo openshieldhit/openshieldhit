@@ -152,8 +152,10 @@ enum osh_scoring_score_kind {
 
     /* --- LET-averaged quantities ---------------------------------------- */
 
-    OSH_SCORING_SCORE_DLET = 5, /* dose-averaged LET  (Cortez algorithm C) [MeV/cm] */
-    OSH_SCORING_SCORE_TLET = 6, /* track-averaged LET (Cortez algorithm C) [MeV/cm] */
+    OSH_SCORING_SCORE_DLET = 5,   /* dose-averaged LET  (Cortez algorithm C) [MeV/cm] */
+    OSH_SCORING_SCORE_TLET = 6,   /* track-averaged LET (Cortez algorithm C) [MeV/cm] */
+    OSH_SCORING_SCORE_DQEFF = 12, /* dose-averaged (z_eff/β)²  [dimensionless] */
+    OSH_SCORING_SCORE_TQEFF = 13, /* track-averaged (z_eff/β)² [dimensionless] */
 
     /* --- Counters ------------------------------------------------------- */
 
