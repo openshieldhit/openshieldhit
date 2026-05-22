@@ -133,11 +133,12 @@ enum osh_scoring_filter_op {
  *
  * Units after postprocessing (NORM mode unless noted)
  * ---------------------------------------------------
- * DOSE    [MeV/g]       multiply by 1.602e-10 to get [Gy]
+ * DOSE    [Gy]          osh_scoring_postprocess() applies the MeV/g → Gy conversion in-place
  * FLUENCE [1/cm^2]
  * LET     [MeV/cm]      or [keV/um] depending on settings rescale
  * COUNT   [1]           raw event count (no normalisation)
- * NKERMA  [MeV/g]       neutron kerma, same unit as DOSE
+ * NKERMA  [MeV/g]       neutron kerma (no Gy conversion yet)
+ * QEFF    [dim.less]    dose/track-averaged (z_eff/β)²
  */
 enum osh_scoring_score_kind {
 
@@ -147,7 +148,7 @@ enum osh_scoring_score_kind {
 
     OSH_SCORING_SCORE_ENERGY = 1,  /* mean energy deposited in voxel [MeV] */
     OSH_SCORING_SCORE_FLUENCE = 2, /* particle fluence (Chilton / ICRU definition) [1/cm^2] */
-    OSH_SCORING_SCORE_DOSE = 3,    /* absorbed dose [MeV/g]; use rescale for [Gy] */
+    OSH_SCORING_SCORE_DOSE = 3,    /* absorbed dose [Gy] after postprocessing */
     OSH_SCORING_SCORE_LETFLU = 4,  /* LET * fluence [MeV/cm * 1/cm^2] — numerator for TLET */
 
     /* --- LET-averaged quantities ---------------------------------------- */

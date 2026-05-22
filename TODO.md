@@ -38,7 +38,7 @@
 ## Transport
 
 - [ ] Gaussian MCS mode
-- [ ] Vavilov energy straggling
+- [x] Vavilov energy straggling
 - [x] Nuclear interactions — Tripathi total reaction cross section, primary attenuation (NUCRE flag)
 - [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
 - [ ] Batch ion-step phases around runtime lookup hot spots
@@ -47,7 +47,8 @@
 
 - [ ] Cylindrical `(R,Z)` mesh scoring
 - [ ] Zone scoring
-- [x] LET scoring (`DLET`, `TLET`) — geometric (de/ds); table-based LET needs material runtime in scorer
+- [x] LET scoring (`DLET`, `TLET`) — table-based `S(medium,E)·ρ`; material overrides via Settings block
+- [x] `DQEFF`, `TQEFF` — dose/track-averaged (z_eff/β)²
 - [ ] Alanine detector response
 - [ ] MCPL phase-space output
 

@@ -72,12 +72,20 @@ This design supports two merging strategies:
 `osh_scoring_postprocess()` applies physics transforms before saving:
 
 - DOSE: converts MeV/g → Gy (`× OSH_MEVG2GY`) once per bin.
-- DLET, TLET: computes the final ratio `data / data2` per bin; the
-  intermediate `data2` denominator array is not written to any output file.
+- DLET, TLET, DQEFF, TQEFF: computes the final ratio `data / data2` per bin;
+  the intermediate `data2` denominator array is not written to any output file.
 
-After postprocessing, page buffers hold values in their final physical units
-(Gy, MeV, 1/cm², MeV/cm, …) but are still un-normalised raw sums.  Both
-ASCII and BDO apply further normalisation as described above.
+After postprocessing, page buffers are in two states depending on scorer kind:
+
+| Kind | State after postprocess | Save-layer normalisation |
+|------|------------------------|--------------------------|
+| NORM (DOSE, ENERGY, FLUENCE, …) | raw accumulated sum | divide by nstat |
+| AVER (DLET, TLET, DQEFF, TQEFF) | physical mean (data÷data2 done) | none — written as-is |
+| SUM (COUNT, …) | raw count | none |
+
+**Multi-run merging caveat**: AVER pages cannot be naively summed across BDO
+files because data2 is discarded.  Merging requires re-weighting by nstat from
+each file.
 
 ## Lifecycle
 

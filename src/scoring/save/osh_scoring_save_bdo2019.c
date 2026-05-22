@@ -3,17 +3,17 @@
  *
  * Normalisation contract
  * ----------------------
- * Page data are written EXACTLY as accumulated in the runtime buffers (raw
- * un-normalised sums over all transport steps and all primary histories).
- * The total primary count is embedded as the OSHBDO_RT_NSTAT tag so that
- * readers and merge tools can apply the correct post-hoc normalisation:
+ * Page data are written as they exist after osh_scoring_postprocess().
+ * NORM/SUM quantities are raw accumulated sums; AVER quantities have already
+ * been divided by their two-pass weight sum.  The total primary count is
+ * embedded as the OSHBDO_RT_NSTAT tag for post-hoc normalisation:
  *
  *   NORM quantities (DOSE, FLUENCE, ENERGY, …):
  *       value_per_primary = data / nstat
  *
- *   AVER quantities (DLET, TLET, …):
- *       averaged_value = data / nstat     (data already holds nstat-weighted sum
- *                                          after osh_scoring_postprocess())
+ *   AVER quantities (DLET, TLET, DQEFF, TQEFF, …):
+ *       averaged_value = data             (osh_scoring_postprocess() has already divided
+ *                                          by the two-pass weight sum; no nstat division)
  *
  *   SUM quantities (COUNT, …):
  *       total = data          (no normalisation)
@@ -207,6 +207,9 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
         return "MeV/cm";
+    case OSH_SCORING_SCORE_DQEFF:
+    case OSH_SCORING_SCORE_TQEFF:
+        return "dim.less";
     default:
         return "arb";
     }
@@ -309,6 +312,10 @@ static int legacy_score_kind(struct osh_scoring_page_runtime const *page) {
         return 6;
     case OSH_SCORING_SCORE_TLET:
         return 7;
+    case OSH_SCORING_SCORE_DQEFF:
+        return 61;
+    case OSH_SCORING_SCORE_TQEFF:
+        return 62;
     case OSH_SCORING_SCORE_NORMCOUNT:
         return 14;
     case OSH_SCORING_SCORE_COUNT:

@@ -12,7 +12,6 @@ extern "C" {
 #endif
 
 struct osh_scoring_page_runtime;
-struct osh_scoring_runtime;
 
 /**
  * @brief One compiled filter rule, ready for hot-path evaluation.
@@ -48,8 +47,7 @@ struct osh_scoring_filter_runtime {
  * Per-history properties (energy, generation, primary index, weight) are read
  * from @p st, which carries them as set by the transport engine.
  */
-int osh_scoring_page_passes_filters(struct osh_scoring_runtime const *rt,
-                                    struct osh_scoring_page_runtime const *page,
+int osh_scoring_page_passes_filters(struct osh_scoring_page_runtime const *page,
                                     struct particle const *part,
                                     struct step const *st);
 

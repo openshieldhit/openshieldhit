@@ -100,7 +100,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
     fprintf(fp, "# Geometry %s\n", geo->name ? geo->name : "(unnamed)");
     fprintf(fp, "# nstat %llu\n", nstat);
     fprintf(fp, "# Data are written in canonical flat mesh order: idx = ix + nx * (iy + ny * iz)\n");
-    fprintf(fp, "# Values are normalised per primary (divided by nstat)\n");
+    fprintf(fp, "# Values: NORM/SUM pages divided by nstat; AVER pages (DLET/TLET/…) written as physical mean\n");
     fprintf(fp, "# X Y Z");
     for (ip = 0; ip < out->npages; ++ip) {
         size_t page_idx = out->page_indices[ip];

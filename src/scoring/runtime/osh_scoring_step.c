@@ -184,6 +184,12 @@ osh_scoring_score_point(struct osh_scoring_runtime *rt, struct particle const *p
     return OSH_ENOTSUP;
 }
 
+/**
+ * @brief Compute the chord direction and length for the scoring raytrace.
+ *
+ * Uses the geometric chord p→q; falls back to the step velocity and physical
+ * track length ds when the chord is degenerate (strongly bent CH step).
+ */
 static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out) {
     double dx;
     double dy;
@@ -215,17 +221,34 @@ static void step_scoring_segment(struct step const *st, double dir_out[3], doubl
     *len_out = st->ds;
 }
 
-/* Relativistic speed β = v/c from total kinetic energy and rest mass [MeV/c²]. */
-static double particle_beta(double e_kin_mev, double rest_mass_mev) {
+/** @brief Relativistic speed β = v/c from total kinetic energy and rest mass [MeV/c²]. */
+static inline double particle_beta(double e_kin_mev, double rest_mass_mev) {
     double gamma_inv = rest_mass_mev / (e_kin_mev + rest_mass_mev);
     return sqrt(1.0 - gamma_inv * gamma_inv);
 }
 
-/* Barkas effective charge: z_eff = z·(1 − exp(−125·β·z^(−2/3))). */
-static double particle_zeff(int z, double beta) {
-    return z * (1.0 - exp(-125.0 * beta * pow((double) abs(z), -2.0 / 3.0)));
+/**
+ * @brief Barkas effective charge: z_eff = z·(1 − exp(−125·β·z^(−2/3))).
+ * @pre   z > 0
+ */
+static inline double particle_zeff(int z, double beta) {
+    double cbrt_z = cbrt((double) z);
+    return z * (1.0 - exp(-125.0 * beta / (cbrt_z * cbrt_z)));
 }
 
+/**
+ * @brief Dose/track quality factor (z_eff/β)² [dimensionless].
+ * @pre   z > 0 (delegates to particle_zeff)
+ */
+static inline double particle_qeff(int z, double beta) {
+    double zeff = particle_zeff(z, beta);
+    return (zeff * zeff) / (beta * beta);
+}
+
+/**
+ * @brief Find the column index for projectile atomic number z in the SP table.
+ * @return 1 if found and proj_idx_out is set; 0 if z has no entry.
+ */
 static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out) {
     size_t i;
     for (i = 0; i < tables->nprojectiles; ++i) {
@@ -237,6 +260,7 @@ static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int
     return 0;
 }
 
+/** @brief Return the index of the named axis in geo, or -1 if not found. */
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label) {
     size_t i;
 
@@ -248,6 +272,11 @@ static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const
     return -1;
 }
 
+/**
+ * @brief Fill an osh_raytrace_grid from a mesh scoring geometry and compute 1/voxel_volume.
+ *
+ * Requires exactly three axes labelled "X", "Y", "Z" with positive bin sizes.
+ */
 static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                              struct osh_raytrace_grid *grid,
                                              double *voxel_volume_inv_out) {
@@ -299,6 +328,11 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
     return OSH_OK;
 }
 
+/**
+ * @brief Accumulate energy deposition [MeV] into the ENERGY scorer pages.
+ *
+ * Distributes st->de proportionally to path length in each crossed voxel.
+ */
 static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
                                           struct osh_scoring_geometry_score_group const *group,
                                           struct osh_voxel_crossing const *crossings,
@@ -313,7 +347,7 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
         for (j = 0; j < ncross; ++j) {
@@ -329,6 +363,11 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
     return OSH_OK;
 }
 
+/**
+ * @brief Accumulate fluence [1/cm²] into the FLUENCE scorer pages.
+ *
+ * Scores track_length / voxel_volume per voxel crossing.
+ */
 static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            struct osh_scoring_geometry_score_group const *group,
                                            struct osh_voxel_crossing const *crossings,
@@ -342,7 +381,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
         for (j = 0; j < ncross; ++j) {
@@ -357,6 +396,13 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
     return OSH_OK;
 }
 
+/**
+ * @brief Accumulate dose [MeV/g] into the DOSE scorer pages.
+ *
+ * When mat_tables is available and a Settings block specifies a medium, applies
+ * a stopping-power ratio correction S(ovr,E)/S(tr,E) for dose-to-medium scoring.
+ * Pure density overrides do not change the dose (Fano theorem).
+ */
 static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
@@ -400,13 +446,13 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
         dose_scale = base_scale;
-        if (have_proj && page->nsettings > 0) {
-            struct osh_scoring_settings_runtime const *sset = &rt->settings[page->settings[0].settings_idx];
-            if (sset->has_medium) {
+        if (have_proj && page->has_sset) {
+            struct osh_scoring_page_override const *sset = &page->sset;
+            if (sset->has_medium && sset->medium >= 0) {
                 /* Dose-to-medium: multiply by stopping-power ratio S(ovr)/S(tr). */
                 sp_ovr = osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc);
                 dose_scale *= (sp_tr > 0.0) ? sp_ovr / sp_tr : 0.0;
@@ -424,6 +470,12 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
     return OSH_OK;
 }
 
+/**
+ * @brief Accumulate dose-averaged LET [MeV/cm] via a two-pass accumulator.
+ *
+ * Uses S(medium,E)·ρ from the SP tables when available; falls back to de/score_len.
+ * Per-page Settings overrides apply S(ovr,E)·ρ_ovr (medium) or S(tr,E)·ρ_ovr (density-only).
+ */
 static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
@@ -468,13 +520,13 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
         let_step = let_default;
-        if (have_proj && page->nsettings > 0) {
-            struct osh_scoring_settings_runtime const *sset = &rt->settings[page->settings[0].settings_idx];
-            if (sset->has_medium) {
+        if (have_proj && page->has_sset) {
+            struct osh_scoring_page_override const *sset = &page->sset;
+            if (sset->has_medium && sset->medium >= 0) {
                 double rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
                 let_step =
                     osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
@@ -498,6 +550,12 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
     return OSH_OK;
 }
 
+/**
+ * @brief Accumulate track-averaged LET [MeV/cm] via a two-pass accumulator.
+ *
+ * Same table lookup as score_group_dlet(); uses track-length ds_vox as the weight
+ * rather than dose weight.
+ */
 static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
@@ -540,13 +598,13 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
         let_step = let_default;
-        if (have_proj && page->nsettings > 0) {
-            struct osh_scoring_settings_runtime const *sset = &rt->settings[page->settings[0].settings_idx];
-            if (sset->has_medium) {
+        if (have_proj && page->has_sset) {
+            struct osh_scoring_page_override const *sset = &page->sset;
+            if (sset->has_medium && sset->medium >= 0) {
                 double rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
                 let_step =
                     osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
@@ -570,6 +628,16 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
     return OSH_OK;
 }
 
+/**
+ * @brief Accumulate dose-averaged (z_eff/β)² [dimensionless] via a two-pass accumulator.
+ *
+ * Requires mat_tables for the rest mass needed to compute β.  Neutrals and
+ * particles without SP table entries contribute nothing.
+ *
+ * @ref Kalholm et al. Medical Physics. 2023 Jan;50(1):651-9.
+ *      https://doi.org/10.1002/mp.16029
+ *
+ */
 static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
                                          struct osh_scoring_geometry_score_group const *group,
                                          struct osh_voxel_crossing const *crossings,
@@ -581,7 +649,6 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
     size_t j;
     double mean_energy;
     double beta;
-    double zeff;
     double qeff;
     double w;
     size_t proj_idx;
@@ -603,12 +670,11 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
     if (!(beta > 0.0)) {
         return OSH_OK;
     }
-    zeff = particle_zeff((int) part->z, beta);
-    qeff = (zeff * zeff) / (beta * beta);
+    qeff = particle_qeff((int) part->z, beta);
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
         for (j = 0; j < ncross; ++j) {
@@ -627,6 +693,15 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
     return OSH_OK;
 }
 
+/**
+ * @brief Accumulate track-averaged (z_eff/β)² [dimensionless] via a two-pass accumulator.
+ *
+ * Same as score_group_dqeff() but uses track-length ds_vox as the weight.
+ *
+ * @ref Kalholm et al. Medical Physics. 2023 Jan;50(1):651-9.
+ *      https://doi.org/10.1002/mp.16029
+ *
+ */
 static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
                                          struct osh_scoring_geometry_score_group const *group,
                                          struct osh_voxel_crossing const *crossings,
@@ -638,7 +713,6 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
     size_t j;
     double mean_energy;
     double beta;
-    double zeff;
     double qeff;
     double ds_vox;
     size_t proj_idx;
@@ -660,12 +734,11 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
     if (!(beta > 0.0)) {
         return OSH_OK;
     }
-    zeff = particle_zeff((int) part->z, beta);
-    qeff = (zeff * zeff) / (beta * beta);
+    qeff = particle_qeff((int) part->z, beta);
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
-        if (!osh_scoring_page_passes_filters(rt, page, part, st)) {
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
         for (j = 0; j < ncross; ++j) {

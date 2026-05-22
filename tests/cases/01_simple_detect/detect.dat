@@ -14,15 +14,15 @@ Geometry Cyl
 
 # ------- Define a few useful filters ----------
 Filter
-        Name Primary    # Only primary protons
+        Name Primary    # Only primary C-12 ions
         GEN = 0
-        Z = 1
-        A = 1
+        Z = 6
+        A = 12
 
 Filter
-        Name Protons    # Primary and secondary protons
-        Z = 1
-        A = 1
+        Name Carbon     # Primary and secondary C-12 ions
+        Z = 6
+        A = 12
 
 # ------- Select for scoring using water stopping power ----------
 Settings

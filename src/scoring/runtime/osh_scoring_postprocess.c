@@ -43,7 +43,9 @@ static enum osh_status page_postprocess(struct osh_scoring_page_runtime *page) {
 
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
-        /* Finalise two-pass LET average: data = weighted_sum, data2 = weight_sum. */
+    case OSH_SCORING_SCORE_DQEFF:
+    case OSH_SCORING_SCORE_TQEFF:
+        /* Finalise two-pass average: data = weighted_sum, data2 = weight_sum. */
         for (i = 0; i < page->len; ++i) {
             if (page->data2[i] > OSH_LET_DENOM_EPS) {
                 page->data[i] /= page->data2[i];

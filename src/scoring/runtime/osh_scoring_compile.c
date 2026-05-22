@@ -395,6 +395,28 @@ static long find_settings_index(struct osh_scoring_runtime const *rt, char const
     return -1;
 }
 
+void osh_scoring_runtime_finalize_ssets(struct osh_scoring_runtime *rt) {
+    size_t ip;
+    size_t k;
+
+    if (!rt) {
+        return;
+    }
+    for (ip = 0; ip < rt->npages; ++ip) {
+        struct osh_scoring_page_runtime *page = &rt->pages[ip];
+        if (page->nsettings == 0u) {
+            continue;
+        }
+        memset(&page->sset, 0, sizeof(page->sset));
+        page->has_sset = 1;
+        for (k = 0; k < page->nsettings; ++k) {
+            struct osh_scoring_settings_runtime const *s = &rt->settings[page->settings[k].settings_idx];
+            if (s->has_medium)        { page->sset.medium = s->medium; page->sset.has_medium = 1; }
+            if (s->has_density_g_cm3) { page->sset.density_g_cm3 = s->density_g_cm3; page->sset.has_density_g_cm3 = 1; }
+        }
+    }
+}
+
 void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     size_t i;
 
@@ -431,7 +453,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     if (rt->pages) {
         for (i = 0; i < rt->npages; ++i) {
             free(rt->pages[i].quantity);
-            free(rt->pages[i].filters);
+            free(rt->pages[i].flat_rules);
             free(rt->pages[i].settings);
             free(rt->pages[i].data);
             free(rt->pages[i].data_var);
@@ -689,27 +711,36 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
 
         if (src_page->nfilter_names > 0u) {
-            /* Pass 1: classify each trailing name as a filter or settings reference. */
+            size_t total_rules;
+            size_t r;
+            /* Pass 1: classify names; count flat rules by summing each filter's rule count. */
             nf = 0u;
             ns = 0u;
+            total_rules = 0u;
             for (k = 0; k < src_page->nfilter_names; ++k) {
-                if (find_filter_index(rt, src_page->filter_names[k]) >= 0) {
+                fidx = find_filter_index(rt, src_page->filter_names[k]);
+                if (fidx >= 0) {
                     nf++;
-                } else if (find_settings_index(rt, src_page->filter_names[k]) >= 0) {
-                    ns++;
+                    total_rules += rt->filters[(size_t) fidx].nrules;
                 } else {
-                    OSH_DIAG_ERRORF(diag,
-                                    "Scoring page '%s' references unknown filter or settings '%s'",
-                                    src_page->quantity ? src_page->quantity : "(unnamed)",
-                                    src_page->filter_names[k]);
-                    rc = OSH_EINVAL;
-                    goto fail;
+                    sidx = find_settings_index(rt, src_page->filter_names[k]);
+                    if (sidx >= 0) {
+                        ns++;
+                    } else {
+                        OSH_DIAG_ERRORF(diag,
+                                        "Scoring page '%s' references unknown filter or settings '%s'",
+                                        src_page->quantity ? src_page->quantity : "(unnamed)",
+                                        src_page->filter_names[k]);
+                        rc = OSH_EINVAL;
+                        goto fail;
+                    }
                 }
             }
-            /* Pass 2: allocate and fill both index arrays. */
-            if (nf > 0u) {
-                dst_page->filters = (struct osh_scoring_page_filter_ref *) calloc(nf, sizeof(*dst_page->filters));
-                if (!dst_page->filters) {
+            /* Pass 2: allocate flat_rules and settings, then fill them. */
+            if (total_rules > 0u) {
+                dst_page->flat_rules = (struct osh_scoring_filter_runtime_rule *) calloc(
+                    total_rules, sizeof(*dst_page->flat_rules));
+                if (!dst_page->flat_rules) {
                     rc = OSH_ENOMEM;
                     goto fail;
                 }
@@ -721,19 +752,23 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                     goto fail;
                 }
             }
-            dst_page->nfilters = nf;
+            dst_page->nflat_rules = 0u;
             dst_page->nsettings = ns;
-            nf = 0u;
             ns = 0u;
             for (k = 0; k < src_page->nfilter_names; ++k) {
                 fidx = find_filter_index(rt, src_page->filter_names[k]);
                 if (fidx >= 0) {
-                    dst_page->filters[nf++].filter_idx = (size_t) fidx;
+                    struct osh_scoring_filter_runtime const *f = &rt->filters[(size_t) fidx];
+                    for (r = 0; r < f->nrules; ++r) {
+                        dst_page->flat_rules[dst_page->nflat_rules++] = f->rules[r];
+                    }
                 } else {
                     sidx = find_settings_index(rt, src_page->filter_names[k]);
                     dst_page->settings[ns++].settings_idx = (size_t) sidx;
                 }
             }
+
+            /* sset is built after all pages are processed; see the call below. */
         }
     }
 
@@ -810,6 +845,7 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
     }
 
+    osh_scoring_runtime_finalize_ssets(rt);
     return OSH_OK;
 
 fail:

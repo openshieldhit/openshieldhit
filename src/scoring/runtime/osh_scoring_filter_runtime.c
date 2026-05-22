@@ -3,7 +3,7 @@
 #include <math.h>
 
 #include "common/osh_const.h"
-#include "scoring/runtime/osh_scoring_runtime.h"
+#include "scoring/runtime/osh_scoring_output_runtime.h"
 
 static int filter_compare_int(unsigned int lhs, enum osh_scoring_filter_op op, unsigned int rhs);
 static int filter_compare_double(double lhs, enum osh_scoring_filter_op op, double rhs);
@@ -11,23 +11,14 @@ static int filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule
                               struct particle const *part,
                               struct step const *st);
 
-int osh_scoring_page_passes_filters(struct osh_scoring_runtime const *rt,
-                                    struct osh_scoring_page_runtime const *page,
+int osh_scoring_page_passes_filters(struct osh_scoring_page_runtime const *page,
                                     struct particle const *part,
                                     struct step const *st) {
     size_t i;
-    size_t j;
-    struct osh_scoring_filter_runtime const *filter;
 
-    for (i = 0; i < page->nfilters; ++i) {
-        if (page->filters[i].filter_idx >= rt->nfilters) {
+    for (i = 0; i < page->nflat_rules; ++i) {
+        if (!filter_rule_passes(&page->flat_rules[i], part, st)) {
             return 0;
-        }
-        filter = &rt->filters[page->filters[i].filter_idx];
-        for (j = 0; j < filter->nrules; ++j) {
-            if (!filter_rule_passes(&filter->rules[j], part, st)) {
-                return 0;
-            }
         }
     }
     return 1;

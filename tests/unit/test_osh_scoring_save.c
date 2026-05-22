@@ -6,6 +6,7 @@
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"
 #include "scoring/runtime/osh_scoring_compile.h"
+#include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/save/osh_scoring_save.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
@@ -22,6 +23,62 @@
 
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes);
 static void write_detect_file(char const *content);
+
+static void test_save_bdo2019_with_dose_and_dlet(void) {
+    char const *detect_text = "Geometry Mesh\n"
+                              "    Name G\n"
+                              "    X 0 1 1\n"
+                              "    Y 0 1 1\n"
+                              "    Z 0 2 2\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_dlet.bdo\n"
+                              "    Geo G\n"
+                              "    Quantity DOSE\n"
+                              "    Quantity DLET\n"
+                              "    Quantity TLET\n"
+                              "    Quantity DQEFF\n"
+                              "    Quantity TQEFF\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    unsigned char bdo_head[6];
+    enum osh_status rc;
+    size_t i;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 5u);
+
+    /* Seed non-zero values and wire data2 (two-pass pages) with matching weights */
+    for (i = 0; i < rt.npages; ++i) {
+        rt.pages[i].data[0] = 2.0;
+        rt.pages[i].data[1] = 4.0;
+        if (rt.pages[i].has_data2) {
+            rt.pages[i].data2[0] = 1.0;
+            rt.pages[i].data2[1] = 1.0;
+        }
+    }
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_save(ws, &rt, 100u);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    read_file_bytes("out_dlet.bdo", bdo_head, sizeof(bdo_head));
+    ASSERT_TRUE(memcmp(bdo_head, "xSH12A", 6u) == 0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_dlet.bdo");
+}
 
 int main(void) {
     char const *detect_text = "Geometry Mesh\n"
@@ -93,6 +150,8 @@ int main(void) {
     remove(DETECT_PATH);
     remove(ASCII_PATH);
     remove(BDO_PATH);
+
+    test_save_bdo2019_with_dose_and_dlet();
     return 0;
 }
 

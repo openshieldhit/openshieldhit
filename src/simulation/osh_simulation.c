@@ -184,7 +184,24 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
             sset->has_medium = 1;
         }
     }
+    /* Validate all medium indices that were set numerically (Material name path
+     * already resolves via osh_material_by_name, so it is always in-range). */
+    for (iz = 0u; iz < sim->scoring_runtime.nsettings; ++iz) {
+        struct osh_scoring_settings_runtime const *sset = &sim->scoring_runtime.settings[iz];
+        if (sset->has_medium) {
+            if (sset->medium < 0 || (size_t) sset->medium >= sim->transport_tables.nmaterials) {
+                OSH_DIAG_ERRORF(diag,
+                                "scoring settings '%s': medium index %d out of range [0, %zu)",
+                                sset->name ? sset->name : "(unnamed)",
+                                sset->medium,
+                                sim->transport_tables.nmaterials);
+                rc = OSH_EPARSE;
+                goto fail;
+            }
+        }
+    }
     sim->scoring_runtime.mat_tables = &sim->transport_tables;
+    osh_scoring_runtime_finalize_ssets(&sim->scoring_runtime);
 
     /* ---- 5. Transport parameters from beam ------------------------------- */
 
