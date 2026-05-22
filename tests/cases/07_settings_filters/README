@@ -10,15 +10,21 @@ Filters:
   Primary  — generation 0 protons only
   Protons  — all protons
 
-Settings (material overrides for dose-to-medium conversion):
+Settings (material overrides for stopping-power-based corrections):
   inWater — Water stopping power
   inSi    — Silicon stopping power
 
 Scored quantities per output:
   Dose               — dose in transport medium (PMMA)
-  Dose inWater       — dose-to-water (SPR correction applied)
-  Dose inSi          — dose-to-silicon (SPR correction applied)
+  Dose inWater       — dose-to-water (SPR correction applied)   [verified]
+  Dose inSi          — dose-to-silicon (SPR correction applied) [verified]
   Fluence            — all particles
   Fluence Primary    — primary protons only (filter applied)
+  DLET               — dose-averaged LET in transport medium (PMMA)
+  DLET inWater       — dose-averaged LET in water
+  DLET inSi          — dose-averaged LET in silicon
+  TLET               — track-averaged LET in transport medium (PMMA)
+  TLET inWater       — track-averaged LET in water
+  TLET inSi          — track-averaged LET in silicon
 
 Output in both TEXT and BDO formats.

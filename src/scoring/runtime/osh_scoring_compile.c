@@ -76,6 +76,12 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     if (strcmp(quantity, "tlet") == 0) {
         return OSH_SCORING_SCORE_TLET;
     }
+    if (strcmp(quantity, "dqeff") == 0) {
+        return OSH_SCORING_SCORE_DQEFF;
+    }
+    if (strcmp(quantity, "tqeff") == 0) {
+        return OSH_SCORING_SCORE_TQEFF;
+    }
     return OSH_SCORING_SCORE_UNKNOWN;
 }
 
@@ -164,6 +170,8 @@ static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
     switch (score_kind) {
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
+    case OSH_SCORING_SCORE_DQEFF:
+    case OSH_SCORING_SCORE_TQEFF:
         return 1;
     default:
         return 0;
@@ -202,6 +210,8 @@ static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
     case OSH_SCORING_SCORE_DOSE:
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
+    case OSH_SCORING_SCORE_DQEFF:
+    case OSH_SCORING_SCORE_TQEFF:
         return 1;
     default:
         return 0;

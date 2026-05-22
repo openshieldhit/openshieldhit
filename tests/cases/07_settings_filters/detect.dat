@@ -38,6 +38,14 @@ Output
     Quantity Dose inSi
     Quantity Fluence
     Quantity Fluence Primary
+    Quantity DLET
+    Quantity DLET inWater
+    Quantity DLET inSi
+    Quantity TLET
+    Quantity TLET inWater
+    Quantity TLET inSi
+    Quantity DQEFF
+    Quantity TQEFF
 
 
 # BDO format
@@ -49,3 +57,11 @@ Output
     Quantity Dose inSi
     Quantity Fluence
     Quantity Fluence Primary
+    Quantity DLET
+    Quantity DLET inWater
+    Quantity DLET inSi
+    Quantity TLET
+    Quantity TLET inWater
+    Quantity TLET inSi
+    Quantity DQEFF
+    Quantity TQEFF
