@@ -1,0 +1,55 @@
+site_name: OpenShieldHIT
+site_description: Open-source Monte Carlo particle transport code for shielding and therapy physics
+site_url: https://nbassler.github.io/openshieldhit
+repo_url: https://github.com/nbassler/openshieldhit
+repo_name: nbassler/openshieldhit
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - User Guide:
+    - Getting started: user/getting-started.md
+    - Input files overview: user/input-files.md
+    - beam.dat reference: user/beam.dat.md
+    - geo.dat reference: user/geo.dat.md
+    - mat.dat reference: user/mat.dat.md
+    - detect.dat reference: user/detect.dat.md
+  - Developer Guide:
+    - Architecture: dev/architecture.md
+    - Build system: dev/build.md
+    - Contributing: dev/contributing.md
+    - Testing: dev/testing.md
+    - Coordinate systems: dev/coordinates.md
+  - API Reference: api/index.html

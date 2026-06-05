@@ -1,0 +1,53 @@
+name: Build and deploy documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MkDocs Material
+        run: pip install ".[docs]"
+
+      - name: Install Doxygen
+        run: sudo apt-get install -y doxygen
+
+      - name: Build Doxygen API reference
+        run: doxygen Doxyfile
+
+      - name: Build MkDocs site
+        # --strict is not used here: the api/ links resolve only after Doxygen
+        # runs and its output is copied into site/api/ in the next step.
+        run: mkdocs build
+
+      - name: Copy Doxygen into MkDocs site
+        run: cp -r docs/api site/api
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

@@ -61,8 +61,16 @@ Useful cache variables for development:
 -DOSH_VOXEL_LAYOUT=ROW_MAJOR|MORTON8
 ```
 
-`cmake --install` currently installs the main executable, documentation, and
-selected examples. Public library/header installation is still incomplete.
+## Install
+
+```bash
+sudo cmake --install build_rel                   # → /usr/local/bin/openshieldhit
+sudo cmake --install build_rel --prefix /usr     # → /usr/bin/openshieldhit
+cmake --install build_rel --prefix ~/.local      # no sudo, user-local install
+```
+
+Installs the main executable, documentation, and selected examples.
+Public library/header installation is still incomplete.
 
 ## The `openshieldhit` application
 

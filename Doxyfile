@@ -1,0 +1,57 @@
+PROJECT_NAME           = "OpenShieldHIT"
+PROJECT_BRIEF          = "Open-source Monte Carlo particle transport for shielding and therapy physics"
+PROJECT_NUMBER         =
+
+# Input
+INPUT                  = include/openshieldhit \
+                         src/beam \
+                         src/transport \
+                         src/scoring \
+                         src/physics \
+                         src/material \
+                         src/common \
+                         src/dicom \
+                         src/apps/osh
+INPUT_ENCODING         = UTF-8
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.c
+EXCLUDE_PATTERNS       = */build/* */_deps/*
+
+# Output
+OUTPUT_DIRECTORY       = docs/api
+GENERATE_HTML          = YES
+HTML_OUTPUT            = .
+GENERATE_LATEX         = NO
+
+# HTML appearance
+HTML_EXTRA_STYLESHEET  =
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+
+# Extraction
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = YES
+HIDE_UNDOC_CLASSES     = YES
+BRIEF_MEMBER_DESC      = YES
+REPEAT_BRIEF           = YES
+ALWAYS_DETAILED_SEC    = NO
+INLINE_INHERITED_MEMB  = NO
+
+# Source browsing
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# Graphs (requires dot/Graphviz — disable if not installed)
+HAVE_DOT               = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+
+# Warnings
+WARN_IF_UNDOCUMENTED   = NO
+QUIET                  = NO
+WARNINGS               = YES
