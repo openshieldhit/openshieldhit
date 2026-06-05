@@ -400,7 +400,9 @@ static int _parse_beamsad(PARSE_HANDLER_ARGS) {
     } else {
         OSH_DIAG_ERRORF(state->diag,
                         "in %s line %i: BEAMSAD must be a positive value or INF (got '%s')",
-                        oshf->filename, oshf->lineno, args);
+                        oshf->filename,
+                        oshf->lineno,
+                        args);
         return OSH_EPARSE;
     }
     return OSH_OK;
