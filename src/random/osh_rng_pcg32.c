@@ -43,5 +43,5 @@ uint32_t osh_rng_pcg32_u32(struct osh_rng *rng) {
     xorshifted = (uint32_t) (((oldstate >> 18u) ^ oldstate) >> 27u);
     rot = (uint32_t) (oldstate >> 59u);
 
-    return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+    return (xorshifted >> rot) | (xorshifted << ((32u - rot) & 31u));
 }

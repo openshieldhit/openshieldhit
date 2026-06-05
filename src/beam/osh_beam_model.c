@@ -47,7 +47,7 @@ static struct beam_spot const *_select_spot(struct beam_workspace const *wb, str
     }
 
     w = osh_rng_double(rng) * prepared->wt_sum;
-    idx = osh_binary_search_upper_d(w, prepared->cum_wt, wb->nspots);
+    idx = osh_binary_search_upper_d(w, prepared->cum_wt, (unsigned long int) wb->nspots);
     if (idx < 0 || idx >= (long int) wb->nspots) {
         return NULL;
     }

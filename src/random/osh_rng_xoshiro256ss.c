@@ -9,13 +9,14 @@
 
 #include "random/osh_rng.h"
 
-/* rotate left */
-static uint64_t _rotl64(uint64_t x, int k) {
+/* rotate left — named rotl64 (no underscore) to avoid colliding with the
+ * MSVC compiler intrinsic _rotl64 (C2169: intrinsic cannot be redefined). */
+static inline uint64_t rotl64(uint64_t x, int k) {
     return (x << k) | (x >> (64 - k));
 }
 
 /* splitmix64: good for seeding other generators */
-static uint64_t _splitmix64_next(uint64_t *x) {
+static inline uint64_t _splitmix64_next(uint64_t *x) {
     uint64_t z;
 
     *x += 0x9e3779b97f4a7c15ULL;
@@ -57,7 +58,7 @@ uint64_t osh_rng_xoshiro256ss_u64(struct osh_rng *rng) {
 
     s = rng->u.xoshiro256ss.s;
 
-    result = _rotl64(s[1] * 5ULL, 7) * 9ULL;
+    result = rotl64(s[1] * 5ULL, 7) * 9ULL;
     t = s[1] << 17;
 
     s[2] ^= s[0];
@@ -66,7 +67,7 @@ uint64_t osh_rng_xoshiro256ss_u64(struct osh_rng *rng) {
     s[0] ^= s[3];
 
     s[2] ^= t;
-    s[3] = _rotl64(s[3], 45);
+    s[3] = rotl64(s[3], 45);
 
     return result;
 }
