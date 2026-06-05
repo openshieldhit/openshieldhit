@@ -223,9 +223,40 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         }
     }
 
-    if (last_report_completed < params->nstat) {
-        double const t_now = monotonic_seconds();
-        report_transport_progress(transport_ctx->diag, params->nstat, params->nstat, t_now - t_start);
+    {
+        double const t_end = monotonic_seconds();
+        double const total_s = t_end - t_start;
+        double const avg_pps = (total_s > 0.0) ? ((double) params->nstat / total_s) : 0.0;
+        unsigned int const th = (unsigned int) (total_s / 3600.0);
+        unsigned int const tm = (unsigned int) ((total_s - th * 3600.0) / 60.0);
+        unsigned int const ts = (unsigned int) (total_s - th * 3600.0 - tm * 60.0);
+
+        if (last_report_completed < params->nstat) {
+            report_transport_progress(transport_ctx->diag, params->nstat, params->nstat, total_s);
+        }
+
+        if (th > 0u) {
+            OSH_DIAG_INFOF(transport_ctx->diag,
+                           "Transport complete: %zu primaries in %u:%02u:%02u  (avg %.0f primaries/s)",
+                           params->nstat,
+                           th,
+                           tm,
+                           ts,
+                           avg_pps);
+        } else if (tm > 0u) {
+            OSH_DIAG_INFOF(transport_ctx->diag,
+                           "Transport complete: %zu primaries in %02u:%02u  (avg %.0f primaries/s)",
+                           params->nstat,
+                           tm,
+                           ts,
+                           avg_pps);
+        } else {
+            OSH_DIAG_INFOF(transport_ctx->diag,
+                           "Transport complete: %zu primaries in %u s  (avg %.0f primaries/s)",
+                           params->nstat,
+                           ts,
+                           avg_pps);
+        }
     }
 
 cleanup:
@@ -276,16 +307,45 @@ static size_t transport_progress_chunk_size(size_t total) {
 static void
 report_transport_progress(struct osh_diag_sink const *diag, size_t completed, size_t total, double elapsed_s) {
     double primaries_per_second;
+    double eta_s;
     size_t remaining;
+    int pct;
+    unsigned int eta_h;
+    unsigned int eta_m;
+    unsigned int eta_sec;
 
     remaining = (completed < total) ? (total - completed) : 0u;
     primaries_per_second = (elapsed_s > 0.0) ? ((double) completed / elapsed_s) : 0.0;
-    OSH_DIAG_INFOF(diag,
-                   "Transport progress: %zu/%zu completed, %zu left, %.1f primaries/s",
-                   completed,
-                   total,
-                   remaining,
-                   primaries_per_second);
+    pct = (total > 0u) ? (int) (completed * 100u / total) : 0;
+
+    if (primaries_per_second > 0.0 && remaining > 0u) {
+        eta_s = (double) remaining / primaries_per_second;
+        eta_h = (unsigned int) (eta_s / 3600.0);
+        eta_m = (unsigned int) ((eta_s - eta_h * 3600.0) / 60.0);
+        eta_sec = (unsigned int) (eta_s - eta_h * 3600.0 - eta_m * 60.0);
+        if (eta_h > 0u) {
+            OSH_DIAG_INFOF(diag,
+                           "Progress: %zu/%zu  %3d%%  %.0f primaries/s  ETA %u:%02u:%02u",
+                           completed,
+                           total,
+                           pct,
+                           primaries_per_second,
+                           eta_h,
+                           eta_m,
+                           eta_sec);
+        } else {
+            OSH_DIAG_INFOF(diag,
+                           "Progress: %zu/%zu  %3d%%  %.0f primaries/s  ETA %02u:%02u",
+                           completed,
+                           total,
+                           pct,
+                           primaries_per_second,
+                           eta_m,
+                           eta_sec);
+        }
+    } else {
+        OSH_DIAG_INFOF(diag, "Progress: %zu/%zu  %3d%%  %.0f primaries/s", completed, total, pct, primaries_per_second);
+    }
 }
 
 static enum osh_status validate_transport_modes(struct osh_transport_context const *transport_ctx) {
