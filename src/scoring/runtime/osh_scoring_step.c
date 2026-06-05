@@ -149,6 +149,7 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
                 rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st, voxel_volume_inv);
                 break;
             case OSH_SCORING_SCORE_DOSE:
+            case OSH_SCORING_SCORE_DOSEGY:
                 rc = score_group_dose(rt, &geo->groups[g], crossings, ncross, part, st, score_len, voxel_volume_inv);
                 break;
             case OSH_SCORING_SCORE_DLET:

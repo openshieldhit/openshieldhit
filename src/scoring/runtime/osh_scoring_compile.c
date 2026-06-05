@@ -70,6 +70,9 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     if (strcmp(quantity, "dose") == 0) {
         return OSH_SCORING_SCORE_DOSE;
     }
+    if (strcmp(quantity, "dosegy") == 0) {
+        return OSH_SCORING_SCORE_DOSEGY;
+    }
     if (strcmp(quantity, "dlet") == 0) {
         return OSH_SCORING_SCORE_DLET;
     }
@@ -208,6 +211,7 @@ static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
     case OSH_SCORING_SCORE_ENERGY:
     case OSH_SCORING_SCORE_FLUENCE:
     case OSH_SCORING_SCORE_DOSE:
+    case OSH_SCORING_SCORE_DOSEGY:
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
     case OSH_SCORING_SCORE_DQEFF:

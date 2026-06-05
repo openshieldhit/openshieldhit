@@ -296,12 +296,23 @@ static void test_score_mesh_dose_and_let_geometric(void) {
     rc = osh_scoring_postprocess(&rt);
     ASSERT_TRUE(rc == OSH_OK);
 
-    /* DOSE: base_scale = de*vol_inv/(score_len*rho) = 2.0*1.0/(2.0*1.0) = 1.0 MeV/g */
+    /* DOSE: base_scale = de*vol_inv/(score_len*rho) = 2.0*1.0/(2.0*1.0) = 1.0 MeV/g
+     * No Gy conversion applied — DOSE is in MeV/g (SH12A-compatible). */
     dose_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSE);
     ASSERT_TRUE(dose_page != NULL);
-    assert_close(dose_page->data[0], 0.5 * OSH_MEVG2GY);
-    assert_close(dose_page->data[1], 1.0 * OSH_MEVG2GY);
-    assert_close(dose_page->data[2], 0.5 * OSH_MEVG2GY);
+    assert_close(dose_page->data[0], 0.5);
+    assert_close(dose_page->data[1], 1.0);
+    assert_close(dose_page->data[2], 0.5);
+
+    /* DOSEGY: same accumulated values, converted to Gy via OSH_MEVG2GY. */
+    {
+        struct osh_scoring_page_runtime *dosegy_page;
+        dosegy_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSEGY);
+        ASSERT_TRUE(dosegy_page != NULL);
+        assert_close(dosegy_page->data[0], 0.5 * OSH_MEVG2GY);
+        assert_close(dosegy_page->data[1], 1.0 * OSH_MEVG2GY);
+        assert_close(dosegy_page->data[2], 0.5 * OSH_MEVG2GY);
+    }
 
     /* DLET geometric: let_step = de/score_len = 1.0 MeV/cm in all traversed bins */
     dlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DLET);

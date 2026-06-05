@@ -8,6 +8,7 @@ Output
     Filename out.bdo
     Geo G
     Quantity Dose
+    Quantity DoseGy
     Quantity DLET
     Quantity TLET
     Quantity DQEFF

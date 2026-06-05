@@ -203,6 +203,8 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
     case OSH_SCORING_SCORE_FLUENCE:
         return "1/cm^2";
     case OSH_SCORING_SCORE_DOSE:
+        return "MeV/g";
+    case OSH_SCORING_SCORE_DOSEGY:
         return "Gy";
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
@@ -306,6 +308,8 @@ static int legacy_score_kind(struct osh_scoring_page_runtime const *page) {
         return 2;
     case OSH_SCORING_SCORE_DOSE:
         return 5;
+    case OSH_SCORING_SCORE_DOSEGY:
+        return 56;
     case OSH_SCORING_SCORE_LETFLU:
         return 4;
     case OSH_SCORING_SCORE_DLET:

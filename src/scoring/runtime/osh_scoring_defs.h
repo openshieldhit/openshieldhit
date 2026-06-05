@@ -133,7 +133,8 @@ enum osh_scoring_filter_op {
  *
  * Units after postprocessing (NORM mode unless noted)
  * ---------------------------------------------------
- * DOSE    [Gy]          osh_scoring_postprocess() applies the MeV/g → Gy conversion in-place
+ * DOSE    [MeV/g]       raw absorbed dose, no unit conversion (SH12A-compatible)
+ * DOSEGY  [Gy]          absorbed dose in Gy — osh_scoring_postprocess() applies OSH_MEVG2GY
  * FLUENCE [1/cm^2]
  * LET     [MeV/cm]      or [keV/um] depending on settings rescale
  * COUNT   [1]           raw event count (no normalisation)
@@ -148,7 +149,7 @@ enum osh_scoring_score_kind {
 
     OSH_SCORING_SCORE_ENERGY = 1,  /* mean energy deposited in voxel [MeV] */
     OSH_SCORING_SCORE_FLUENCE = 2, /* particle fluence (Chilton / ICRU definition) [1/cm^2] */
-    OSH_SCORING_SCORE_DOSE = 3,    /* absorbed dose [Gy] after postprocessing */
+    OSH_SCORING_SCORE_DOSE = 3,    /* absorbed dose [MeV/g] — no unit conversion */
     OSH_SCORING_SCORE_LETFLU = 4,  /* LET * fluence [MeV/cm * 1/cm^2] — numerator for TLET */
 
     /* --- LET-averaged quantities ---------------------------------------- */
@@ -173,7 +174,11 @@ enum osh_scoring_score_kind {
 
     /* --- Phase-space output --------------------------------------------- */
 
-    OSH_SCORING_SCORE_MCPL = 11 /* MC particle list (phase-space append mode) */
+    OSH_SCORING_SCORE_MCPL = 11, /* MC particle list (phase-space append mode) */
+
+    /* --- Gy-converted dose ------------------------------------------------- */
+
+    OSH_SCORING_SCORE_DOSEGY = 14 /* absorbed dose [Gy] — applies OSH_MEVG2GY in postprocessing */
 };
 
 #ifdef __cplusplus

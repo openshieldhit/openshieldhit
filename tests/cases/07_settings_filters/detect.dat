@@ -34,6 +34,7 @@ Output
     Fileformat TEXT
     Geo MyMesh
     Quantity Dose
+    Quantity DoseGy
     Quantity Dose inWater
     Quantity Dose inSi
     Quantity Fluence
@@ -53,6 +54,7 @@ Output
     Filename NB_msh.bdo
     Geo MyMesh
     Quantity Dose
+    Quantity DoseGy
     Quantity Dose inWater
     Quantity Dose inSi
     Quantity Fluence
