@@ -424,6 +424,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
     int have_proj;
     struct osh_scoring_page_runtime *page;
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
+    e_per_nuc = 0.0; /* set inside have_proj block; 0.0 satisfies MSVC C4701 */
 
     if (!(st->rho > 0.0)) {
         return OSH_OK;
@@ -496,6 +497,7 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
     int have_proj;
     struct osh_scoring_page_runtime *page;
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
+    e_per_nuc = 0.0; /* set inside have_proj block; 0.0 satisfies MSVC C4701 */
 
     /* LET is only defined for charged particles in a material (not vacuum). */
     if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
@@ -576,6 +578,7 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
     int have_proj;
     struct osh_scoring_page_runtime *page;
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
+    e_per_nuc = 0.0; /* set inside have_proj block; 0.0 satisfies MSVC C4701 */
 
     /* LET is only defined for charged particles in a material (not vacuum). */
     if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
