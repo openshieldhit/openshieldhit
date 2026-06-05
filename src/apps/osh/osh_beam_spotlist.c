@@ -209,6 +209,10 @@ spotlist_fill_spot(struct osh_beam_spot *spot, double const values[OSH_SPOTLIST_
         return OSH_EINVAL;
     }
 
+    /* x/y from the file are isocenter coordinates (SH12A / DICOM RT Plan
+     * convention).  They are stored here as-is; the caller (osh_app_osh.c)
+     * is responsible for back-projecting them to physical beam-start
+     * coordinates using BEAMSAD before the spots enter the beam workspace. */
     spot->p[0] = values[(ncols == 5 || ncols == 6) ? 1 : 2];
     spot->p[1] = values[(ncols == 5 || ncols == 6) ? 2 : 3];
 

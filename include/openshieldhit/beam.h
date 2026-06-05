@@ -53,6 +53,20 @@ struct osh_beam_species {
  * All values here are user/input-facing beam parameters. Prepared quantities
  * such as affine transforms or cumulative SOBP weights are stored outside the
  * public struct during @ref osh_beam_workspace_prepare().
+ *
+ * Coordinate convention for p[]:
+ *   p[0], p[1] — physical beam-start position (x, y) in the beam-local PZALIGN
+ *                frame [cm], measured from the beam axis at the beam-entrance
+ *                plane (BEAMPOS z). These are NOT isocenter coordinates.
+ *   p[2]       — beam-start z in PZALIGN [cm]; negative means upstream of the
+ *                isocenter (isocenter is at z = 0 in PZALIGN).
+ *
+ * When loading from a USECBEAM spotlist file the app layer converts from the
+ * file's isocenter convention to these physical beam-start coordinates before
+ * populating this struct (see osh_app_osh.c).  The cold struct itself is
+ * coordinate-agnostic: it always holds physical beam-start positions so that
+ * the beam model and any other consumer can use it without knowing about
+ * upstream file-format conventions.
  */
 struct osh_beam_spot {
     double p[3];
@@ -74,6 +88,15 @@ struct osh_beam_spot {
 
 /**
  * @brief Beam parameters shared by all spots.
+ *
+ * sad[]:       Source-to-Axis Distance [cm] for x (index 0) and y (index 1).
+ *              Always a positive distance from the virtual upstream point source
+ *              to the isocenter, regardless of beam direction.  Zero when SAD is
+ *              not active.
+ * use_sad:     1 if fan-out correction is active (finite SAD), 0 for parallel beam.
+ * sad_was_set: 1 if BEAMSAD was explicitly present in the input file (even if
+ *              set to INF).  Used to suppress the "USECBEAM without BEAMSAD"
+ *              warning when the user intentionally chose parallel delivery.
  */
 struct osh_beam_shared {
     double sad[2];
@@ -82,6 +105,7 @@ struct osh_beam_shared {
     double phi;
     char use_div;
     char use_sad;
+    char sad_was_set;
 };
 
 /**

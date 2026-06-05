@@ -16,10 +16,17 @@
  *
  * Spot position convention
  * ------------------------
- * All spot positions (spot->p[x,y,z]) are beam-local offsets relative to
- * isocenter BEFORE gantry/table rotation. In other words, BEAMPOS lives in
- * the beam-local PZALIGN frame. The post-parse step folds this offset into the
- * precomputed spot->_tm matrix as a standard affine transform:
+ * spot->p[0,1,2] are the physical beam-start position in the beam-local
+ * PZALIGN frame [cm]:
+ *   p[0], p[1] — lateral (x, y) offset at the beam-entrance plane.
+ *   p[2]       — longitudinal position along the beam axis; negative means
+ *                upstream of the isocenter (isocenter is at z = 0 in PZALIGN).
+ *
+ * These are NOT isocenter coordinates.  For beams loaded from a USECBEAM
+ * spotlist the app layer converts from the file's isocenter convention before
+ * the spots reach this model.  The PZALIGN origin (0, 0, 0) is the isocenter.
+ *
+ * The post-parse step folds spot->p into the precomputed affine matrix:
  *
  *   p_universe = R * p_local + R * spot->p
  *

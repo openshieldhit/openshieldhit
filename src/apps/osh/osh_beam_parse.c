@@ -166,6 +166,22 @@ enum osh_status osh_beam_parse(struct oshfile *oshf,
         free(lline);
         lline = NULL;
     }
+
+    /* Warn when USECBEAM is present but BEAMSAD was never set.
+     * In that case spot x/y positions from the file are used as-is (no
+     * back-projection), which is physically correct only for parallel beam
+     * delivery (SAD = infinity).  This is a valid research use-case, but
+     * easy to overlook — hence the warning.
+     * Set BEAMSAD INF explicitly to suppress it. */
+    if (spotlist_path_out && *spotlist_path_out && !beam->shared.sad_was_set) {
+        OSH_DIAG_WARNF(diag,
+                       "USECBEAM loaded without BEAMSAD: assuming parallel beam delivery "
+                       "(SAD = infinity, no fan-out correction). Spot x/y positions are "
+                       "used as-is. If your nozzle has a finite source distance, add "
+                       "BEAMSAD <sadX> [sadY]. To suppress this warning for intentional "
+                       "parallel delivery, set BEAMSAD INF.");
+    }
+
     return OSH_OK;
 }
 
@@ -331,19 +347,25 @@ static int _parse_beampos(PARSE_HANDLER_ARGS) {
  * @details
  * Syntax: BEAMSAD \<sadX\> [\<sadY\>]  [cm]
  *
- * SAD is the distance from the virtual point source to the isocenter.
- * It is used to tilt each primary particle so that it aims toward the
- * isocenter, rather than travelling parallel to the beam axis.
+ * SAD is the positive distance from the virtual upstream point source to the
+ * isocenter.  It is always a positive number regardless of beam direction,
+ * because it is a physical distance along the beam axis, not a signed
+ * coordinate.  It is used to tilt each primary so that it converges toward
+ * the isocenter (scanning-magnet fan-out correction).
  *
- * One value sets a symmetric SAD (same in X and Y, e.g. a circular nozzle).
- * Two values allow an asymmetric nozzle where X and Y focusing differ.
- * Both values must be strictly positive; zero or negative SAD is unphysical.
+ * One value gives a symmetric nozzle (same SAD for X and Y).
+ * Two values allow an asymmetric nozzle (common in clinical systems).
  *
- * @param[in,out] beam  Writes shared.sad[0,1] and sets shared.use_sad.
+ * The special value INF (or Inf, inf) explicitly selects parallel beam
+ * delivery (SAD = infinity, no fan-out correction).  This suppresses the
+ * warning that would otherwise appear when USECBEAM is used without BEAMSAD.
+ *
+ * @param[in,out] beam  Writes shared.sad[0,1], sets shared.use_sad and
+ *                      shared.sad_was_set.
  * @param[in]     oshf  Used for error diagnostics.
- * @param[in]     args  One or two whitespace-separated positive floats.
+ * @param[in]     args  One or two whitespace-separated positive floats or INF.
  *
- * @returns OSH_OK on success.
+ * @returns OSH_OK on success, OSH_EPARSE on invalid input.
  */
 static int _parse_beamsad(PARSE_HANDLER_ARGS) {
     float _f[2];
@@ -361,10 +383,24 @@ static int _parse_beamsad(PARSE_HANDLER_ARGS) {
         OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
-    if (beam->shared.sad[0] > 0.0 && beam->shared.sad[1] > 0.0) {
+
+    beam->shared.sad_was_set = 1;
+
+    if (isinf((float) beam->shared.sad[0]) || isinf((float) beam->shared.sad[1])) {
+        /* INF means parallel beam (SAD = infinity). No fan-out correction is
+         * applied and back-projection of spotlist coordinates is skipped.
+         * Suppress the "USECBEAM without BEAMSAD" warning since the user
+         * has explicitly declared their intent. */
+        OSH_DIAG_INFOF(state->diag, "BEAMSAD INF: parallel beam delivery (no fan-out correction)");
+        beam->shared.sad[0] = 0.0;
+        beam->shared.sad[1] = 0.0;
+        beam->shared.use_sad = 0;
+    } else if (beam->shared.sad[0] > 0.0 && beam->shared.sad[1] > 0.0) {
         beam->shared.use_sad = 1;
     } else {
-        OSH_DIAG_ERRORF(state->diag, "in %s line %i: SAD must be > 0.0", oshf->filename, oshf->lineno);
+        OSH_DIAG_ERRORF(state->diag,
+                        "in %s line %i: BEAMSAD must be a positive value or INF (got '%s')",
+                        oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
     return OSH_OK;

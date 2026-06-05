@@ -3,7 +3,7 @@ RNDSEED                 89736501     # Random seed
 PRIMARY                        6          12     # Carbon-12 ion (Z=6, A=12)
 TMAX0                      400.0         0.0     # Incident energy; (MeV/nucl)
 BEAMSIGMA                    2.0         2.0	 # SigmaX, SigmaY at focus point
-BEAMPOS                      0.0         0.0        0.00 # Beam XYZ start pos
+BEAMPOS                      0.0         0.0        0.00 # Beam XYZ start pos [cm]
 NSTAT                       5000        5000     # NSTAT, Step of saving
 
 NEUTRLCUT                    0.0    # Cutoff for neutron transport
@@ -15,4 +15,9 @@ DEMIN                      0.025    # Minimum Energy step 0.025 (MeV/nucleon)
 STRAGG                         1    # Straggling: 0-Off 1-Gauss, 2-Vavilov
 MSCAT                          2    # Mult. scatt 0-Off 1-Gauss, 2-Moliere
 NUCRE                          1    # Nucl.Reac. switcher: 0-Off, 1-On
-USECBEAM               sobp.dat     # Filename of beam sourcefile
+# BEAMSAD is intentionally absent here: this test uses a broad research field
+# with no scanning-magnet geometry, so parallel beam delivery (SAD = infinity)
+# is the correct physical model. Spot x/y positions in sobp.dat are used
+# as-is (no isocenter back-projection). Set BEAMSAD INF to suppress the
+# resulting warning, or add BEAMSAD <sadX> [sadY] for a real clinical nozzle.
+USECBEAM               sobp.dat     # Filename of beam sourcefile (isocenter coords)
