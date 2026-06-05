@@ -14,6 +14,8 @@ jobs:
   # Build DEB and TGZ packages on Linux
   package-linux:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
@@ -48,9 +50,19 @@ jobs:
           build/*.tar.gz
         retention-days: 3
 
+    - name: Upload packages to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          build/*.deb
+          build/*.tar.gz
+
   # Build TGZ package on macOS
   package-macos:
     runs-on: macos-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
@@ -83,9 +95,17 @@ jobs:
         path: build/*.tar.gz
         retention-days: 3
 
+    - name: Upload packages to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: build/*.tar.gz
+
   # Build ZIP package on Windows
   package-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
@@ -115,6 +135,12 @@ jobs:
         path: build/*.zip
         retention-days: 3
 
+    - name: Upload packages to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: build/*.zip
+
   # Install and verify DEB package works correctly
   test-package:
     needs: package-linux
@@ -141,42 +167,3 @@ jobs:
     - name: Verify installed files
       run: |
         dpkg -L openshieldhit | head -20
-
-  # Upload packages to GitHub Release — only runs when a release is published.
-  # Separate job so that contents: write is never granted on plain push/PR runs.
-  upload-to-release:
-    needs: [package-linux, package-macos, package-windows]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    if: github.event_name == 'release'
-
-    steps:
-    - name: Download Linux artifacts
-      uses: actions/download-artifact@v8
-      with:
-        name: openshieldhit-packages-linux
-        path: artifacts/linux
-
-    - name: Download macOS artifacts
-      uses: actions/download-artifact@v8
-      with:
-        name: openshieldhit-packages-macos
-        path: artifacts/macos
-
-    - name: Download Windows artifacts
-      uses: actions/download-artifact@v8
-      with:
-        name: openshieldhit-packages-windows
-        path: artifacts/windows
-
-    - name: Upload artifacts to GitHub Release
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        # Use find rather than globs: upload-artifact v4+ preserves the build/
-        # directory prefix inside the artifact, so *.deb at the top level would
-        # not match.  find recurses safely regardless of the internal layout.
-        gh release upload ${{ github.event.release.tag_name }} \
-          $(find artifacts -name "*.deb" -o -name "*.tar.gz" -o -name "*.zip") \
-          --clobber
