@@ -47,7 +47,7 @@ int osh_readline(struct oshfile *oshf, char **line, int *lineno) {
 
     while (fgets(buff, OSH_MAX_LINE_LENGTH, oshf->fp)) {
         oshf->lineno++;
-        slen = strlen(buff);
+        slen = (int) strlen(buff);
         pos0 = 0;
         pos1 = -1;
 
@@ -88,7 +88,7 @@ int osh_readline_key(struct oshfile *oshf, char **lline, char **kkey, char **aar
 
     while (fgets(buff, OSH_MAX_LINE_LENGTH, oshf->fp)) {
         oshf->lineno++;
-        slen = strlen(buff);
+        slen = (int) strlen(buff);
 
         /* Skip empty lines and comments */
         i = 0;
@@ -173,7 +173,7 @@ static int _is_comment(char c) {
     int i = 0;
     int cl;
 
-    cl = strlen(OSH_READLINE_COMMENT);
+    cl = (int) strlen(OSH_READLINE_COMMENT);
 
     for (i = 0; i < cl; i++) {
         if (c == OSH_READLINE_COMMENT[i]) {

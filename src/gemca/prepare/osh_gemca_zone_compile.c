@@ -266,7 +266,7 @@ static size_t _reformat(char const *input, char **output, struct osh_diag_sink c
         char *tmp = realloc(*output, ol * sizeof(char));
         if (tmp == NULL) {
             OSH_DIAG_ERRORF(diag, "_reformat(): cannot malloc");
-            return -1;
+            return (size_t) -1;
         }
         *output = tmp;
     }
@@ -332,7 +332,7 @@ static size_t _reformat(char const *input, char **output, struct osh_diag_sink c
                 char *tmp = realloc(*output, ol * sizeof(char));
                 if (tmp == NULL) {
                     OSH_DIAG_ERRORF(diag, "_reformat(): cannot realloc #2");
-                    return -1;
+                    return (size_t) -1;
                 }
                 *output = tmp;
             }
@@ -348,7 +348,7 @@ static size_t _reformat(char const *input, char **output, struct osh_diag_sink c
         char *tmp = realloc(*output, (j + 1) * sizeof(char));
         if (tmp == NULL) {
             OSH_DIAG_ERRORF(diag, "_reformat(): cannot realloc #3");
-            return -1;
+            return (size_t) -1;
         }
         *output = tmp;
     }
@@ -429,7 +429,7 @@ static int _tokenizer(char const *input, char ***ptokens, struct osh_diag_sink c
     }
     /* We are now done making the token list. Attach it to the ptokens pointer so it can be returned */
     /* n is now no longer an index, but holds the actual number of tokens  due to the last icreement */
-    return n;
+    return (int) n;
 }
 
 /**

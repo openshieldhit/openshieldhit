@@ -119,8 +119,8 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
         }
         p->pdg = pdg;
         p->is_nucleus = 1;
-        p->z = iso.z;
-        p->a = iso.a;
+        p->z = (uint16_t) iso.z;
+        p->a = (uint16_t) iso.a;
         p->charge = (int16_t) iso.z; /* assume fully ionized */
         return 1;
     } else {
@@ -129,7 +129,7 @@ int osh_particle_from_pdg(struct particle *p, int pdg) {
         p->a = 0;
         for (i = 0; i < osh_particle_db_len; ++i) {
             if (osh_particle_db[i].pdg == pdg) {
-                p->charge = osh_particle_db[i].charge_e;
+                p->charge = (int16_t) osh_particle_db[i].charge_e;
                 p->pdg = pdg;
                 (void) populate_light_ion_fields(p, pdg);
                 return 1;
