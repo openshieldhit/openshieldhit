@@ -197,6 +197,7 @@ enum osh_status osh_material_loaddedx_table_load(char const *path,
 
     oshf = osh_fopen(path);
     if (!oshf) {
+        OSH_DIAG_ERRORF(diag, "LOADDEDX: cannot open stopping-power table '%s'", path);
         return OSH_EIO;
     }
 
