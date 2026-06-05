@@ -1,0 +1,82 @@
+# OpenShieldHIT
+
+> A modern, lean Monte Carlo particle transport framework written from scratch in C11. Designed to be readable, fast, and pedagogically transparent. Conceptually inspired by the closed-source SHIELD-HIT12A; shares no code with it. MIT licensed.
+
+OpenShieldHIT transports ions (protons, heavier ions) through 3D geometry using Continuous-Slowing-Down Approximation (CSDA), scores dose, fluence, LET, and related quantities onto Cartesian meshes or DICOM grids, and writes output in its own BDO binary format, plain text, or DICOM RTDOSE.
+
+## Key documents
+
+- [README.md](README.md) — overview, build, install, application usage, public C API, repository layout
+- [DEVELOPER.md](DEVELOPER.md) — coding style, naming conventions, struct layout rules, C11 portability constraints (no POSIX-only APIs), module dependency rules, CMake presets
+- [TODO.md](TODO.md) — known open work items; treat as directional, not authoritative (items may be stale)
+- [docs/user/beam.dat.md](docs/user/beam.dat.md) — complete keyword reference for the beam input file
+- [docs/user/detect.dat.md](docs/user/detect.dat.md) — scored quantities (Dose in MeV/g, DoseGy in Gy, Fluence, DLET, TLET, …) and output formats
+- [docs/user/getting-started.md](docs/user/getting-started.md) — build, install, run a case
+
+## Build
+
+```bash
+cmake --preset release && cmake --build --preset release   # optimised
+cmake --preset debug   && cmake --build --preset debug     # debug + sanitisers
+ctest --preset debug                                        # run tests
+```
+
+Binaries: `build_rel/bin/openshieldhit` (release) or `build/bin/openshieldhit` (debug).
+
+## Running a simulation
+
+```bash
+openshieldhit path/to/case/          # full transport
+openshieldhit --dry-run path/to/case/  # parse inputs only, no transport
+openshieldhit -n 50000 path/to/case/   # override history count
+```
+
+A case directory must contain four plain-text input files:
+
+| File | Purpose |
+|------|---------|
+| `beam.dat` | Particle type, energy, beam geometry, physics switches (MCS, straggling), optional spotlist |
+| `geo.dat` | GEMCA analytic geometry bodies and zones, or DICOM CT (`DCM` card) |
+| `mat.dat` | Material definitions; optional external stopping-power tables via `LOADDEDX` |
+| `detect.dat` | Scoring detectors: geometry, quantities, output filenames and formats |
+
+## Source layout
+
+```
+include/openshieldhit/   public C API headers (cold workspaces, simulation entry points)
+src/apps/osh/            CLI application, input-file parsers, app-level orchestration
+src/beam/                beam cold workspace, runtime, wavefront spotlist
+src/gemca/               analytic geometry compiler and runtime (zone/material lookups)
+src/material/            material runtime, stopping-power tables
+src/scoring/             scoring runtime, step accumulation, postprocessing, BDO/text/DICOM save
+src/transport/           CSDA wavefront transport loop, per-step physics
+src/simulation/          top-level compile + run entry points (osh_simulation_create/run/free)
+src/common/              shared low-level utilities (diagnostics, file I/O, math, raytrace)
+src/voxel/               CT voxel body, HU calibration, Jacobs traversal
+src/physics/             MCS (Molière), energy straggling (Gaussian), nuclear interactions
+tests/unit/              CTest unit tests (one binary per module)
+tests/cases/             end-to-end integration cases (each is a self-contained case directory)
+tests/fixtures/          small shared input files reused across unit tests
+```
+
+## Key conventions (from DEVELOPER.md)
+
+- **C11**, but no `//` single-line comments in production code (reserved for TODO/WIP)
+- No `typedef struct` — use `struct foo` explicitly everywhere
+- No POSIX-only APIs (`strcasecmp`, `mkdtemp`, `<unistd.h>`) — Windows is a target
+- Case-insensitive keyword matching: lowercase at parse time with `osh_lower_inplace()`, then `strcmp`
+- All public functions prefixed `osh_`; internal helpers are `static` with no prefix
+- Return values: predicate functions return `int` (1/0); operation functions return `enum osh_status` (OSH_OK = 0 = success)
+- No heap allocations on the simulation hot path (inside `osh_scoring_score_step` or `osh_transport_step`)
+- Doxygen `/** @brief / @param / @returns */` blocks on all non-trivial functions
+
+## Unit conventions
+
+Quantities are generally in CGS-adjacent physics units (MeV, cm, g) — consistent with SH12A defaults. Exceptions exist where SI or clinical units are more natural: `DoseGy` outputs absorbed dose in Gy rather than MeV/g, and `DLET`/`TLET` are in MeV/cm. When in doubt, check the unit string in the output file header or the `page_data_unit()` function in `src/scoring/save/osh_scoring_save_bdo2019.c`.
+
+## SH12A / DICOM compatibility notes
+
+- BDO binary output uses the SH12A magic number `xSH12A` for legacy tool compatibility
+- `USECBEAM` spotlist x/y coordinates are isocenter coordinates (SH12A / DICOM RT Plan convention); openshieldhit back-projects them to beam-start coordinates using `BEAMSAD`
+- DICOM support (CT read, RTDOSE read/write) is built in — no external DICOM library required
+- zlib is optional (enables compressed `.bdz` output); not related to DICOM
