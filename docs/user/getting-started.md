@@ -3,7 +3,7 @@
 ## Requirements
 
 - CMake ≥ 3.16
-- C99 compiler (GCC, Clang, or MSVC)
+- C11 compiler (GCC, Clang, or MSVC)
 - Optional: zlib (compressed `.bdz` output files), libSDL2 (interactive geometry viewers)
 - DICOM: no external library needed — openshieldhit includes a minimal self-contained reader/writer
 
@@ -12,8 +12,8 @@
 ```bash
 git clone https://github.com/nbassler/openshieldhit.git
 cd openshieldhit
-cmake -B build -DCMAKE_BUILD_TYPE=Release .
-cmake --build build --parallel
+cmake -B build_rel -DCMAKE_BUILD_TYPE=Release .
+cmake --build build_rel --parallel
 ```
 
 The `openshieldhit` binary is written to `build_rel/bin/`.
@@ -29,7 +29,7 @@ cmake --install build_rel --prefix ~/.local      # user-local, no sudo needed
 ## Run a case
 
 ```bash
-build/bin/openshieldhit path/to/case/
+build_rel/bin/openshieldhit path/to/case/
 ```
 
 The case directory must contain `beam.dat`, `geo.dat`, `mat.dat`, and
@@ -37,19 +37,19 @@ The case directory must contain `beam.dat`, `geo.dat`, `mat.dat`, and
 
 ```bash
 # parse and compile inputs only, no transport
-build/bin/openshieldhit --dry-run path/to/case/
+build_rel/bin/openshieldhit --dry-run path/to/case/
 
 # override history count
-build/bin/openshieldhit -n 50000 path/to/case/
+build_rel/bin/openshieldhit -n 50000 path/to/case/
 
 # verbose logging
-build/bin/openshieldhit -v path/to/case/
+build_rel/bin/openshieldhit -v path/to/case/
 ```
 
 ## Try the minimal example
 
 ```bash
-build/bin/openshieldhit tests/cases/00_minimal/
+build_rel/bin/openshieldhit tests/cases/00_minimal/
 ```
 
 Produces a Bragg-peak depth-dose profile for 200 MeV protons in water.
