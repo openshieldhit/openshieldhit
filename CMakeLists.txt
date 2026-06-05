@@ -50,6 +50,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-pedantic -Wall -Wextra)
 elseif(MSVC)
     add_compile_options(/W4)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS) # fopen etc. are standard C; fopen_s is Annex K (optional)
 endif()
 
 # (Optional but recommended) default build type for Makefiles/Ninja
