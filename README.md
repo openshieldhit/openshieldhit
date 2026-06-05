@@ -76,6 +76,52 @@ openshieldhit --dry-run path/to/case/    # parse and load inputs, skip transport
 openshieldhit --help
 ```
 
+## Spot-scanning delivery: USECBEAM and BEAMSAD
+
+### Coordinate convention
+
+Spot x/y positions in a `USECBEAM` file are **isocenter coordinates** — the
+lateral offset of each spot at the isocenter plane (z = 0 in the beam-local
+frame).  This matches the SH12A legacy format and the DICOM RT Plan standard,
+where scanning-magnet setpoints are always expressed at isocenter.
+
+OSH reads these isocenter coordinates and **back-projects** them to the
+beam-entrance plane (BEAMPOS z) using the SAD before the spots enter the cold
+beam struct.  The cold `osh_beam_spot.p[]` always holds physical beam-start
+coordinates — it knows nothing about isocenter conventions.
+
+### BEAMSAD is required for correct fan-out
+
+`BEAMSAD <sadX> [sadY]` gives the source-to-axis distance in cm.  It is
+always a positive number: a physical distance from the upstream virtual point
+source to the isocenter, independent of beam direction.
+
+```
+BEAMSAD   200.0 256.0     # asymmetric nozzle: SAD_x = 200 cm, SAD_y = 256 cm
+BEAMSAD   200.0            # symmetric nozzle
+```
+
+Without `BEAMSAD`, or with `BEAMSAD INF`, OSH assumes **parallel beam
+delivery** (SAD = infinity): spot positions are used as-is with no fan-out
+correction and no back-projection.  This is correct for broad research fields
+with no scanning magnet.  OSH emits a warning when `USECBEAM` is present
+without `BEAMSAD` to flag the likely oversight; set `BEAMSAD INF` to suppress
+the warning when parallel delivery is intentional.
+
+### Back-projection formula
+
+For a spot at isocenter position x_iso, with beam start at BEAMPOS z = z_start
+(negative = upstream of isocenter) and SAD along x:
+
+```
+x_beam_start = x_iso * (SAD + z_start) / SAD
+```
+
+Example: x_iso = 5 cm, z_start = −50 cm, SAD = 200 cm
+→ factor = 150/200 = 0.75, x_beam_start = 3.75 cm.
+The SAD fan-out then tilts the beam back to exactly 5 cm at isocenter.
+Omitting this step would make the field ~33% wider than intended.
+
 ## Run a Minimal Example
 
 ```bash

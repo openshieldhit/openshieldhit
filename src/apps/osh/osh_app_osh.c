@@ -69,6 +69,38 @@ osh_beam_setup_from_path(char const *path, struct osh_diag_sink const *diag, str
             osh_beam_workspace_free(wb);
             return rc;
         }
+
+        if (wb->shared.use_sad) {
+            /* USECBEAM files follow the SH12A / DICOM RT Plan convention:
+             * spot x/y are isocenter coordinates (lateral offset at z = 0 in
+             * the beam-local PZALIGN frame).  osh_beam_spot.p[] must hold
+             * physical beam-start coordinates, so back-project each spot to
+             * the beam-entrance plane (spot->p[2] = BEAMPOS z, negative =
+             * upstream).
+             *
+             * The projection from isocenter to beam start follows the line
+             * from the virtual point source (at z = -SAD upstream of
+             * isocenter) through the isocenter position:
+             *
+             *   x_bs = x_iso * (sad + z_start) / sad
+             *
+             * SAD is always positive (it is a distance, not a signed z
+             * coordinate).  z_start is negative for a beam that enters
+             * upstream of the isocenter, so (sad + z_start) < sad and
+             * the beam-start offset is smaller than the isocenter offset.
+             *
+             * Example: x_iso = 5 cm, z_start = -50 cm, SAD = 200 cm
+             *   factor = (200 - 50) / 200 = 0.75  →  x_bs = 3.75 cm
+             * Without this step the SAD formula would compute an angle that
+             * is too steep, making the field ~33% wider at isocenter. */
+            size_t i;
+            for (i = 0u; i < nspots; i++) {
+                double z = spots[i].p[2]; /* beam-start z (negative = upstream) */
+                spots[i].p[0] *= (wb->shared.sad[0] + z) / wb->shared.sad[0];
+                spots[i].p[1] *= (wb->shared.sad[1] + z) / wb->shared.sad[1];
+            }
+        }
+
         rc = osh_beam_spots_set(wb, spots, nspots);
         free(spots);
         if (rc != OSH_OK) {

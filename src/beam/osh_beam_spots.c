@@ -35,6 +35,7 @@ int osh_beam_shared_init(struct beam_shared *shared) {
     shared->phi = 0.0;   /* rad */
     shared->use_div = 0;
     shared->use_sad = 0;
+    shared->sad_was_set = 0;
 
     return OSH_OK;
 }
