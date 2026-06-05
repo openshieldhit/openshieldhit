@@ -71,3 +71,6 @@ CMakeUserPresets.json
 
 # Build directory (CMake)
 build/
+# Generated documentation
+docs/api/
+site/
