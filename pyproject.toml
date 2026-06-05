@@ -20,6 +20,7 @@ docs = [
 
 [tool.scikit-build]
 cmake.build-type = "Release"
+cmake.args = ["-DOSH_BUILD_EXAMPLES=OFF"]  # SDL2 examples are never part of the Python wheel
 wheel.packages = []          # no Python packages yet; remove when bindings are added
 
 [tool.ruff]
