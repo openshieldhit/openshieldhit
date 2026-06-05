@@ -134,7 +134,10 @@ jobs:
     - name: Upload packages to release
       uses: softprops/action-gh-release@v3
       with:
-        files: artifacts/*
+        files: |
+          artifacts/**/*.deb
+          artifacts/**/*.tar.gz
+          artifacts/**/*.zip
 
   # Install and verify DEB package works correctly
   test-package:
