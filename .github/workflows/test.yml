@@ -59,3 +59,23 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: ./build/bin/Debug/openshieldhit.exe --version
+
+  # Windows Release build — catches MSVC warnings-as-errors that only fire in
+  # Release mode (e.g. C4701 uninitialized variable).  No test run needed here;
+  # correctness is verified by the Debug job above.
+  build-windows-release:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Set up CMake
+      uses: jwlawson/actions-setup-cmake@v2.2.0
+
+    - name: Configure project (Release, examples off — no SDL2 on Windows CI)
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
+
+    - name: Build project (Release)
+      run: cmake --build build --config Release --parallel
