@@ -34,7 +34,7 @@ static enum osh_status page_postprocess(struct osh_scoring_page_runtime *page) {
 
     switch (page->score_kind) {
 
-    case OSH_SCORING_SCORE_DOSE:
+    case OSH_SCORING_SCORE_DOSEGY:
         /* Convert accumulated MeV/g to Gy once per bin, not per transport step. */
         for (i = 0; i < page->len; ++i) {
             page->data[i] *= OSH_MEVG2GY;
