@@ -141,7 +141,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
 
         event_out->secondaries[j].energy = e_sec;
         event_out->secondaries[j].species = species;
-        event_out->n_secondaries = (size_t) (j + 1);
+        event_out->n_secondaries = (size_t) j + 1u;
 
         /* Degrade the proton for the next collision. */
         T_current = e_prim;
