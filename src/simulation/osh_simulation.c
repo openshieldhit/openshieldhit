@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -299,8 +298,10 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
                        sim->neutron_pool.n_created);
     }
     if (sim->fragment_pool.n_created > 0u) {
-        printf("simulation: %zu nuclear fragment(s) created but not processed (Fermi breakup not yet implemented)\n",
-               sim->fragment_pool.n_created);
+        OSH_DIAG_INFOF(
+            sim->diag,
+            "simulation: %zu nuclear fragment(s) created but not processed (Fermi breakup not yet implemented)",
+            sim->fragment_pool.n_created);
     }
 
     rc = osh_scoring_postprocess(&sim->scoring_runtime);

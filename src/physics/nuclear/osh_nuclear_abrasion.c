@@ -10,18 +10,9 @@
 #include "physics/osh_kinematics.h"
 #include "random/osh_rng.h"
 
-/* Species descriptors initialised on first call; read-only thereafter. */
-static struct particle s_proton;
-static struct particle s_neutron;
-static int s_species_valid = 0;
-
-static void ensure_species(void) {
-    if (!s_species_valid) {
-        osh_particle_from_pdg(&s_proton, OSH_PART_PDG_PROTON);
-        osh_particle_from_pdg(&s_neutron, OSH_PART_PDG_NEUTRON);
-        s_species_valid = 1;
-    }
-}
+/* Compile-time constants; values match osh_particle_from_pdg for these PDG codes. */
+static struct particle const s_proton = {OSH_PART_MASS_PROTON, OSH_PART_PDG_PROTON, 1, 1u, 1u, 0u};
+static struct particle const s_neutron = {OSH_PART_MASS_NEUTRON, OSH_PART_PDG_NEUTRON, 0, 0u, 1u, 0u};
 
 void osh_nuclear_abrasion_step(double T_lab_mev,
                                double const incident_dir[3],
@@ -48,8 +39,6 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     int nu; /* sampled number of participant nucleons */
     int j;
     struct particle const *species;
-
-    ensure_species();
 
     /* Primary is always absorbed in an inelastic event.  Secondaries are filled
      * in below; n_secondaries stays 0 if nu=0 (Poisson fluctuation). */
