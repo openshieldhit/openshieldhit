@@ -51,3 +51,13 @@ Everything under `include/openshieldhit/` is the stable public API.
 Internal headers under `src/` are not API — they may change between releases.
 
 See [API reference →](../api/index.html) for the full Doxygen-generated documentation.
+
+## Examples
+
+`examples/` contains small programs that demonstrate the public C API directly,
+bypassing the `openshieldhit` application layer.  They include interactive
+geometry viewers (SDL2), a BNCT cell demo, and transport benchmarks.  These are
+developer tools, not end-user cases.  SDL2 is required for the interactive
+viewers (`sudo apt-get install libsdl2-dev`).  See
+[examples/README.md](../../examples/README.md) for build instructions and a
+description of each program.

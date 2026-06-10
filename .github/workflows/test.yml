@@ -49,7 +49,7 @@ jobs:
       run: cmake --build build --parallel --config Debug
 
     - name: Run tests
-      run: ctest --test-dir build --output-on-failure -C Debug -E 'cases::05_dicom_simple'
+      run: ctest --test-dir build --output-on-failure -C Debug -E 'cases::05_dicom_simple|unit::test_osh_dicom|unit::test_osh_geometry_dcm'
 
     - name: Print version information (Linux/macOS)
       if: runner.os != 'Windows'

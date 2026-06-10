@@ -1,6 +1,7 @@
 # OpenShieldHIT
 
-> A modern, lean Monte Carlo particle transport framework written from scratch in C11. Designed to be readable, fast, and pedagogically transparent. Conceptually inspired by the closed-source SHIELD-HIT12A; shares no code with it. MIT licensed.
+> A modern, lean Monte Carlo particle transport framework written from scratch in C11. Designed to be readable, fast, and pedagogically transparent. Conceptually inspired by the same application domain as SHIELD-HIT12A; shares no code with it. MIT licensed.
+
 
 OpenShieldHIT transports ions (protons, heavier ions) through 3D geometry using Continuous-Slowing-Down Approximation (CSDA), scores dose, fluence, LET, and related quantities onto Cartesian meshes or DICOM grids, and writes output in its own BDO binary format, plain text, or DICOM RTDOSE.
 
@@ -80,3 +81,11 @@ Quantities are generally in CGS-adjacent physics units (MeV, cm, g) — consiste
 - `USECBEAM` spotlist x/y coordinates are isocenter coordinates (SH12A / DICOM RT Plan convention); openshieldhit back-projects them to beam-start coordinates using `BEAMSAD`
 - DICOM support (CT read, RTDOSE read/write) is built in — no external DICOM library required
 - zlib is optional (enables compressed `.bdz` output); not related to DICOM
+
+## IMPORTANT: relationship to SHIELD-HIT and SHIELD-HIT12A
+
+OpenShieldHIT shares **zero source code** with SHIELD-HIT (the original code) or with SHIELD-HIT12A (SH12A).
+Do NOT describe it as a "reimplementation", "port", or "derivative" of either — those terms imply code derivation and are legally incorrect.
+The code flow is **one-way**: parts of OpenShieldHIT *may be reused in* SH12A, not the other way around.
+The connection is limited to: same application domain, same input-file format (beam.dat / geo.dat / mat.dat / detect.dat), and conceptual inspiration.
+The architecture, algorithms, and every line of OpenShieldHIT are written from scratch, using only publicly available scientific literature and data.
