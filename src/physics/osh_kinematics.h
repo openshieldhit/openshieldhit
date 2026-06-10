@@ -43,9 +43,8 @@ struct osh_rng;
  * @param[in]  a          cos φ component of azimuthal unit vector.
  * @param[in]  b          sin φ component of azimuthal unit vector.
  */
-void osh_kinematics_rotate_dir_cos(double const v[3], double w[3],
-                                   double cos_theta, double sin_theta,
-                                   double a, double b);
+void osh_kinematics_rotate_dir_cos(
+    double const v[3], double w[3], double cos_theta, double sin_theta, double a, double b);
 
 /**
  * @brief Generate an azimuthal unit vector (cos φ, sin φ) without trig.
@@ -92,8 +91,12 @@ void osh_kinematics_azimuth(struct osh_rng *rng, double *cos_phi, double *sin_ph
  * @param[out] cos_theta2_lab Lab-frame recoil angle cosine (target particle, >= 0).
  * @param[out] e2_lab_mev     Recoil particle lab kinetic energy [MeV].
  */
-void osh_kinematics_elastic_equal_mass_lab(double T_lab, double mp, double cos_theta_cm,
-                                           double *cos_theta1_lab, double *e1_lab_mev,
-                                           double *cos_theta2_lab, double *e2_lab_mev);
+void osh_kinematics_elastic_equal_mass_lab(double T_lab,
+                                           double mp,
+                                           double cos_theta_cm,
+                                           double *cos_theta1_lab,
+                                           double *e1_lab_mev,
+                                           double *cos_theta2_lab,
+                                           double *e2_lab_mev);
 
 #endif /* OSH_KINEMATICS_H */

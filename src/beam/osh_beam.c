@@ -514,8 +514,11 @@ void osh_beam_print(struct beam_workspace const *wb, struct osh_diag_sink const 
     OSH_DIAG_INFOF(diag, "%s", "");
     OSH_DIAG_INFOF(diag, "%-18s : %s", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);
     OSH_DIAG_INFOF(diag, "%-18s : %s", "Straggling mode", osh_beam_stragg_names[(int) wb->straggl]);
-    OSH_DIAG_INFOF(diag, "%-18s : %s / %s", "Nuclear (inel/el)",
-                   _beam_onoff((int) wb->nuclear_inelastic), _beam_onoff((int) wb->nuclear_elastic));
+    OSH_DIAG_INFOF(diag,
+                   "%-18s : %s / %s",
+                   "Nuclear (inel/el)",
+                   _beam_onoff((int) wb->nuclear_inelastic),
+                   _beam_onoff((int) wb->nuclear_elastic));
     OSH_DIAG_INFOF(diag, "%-18s : %s", "Apcorr mode", _beam_onoff((int) wb->apcorr));
     OSH_DIAG_INFOF(diag, "%-18s : %s", "Beam mode", osh_beam_mode_names[(int) wb->beam_mode]);
     OSH_DIAG_INFOF(diag, "%-18s : %s", "Make LN", _beam_onoff((int) wb->makeln));

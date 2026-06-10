@@ -30,7 +30,7 @@ static void test_rotate_identity(void) {
 
     /* Result must be unit length after any rotation */
     osh_kinematics_rotate_dir_cos(v, w, 0.5, sqrt(1.0 - 0.25), 1.0, 0.0);
-    len = sqrt(w[0]*w[0] + w[1]*w[1] + w[2]*w[2]);
+    len = sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
     ASSERT_NEAR(len, 1.0, 1e-12);
 }
 
@@ -62,7 +62,7 @@ static void test_rotate_unit_length(void) {
         osh_kinematics_azimuth(&rng, &cos_phi, &sin_phi);
 
         osh_kinematics_rotate_dir_cos(v, w, cos_t, sin_t, cos_phi, sin_phi);
-        len = sqrt(w[0]*w[0] + w[1]*w[1] + w[2]*w[2]);
+        len = sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
         ASSERT_NEAR(len, 1.0, 1e-12);
     }
 }
@@ -73,7 +73,7 @@ static void test_rotate_aliasing(void) {
 
     /* w may alias v — must not corrupt the result */
     osh_kinematics_rotate_dir_cos(v, v, 0.6, 0.8, 1.0, 0.0);
-    len = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+    len = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
     ASSERT_NEAR(len, 1.0, 1e-12);
 }
 
@@ -107,8 +107,7 @@ static void test_elastic_energy_conservation(void) {
 
     for (i = 0; i < 5; ++i) {
         for (j = 0; j < 5; ++j) {
-            osh_kinematics_elastic_equal_mass_lab(
-                energies[i], PROTON_MASS_MEV, cos_cms[j], &cos1, &e1, &cos2, &e2);
+            osh_kinematics_elastic_equal_mass_lab(energies[i], PROTON_MASS_MEV, cos_cms[j], &cos1, &e1, &cos2, &e2);
             /* Energy conservation: e1 + e2 == T_lab within 1e-6 relative */
             ASSERT_NEAR(e1 + e2, energies[i], energies[i] * 1e-6);
         }
@@ -121,8 +120,7 @@ static void test_elastic_nonrelativistic_limit(void) {
     double e1, e2, cos1, cos2;
     double cos_cm = 0.5; /* arbitrary CM angle */
 
-    osh_kinematics_elastic_equal_mass_lab(
-        10.0, PROTON_MASS_MEV, cos_cm, &cos1, &e1, &cos2, &e2);
+    osh_kinematics_elastic_equal_mass_lab(10.0, PROTON_MASS_MEV, cos_cm, &cos1, &e1, &cos2, &e2);
 
     /* Non-relativistic: cos1^2 + cos2^2 ≈ 1 (Pythagorean identity)
      * This holds because θ1 + θ2 = π/2 implies cos^2(θ1) + cos^2(θ2) = 1. */
@@ -139,8 +137,7 @@ static void test_elastic_recoil_always_forward(void) {
      * Allow 1e-10 tolerance for floating-point rounding near cos_cm = 1. */
     for (i = 0; i <= 100; ++i) {
         cos_cm = -1.0 + 2.0 * i / 100.0;
-        osh_kinematics_elastic_equal_mass_lab(
-            500.0, PROTON_MASS_MEV, cos_cm, &cos1, &e1, &cos2, &e2);
+        osh_kinematics_elastic_equal_mass_lab(500.0, PROTON_MASS_MEV, cos_cm, &cos1, &e1, &cos2, &e2);
         ASSERT_TRUE(cos2 >= -1e-10);
     }
 }
@@ -152,8 +149,7 @@ static void test_elastic_energies_non_negative(void) {
 
     for (i = 0; i <= 100; ++i) {
         cos_cm = -1.0 + 2.0 * i / 100.0;
-        osh_kinematics_elastic_equal_mass_lab(
-            200.0, PROTON_MASS_MEV, cos_cm, &cos1, &e1, &cos2, &e2);
+        osh_kinematics_elastic_equal_mass_lab(200.0, PROTON_MASS_MEV, cos_cm, &cos1, &e1, &cos2, &e2);
         ASSERT_TRUE(e1 >= 0.0);
         ASSERT_TRUE(e2 >= 0.0);
     }

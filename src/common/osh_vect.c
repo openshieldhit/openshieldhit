@@ -166,18 +166,26 @@ void osh_vect_orthogonal_basis_norm(double const *w, double *u, double *v) {
     double norm_inv;
 
     if (ax <= ay && ax <= az) {
-        u[0] = 1.0 - w[0]*w[0]; u[1] = 0.0 - w[1]*w[0]; u[2] = 0.0 - w[2]*w[0];
+        u[0] = 1.0 - w[0] * w[0];
+        u[1] = 0.0 - w[1] * w[0];
+        u[2] = 0.0 - w[2] * w[0];
     } else if (ay <= az) {
-        u[0] = 0.0 - w[0]*w[1]; u[1] = 1.0 - w[1]*w[1]; u[2] = 0.0 - w[2]*w[1];
+        u[0] = 0.0 - w[0] * w[1];
+        u[1] = 1.0 - w[1] * w[1];
+        u[2] = 0.0 - w[2] * w[1];
     } else {
-        u[0] = 0.0 - w[0]*w[2]; u[1] = 0.0 - w[1]*w[2]; u[2] = 1.0 - w[2]*w[2];
+        u[0] = 0.0 - w[0] * w[2];
+        u[1] = 0.0 - w[1] * w[2];
+        u[2] = 1.0 - w[2] * w[2];
     }
-    norm_inv = 1.0 / sqrt(u[0]*u[0] + u[1]*u[1] + u[2]*u[2]);
-    u[0] *= norm_inv; u[1] *= norm_inv; u[2] *= norm_inv;
+    norm_inv = 1.0 / sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+    u[0] *= norm_inv;
+    u[1] *= norm_inv;
+    u[2] *= norm_inv;
 
-    v[0] = w[1]*u[2] - w[2]*u[1];
-    v[1] = w[2]*u[0] - w[0]*u[2];
-    v[2] = w[0]*u[1] - w[1]*u[0];
+    v[0] = w[1] * u[2] - w[2] * u[1];
+    v[1] = w[2] * u[0] - w[0] * u[2];
+    v[2] = w[0] * u[1] - w[1] * u[0];
 }
 
 void osh_vect_eqpln(double const *p, double const *u, double *pp) {

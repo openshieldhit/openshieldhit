@@ -54,14 +54,14 @@ enum osh_transport_straggling_mode {
  *   - deltae and demin are per-step fractions / absolute floors
  */
 struct osh_transport_params {
-    size_t nstat;         /**< Total number of primary histories to transport. */
-    float deltae;         /**< Max fractional energy loss per CSDA substep [dimensionless]. */
-    float demin;          /**< Min energy loss per material substep [MeV/nucleon]. */
-    float tcut;           /**< Lower ion energy cutoff [MeV/nucleon]. */
-    int rndseed;          /**< Base RNG seed. */
-    int rndoffset;        /**< RNG seed offset (added on top of rndseed). */
-    char mcs_mode;        /**< enum osh_transport_mcs_mode value. */
-    char straggling_mode; /**< enum osh_transport_straggling_mode value. */
+    size_t nstat;           /**< Total number of primary histories to transport. */
+    float deltae;           /**< Max fractional energy loss per CSDA substep [dimensionless]. */
+    float demin;            /**< Min energy loss per material substep [MeV/nucleon]. */
+    float tcut;             /**< Lower ion energy cutoff [MeV/nucleon]. */
+    int rndseed;            /**< Base RNG seed. */
+    int rndoffset;          /**< RNG seed offset (added on top of rndseed). */
+    char mcs_mode;          /**< enum osh_transport_mcs_mode value. */
+    char straggling_mode;   /**< enum osh_transport_straggling_mode value. */
     char nuclear_inelastic; /**< Non-zero to enable inelastic nuclear reactions (Tripathi). */
     char nuclear_elastic;   /**< Non-zero to enable pp elastic scattering. */
 };
