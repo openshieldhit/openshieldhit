@@ -31,8 +31,8 @@ int main(void) {
 }
 
 /*
- * p on O-16 at 200 MeV.  The Tripathi formula yields ~300 mb at this energy;
- * the test pins the implementation against its own output (regression test).
+ * p on O-16 at 200 MeV.  This test pins the unscaled Tripathi implementation
+ * against its own output (regression test).
  * Experimental data are ~550 mb; the discrepancy is a known limitation of the
  * purely geometric parametrization for light projectiles at this energy — a
  * systematic correction is deferred.
@@ -40,9 +40,9 @@ int main(void) {
 static void test_sigma_proton_oxygen(void) {
     /* zp=1, ap=1, zt=8, at=16, E=200 MeV/nucleon */
     double sigma = osh_nuclear_tripathi_sigma(1u, 1u, 8.0, 16.0, 200.0);
-    /* Regression: ~300 mb = 300e-27 cm^2; accept 5 % tolerance */
+    /* Regression: ~301 mb; accept 5 % tolerance */
     ASSERT_TRUE(sigma > 0.0);
-    ASSERT_TRUE(nearly(sigma, 3.0e-25, 0.05));
+    ASSERT_TRUE(nearly(sigma, 3.01e-25, 0.05));
 }
 
 /*

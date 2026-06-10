@@ -75,12 +75,14 @@ struct osh_transport_params {
  * stored in function-local statics if transport is later threaded.
  */
 struct osh_nuclear_handler;
+struct osh_fragment_pool;
 struct osh_neutron_pool;
 
 struct osh_transport_context {
     struct osh_transport_params params;
     struct osh_diag_sink const *diag;                   /**< Borrowed; NULL silences transport diagnostics. */
     struct osh_nuclear_handler const *nuclear_handler;  /**< Borrowed; NULL disables handler. */
+    struct osh_fragment_pool *fragment_pool;            /**< Borrowed; residual fragments for future breakup. */
     struct osh_neutron_pool *neutron_pool;              /**< Borrowed; neutrons routed here instead of CSDA pool. */
     char warned_boundary_demin_override;
 };

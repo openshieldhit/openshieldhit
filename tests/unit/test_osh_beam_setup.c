@@ -443,6 +443,36 @@ static void test_setup_nstat_negative_save_disables_nsave(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+static void test_setup_nucre_modes_set_independent_flags(void) {
+    char beam_path[512];
+    char beam_text[512];
+    int mode;
+
+    for (mode = 0; mode <= 3; ++mode) {
+        struct osh_beam_workspace *wb = NULL;
+        int rc;
+
+        snprintf(beam_text,
+                 sizeof beam_text,
+                 "PRIMARY proton\n"
+                 "TMAX0 120.0 0.0\n"
+                 "BEAMPOS 0.0 0.0 -10.0\n"
+                 "NUCRE %d\n",
+                 mode);
+        _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+        rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+        ASSERT_TRUE(rc == OSH_OK);
+        ASSERT_TRUE(wb != NULL);
+        ASSERT_TRUE(wb->nuclear_inelastic == (char) (mode == 1 || mode == 3));
+        ASSERT_TRUE(wb->nuclear_elastic == (char) (mode == 1 || mode == 2));
+
+        ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+        ASSERT_TRUE(remove(beam_path) == 0);
+    }
+}
+
 int main(void) {
     test_beam_spots_set_replace_and_validate();
     test_setup_single_spot_from_beamdat();
@@ -458,5 +488,6 @@ int main(void) {
     test_setup_beamsigma_single_value_sets_symmetric_xy();
     test_setup_nstat_single_value_defaults_nsave_to_zero();
     test_setup_nstat_negative_save_disables_nsave();
+    test_setup_nucre_modes_set_independent_flags();
     return 0;
 }

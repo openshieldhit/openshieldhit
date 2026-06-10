@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,6 +16,7 @@
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/save/osh_scoring_save.h"
+#include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
 #include "transport/osh_transport.h"
 
@@ -38,6 +40,7 @@ struct osh_simulation {
     struct osh_scoring_runtime scoring_runtime;
     struct osh_transport_context transport_ctx;
     struct osh_nuclear_handler nuclear_handler;
+    struct osh_fragment_pool fragment_pool;
     struct osh_neutron_pool neutron_pool;
 
     unsigned long long requested_nstat;
@@ -241,7 +244,9 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     sim->transport_ctx.params.nuclear_inelastic = beam->nuclear_inelastic ? 1 : 0;
     sim->transport_ctx.params.nuclear_elastic = beam->nuclear_elastic ? 1 : 0;
     sim->transport_ctx.diag = diag;
+    sim->fragment_pool.n_created = 0u;
     sim->neutron_pool.n_created = 0u;
+    sim->transport_ctx.fragment_pool = &sim->fragment_pool;
     sim->transport_ctx.neutron_pool = &sim->neutron_pool;
 
     /* ---- 5b. Nuclear handler --------------------------------------------- */
@@ -292,6 +297,10 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
         OSH_DIAG_INFOF(sim->diag,
                        "simulation: %zu neutron(s) created but not transported (neutron transport not yet implemented)",
                        sim->neutron_pool.n_created);
+    }
+    if (sim->fragment_pool.n_created > 0u) {
+        printf("simulation: %zu nuclear fragment(s) created but not processed (Fermi breakup not yet implemented)\n",
+               sim->fragment_pool.n_created);
     }
 
     rc = osh_scoring_postprocess(&sim->scoring_runtime);

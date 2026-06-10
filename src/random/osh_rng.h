@@ -220,8 +220,9 @@ void osh_rng_gauss_vec(struct osh_rng *rng, double mu, double sigma, double *res
  *
  * @details
  * Uses Knuth's product-of-uniforms method, O(lambda) on average.
- * Suitable for lambda up to ~30; returns at most OSH_NUCLEAR_MAX_SECONDARIES
- * to bound cost for unexpectedly large lambda values.
+ * Suitable for modest lambda values. The implementation has a finite loop
+ * guard for pathological inputs; callers that need a hard output cap should
+ * clamp the returned value themselves.
  *
  * @param rng     RNG state (mutated).
  * @param lambda  Mean of the Poisson distribution; must be >= 0.

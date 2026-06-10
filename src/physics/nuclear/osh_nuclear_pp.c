@@ -1,6 +1,7 @@
 #include "physics/nuclear/osh_nuclear_pp.h"
 
 #include "common/osh_interpolate.h"
+#include "openshieldhit/const.h"
 #include "physics/nuclear/osh_nuclear_pp_data.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "random/osh_rng.h"
@@ -36,7 +37,7 @@ double osh_nuclear_pp_sigma_el(double e_lab_mev) {
     sigma_mb = (1.0f - te) * osh_pp_sigma_tot_mb[ei] * (1.0f - osh_pp_sigma_in_frac[ei])
                + te * osh_pp_sigma_tot_mb[ei + 1] * (1.0f - osh_pp_sigma_in_frac[ei + 1]);
 
-    return (double) sigma_mb * 1.0e-27; /* mb → cm² */
+    return (double) sigma_mb * OSH_MB_TO_CM2;
 }
 
 /* ---- CDF angle sampling -------------------------------------------------- */

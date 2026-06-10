@@ -3,13 +3,12 @@
 
 #include <math.h> /* sqrt */
 
+#include "openshieldhit/const.h"
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
 #include "physics/osh_kinematics.h"
 #include "random/osh_rng.h"
-
-#define OSH_MB_TO_CM2 1.0e-27
 
 /* Species descriptors initialised on first call; read-only thereafter. */
 static struct particle s_proton;
@@ -44,6 +43,8 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     double e_sec;    /* lab KE of the knocked-out nucleon [MeV] */
     double sin_sec;
     int is_neutron;
+    int n_knockout_p;
+    int n_knockout_n;
     int nu;          /* sampled number of participant nucleons */
     int j;
     struct particle const *species;
@@ -55,15 +56,23 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     event_out->kind = OSH_NUCLEAR_EVENT_ABRASION;
     event_out->primary_energy = 0.0;
     event_out->n_secondaries = 0u;
+    event_out->n_fragments = 0u;
 
     if (sigma_pa_cm2 <= 0.0 || a_eff <= 0.0) {
         return;
     }
 
+    /* The residual target nucleus is stored for the future Fermi-breakup
+     * stage.  Fast nucleon emission below will update A/Z before return. */
+    event_out->n_fragments = 1u;
+    event_out->fragments[0].a = (unsigned int) floor(a_eff + 0.5);
+    event_out->fragments[0].z = (unsigned int) floor(z_eff + 0.5);
+    event_out->fragments[0].excitation_energy = 0.0;
+
     /* Wounded-nucleon mean (Glauber 1970):
      *   <nu> = sigma_pN * A / sigma_pA
      * sigma_pN is a tunable constant (OSH_ABRASION_SIGMA_PN_MB); calibrate
-     * against FLUKA / SH12A secondary proton yield data. */
+     * against public secondary-nucleon yield benchmark data. */
     sigma_pn_cm2 = OSH_ABRASION_SIGMA_PN_MB * OSH_MB_TO_CM2;
     nu_mean = sigma_pn_cm2 * a_eff / sigma_pa_cm2;
     nu = osh_rng_poisson(rng, nu_mean);
@@ -88,12 +97,12 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         n_over_a = 1.0;
     }
 
-    /* Sequential collision model: each participant scatters off the
-     * incoming proton in turn.  The proton energy degrades after each
-     * collision so that energy is conserved across all nu steps.
-     * (This is equivalent to a one-dimensional intranuclear cascade with
-     * nu steps and isotropic CM scattering.) */
+    /* Minimal fast-emission model: each participant is sampled against the
+     * original beam axis, while the available proton energy is degraded after
+     * each emission so total emitted kinetic energy remains bounded. */
     T_current = T_lab_mev;
+    n_knockout_p = 0;
+    n_knockout_n = 0;
 
     for (j = 0; j < nu; ++j) {
         /* Stop if the remaining proton energy is too low for meaningful
@@ -106,6 +115,11 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         /* Nucleon type: neutron with prob N/A, proton with prob Z/A. */
         is_neutron = (osh_rng_double(rng) < n_over_a);
         species = is_neutron ? &s_neutron : &s_proton;
+        if (is_neutron) {
+            ++n_knockout_n;
+        } else {
+            ++n_knockout_p;
+        }
 
         /* Isotropic CM scattering — simplest physical model.
          * A forward-peaked angular distribution (e.g. from a diffraction
@@ -123,7 +137,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         /* Rotate the recoil nucleon into the lab frame.
          * Convention matches pp elastic: secondary uses the opposite azimuth
          * (-cos_phi, -sin_phi) so that momentum is conserved transversely. */
-        sin_sec = sqrt(1.0 - cos_sec * cos_sec);
+        sin_sec = sqrt(fmax(0.0, 1.0 - cos_sec * cos_sec));
         osh_kinematics_rotate_dir_cos(incident_dir,
                                       event_out->secondaries[j].dir,
                                       cos_sec, sin_sec,
@@ -135,5 +149,16 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
 
         /* Degrade the proton for the next collision. */
         T_current = e_prim;
+    }
+
+    if (event_out->n_fragments > 0u) {
+        unsigned int da = (unsigned int) (n_knockout_p + n_knockout_n);
+        unsigned int dz = (unsigned int) n_knockout_p;
+
+        event_out->fragments[0].a = (event_out->fragments[0].a > da) ? event_out->fragments[0].a - da : 0u;
+        event_out->fragments[0].z = (event_out->fragments[0].z > dz) ? event_out->fragments[0].z - dz : 0u;
+        if (event_out->fragments[0].a == 0u || event_out->fragments[0].z == 0u) {
+            event_out->n_fragments = 0u;
+        }
     }
 }

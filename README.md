@@ -55,7 +55,7 @@ cmake --preset debug   && cmake --build --preset debug     # debug symbols, -Og
 ```
 
 Available presets: `debug`, `release`, `relwithdebinfo`, `prof`.
-Binaries land in `build_rel/bin/` (release) or `build/bin/` (debug).
+Binaries land in `build/bin/` (release) or `build_debug/bin/` (debug).
 
 Useful cache variables for development:
 
@@ -67,9 +67,9 @@ Useful cache variables for development:
 ## Install
 
 ```bash
-sudo cmake --install build_rel                   # → /usr/local/bin/openshieldhit
-sudo cmake --install build_rel --prefix /usr     # → /usr/bin/openshieldhit
-cmake --install build_rel --prefix ~/.local      # no sudo, user-local install
+sudo cmake --install build                   # → /usr/local/bin/openshieldhit
+sudo cmake --install build --prefix /usr     # → /usr/bin/openshieldhit
+cmake --install build --prefix ~/.local      # no sudo, user-local install
 ```
 
 Installs the main executable, documentation, and selected examples.
@@ -90,7 +90,7 @@ openshieldhit --help
 ## Run a Minimal Example
 
 ```bash
-build_rel/bin/openshieldhit -v tests/cases/00_minimal/
+build/bin/openshieldhit -v tests/cases/00_minimal/
 ```
 
 Produces a `.bdo` and `.txt` output file with scored dose vs. depth — a Bragg peak for a proton beam in water.
@@ -104,13 +104,13 @@ the full CT grid as well as an RTDOSE template file.
 Validate parsing and geometry compilation without transporting particles:
 
 ```bash
-build_rel/bin/openshieldhit --dry-run tests/cases/05_dicom_simple/
+build/bin/openshieldhit --dry-run tests/cases/05_dicom_simple/
 ```
 
 Run 100 000 primaries:
 
 ```bash
-build_rel/bin/openshieldhit -v -n 100000 tests/cases/05_dicom_simple/
+build/bin/openshieldhit -v -n 100000 tests/cases/05_dicom_simple/
 ```
 
 Output files are written next to the input case:

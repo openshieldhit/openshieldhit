@@ -6,7 +6,7 @@
             "name": "debug",
             "displayName": "Debug",
             "description": "Unoptimised build with full debug info",
-            "binaryDir": "${sourceDir}/build",
+            "binaryDir": "${sourceDir}/build_debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
@@ -15,7 +15,7 @@
             "name": "release",
             "displayName": "Release",
             "description": "Optimised release build (-O3)",
-            "binaryDir": "${sourceDir}/build_rel",
+            "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }

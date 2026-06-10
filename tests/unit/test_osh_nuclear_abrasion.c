@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "openshieldhit/const.h"
 #include "particle/osh_particle.h"
 #include "physics/nuclear/osh_nuclear_abrasion.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
@@ -23,7 +24,7 @@
  */
 #define O16_A       16.0
 #define O16_Z        8.0
-#define SIGMA_PA_CM2 450.0e-27
+#define SIGMA_PA_CM2 (450.0 * OSH_MB_TO_CM2)
 
 static void test_event_kind(void) {
     struct osh_rng rng;
@@ -40,6 +41,9 @@ static void test_event_kind(void) {
         osh_nuclear_abrasion_step(140.0, dir, O16_A, O16_Z, SIGMA_PA_CM2, &rng, &ev);
         ASSERT_TRUE(ev.kind == OSH_NUCLEAR_EVENT_ABRASION);
         ASSERT_TRUE(ev.primary_energy == 0.0);
+        ASSERT_TRUE(ev.n_fragments == 1u);
+        ASSERT_TRUE(ev.fragments[0].a <= (unsigned int) O16_A);
+        ASSERT_TRUE(ev.fragments[0].z <= (unsigned int) O16_Z);
     }
 }
 
@@ -140,7 +144,7 @@ static void test_mean_nu(void) {
     total_nu = 0.0;
     n_events = 20000;
 
-    expected_nu = (OSH_ABRASION_SIGMA_PN_MB * 1.0e-27 * O16_A) / SIGMA_PA_CM2;
+    expected_nu = (OSH_ABRASION_SIGMA_PN_MB * OSH_MB_TO_CM2 * O16_A) / SIGMA_PA_CM2;
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 42u, 0u);
     for (i = 0; i < n_events; ++i) {
