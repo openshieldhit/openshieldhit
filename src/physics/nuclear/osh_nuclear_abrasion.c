@@ -1,5 +1,4 @@
 #include "physics/nuclear/osh_nuclear_abrasion.h"
-#include "physics/nuclear/osh_nuclear_handler.h"
 
 #include <math.h> /* sqrt */
 
@@ -7,6 +6,7 @@
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
+#include "physics/nuclear/osh_nuclear_handler.h"
 #include "physics/osh_kinematics.h"
 #include "random/osh_rng.h"
 
@@ -45,7 +45,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     int is_neutron;
     int n_knockout_p;
     int n_knockout_n;
-    int nu;          /* sampled number of participant nucleons */
+    int nu; /* sampled number of participant nucleons */
     int j;
     struct particle const *species;
 
@@ -129,23 +129,19 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
 
         /* Full relativistic equal-mass kinematics (proton mass used for both
          * p and n since mp ≈ mn to better than 0.1%). */
-        osh_kinematics_elastic_equal_mass_lab(T_current, OSH_PART_MASS_PROTON,
-                                              cos_cm,
-                                              &cos_prim, &e_prim,
-                                              &cos_sec, &e_sec);
+        osh_kinematics_elastic_equal_mass_lab(
+            T_current, OSH_PART_MASS_PROTON, cos_cm, &cos_prim, &e_prim, &cos_sec, &e_sec);
 
         /* Rotate the recoil nucleon into the lab frame.
          * Convention matches pp elastic: secondary uses the opposite azimuth
          * (-cos_phi, -sin_phi) so that momentum is conserved transversely. */
         sin_sec = sqrt(fmax(0.0, 1.0 - cos_sec * cos_sec));
-        osh_kinematics_rotate_dir_cos(incident_dir,
-                                      event_out->secondaries[j].dir,
-                                      cos_sec, sin_sec,
-                                      -cos_phi, -sin_phi);
+        osh_kinematics_rotate_dir_cos(
+            incident_dir, event_out->secondaries[j].dir, cos_sec, sin_sec, -cos_phi, -sin_phi);
 
         event_out->secondaries[j].energy = e_sec;
         event_out->secondaries[j].species = species;
-        event_out->n_secondaries = (size_t)(j + 1);
+        event_out->n_secondaries = (size_t) (j + 1);
 
         /* Degrade the proton for the next collision. */
         T_current = e_prim;

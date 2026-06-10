@@ -61,9 +61,9 @@ struct osh_nuclear_secondary {
 
 /** One residual nuclear fragment produced by an inelastic event. */
 struct osh_nuclear_fragment {
-    unsigned int z;                 /**< Residual atomic number.                 */
-    unsigned int a;                 /**< Residual mass number.                   */
-    double excitation_energy;       /**< Placeholder for future breakup [MeV].   */
+    unsigned int z;           /**< Residual atomic number.                 */
+    unsigned int a;           /**< Residual mass number.                   */
+    double excitation_energy; /**< Placeholder for future breakup [MeV].   */
 };
 
 /**

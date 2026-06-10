@@ -271,7 +271,7 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         }
 
         /* Minimal development final state until Fermi breakup/SMM is wired. */
-        osh_nuclear_abrasion_step(final_energy_mev, incident_dir, selected_a, selected_z,
-                                  selected_sigma_inel, rng, event_out);
+        osh_nuclear_abrasion_step(
+            final_energy_mev, incident_dir, selected_a, selected_z, selected_sigma_inel, rng, event_out);
     }
 }

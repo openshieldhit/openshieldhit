@@ -22,8 +22,8 @@
  * O-16 at 140 MeV: Tripathi sigma_R is approximately 450 mb.
  * Expected mean participants: sigma_pN * A / sigma_pA = 30mb * 16 / 450mb ≈ 1.07
  */
-#define O16_A       16.0
-#define O16_Z        8.0
+#define O16_A 16.0
+#define O16_Z 8.0
 #define SIGMA_PA_CM2 (450.0 * OSH_MB_TO_CM2)
 
 static void test_event_kind(void) {
