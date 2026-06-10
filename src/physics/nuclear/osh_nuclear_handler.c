@@ -16,8 +16,7 @@
 
 /* ---- Handler lifecycle --------------------------------------------------- */
 
-enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const *ws,
-                                            struct osh_nuclear_handler *out) {
+enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const *ws, struct osh_nuclear_handler *out) {
     size_t total_elems;
     size_t i;
     size_t j;
@@ -31,7 +30,7 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
     out->nmaterials = ws->nmaterials;
 
     out->elem_offset = (size_t *) malloc(ws->nmaterials * sizeof(size_t));
-    out->elem_count  = (size_t *) malloc(ws->nmaterials * sizeof(size_t));
+    out->elem_count = (size_t *) malloc(ws->nmaterials * sizeof(size_t));
     if (!out->elem_offset || !out->elem_count) {
         osh_nuclear_handler_free(out);
         return OSH_ENOMEM;
@@ -40,7 +39,7 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
     total_elems = 0u;
     for (i = 0u; i < ws->nmaterials; ++i) {
         out->elem_offset[i] = total_elems;
-        out->elem_count[i]  = ws->materials[i].nelements;
+        out->elem_count[i] = ws->materials[i].nelements;
         total_elems += ws->materials[i].nelements;
     }
 
@@ -56,8 +55,8 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
     for (i = 0u; i < ws->nmaterials; ++i) {
         for (j = 0u; j < ws->materials[i].nelements; ++j) {
             struct osh_material_element const *src = &ws->materials[i].elements[j];
-            ep->z            = src->z;
-            ep->a            = src->a;
+            ep->z = src->z;
+            ep->a = src->a;
             ep->mass_fraction = (float) src->mass_fraction;
             ++ep;
         }
@@ -108,7 +107,7 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     double sin1, sin2;
     double a_proj;
 
-    event_out->kind        = OSH_NUCLEAR_EVENT_NONE;
+    event_out->kind = OSH_NUCLEAR_EVENT_NONE;
     event_out->n_secondaries = 0u;
 
     if (ds_gcm2 <= 0.0) {
@@ -134,7 +133,7 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         for (i = 0u; i < nelem; ++i) {
             z_sum += (double) elems[i].z * (double) elems[i].mass_fraction;
             a_sum += (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u) * (double) elems[i].mass_fraction;
-            wsum  += (double) elems[i].mass_fraction;
+            wsum += (double) elems[i].mass_fraction;
         }
         at = (wsum > 0.0) ? (a_sum / wsum) : 1.0;
         {
@@ -142,12 +141,12 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             a_proj = (projectile->a > 0u) ? (double) projectile->a : 1.0;
             e_per_nucleon = rate_energy_mev / a_proj;
             sigma_inel = params->nuclear_inelastic
-                ? osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zt, at, e_per_nucleon)
-                : 0.0;
+                             ? osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zt, at, e_per_nucleon)
+                             : 0.0;
         }
     }
     lambda_inel = (sigma_inel > 0.0) ? osh_nuclear_lambda_gcm2(at, sigma_inel) : 1.0e30;
-    rate_inel   = 1.0 / lambda_inel;
+    rate_inel = 1.0 / lambda_inel;
 
     /* pp elastic rate — only for proton projectile */
     rate_pp = 0.0;
@@ -160,9 +159,9 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             }
         }
         if (hydrogen_mf > 0.0) {
-            sigma_el  = osh_nuclear_pp_sigma_el(rate_energy_mev);
+            sigma_el = osh_nuclear_pp_sigma_el(rate_energy_mev);
             lambda_pp = osh_nuclear_pp_lambda_gcm2(hydrogen_mf, sigma_el);
-            rate_pp   = 1.0 / lambda_pp;
+            rate_pp = 1.0 / lambda_pp;
         }
     }
 
@@ -182,25 +181,37 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         cos_cm = osh_nuclear_pp_sample_cos_theta_cm(rate_energy_mev, rng);
         osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
 
-        osh_kinematics_elastic_equal_mass_lab(final_energy_mev, OSH_PART_MASS_PROTON, cos_cm,
-                                             &cos1, &e1, &cos2, &e2);
+        osh_kinematics_elastic_equal_mass_lab(final_energy_mev, OSH_PART_MASS_PROTON, cos_cm, &cos1, &e1, &cos2, &e2);
+
+        /* Møller convention: primary keeps the higher-energy particle.
+         * For backward CM scatter (cos_CM < 0) e2 > e1; swap so gen=0 stays
+         * with the forward-going proton, not the low-energy sideways one. */
+        if (e2 > e1) {
+            double tmp;
+            tmp = e1;
+            e1 = e2;
+            e2 = tmp;
+            tmp = cos1;
+            cos1 = cos2;
+            cos2 = tmp;
+            cos_phi = -cos_phi;
+            sin_phi = -sin_phi;
+        }
 
         sin1 = sqrt(1.0 - cos1 * cos1);
         sin2 = sqrt(1.0 - cos2 * cos2);
 
-        osh_kinematics_rotate_dir_cos(incident_dir, event_out->primary_dir,
-                                      cos1, sin1, cos_phi, sin_phi);
-        osh_kinematics_rotate_dir_cos(incident_dir, event_out->secondaries[0].dir,
-                                      cos2, sin2, -cos_phi, -sin_phi);
+        osh_kinematics_rotate_dir_cos(incident_dir, event_out->primary_dir, cos1, sin1, cos_phi, sin_phi);
+        osh_kinematics_rotate_dir_cos(incident_dir, event_out->secondaries[0].dir, cos2, sin2, -cos_phi, -sin_phi);
 
-        event_out->kind           = OSH_NUCLEAR_EVENT_ELASTIC_PP;
+        event_out->kind = OSH_NUCLEAR_EVENT_ELASTIC_PP;
         event_out->primary_energy = e1;
-        event_out->n_secondaries  = 1u;
-        event_out->secondaries[0].energy  = e2;
+        event_out->n_secondaries = 1u;
+        event_out->secondaries[0].energy = e2;
         event_out->secondaries[0].species = projectile; /* proton = same species */
     } else {
         /* Inelastic absorption */
-        event_out->kind           = OSH_NUCLEAR_EVENT_ABSORB;
+        event_out->kind = OSH_NUCLEAR_EVENT_ABSORB;
         event_out->primary_energy = 0.0;
     }
 }

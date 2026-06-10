@@ -1,15 +1,15 @@
+#include "physics/osh_kinematics.h"
+
 #include <math.h>
 #include <stddef.h>
 
 #include "common/osh_vect.h"
-#include "physics/osh_kinematics.h"
 #include "random/osh_rng.h"
 
 /* ---- Direction rotation -------------------------------------------------- */
 
-void osh_kinematics_rotate_dir_cos(double const v[3], double w[3],
-                                   double cos_theta, double sin_theta,
-                                   double a, double b) {
+void osh_kinematics_rotate_dir_cos(
+    double const v[3], double w[3], double cos_theta, double sin_theta, double a, double b) {
     double u1[3];
     double u2[3];
     double norm;
@@ -59,8 +59,8 @@ void osh_kinematics_azimuth(struct osh_rng *rng, double *cos_phi, double *sin_ph
      * No sqrt, no trig.
      */
     do {
-        Q  = 2.0 * osh_rng_double(rng) - 1.0;
-        R  = osh_rng_double(rng);
+        Q = 2.0 * osh_rng_double(rng) - 1.0;
+        R = osh_rng_double(rng);
         QQ = Q * Q;
         RR = R * R;
         QR = QQ + RR;
@@ -72,9 +72,13 @@ void osh_kinematics_azimuth(struct osh_rng *rng, double *cos_phi, double *sin_ph
 
 /* ---- Relativistic 2-body elastic kinematics ----------------------------- */
 
-void osh_kinematics_elastic_equal_mass_lab(double T_lab, double mp, double cos_theta_cm,
-                                           double *cos_theta1_lab, double *e1_lab_mev,
-                                           double *cos_theta2_lab, double *e2_lab_mev) {
+void osh_kinematics_elastic_equal_mass_lab(double T_lab,
+                                           double mp,
+                                           double cos_theta_cm,
+                                           double *cos_theta1_lab,
+                                           double *e1_lab_mev,
+                                           double *cos_theta2_lab,
+                                           double *e2_lab_mev) {
     double p_lab;        /* lab momentum of incident particle [MeV/c] */
     double W;            /* invariant mass sqrt(s) [MeV] */
     double p_cm;         /* CM momentum magnitude [MeV/c] */
@@ -102,11 +106,11 @@ void osh_kinematics_elastic_equal_mass_lab(double T_lab, double mp, double cos_t
      *   β_cm   = p_lab / (T + 2m)
      *   γ_cm   = (T + 2m) / W
      */
-    p_lab    = sqrt(T_lab * (T_lab + 2.0 * mp));
-    W        = sqrt(2.0 * mp * (T_lab + 2.0 * mp));
-    p_cm     = (W > 0.0) ? (p_lab * mp / W) : 0.0;
-    E_cm     = W * 0.5;
-    beta_cm  = p_lab / (T_lab + 2.0 * mp);
+    p_lab = sqrt(T_lab * (T_lab + 2.0 * mp));
+    W = sqrt(2.0 * mp * (T_lab + 2.0 * mp));
+    p_cm = (W > 0.0) ? (p_lab * mp / W) : 0.0;
+    E_cm = W * 0.5;
+    beta_cm = p_lab / (T_lab + 2.0 * mp);
     gamma_cm = (T_lab + 2.0 * mp) / W;
 
     sin_theta_cm = sqrt(1.0 - cos_theta_cm * cos_theta_cm);
@@ -127,10 +131,10 @@ void osh_kinematics_elastic_equal_mass_lab(double T_lab, double mp, double cos_t
      *   p2z_lab = γ·(−p1z_cm + β·E_cm)
      *   p2t_lab = p1t_cm             (same transverse magnitude)
      */
-    E1_lab  = gamma_cm * (E_cm + beta_cm * p1z_cm);
+    E1_lab = gamma_cm * (E_cm + beta_cm * p1z_cm);
     p1z_lab = gamma_cm * (p1z_cm + beta_cm * E_cm);
 
-    E2_lab  = gamma_cm * (E_cm - beta_cm * p1z_cm);
+    E2_lab = gamma_cm * (E_cm - beta_cm * p1z_cm);
     /*
      * p2z_lab = γ(-p1z_cm + β·E_cm).  In exact arithmetic β·E_cm == p_cm,
      * but computing β·E_cm separately introduces floating-point error that can
@@ -152,6 +156,8 @@ void osh_kinematics_elastic_equal_mass_lab(double T_lab, double mp, double cos_t
     *cos_theta2_lab = (p2_tot_lab > 0.0) ? (p2z_lab / p2_tot_lab) : 0.0;
 
     /* Guard against tiny negative kinetic energies from floating-point rounding */
-    if (*e1_lab_mev < 0.0) *e1_lab_mev = 0.0;
-    if (*e2_lab_mev < 0.0) *e2_lab_mev = 0.0;
+    if (*e1_lab_mev < 0.0)
+        *e1_lab_mev = 0.0;
+    if (*e2_lab_mev < 0.0)
+        *e2_lab_mev = 0.0;
 }

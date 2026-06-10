@@ -42,10 +42,10 @@ struct particle;
 
 /** Classification of the nuclear event that fired on a given step. */
 enum osh_nuclear_event_kind {
-    OSH_NUCLEAR_EVENT_NONE        = 0, /**< No nuclear event this step.        */
-    OSH_NUCLEAR_EVENT_ABSORB,          /**< Inelastic kill (Tripathi).          */
-    OSH_NUCLEAR_EVENT_ELASTIC_PP,      /**< pp elastic scatter.                 */
-    OSH_NUCLEAR_EVENT_FRAGMENTATION    /**< Future: SMM / Fermi breakup.        */
+    OSH_NUCLEAR_EVENT_NONE = 0,     /**< No nuclear event this step.        */
+    OSH_NUCLEAR_EVENT_ABSORB,       /**< Inelastic kill (Tripathi).          */
+    OSH_NUCLEAR_EVENT_ELASTIC_PP,   /**< pp elastic scatter.                 */
+    OSH_NUCLEAR_EVENT_FRAGMENTATION /**< Future: SMM / Fermi breakup.        */
 };
 
 /** One secondary particle produced by a nuclear event. */
@@ -64,8 +64,8 @@ struct osh_nuclear_secondary {
  */
 struct osh_nuclear_event {
     enum osh_nuclear_event_kind kind;
-    double primary_energy;       /**< Primary exit KE [MeV]; 0 if ABSORB.       */
-    double primary_dir[3];       /**< Primary exit direction; unchanged if ABSORB. */
+    double primary_energy; /**< Primary exit KE [MeV]; 0 if ABSORB.       */
+    double primary_dir[3]; /**< Primary exit direction; unchanged if ABSORB. */
     size_t n_secondaries;
     struct osh_nuclear_secondary secondaries[OSH_NUCLEAR_MAX_SECONDARIES];
 };
@@ -74,9 +74,9 @@ struct osh_nuclear_event {
 
 /** One element entry in the per-material composition cache. */
 struct osh_nuclear_elem {
-    unsigned int z;         /**< Atomic number.                                  */
-    unsigned int a;         /**< Approximate mass number.                        */
-    float mass_fraction;    /**< Element mass fraction in this material [0, 1].  */
+    unsigned int z;      /**< Atomic number.                                  */
+    unsigned int a;      /**< Approximate mass number.                        */
+    float mass_fraction; /**< Element mass fraction in this material [0, 1].  */
 };
 
 /**
@@ -108,8 +108,7 @@ struct osh_nuclear_handler {
  * @param[out] out  Handler to populate (must point to zero-initialised storage).
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure.
  */
-enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const *ws,
-                                            struct osh_nuclear_handler *out);
+enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const *ws, struct osh_nuclear_handler *out);
 
 /**
  * @brief Free all memory owned by the handler.

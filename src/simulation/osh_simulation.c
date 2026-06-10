@@ -237,7 +237,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
         break;
     }
     sim->transport_ctx.params.nuclear_inelastic = beam->nuclear_inelastic ? 1 : 0;
-    sim->transport_ctx.params.nuclear_elastic   = beam->nuclear_elastic ? 1 : 0;
+    sim->transport_ctx.params.nuclear_elastic = beam->nuclear_elastic ? 1 : 0;
     sim->transport_ctx.diag = diag;
 
     /* ---- 5b. Nuclear handler --------------------------------------------- */

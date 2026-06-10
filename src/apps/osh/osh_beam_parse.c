@@ -858,12 +858,15 @@ static int _parse_nucre(PARSE_HANDLER_ARGS) {
         return OSH_EPARSE;
     }
     if (_i < 0 || _i > 2) {
-        OSH_DIAG_ERRORF(
-            state->diag, "in %s line %i: invalid NUCRE mode '%i' (expected 0, 1, or 2)", oshf->filename, oshf->lineno, _i);
+        OSH_DIAG_ERRORF(state->diag,
+                        "in %s line %i: invalid NUCRE mode '%i' (expected 0, 1, or 2)",
+                        oshf->filename,
+                        oshf->lineno,
+                        _i);
         return OSH_EPARSE;
     }
     beam->nuclear_inelastic = (_i == 1) ? 1 : 0;
-    beam->nuclear_elastic   = (_i >= 1) ? 1 : 0;
+    beam->nuclear_elastic = (_i >= 1) ? 1 : 0;
     return OSH_OK;
 }
 

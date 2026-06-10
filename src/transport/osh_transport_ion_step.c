@@ -111,7 +111,7 @@ struct ion_step_ctx {
     double ds_gcm2;     /* areal density of actual step [g/cm²] */
 
     /* --- Set by ion_step_nuclear() --------------------------------------- */
-    double incident_dir[3];              /* entry direction before MCS         */
+    double incident_dir[3];                 /* entry direction before MCS         */
     struct osh_nuclear_event nuclear_event; /* kind=NONE until handler fires   */
 };
 
@@ -254,17 +254,17 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                 break;
             }
             s = pool->n;
-            pool->x[s]        = pool->x[slot];
-            pool->y[s]        = pool->y[slot];
-            pool->z[s]        = pool->z[slot];
-            pool->ux[s]       = ev->secondaries[si].dir[0];
-            pool->uy[s]       = ev->secondaries[si].dir[1];
-            pool->uz[s]       = ev->secondaries[si].dir[2];
-            pool->e[s]        = ev->secondaries[si].energy;
-            pool->wt[s]       = pool->wt[slot];
+            pool->x[s] = pool->x[slot];
+            pool->y[s] = pool->y[slot];
+            pool->z[s] = pool->z[slot];
+            pool->ux[s] = ev->secondaries[si].dir[0];
+            pool->uy[s] = ev->secondaries[si].dir[1];
+            pool->uz[s] = ev->secondaries[si].dir[2];
+            pool->e[s] = ev->secondaries[si].energy;
+            pool->wt[s] = pool->wt[slot];
             pool->prim_idx[s] = pool->prim_idx[slot];
-            pool->gen[s]      = (pool->gen[slot] < 255u) ? (uint8_t)(pool->gen[slot] + 1u) : 255u;
-            pool->species[s]  = ev->secondaries[si].species;
+            pool->gen[s] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+            pool->species[s] = ev->secondaries[si].species;
             pool->n++;
         }
     }
@@ -721,14 +721,15 @@ static void ion_step_nuclear(struct ion_step_ctx *ctx,
 
     if (transport_ctx->nuclear_handler) {
         osh_nuclear_handler_step(transport_ctx->nuclear_handler,
-                                  ctx->e0, ctx->exit_energy,
-                                  ctx->incident_dir,
-                                  ctx->zone_material_idx,
-                                  ctx->ds_gcm2,
-                                  ctx->part,
-                                  &transport_ctx->params,
-                                  rng,
-                                  &ctx->nuclear_event);
+                                 ctx->e0,
+                                 ctx->exit_energy,
+                                 ctx->incident_dir,
+                                 ctx->zone_material_idx,
+                                 ctx->ds_gcm2,
+                                 ctx->part,
+                                 &transport_ctx->params,
+                                 rng,
+                                 &ctx->nuclear_event);
 
         /* Elastic overrides MCS: straight-line endpoint. */
         if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
@@ -754,7 +755,7 @@ static void ion_step_nuclear(struct ion_step_ctx *ctx,
         lambda = osh_nuclear_lambda_gcm2(at, sigma);
         p_survive = osh_nuclear_survival_prob(ctx->ds_gcm2, lambda);
         if (osh_rng_double(rng) > p_survive) {
-            ctx->nuclear_event.kind           = OSH_NUCLEAR_EVENT_ABSORB;
+            ctx->nuclear_event.kind = OSH_NUCLEAR_EVENT_ABSORB;
             ctx->nuclear_event.primary_energy = 0.0;
         }
     }
@@ -822,10 +823,10 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
         st.q[3] = 0.0;
     } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
         /* Primary survives with a new direction and energy from elastic scatter. */
-        st.q[3]  = ctx->nuclear_event.primary_energy;
-        st.w[0]  = ctx->nuclear_event.primary_dir[0];
-        st.w[1]  = ctx->nuclear_event.primary_dir[1];
-        st.w[2]  = ctx->nuclear_event.primary_dir[2];
+        st.q[3] = ctx->nuclear_event.primary_energy;
+        st.w[0] = ctx->nuclear_event.primary_dir[0];
+        st.w[1] = ctx->nuclear_event.primary_dir[1];
+        st.w[2] = ctx->nuclear_event.primary_dir[2];
     }
 
     rc = osh_scoring_score_step(score_rt, ctx->part, &st);
@@ -854,7 +855,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
         pool->uy[slot] = ctx->w_scat[1];
         pool->uz[slot] = ctx->w_scat[2];
     } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
-        pool->e[slot]  = ctx->nuclear_event.primary_energy;
+        pool->e[slot] = ctx->nuclear_event.primary_energy;
         pool->ux[slot] = ctx->nuclear_event.primary_dir[0];
         pool->uy[slot] = ctx->nuclear_event.primary_dir[1];
         pool->uz[slot] = ctx->nuclear_event.primary_dir[2];
