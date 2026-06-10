@@ -26,10 +26,12 @@ double osh_nuclear_pp_sigma_el(double e_lab_mev) {
     te = (osh_pp_elab_mev[ei + 1] > osh_pp_elab_mev[ei])
              ? (e_f - osh_pp_elab_mev[ei]) / (osh_pp_elab_mev[ei + 1] - osh_pp_elab_mev[ei])
              : 0.0f;
-    if (te < 0.0f)
+    if (te < 0.0f) {
         te = 0.0f;
-    if (te > 1.0f)
+    }
+    if (te > 1.0f) {
         te = 1.0f;
+    }
 
     sigma_mb = (1.0f - te) * osh_pp_sigma_tot_mb[ei] * (1.0f - osh_pp_sigma_in_frac[ei])
                + te * osh_pp_sigma_tot_mb[ei + 1] * (1.0f - osh_pp_sigma_in_frac[ei + 1]);
@@ -46,8 +48,10 @@ double osh_nuclear_pp_sample_cos_theta_cm(double e_lab_mev, struct osh_rng *rng)
     double U;
     int j;
     float cdf_next;
-    float cdf_lo, cdf_hi;
-    float width, ta;
+    float cdf_lo;
+    float cdf_hi;
+    float width;
+    float ta;
 
     e_f = (float) e_lab_mev;
     ei = osh_binary_search_f(e_f, osh_pp_elab_mev, OSH_PP_NENERGY);
@@ -58,10 +62,12 @@ double osh_nuclear_pp_sample_cos_theta_cm(double e_lab_mev, struct osh_rng *rng)
     te = (osh_pp_elab_mev[ei + 1] > osh_pp_elab_mev[ei])
              ? (e_f - osh_pp_elab_mev[ei]) / (osh_pp_elab_mev[ei + 1] - osh_pp_elab_mev[ei])
              : 0.0f;
-    if (te < 0.0f)
+    if (te < 0.0f) {
         te = 0.0f;
-    if (te > 1.0f)
+    }
+    if (te > 1.0f) {
         te = 1.0f;
+    }
 
     U = osh_rng_double(rng); /* one deviate in [0, 1) */
 
@@ -87,8 +93,14 @@ double osh_nuclear_pp_sample_cos_theta_cm(double e_lab_mev, struct osh_rng *rng)
     /* Sub-bin linear interpolation in cos(θ) */
     width = cdf_hi - cdf_lo;
     ta = (width > 0.0f) ? (float) ((U - (double) cdf_lo) / (double) width) : 0.0f;
+    if (ta < 0.0f) {
+        ta = 0.0f;
+    }
+    if (ta > 1.0f) {
+        ta = 1.0f;
+    }
 
-    return (double) ((1.0f - ta) * osh_pp_cos_theta_axis[j] + ta * osh_pp_cos_theta_axis[j + 1]);
+    return (double) (((1.0f - ta) * osh_pp_cos_theta_axis[j]) + (ta * osh_pp_cos_theta_axis[j + 1]));
 }
 
 /* ---- Mean free path ------------------------------------------------------ */
