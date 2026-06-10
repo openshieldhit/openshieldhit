@@ -11,6 +11,7 @@
 #include "material/runtime/osh_material_compile.h"
 #include "openshieldhit/beam_defs.h"
 #include "openshieldhit/simulation.h"
+#include "physics/nuclear/osh_nuclear_handler.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/save/osh_scoring_save.h"
@@ -35,6 +36,7 @@ struct osh_simulation {
     struct osh_material_runtime transport_tables;
     struct osh_scoring_runtime scoring_runtime;
     struct osh_transport_context transport_ctx;
+    struct osh_nuclear_handler nuclear_handler;
 
     unsigned long long requested_nstat;
     unsigned long long completed_nstat;
@@ -234,8 +236,21 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
         sim->transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_OFF;
         break;
     }
-    sim->transport_ctx.params.nuclear = beam->nuclear ? 1 : 0;
+    sim->transport_ctx.params.nuclear_inelastic = beam->nuclear_inelastic ? 1 : 0;
+    sim->transport_ctx.params.nuclear_elastic   = beam->nuclear_elastic ? 1 : 0;
     sim->transport_ctx.diag = diag;
+
+    /* ---- 5b. Nuclear handler --------------------------------------------- */
+
+    sim->transport_ctx.nuclear_handler = NULL;
+    if (sim->transport_ctx.params.nuclear_inelastic || sim->transport_ctx.params.nuclear_elastic) {
+        rc = osh_nuclear_handler_compile(mat, &sim->nuclear_handler);
+        if (rc != OSH_OK) {
+            OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile nuclear handler");
+            goto fail;
+        }
+        sim->transport_ctx.nuclear_handler = &sim->nuclear_handler;
+    }
 
     /* ---- 6. Beam runtime ------------------------------------------------- */
 
@@ -335,6 +350,7 @@ enum osh_status osh_simulation_free(struct osh_simulation *sim) {
     if (!sim) {
         return OSH_OK;
     }
+    osh_nuclear_handler_free(&sim->nuclear_handler);
     osh_scoring_runtime_free(&sim->scoring_runtime);
     osh_gemca_runtime_free(&sim->geom_rt);
     osh_material_runtime_free(&sim->transport_tables);

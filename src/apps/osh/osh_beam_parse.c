@@ -836,17 +836,18 @@ static int _parse_nstat(PARSE_HANDLER_ARGS) {
  * @brief Parse NUCRE: nuclear reaction switch.
  *
  * @details
- * Syntax: NUCRE \<0|1\>
+ * Syntax: NUCRE \<0|1|2\>
  *
  *   0 — off (electromagnetic transport only, no hadronic interactions)
- *   1 — on  (enables nuclear reactions, fragmentation, secondary production)
+ *   1 — inelastic + elastic (Tripathi absorption + pp elastic scattering)
+ *   2 — elastic only (pp elastic scattering, no inelastic absorption)
  *
  * Disabling nuclear reactions is useful for pure range/dose validation
  * where hadronic secondaries would complicate comparison with analytic models.
  *
- * @param[in,out] beam  Writes beam->nuclear.
+ * @param[in,out] beam  Writes beam->nuclear_inelastic and beam->nuclear_elastic.
  * @param[in]     oshf  Used for error diagnostics.
- * @param[in]     args  Single integer: 0 or 1.
+ * @param[in]     args  Single integer: 0, 1, or 2.
  *
  * @returns OSH_OK on success.
  */
@@ -856,12 +857,13 @@ static int _parse_nucre(PARSE_HANDLER_ARGS) {
         OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
-    beam->nuclear = (char) _i;
-    if (beam->nuclear > 1 || beam->nuclear < 0) {
+    if (_i < 0 || _i > 2) {
         OSH_DIAG_ERRORF(
-            state->diag, "in %s line %i: invalid NUCRE mode '%i'", oshf->filename, oshf->lineno, beam->nuclear);
+            state->diag, "in %s line %i: invalid NUCRE mode '%i' (expected 0, 1, or 2)", oshf->filename, oshf->lineno, _i);
         return OSH_EPARSE;
     }
+    beam->nuclear_inelastic = (_i == 1) ? 1 : 0;
+    beam->nuclear_elastic   = (_i >= 1) ? 1 : 0;
     return OSH_OK;
 }
 

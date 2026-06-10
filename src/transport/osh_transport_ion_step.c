@@ -1,6 +1,7 @@
 #include "transport/osh_transport_ion_step.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "common/osh_coord.h"
@@ -15,6 +16,7 @@
 #include "physics/atomic/osh_physics_bethe.h"
 #include "physics/atomic/osh_physics_moliere.h"
 #include "physics/atomic/osh_physics_straggling.h"
+#include "physics/nuclear/osh_nuclear_handler.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "random/osh_rng.h"
 #include "scoring/runtime/osh_scoring_step.h"
@@ -109,7 +111,8 @@ struct ion_step_ctx {
     double ds_gcm2;     /* areal density of actual step [g/cm²] */
 
     /* --- Set by ion_step_nuclear() --------------------------------------- */
-    char nuclear_kill; /* 1 if primary killed by nuclear reaction */
+    double incident_dir[3];              /* entry direction before MCS         */
+    struct osh_nuclear_event nuclear_event; /* kind=NONE until handler fires   */
 };
 
 /* ---- Forward declarations ------------------------------------------------ */
@@ -146,8 +149,10 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                                            struct osh_material_runtime const *material_rt,
                                            struct osh_rng *rng);
 
-static void
-ion_step_nuclear(struct ion_step_ctx *ctx, struct osh_transport_context const *transport_ctx, struct osh_rng *rng);
+static void ion_step_nuclear(struct ion_step_ctx *ctx,
+                             struct osh_transport_context const *transport_ctx,
+                             struct osh_material_runtime const *material_rt,
+                             struct osh_rng *rng);
 
 static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
@@ -227,12 +232,44 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         if (ctx.done)
             return ctx.done_rc;
 
-        /* Phase 5 — stochastic nuclear reaction kill (no-op when disabled) */
-        ion_step_nuclear(&ctx, transport_ctx, rng);
+        /* Phase 5 — nuclear interaction sampling (no-op when disabled) */
+        ion_step_nuclear(&ctx, transport_ctx, material_rt, rng);
     }
 
     /* Phase 6 — score step, update pool position/energy/direction, nudge */
-    return ion_step_commit(&ctx, pool, slot, transport_ctx, score_rt);
+    rc = ion_step_commit(&ctx, pool, slot, transport_ctx, score_rt);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    /* Inject secondaries produced by a nuclear event (pp elastic recoil, future
+     * fragments).  Secondaries are appended past the current wavefront and are
+     * processed on the next pass.  Silently skip if the pool is full. */
+    if (ctx.nuclear_event.n_secondaries > 0u) {
+        size_t si;
+        struct osh_nuclear_event const *ev = &ctx.nuclear_event;
+        for (si = 0u; si < ev->n_secondaries; ++si) {
+            size_t s;
+            if (pool->n >= pool->capacity) {
+                break;
+            }
+            s = pool->n;
+            pool->x[s]        = pool->x[slot];
+            pool->y[s]        = pool->y[slot];
+            pool->z[s]        = pool->z[slot];
+            pool->ux[s]       = ev->secondaries[si].dir[0];
+            pool->uy[s]       = ev->secondaries[si].dir[1];
+            pool->uz[s]       = ev->secondaries[si].dir[2];
+            pool->e[s]        = ev->secondaries[si].energy;
+            pool->wt[s]       = pool->wt[slot];
+            pool->prim_idx[s] = pool->prim_idx[slot];
+            pool->gen[s]      = (pool->gen[slot] < 255u) ? (uint8_t)(pool->gen[slot] + 1u) : 255u;
+            pool->species[s]  = ev->secondaries[si].species;
+            pool->n++;
+        }
+    }
+
+    return OSH_OK;
 }
 
 /* ---- Phase 1: setup ------------------------------------------------------ */
@@ -261,7 +298,8 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     params = transport_ctx ? &transport_ctx->params : NULL;
     ctx->done = 0;
     ctx->done_rc = OSH_OK;
-    ctx->nuclear_kill = 0;
+    ctx->nuclear_event.kind = OSH_NUCLEAR_EVENT_NONE;
+    ctx->nuclear_event.n_secondaries = 0u;
     ctx->part = pool->species[slot];
     ctx->a_proj = (ctx->part->a > 0u) ? (double) ctx->part->a : 1.0;
     ctx->e0 = pool->e[slot];
@@ -335,6 +373,9 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->is_vacuum = (is_vacuum_material(zone_ref->material_idx) || ctx->rho <= 0.0);
 
     /* Default exit direction: incident direction (overwritten by MCS phases) */
+    ctx->incident_dir[0] = pool->ux[slot];
+    ctx->incident_dir[1] = pool->uy[slot];
+    ctx->incident_dir[2] = pool->uz[slot];
     ctx->w_scat[0] = pool->ux[slot];
     ctx->w_scat[1] = pool->uy[slot];
     ctx->w_scat[2] = pool->uz[slot];
@@ -655,44 +696,68 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     }
 }
 
-/* ---- Phase 5: nuclear reaction kill -------------------------------------- */
+/* ---- Phase 5: nuclear interaction sampling ------------------------------- */
 
 /*
- * Sample a nuclear reaction over the current step.  Sets ctx->nuclear_kill = 1
- * if the primary is destroyed.  Does nothing when nuclear reactions are disabled,
- * in vacuum, or when the step has zero areal density.
+ * Sample nuclear interactions over the current step.  Dispatches to
+ * osh_nuclear_handler_step() when a compiled handler is present; otherwise
+ * falls back to the legacy scalar Tripathi path.
  *
- * Applies the condensed survival probability exp(-ds/λ) to every material step,
- * including boundary-limited steps.  ds_gcm2 = rho * step_len is well-defined
- * regardless of why the step ended; skipping boundary steps would systematically
- * under-sample reactions near geometry interfaces.
+ * When pp elastic fires, w_scat is overwritten with incident_dir so that the
+ * bent-path commit formula  q = p + h·u0 + tail·w_scat  reduces to a straight
+ * endpoint  q = p + step_len·u0.  This is correct because elastic scattering
+ * replaces MCS for this step.
  */
-static void
-ion_step_nuclear(struct ion_step_ctx *ctx, struct osh_transport_context const *transport_ctx, struct osh_rng *rng) {
-    double at;
-    double e_per_nucleon;
-    double sigma;
-    double lambda;
-    double p_survive;
+static void ion_step_nuclear(struct ion_step_ctx *ctx,
+                             struct osh_transport_context const *transport_ctx,
+                             struct osh_material_runtime const *material_rt,
+                             struct osh_rng *rng) {
+    (void) material_rt;
 
-    if (!transport_ctx->params.nuclear)
+    if (!transport_ctx->params.nuclear_inelastic && !transport_ctx->params.nuclear_elastic)
         return;
-    if (ctx->ds_gcm2 <= 0.0 || ctx->mat_z_over_a <= 0.0)
+    if (ctx->ds_gcm2 <= 0.0)
         return;
 
-    at = ctx->mat_z_mean / ctx->mat_z_over_a;
-    e_per_nucleon = ctx->e0 / ctx->a_proj; /* T/A [MeV/nucleon] */
+    if (transport_ctx->nuclear_handler) {
+        osh_nuclear_handler_step(transport_ctx->nuclear_handler,
+                                  ctx->e0, ctx->exit_energy,
+                                  ctx->incident_dir,
+                                  ctx->zone_material_idx,
+                                  ctx->ds_gcm2,
+                                  ctx->part,
+                                  &transport_ctx->params,
+                                  rng,
+                                  &ctx->nuclear_event);
 
-    sigma = osh_nuclear_tripathi_sigma(ctx->part->z, ctx->part->a, ctx->mat_z_mean, at, e_per_nucleon);
+        /* Elastic overrides MCS: straight-line endpoint. */
+        if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+            ctx->w_scat[0] = ctx->incident_dir[0];
+            ctx->w_scat[1] = ctx->incident_dir[1];
+            ctx->w_scat[2] = ctx->incident_dir[2];
+        }
+    } else if (transport_ctx->params.nuclear_inelastic) {
+        /* Legacy scalar Tripathi path (no handler compiled). */
+        double at;
+        double e_per_nucleon;
+        double sigma;
+        double lambda;
+        double p_survive;
 
-    if (sigma <= 0.0)
-        return;
-
-    lambda = osh_nuclear_lambda_gcm2(at, sigma);
-    p_survive = osh_nuclear_survival_prob(ctx->ds_gcm2, lambda);
-
-    if (osh_rng_double(rng) > p_survive)
-        ctx->nuclear_kill = 1;
+        if (ctx->mat_z_over_a <= 0.0)
+            return;
+        at = ctx->mat_z_mean / ctx->mat_z_over_a;
+        e_per_nucleon = ctx->e0 / ctx->a_proj;
+        sigma = osh_nuclear_tripathi_sigma(ctx->part->z, ctx->part->a, ctx->mat_z_mean, at, e_per_nucleon);
+        if (sigma <= 0.0)
+            return;
+        lambda = osh_nuclear_lambda_gcm2(at, sigma);
+        p_survive = osh_nuclear_survival_prob(ctx->ds_gcm2, lambda);
+        if (osh_rng_double(rng) > p_survive) {
+            ctx->nuclear_event.kind           = OSH_NUCLEAR_EVENT_ABSORB;
+            ctx->nuclear_event.primary_energy = 0.0;
+        }
+    }
 }
 
 /* ---- Phase 6: commit ----------------------------------------------------- */
@@ -750,17 +815,17 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.voxel_idx = ctx->voxel_idx;
     st.has_voxel = ctx->has_voxel;
 
-    if (ctx->nuclear_kill) {
-        /* Primary destroyed by nuclear reaction.  st.de already holds the
-         * ionisation energy deposited along the step — that energy genuinely
-         * went into the material and must not be touched.  The remaining
-         * exit_energy escapes with the (untracked) nuclear fragments and is
-         * intentionally not added to st.de; this approximation is validated
-         * against SHIELD-HIT12A (see tests/reference/shieldhit/).
-         * st.q[3] = 0 signals that the primary exits this step dead.
-         * When SMM secondary transport is added, the fragment pool push goes
-         * here and the escaped energy is explicitly accounted for. */
+    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB) {
+        /* Primary destroyed by inelastic nuclear reaction.  st.de already
+         * holds the ionisation energy deposited — do not modify it.
+         * st.q[3] = 0 signals that the primary exits dead. */
         st.q[3] = 0.0;
+    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+        /* Primary survives with a new direction and energy from elastic scatter. */
+        st.q[3]  = ctx->nuclear_event.primary_energy;
+        st.w[0]  = ctx->nuclear_event.primary_dir[0];
+        st.w[1]  = ctx->nuclear_event.primary_dir[1];
+        st.w[2]  = ctx->nuclear_event.primary_dir[2];
     }
 
     rc = osh_scoring_score_step(score_rt, ctx->part, &st);
@@ -783,10 +848,22 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     pool->x[slot] = qx;
     pool->y[slot] = qy;
     pool->z[slot] = qz;
-    pool->e[slot] = ctx->nuclear_kill ? 0.0 : ctx->exit_energy;
-    pool->ux[slot] = ctx->w_scat[0];
-    pool->uy[slot] = ctx->w_scat[1];
-    pool->uz[slot] = ctx->w_scat[2];
+    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB) {
+        pool->e[slot] = 0.0;
+        pool->ux[slot] = ctx->w_scat[0];
+        pool->uy[slot] = ctx->w_scat[1];
+        pool->uz[slot] = ctx->w_scat[2];
+    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+        pool->e[slot]  = ctx->nuclear_event.primary_energy;
+        pool->ux[slot] = ctx->nuclear_event.primary_dir[0];
+        pool->uy[slot] = ctx->nuclear_event.primary_dir[1];
+        pool->uz[slot] = ctx->nuclear_event.primary_dir[2];
+    } else {
+        pool->e[slot] = ctx->exit_energy;
+        pool->ux[slot] = ctx->w_scat[0];
+        pool->uy[slot] = ctx->w_scat[1];
+        pool->uz[slot] = ctx->w_scat[2];
+    }
 
     if (ctx->hit_boundary) {
         /* Nudge past the boundary in the leg direction that reached it:

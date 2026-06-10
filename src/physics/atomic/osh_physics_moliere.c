@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "common/osh_vect.h"
 #include "random/osh_rng.h"
 
 /* ---- Highland formula ----------------------------------------------------- */
@@ -103,9 +104,6 @@ void osh_physics_moliere_scatter(double const v[3], double w[3], double theta0, 
     double tx;    /* projected angle in the u1 plane [rad] */
     double ty;    /* projected angle in the u2 plane [rad] */
     double norm;
-    double ax;
-    double ay;
-    double az;
 
     if (theta0 < 1e-9) {
         w[0] = v[0];
@@ -114,60 +112,7 @@ void osh_physics_moliere_scatter(double const v[3], double w[3], double theta0, 
         return;
     }
 
-    /*
-     * Build a stable orthonormal transverse basis {u1, u2} in the plane
-     * perpendicular to v, working entirely in the caller's coordinate frame.
-     *
-     * No coordinate transformation to a beam-local frame is needed here.
-     * Legacy implementations (e.g. the original SHIELD-HIT) sometimes worked
-     * in a frame where the beam was along Z, applied scatter in that frame, and
-     * then rotated back to the universe frame.  That is equivalent but
-     * unnecessary: by constructing u1 and u2 directly from v we stay in
-     * whatever frame v is expressed in (UNIVERSE in transport), and the
-     * scattered direction w comes out in the same frame automatically.
-     *
-     * Construction of u1 — Gram-Schmidt projection of the least-aligned
-     * Cartesian axis ê_i onto the plane perpendicular to v:
-     *
-     *   u1 = ê_i - (ê_i · v) v
-     *
-     * "Least aligned" means |v · ê_i| is smallest, i.e. ê_i is closest to
-     * perpendicular to v.  This maximises the length of the projection and
-     * avoids near-cancellation.  The three cases below evaluate the formula
-     * for ê_x, ê_y, and ê_z respectively, using the fact that ê_i · v = v[i].
-     *
-     * u2 = v × u1 completes the right-handed orthonormal basis.
-     */
-    ax = fabs(v[0]);
-    ay = fabs(v[1]);
-    az = fabs(v[2]);
-
-    if (ax <= ay && ax <= az) {
-        /* ê_x least aligned: u1 = ê_x - v[0]*v */
-        u1[0] = 1.0 - v[0] * v[0];
-        u1[1] = 0.0 - v[1] * v[0];
-        u1[2] = 0.0 - v[2] * v[0];
-    } else if (ay <= az) {
-        /* ê_y least aligned: u1 = ê_y - v[1]*v */
-        u1[0] = 0.0 - v[0] * v[1];
-        u1[1] = 1.0 - v[1] * v[1];
-        u1[2] = 0.0 - v[2] * v[1];
-    } else {
-        /* ê_z least aligned: u1 = ê_z - v[2]*v */
-        u1[0] = 0.0 - v[0] * v[2];
-        u1[1] = 0.0 - v[1] * v[2];
-        u1[2] = 1.0 - v[2] * v[2];
-    }
-
-    norm = sqrt(u1[0] * u1[0] + u1[1] * u1[1] + u1[2] * u1[2]);
-    u1[0] /= norm;
-    u1[1] /= norm;
-    u1[2] /= norm;
-
-    /* u2 = v × u1: perpendicular to both, already unit length since v and u1 are. */
-    u2[0] = v[1] * u1[2] - v[2] * u1[1];
-    u2[1] = v[2] * u1[0] - v[0] * u1[2];
-    u2[2] = v[0] * u1[1] - v[1] * u1[0];
+    osh_vect_orthogonal_basis_norm(v, u1, u2);
 
     /*
      * Sample two independent projected scattering angles from N(0, θ₀).

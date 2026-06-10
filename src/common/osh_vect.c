@@ -107,6 +107,7 @@ void osh_vect_norm2(double const *u, double *v) {
     return;
 }
 
+/* TODO: new code should use osh_vect_orthogonal_basis_norm instead. */
 void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
 
     int i;
@@ -156,6 +157,27 @@ void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
             v[i] = im[1][i];
         }
     }
+}
+
+void osh_vect_orthogonal_basis_norm(double const *w, double *u, double *v) {
+    double ax = fabs(w[0]);
+    double ay = fabs(w[1]);
+    double az = fabs(w[2]);
+    double norm_inv;
+
+    if (ax <= ay && ax <= az) {
+        u[0] = 1.0 - w[0]*w[0]; u[1] = 0.0 - w[1]*w[0]; u[2] = 0.0 - w[2]*w[0];
+    } else if (ay <= az) {
+        u[0] = 0.0 - w[0]*w[1]; u[1] = 1.0 - w[1]*w[1]; u[2] = 0.0 - w[2]*w[1];
+    } else {
+        u[0] = 0.0 - w[0]*w[2]; u[1] = 0.0 - w[1]*w[2]; u[2] = 1.0 - w[2]*w[2];
+    }
+    norm_inv = 1.0 / sqrt(u[0]*u[0] + u[1]*u[1] + u[2]*u[2]);
+    u[0] *= norm_inv; u[1] *= norm_inv; u[2] *= norm_inv;
+
+    v[0] = w[1]*u[2] - w[2]*u[1];
+    v[1] = w[2]*u[0] - w[0]*u[2];
+    v[2] = w[0]*u[1] - w[1]*u[0];
 }
 
 void osh_vect_eqpln(double const *p, double const *u, double *pp) {

@@ -144,6 +144,20 @@ void osh_vect_norm2(double const *u, double *v);
 void osh_vect_orthogonal_basis(double const *w, double *u, double *v);
 
 /**
+ * @brief Like osh_vect_orthogonal_basis() but uses the least-aligned Cartesian
+ * axis (Gram-Schmidt projection) for numerical robustness and returns
+ * normalized output vectors.  Preferable over the non-normalized variant for
+ * new code.
+ *
+ * TODO: migrate gemca callers of osh_vect_orthogonal_basis to this function.
+ *
+ * @param[in]  w  Input unit direction.
+ * @param[out] u  First transverse unit vector, perpendicular to @p w.
+ * @param[out] v  Second transverse unit vector, perpendicular to both.
+ */
+void osh_vect_orthogonal_basis_norm(double const *w, double *u, double *v);
+
+/**
  * @brief
  * Computes the coefficients (A, B, C, D) of the plane equation Ax + By + Cz + D
  * = 0, given a point `p` in the plane and a normal vector `u` orthogonal to it.

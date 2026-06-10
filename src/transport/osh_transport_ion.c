@@ -83,6 +83,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     size_t primaries_done;
     size_t primaries_completed;
     size_t n_fill;
+    size_t n_wavefront;
     size_t i;
     size_t step_budget;
     size_t steps_taken;
@@ -155,8 +156,12 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         osh_gemca_runtime_get_distance_batch(
             geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, zone_refs, pool->n, dist_batch);
 
+        /* Snapshot wavefront size — secondaries injected this pass are processed
+         * on the next iteration, not in the current one. */
+        n_wavefront = pool->n;
+
         /* Advance every live particle by one step */
-        for (i = 0u; i < pool->n; ++i) {
+        for (i = 0u; i < n_wavefront; ++i) {
             if (steps_taken >= step_budget) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: step budget exceeded after %zu steps (pool slot %zu, primaries_done=%zu, "
