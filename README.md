@@ -10,6 +10,9 @@
 
 OpenShieldHIT is a modern and lean Monte Carlo particle transport framework written entirely from scratch in C.
 
+> **Work in progress** — OpenShieldHIT is under active development; APIs, input formats, and behaviour may change between releases.
+> Documentation (also work in progress) is at [nbassler.github.io/openshieldhit](https://nbassler.github.io/openshieldhit).
+
 ## Philosophy
 
 OpenShieldHIT is designed to be:
@@ -84,52 +87,6 @@ openshieldhit --dry-run path/to/case/    # parse and load inputs, skip transport
 openshieldhit --help
 ```
 
-## Spot-scanning delivery: USECBEAM and BEAMSAD
-
-### Coordinate convention
-
-Spot x/y positions in a `USECBEAM` file are **isocenter coordinates** — the
-lateral offset of each spot at the isocenter plane (z = 0 in the beam-local
-frame).  This matches the SH12A legacy format and the DICOM RT Plan standard,
-where scanning-magnet setpoints are always expressed at isocenter.
-
-OSH reads these isocenter coordinates and **back-projects** them to the
-beam-entrance plane (BEAMPOS z) using the SAD before the spots enter the cold
-beam struct.  The cold `osh_beam_spot.p[]` always holds physical beam-start
-coordinates — it knows nothing about isocenter conventions.
-
-### BEAMSAD is required for correct fan-out
-
-`BEAMSAD <sadX> [sadY]` gives the source-to-axis distance in cm.  It is
-always a positive number: a physical distance from the upstream virtual point
-source to the isocenter, independent of beam direction.
-
-```
-BEAMSAD   200.0 256.0     # asymmetric nozzle: SAD_x = 200 cm, SAD_y = 256 cm
-BEAMSAD   200.0            # symmetric nozzle
-```
-
-Without `BEAMSAD`, or with `BEAMSAD INF`, OSH assumes **parallel beam
-delivery** (SAD = infinity): spot positions are used as-is with no fan-out
-correction and no back-projection.  This is correct for broad research fields
-with no scanning magnet.  OSH emits a warning when `USECBEAM` is present
-without `BEAMSAD` to flag the likely oversight; set `BEAMSAD INF` to suppress
-the warning when parallel delivery is intentional.
-
-### Back-projection formula
-
-For a spot at isocenter position x_iso, with beam start at BEAMPOS z = z_start
-(negative = upstream of isocenter) and SAD along x:
-
-```
-x_beam_start = x_iso * (SAD + z_start) / SAD
-```
-
-Example: x_iso = 5 cm, z_start = −50 cm, SAD = 200 cm
-→ factor = 150/200 = 0.75, x_beam_start = 3.75 cm.
-The SAD fan-out then tilts the beam back to exactly 5 cm at isocenter.
-Omitting this step would make the field ~33% wider than intended.
-
 ## Run a Minimal Example
 
 ```bash
@@ -179,13 +136,6 @@ Requires `numpy`, `matplotlib`, and `pydicom`.
 <img width="927" height="719" alt="signal-2026-05-21-130343_002" src="https://github.com/user-attachments/assets/df6ad7fd-18c5-426e-8f5e-f2c3429ca7aa" />
 
 
-## Examples
-
-Interactive geometry viewers, the BNCT cell demo, and performance benchmarks
-live in `examples/`.  See [examples/README.md](examples/README.md) for build
-instructions and how to run each program.  SDL2 is required for the interactive
-examples (`sudo apt-get install libsdl2-dev`).
-
 ## Public C API
 
 The library API lives under `include/openshieldhit/`.  Input descriptions are
@@ -227,6 +177,13 @@ The current codebase has a working end-to-end ion transport path with:
 - multiple raytrace implementations with a shared grid contract
 - dose / fluence scoring with BDO, text, and DICOM RTDOSE output
 
+Nuclear physics:
+
+- Tripathi nuclear inelastic cross section — beam attenuation in tissue and matter
+- pp nuclear elastic scattering — recoil proton secondaries tracked with full
+  relativistic kinematics (Arndt PSA 1998 + Jones 2010 data); secondary protons
+  scored at generation ≥ 1
+
 CT voxel transport is working end-to-end:
 
 - Schneider and Permatassari HU calibration/material registration
@@ -240,7 +197,8 @@ CT voxel transport is working end-to-end:
 
 Not yet implemented:
 
-- nuclear fragmentation — secondary particle transport (SMM)
+- elastic p-hadron reactions (pn, pα, …) — only pp elastic is currently modelled
+- nuclear fragmentation and secondary hadron production — Fermi break-up model planned (before SMM)
 - neutron transport
 - phase-space (PHSP) source and output support
 - ridge filter / range modulator support

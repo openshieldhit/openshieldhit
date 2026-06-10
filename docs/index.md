@@ -1,6 +1,7 @@
 # OpenShieldHIT
 
-Open-source Monte Carlo particle transport code for shielding calculations and particle therapy physics, built as a clean reimplementation of the SHIELD-HIT12A (SH12A) heritage code.
+Open-source Monte Carlo particle transport code for shielding calculations and particle therapy physics.
+
 
 ## What it does
 
@@ -36,9 +37,12 @@ Every simulation case lives in a directory with four plain-text files:
 
 ## SH12A compatibility
 
+Conceptually inspired by the same application domain as [SHIELD-HIT12A](https://shieldhit.org) (SH12A) and sharing its input-file format.
+
 openshieldhit reads the same `beam.dat` / `geo.dat` / `mat.dat` / `detect.dat` format as SH12A.
 Where the formats differ or where openshieldhit extends SH12A, the relevant reference pages
 call out the difference explicitly.
+
 
 ## API reference
 

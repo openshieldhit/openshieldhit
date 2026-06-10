@@ -241,18 +241,31 @@ Multiple Coulomb scattering model.
 ### NUCRE
 
 ```
-NUCRE  <0|1>
+NUCRE  <0|1|2>
 ```
 
-Nuclear reactions switch.
+Nuclear reactions switch.  This controls **hadronic** (nuclear) interactions
+only.  Coulomb (atomic) elastic scattering is always handled separately by the
+multiple Coulomb scattering model selected with [`MSCAT`](#mscat) and is
+unaffected by this switch.
 
 | Value | Effect |
 |-------|--------|
 | 0 | Off — electromagnetic transport only, no hadronic interactions |
-| 1 | On — enables nuclear reactions, fragmentation, secondary production |
+| 1 | Inelastic + elastic — Tripathi nuclear inelastic absorption and pp nuclear elastic scattering with secondary proton production |
+| 2 | Elastic only — pp nuclear elastic scattering only; no inelastic absorption |
 
-Disabling nuclear reactions is useful for pure range/dose validation where
-hadronic secondaries would complicate comparison with analytic models.
+Mode 1 is the physically complete setting for proton transport in tissue:
+inelastic reactions on oxygen and other nuclei remove primaries from the beam
+(Tripathi cross section), while pp nuclear elastic scattering deflects primaries
+and produces recoil proton secondaries scored at generation ≥ 1.
+
+Mode 2 is useful for isolating the pp elastic contribution, for example when
+cross-validating secondary proton spectra against analytic estimates.
+
+Disabling nuclear reactions entirely (`NUCRE 0`) is useful for pure
+range/dose validation where hadronic secondaries would complicate comparison
+with analytic models.
 
 ### NEUTRLCUT
 

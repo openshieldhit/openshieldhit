@@ -38,7 +38,7 @@ jobs:
       run: cmake --build build-coverage --parallel
 
     - name: Run tests
-      run: ctest --test-dir build-coverage --output-on-failure -E 'cases::05_dicom_simple'
+      run: ctest --test-dir build-coverage --output-on-failure -E 'cases::05_dicom_simple|unit::test_osh_dicom|unit::test_osh_geometry_dcm'
 
     - name: Capture coverage
       run: |
