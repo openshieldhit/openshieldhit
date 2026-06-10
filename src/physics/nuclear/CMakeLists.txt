@@ -1,6 +1,7 @@
 add_library(osh_nuclear
     osh_nuclear_tripathi.c
     osh_nuclear_pp.c
+    osh_nuclear_abrasion.c
     osh_nuclear_handler.c
 )
 

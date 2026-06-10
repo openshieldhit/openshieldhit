@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "transport/osh_neutron_pool.h"
+
 #include "common/osh_coord.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
@@ -250,6 +252,14 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         struct osh_nuclear_event const *ev = &ctx.nuclear_event;
         for (si = 0u; si < ev->n_secondaries; ++si) {
             size_t s;
+            /* Neutrons are not transported through the CSDA charged-particle
+             * loop — route them to the neutron pool instead. */
+            if (transport_ctx->neutron_pool != NULL &&
+                ev->secondaries[si].species != NULL &&
+                ev->secondaries[si].species->pdg == 2112) {
+                transport_ctx->neutron_pool->n_created++;
+                continue;
+            }
             if (pool->n >= pool->capacity) {
                 break;
             }
@@ -816,7 +826,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.voxel_idx = ctx->voxel_idx;
     st.has_voxel = ctx->has_voxel;
 
-    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB) {
+    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB ||
+        ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABRASION) {
         /* Primary destroyed by inelastic nuclear reaction.  st.de already
          * holds the ionisation energy deposited — do not modify it.
          * st.q[3] = 0 signals that the primary exits dead. */
@@ -849,7 +860,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     pool->x[slot] = qx;
     pool->y[slot] = qy;
     pool->z[slot] = qz;
-    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB) {
+    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB ||
+        ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABRASION) {
         pool->e[slot] = 0.0;
         pool->ux[slot] = ctx->w_scat[0];
         pool->uy[slot] = ctx->w_scat[1];
