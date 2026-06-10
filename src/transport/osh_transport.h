@@ -62,7 +62,8 @@ struct osh_transport_params {
     int rndoffset;        /**< RNG seed offset (added on top of rndseed). */
     char mcs_mode;        /**< enum osh_transport_mcs_mode value. */
     char straggling_mode; /**< enum osh_transport_straggling_mode value. */
-    char nuclear;         /**< Non-zero to enable nuclear interaction sampling. */
+    char nuclear_inelastic; /**< Non-zero to enable inelastic nuclear reactions (Tripathi). */
+    char nuclear_elastic;   /**< Non-zero to enable pp elastic scattering. */
 };
 
 /**
@@ -73,9 +74,12 @@ struct osh_transport_params {
  * fields hold warning-once bits and other run-lifetime state that must not be
  * stored in function-local statics if transport is later threaded.
  */
+struct osh_nuclear_handler;
+
 struct osh_transport_context {
     struct osh_transport_params params;
     struct osh_diag_sink const *diag; /**< Borrowed diagnostics sink; NULL silences transport diagnostics. */
+    struct osh_nuclear_handler const *nuclear_handler; /**< Borrowed; NULL disables handler. */
     char warned_boundary_demin_override;
 };
 

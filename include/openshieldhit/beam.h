@@ -158,7 +158,8 @@ struct osh_beam_workspace {
     float demin;
     char straggl;
     char scatter;
-    char nuclear;
+    char nuclear_inelastic; /**< Non-zero to enable inelastic nuclear reactions. */
+    char nuclear_elastic;   /**< Non-zero to enable pp elastic scattering. */
     char emtrans;
     char apcorr;
     char beam_mode;
