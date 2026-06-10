@@ -41,9 +41,9 @@ struct osh_beam_prepared;
  * particle constants are resolved later by core prepare/runtime code.
  */
 struct osh_beam_species {
-    int pdg;
-    unsigned int z;
-    unsigned int a;
+    int pdg;        /**< PDG Monte Carlo particle code; takes precedence over z/a when non-zero. */
+    unsigned int z; /**< Atomic number (proton number). */
+    unsigned int a; /**< Mass number (nucleon count). */
 };
 
 /**
@@ -69,21 +69,28 @@ struct osh_beam_species {
  * upstream file-format conventions.
  */
 struct osh_beam_spot {
-    double p[3];
-    double size[2];
-    double div[2];
-    double cor[2];
-    double t0;
-    double tsigma;
-    double p0;
-    double psigma;
-    double wt;
-    unsigned int spot_id;
-    unsigned int layer_id;
-    char shape;
-    char tsigma_type;
-    char t0_per_nucleon;
-    char tsigma_per_nucleon;
+    double p[3];             /**< Physical beam-start position [cm]; see coordinate convention above. */
+    double size[2];          /**< Lateral 1σ half-widths [cm] for x (0) and y (1).  Sign encodes
+                                  profile: positive = Gaussian σ, negative = uniform half-width,
+                                  zero = pencil beam.  Matches the BEAMSIGMA sign convention. */
+    double div[2];           /**< Angular divergence [mrad] for x (0) and y (1); zero when unused. */
+    double cor[2];           /**< Emittance correlation between position and divergence for x (0) and
+                                  y (1); dimensionless, range [−1, 1]; zero when unused. */
+    double t0;               /**< Nominal kinetic energy [MeV]; or [MeV/nucleon] when t0_per_nucleon
+                                  is set.  Zero when p0 is used instead. */
+    double tsigma;           /**< Energy spread 1σ [MeV or MeV/nucleon]; zero for monoenergetic beam. */
+    double p0;               /**< Nominal momentum [MeV/c]; used when t0 is not set. */
+    double psigma;           /**< Momentum spread 1σ [MeV/c]; zero when unused. */
+    double wt;               /**< Relative spot weight (arbitrary units); normalised across all spots
+                                  during prepare. */
+    unsigned int spot_id;    /**< Spot identifier from the input file; informational only. */
+    unsigned int layer_id;   /**< Energy layer identifier from the input file; informational only. */
+    char shape;              /**< Lateral profile shape: 'G' = Gaussian, 'U' = uniform. */
+    char tsigma_type;        /**< Origin of energy spread: 0 = from TMAX0/spot file,
+                                  1 = from EXTSPEC table. */
+    char t0_per_nucleon;     /**< Non-zero when t0 and tsigma are in MeV/nucleon (ions);
+                                  converted to total MeV during prepare. */
+    char tsigma_per_nucleon; /**< Non-zero when tsigma is per-nucleon; converted during prepare. */
 };
 
 /**
@@ -99,13 +106,17 @@ struct osh_beam_spot {
  *              warning when the user intentionally chose parallel delivery.
  */
 struct osh_beam_shared {
-    double sad[2];
-    double focus;
-    double theta;
-    double phi;
-    char use_div;
-    char use_sad;
-    char sad_was_set;
+    double sad[2];    /**< Source-to-Axis Distance [cm] for x (0) and y (1); always positive.
+                           Zero when SAD is not active.  See sad_was_set for intent. */
+    double focus;     /**< Focus position along the beam axis [cm]; used with BEAMDIV.
+                           Zero when angular divergence is not focused. */
+    double theta;     /**< Beam direction polar angle [rad]; 0 = along +z. */
+    double phi;       /**< Beam direction azimuthal angle [rad]. */
+    char use_div;     /**< Non-zero when angular divergence (div[] in spots) is active. */
+    char use_sad;     /**< 1 = finite SAD, fan-out correction applied; 0 = parallel beam. */
+    char sad_was_set; /**< 1 if BEAMSAD was explicitly set in the input (even if INF).
+                           Suppresses the "USECBEAM without BEAMSAD" warning for intentional
+                           parallel delivery. */
 };
 
 /**
@@ -117,16 +128,16 @@ struct osh_beam_shared {
  * source description and lightweight caches, not the full particle content.
  */
 struct osh_beam_phsp {
-    double *p[3];
-    double *d[3];
-    double *e;
-    double *wt;
-    int32_t *pdg;
-    size_t len;
-    char *fname;
-    int32_t _cached_pdg;
-    struct osh_beam_species _cached_species;
-    char _cached_species_valid;
+    double *p[3];                            /**< Position arrays [cm]: p[0]=x, p[1]=y, p[2]=z; each length len. */
+    double *d[3];                            /**< Direction cosine arrays: d[0]=u, d[1]=v, d[2]=w; each length len. */
+    double *e;                               /**< Kinetic energy array [MeV]; length len. */
+    double *wt;                              /**< Statistical weight array; length len. */
+    int32_t *pdg;                            /**< PDG particle code array; length len. */
+    size_t len;                              /**< Number of particles in this phase-space snapshot. */
+    char *fname;                             /**< Source filename for streaming/reload; owned by this struct. */
+    int32_t _cached_pdg;                     /**< Internal cache: PDG of the dominant species. */
+    struct osh_beam_species _cached_species; /**< Internal cache: resolved species for _cached_pdg. */
+    char _cached_species_valid;              /**< Non-zero when the cached species is up to date. */
 };
 
 /**
@@ -138,33 +149,42 @@ struct osh_beam_phsp {
  * must be treated as opaque by callers.
  */
 struct osh_beam_workspace {
-    struct osh_beam_phsp *phsp;
-    struct osh_beam_spot *spots;
-    struct osh_beam_species primary;
-    struct osh_beam_shared shared;
-    struct osh_beam_prepared *prepared; /* internal prepared state; owned by core */
-    struct ripple_filter *rifi;
-    struct parlev *parlev;
-    size_t nspots;
-    char has_primary;
-    size_t nstat;
-    size_t nsave;
-    int rndseed;
-    int rndoffset;
-    float tcut;
-    float pcut;
-    float ncut;
-    float deltae;
-    float demin;
-    char straggl;
-    char scatter;
-    char nuclear_inelastic; /**< Non-zero to enable inelastic nuclear reactions. */
-    char nuclear_elastic;   /**< Non-zero to enable pp elastic scattering. */
-    char emtrans;
-    char apcorr;
-    char beam_mode;
-    char makeln;
-    char neutrfast;
+    struct osh_beam_phsp *phsp;         /**< Phase-space source; mutually exclusive with spots.
+                                             NULL when not used. */
+    struct osh_beam_spot *spots;        /**< Owned array of nspots cold spot descriptions. */
+    struct osh_beam_species primary;    /**< Primary particle species shared by all spots. */
+    struct osh_beam_shared shared;      /**< Beam parameters common to all spots (SAD, direction). */
+    struct osh_beam_prepared *prepared; /**< Internal prepared state; owned by core, opaque to callers. */
+    struct ripple_filter *rifi;         /**< Ripple filter descriptor; NULL when not used
+                                             (feature not yet implemented). */
+    struct parlev *parlev;              /**< Parallel lever optics descriptor; NULL when not used
+                                             (feature not yet implemented). */
+    size_t nspots;                      /**< Number of spots in spots[]; must be >= 1 when spots is set. */
+    char has_primary;                   /**< Non-zero if primary species was explicitly set by the caller. */
+    size_t nstat;                       /**< Total primary histories to simulate (NSTAT). */
+    size_t nsave;                       /**< Save interval in histories; 0 = write only at end (NSTAT step). */
+    int rndseed;                        /**< RNG seed; same seed gives bit-for-bit reproducible results (RNDSEED). */
+    int rndoffset;                      /**< RNG stream offset for producing independent parallel runs
+                                             from the same seed. */
+    float tcut;                         /**< Primary kinetic energy cutoff [MeV/nucleon]; primaries
+                                             below this are killed (TCUT0). */
+    float pcut;                         /**< Secondary proton kinetic energy cutoff [MeV]. */
+    float ncut;                         /**< Neutron energy cutoff [MeV]; neutrons below this are
+                                             absorbed locally (NEUTRLCUT). */
+    float deltae;                       /**< Maximum relative energy loss per step, e.g. 0.005 = 0.5%
+                                             (DELTAE). */
+    float demin;                        /**< Minimum kinetic energy step size [MeV/nucleon]; prevents
+                                             extremely small steps near the Bragg peak (DEMIN). */
+    char straggl;                       /**< Energy straggling model: 0=off, 1=Gaussian, 2=Vavilov (STRAGG). */
+    char scatter;                       /**< Multiple Coulomb scattering model: 0=off, 1=Gaussian/Rossi-Greisen,
+                                             2=Molière (MSCAT). */
+    char nuclear_inelastic;             /**< Non-zero to enable inelastic nuclear reactions (NUCRE >= 1). */
+    char nuclear_elastic;               /**< Non-zero to enable pp nuclear elastic scattering (NUCRE >= 1). */
+    char emtrans;                       /**< Non-zero to enable electromagnetic transport corrections. */
+    char apcorr;                        /**< Non-zero to apply AP correction factor (APCORR). */
+    char beam_mode;                     /**< Internal beam delivery mode flag. */
+    char makeln;                        /**< Non-zero to write primary phase-space to file (MAKELN). */
+    char neutrfast;                     /**< Non-zero for fast (analog) neutron transport. */
 };
 
 /**
