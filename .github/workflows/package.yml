@@ -20,6 +20,7 @@ jobs:
       uses: actions/checkout@v6
       with:
         fetch-depth: 0  # Full git history needed for version extraction (git describe)
+        lfs: false
 
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.2.0
@@ -57,6 +58,7 @@ jobs:
       uses: actions/checkout@v6
       with:
         fetch-depth: 0
+        lfs: false
 
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.2.0
@@ -92,6 +94,7 @@ jobs:
       uses: actions/checkout@v6
       with:
         fetch-depth: 0
+        lfs: false
 
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.2.0
