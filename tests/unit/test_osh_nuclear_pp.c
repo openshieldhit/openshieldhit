@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "openshieldhit/const.h"
 #include "physics/nuclear/osh_nuclear_pp.h"
 #include "random/osh_rng.h"
 
@@ -26,15 +27,15 @@ static void test_sigma_el_known_values(void) {
 
     /* At 100 MeV: σ_tot = 32.8 mb → 32.8e-27 cm² */
     sigma = osh_nuclear_pp_sigma_el(100.0);
-    ASSERT_NEAR(sigma, 32.8e-27, 1.0e-27);
+    ASSERT_NEAR(sigma, 32.8 * OSH_MB_TO_CM2, OSH_MB_TO_CM2);
 
     /* At 5000 MeV (last bin): σ_tot = 33.603 mb → clamp returns last value */
     sigma = osh_nuclear_pp_sigma_el(5000.0);
-    ASSERT_NEAR(sigma, 33.603e-27, 1.0e-27);
+    ASSERT_NEAR(sigma, 33.603 * OSH_MB_TO_CM2, OSH_MB_TO_CM2);
 
     /* Well above table: should return last-bin value (te clamped to 1) */
     double sigma_clamped = osh_nuclear_pp_sigma_el(9999.0);
-    ASSERT_NEAR(sigma_clamped, sigma, 1.0e-27);
+    ASSERT_NEAR(sigma_clamped, sigma, OSH_MB_TO_CM2);
 }
 
 static void test_sigma_el_positive(void) {

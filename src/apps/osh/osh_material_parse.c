@@ -502,10 +502,19 @@ static enum osh_status parse_loaddedx(struct osh_diag_sink const *diag,
 
     memset(&table, 0, sizeof(table));
     rc = osh_material_loaddedx_table_load(resolved_path, diag, &table);
-    free(resolved_path);
     if (rc != OSH_OK) {
+        free(resolved_path);
         return rc;
     }
+    OSH_DIAG_INFOF(diag,
+                   "LOADDEDX: material '%s' loaded %s (%zu energies, %zu projectiles, %.6g..%.6g MeV/u)",
+                   mat->name,
+                   resolved_path,
+                   table.nenergy,
+                   table.nprojectiles,
+                   table.energy_grid[0],
+                   table.energy_grid[table.nenergy - 1u]);
+    free(resolved_path);
 
     osh_material_dedx_clear(mat);
 

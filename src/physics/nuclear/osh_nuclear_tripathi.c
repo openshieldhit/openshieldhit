@@ -20,6 +20,20 @@
  */
 #define OSH_COULOMB_MEV_FM 1.44
 
+/*
+ * Local benchmark note: 160 MeV proton-in-water primary-fluence comparisons
+ * showed that a p+O-16 multiplier near 0.9 can closely match the legacy
+ * reference attenuation curve, for benchmark and development purposes.
+ * That is not part of the published Tripathi parametrization,
+ * so the production value remains unity unless a documented
+ * public tuning model is added.
+ */
+#define OSH_TRIPATHI_P_O_SCALE 1.0
+
+static int is_proton_oxygen(unsigned int zp, unsigned int ap, double zt, double at) {
+    return zp == 1u && ap == 1u && fabs(zt - 8.0) < 1.0e-12 && fabs(at - 16.0) < 1.0e-12;
+}
+
 double osh_nuclear_tripathi_sigma(unsigned int zp, unsigned int ap, double zt, double at, double e_lab_per_nucleon) {
     double ap3;
     double at3;
@@ -68,6 +82,9 @@ double osh_nuclear_tripathi_sigma(unsigned int zp, unsigned int ap, double zt, d
         return 0.0;
 
     sigma = OSH_M_PI * OSH_TRIPATHI_R0_CM * OSH_TRIPATHI_R0_CM * arg * arg * (1.0 - bc / ecm);
+    if (is_proton_oxygen(zp, ap, zt, at)) {
+        sigma *= OSH_TRIPATHI_P_O_SCALE;
+    }
 
     return (sigma > 0.0) ? sigma : 0.0;
 }

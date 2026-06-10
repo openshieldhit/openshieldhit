@@ -7,12 +7,12 @@ full developer build guide including coverage, sanitizers, and packaging.
 
 ```bash
 # release build (optimised, no debug symbols)
-cmake -B build_rel -DCMAKE_BUILD_TYPE=Release .
-cmake --build build_rel --parallel
+cmake --preset release
+cmake --build --preset release
 
 # debug build
-cmake -B build_dbg -DCMAKE_BUILD_TYPE=Debug .
-cmake --build build_dbg --parallel
+cmake --preset debug
+cmake --build --preset debug
 
 # coverage build
 cmake -B build_cov -DCMAKE_BUILD_TYPE=Debug -DCOVERAGE=ON .

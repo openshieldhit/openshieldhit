@@ -27,9 +27,11 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         return OSH_EINVAL;
     }
 
+    /* Start from a clean object so failure paths can call free() safely. */
     memset(out, 0, sizeof(*out));
     out->nmaterials = ws->nmaterials;
 
+    /* Per-material index arrays point into one flat element pool. */
     out->elem_offset = (size_t *) malloc(ws->nmaterials * sizeof(size_t));
     out->elem_count = (size_t *) malloc(ws->nmaterials * sizeof(size_t));
     if (!out->elem_offset || !out->elem_count) {
@@ -37,6 +39,7 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         return OSH_ENOMEM;
     }
 
+    /* Build prefix offsets and count the total number of element records. */
     total_elems = 0u;
     for (i = 0u; i < ws->nmaterials; ++i) {
         out->elem_offset[i] = total_elems;
@@ -52,6 +55,7 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         }
     }
 
+    /* Copy only the nuclear fields needed in the hot path. */
     ep = out->elem_pool;
     for (i = 0u; i < ws->nmaterials; ++i) {
         for (j = 0u; j < ws->materials[i].nelements; ++j) {
@@ -91,18 +95,31 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     struct osh_nuclear_elem const *elems;
     size_t nelem;
     size_t i;
-    double at;
-    double zt;
+
+    /* Projectile energy used by Tripathi tables: total KE converted to MeV/u. */
+    double a_proj;
     double e_per_nucleon;
-    double sigma_inel;
+
+    /* Inelastic process hazard, summed over material elements in g^-1 cm^2. */
     double lambda_inel;
     double rate_inel;
+
+    /* Concrete target nucleus selected after the inelastic channel fires. */
+    double selected_a;
+    double selected_z;
+    double selected_sigma_inel;
+
+    /* pp elastic hazard for hydrogen-containing materials. */
     double hydrogen_mf;
     double sigma_el;
     double lambda_pp;
     double rate_pp;
+
+    /* Competing-process event sampling. */
     double rate_tot;
     double p_event;
+
+    /* pp elastic final-state kinematics. */
     double cos_cm;
     double cos_phi;
     double sin_phi;
@@ -112,10 +129,10 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     double e2;
     double sin1;
     double sin2;
-    double a_proj;
 
     event_out->kind = OSH_NUCLEAR_EVENT_NONE;
     event_out->n_secondaries = 0u;
+    event_out->n_fragments = 0u;
 
     if (ds_gcm2 <= 0.0) {
         return;
@@ -133,33 +150,27 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     }
     elems = handler->elem_pool + handler->elem_offset[material_idx];
 
+    a_proj = (projectile->a > 0u) ? (double) projectile->a : 1.0;
+    e_per_nucleon = rate_energy_mev / a_proj;
+
     /*
-     * Tripathi inelastic rate at rate_energy_mev.
-     * at = effective target mass number (= z_mean / z_over_a).
-     * Compute effective Z and A from the element list.
+     * Inelastic rate: sum per-element hazards, then sample the struck element
+     * proportional to its hazard when the inelastic channel wins. This keeps
+     * compound materials physically meaningful for later fragmentation: water
+     * can be struck on oxygen or hydrogen, but only the oxygen branch currently
+     * has an abrasion final state.
      */
-    {
-        double z_sum = 0.0;
-        double a_sum = 0.0;
-        double wsum = 0.0;
+    rate_inel = 0.0;
+    if (params->nuclear_inelastic) {
         for (i = 0u; i < nelem; ++i) {
-            z_sum += (double) elems[i].z * (double) elems[i].mass_fraction;
-            a_sum += (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u) * (double) elems[i].mass_fraction;
-            wsum += (double) elems[i].mass_fraction;
+            double ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
+            double zi = (double) elems[i].z;
+            double sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
+            if (sigma_i > 0.0) {
+                lambda_inel = osh_nuclear_lambda_gcm2(ai, sigma_i);
+                rate_inel += (double) elems[i].mass_fraction / lambda_inel;
+            }
         }
-        at = (wsum > 0.0) ? (a_sum / wsum) : 1.0;
-        zt = (wsum > 0.0) ? (z_sum / wsum) : 1.0;
-        a_proj = (projectile->a > 0u) ? (double) projectile->a : 1.0;
-        e_per_nucleon = rate_energy_mev / a_proj;
-        sigma_inel = params->nuclear_inelastic
-                         ? osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zt, at, e_per_nucleon)
-                         : 0.0;
-    }
-    if (sigma_inel > 0.0) {
-        lambda_inel = osh_nuclear_lambda_gcm2(at, sigma_inel);
-        rate_inel = 1.0 / lambda_inel;
-    } else {
-        rate_inel = 0.0;
     }
 
     /* pp elastic rate — only for proton projectile */
@@ -213,8 +224,8 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             sin_phi = -sin_phi;
         }
 
-        sin1 = sqrt(1.0 - (cos1 * cos1));
-        sin2 = sqrt(1.0 - (cos2 * cos2));
+        sin1 = sqrt(fmax(0.0, 1.0 - (cos1 * cos1)));
+        sin2 = sqrt(fmax(0.0, 1.0 - (cos2 * cos2)));
 
         osh_kinematics_rotate_dir_cos(incident_dir, event_out->primary_dir, cos1, sin1, cos_phi, sin_phi);
         osh_kinematics_rotate_dir_cos(incident_dir, event_out->secondaries[0].dir, cos2, sin2, -cos_phi, -sin_phi);
@@ -225,8 +236,42 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         event_out->secondaries[0].energy = e2;
         event_out->secondaries[0].species = projectile; /* proton = same species */
     } else {
-        /* Inelastic: Abrasion-Ablation model — emit fast nucleons */
-        osh_nuclear_abrasion_step(final_energy_mev, incident_dir, at, zt,
-                                  sigma_inel, rng, event_out);
+        /* Select the actual struck element, not a compound-average nucleus. */
+        double threshold;
+        double cumulative;
+
+        selected_a = 0.0;
+        selected_z = 0.0;
+        selected_sigma_inel = 0.0;
+        threshold = osh_rng_double(rng) * rate_inel;
+        cumulative = 0.0;
+
+        for (i = 0u; i < nelem; ++i) {
+            double ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
+            double zi = (double) elems[i].z;
+            double sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
+            if (sigma_i > 0.0) {
+                double elem_rate = (double) elems[i].mass_fraction / osh_nuclear_lambda_gcm2(ai, sigma_i);
+                selected_a = ai;
+                selected_z = zi;
+                selected_sigma_inel = sigma_i;
+                cumulative += elem_rate;
+                if (threshold <= cumulative) {
+                    break;
+                }
+            }
+        }
+
+        if (selected_sigma_inel <= 0.0 || projectile->pdg != OSH_PART_PDG_PROTON || selected_a <= 1.5) {
+            event_out->kind = OSH_NUCLEAR_EVENT_ABSORB;
+            event_out->primary_energy = 0.0;
+            event_out->n_secondaries = 0u;
+            event_out->n_fragments = 0u;
+            return;
+        }
+
+        /* Minimal development final state until Fermi breakup/SMM is wired. */
+        osh_nuclear_abrasion_step(final_energy_mev, incident_dir, selected_a, selected_z,
+                                  selected_sigma_inel, rng, event_out);
     }
 }

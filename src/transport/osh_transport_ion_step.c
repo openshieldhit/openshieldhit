@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
 
 #include "common/osh_coord.h"
@@ -15,6 +16,7 @@
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/osh_material.h"
 #include "material/runtime/osh_material_runtime.h"
+#include "particle/osh_particle_pdg.h"
 #include "physics/atomic/osh_physics_bethe.h"
 #include "physics/atomic/osh_physics_moliere.h"
 #include "physics/atomic/osh_physics_straggling.h"
@@ -256,12 +258,12 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
              * loop — route them to the neutron pool instead. */
             if (transport_ctx->neutron_pool != NULL &&
                 ev->secondaries[si].species != NULL &&
-                ev->secondaries[si].species->pdg == 2112) {
+                ev->secondaries[si].species->pdg == OSH_PART_PDG_NEUTRON) {
                 transport_ctx->neutron_pool->n_created++;
                 continue;
             }
             if (pool->n >= pool->capacity) {
-                break;
+                continue;
             }
             s = pool->n;
             pool->x[s] = pool->x[slot];
@@ -277,6 +279,10 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             pool->species[s] = ev->secondaries[si].species;
             pool->n++;
         }
+    }
+
+    if (ctx.nuclear_event.n_fragments > 0u && transport_ctx->fragment_pool != NULL) {
+        transport_ctx->fragment_pool->n_created += ctx.nuclear_event.n_fragments;
     }
 
     return OSH_OK;
@@ -310,6 +316,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->done_rc = OSH_OK;
     ctx->nuclear_event.kind = OSH_NUCLEAR_EVENT_NONE;
     ctx->nuclear_event.n_secondaries = 0u;
+    ctx->nuclear_event.n_fragments = 0u;
     ctx->part = pool->species[slot];
     ctx->a_proj = (ctx->part->a > 0u) ? (double) ctx->part->a : 1.0;
     ctx->e0 = pool->e[slot];

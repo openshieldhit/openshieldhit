@@ -241,7 +241,7 @@ Multiple Coulomb scattering model.
 ### NUCRE
 
 ```
-NUCRE  <0|1|2>
+NUCRE  <0|1|2|3>
 ```
 
 Nuclear reactions switch.  This controls **hadronic** (nuclear) interactions
@@ -252,16 +252,20 @@ unaffected by this switch.
 | Value | Effect |
 |-------|--------|
 | 0 | Off — electromagnetic transport only, no hadronic interactions |
-| 1 | Inelastic + elastic — Tripathi nuclear inelastic absorption and pp nuclear elastic scattering with secondary proton production |
+| 1 | All nuclear reactions — Tripathi nuclear inelastic absorption and pp nuclear elastic scattering with secondary proton production |
 | 2 | Elastic only — pp nuclear elastic scattering only; no inelastic absorption |
+| 3 | Inelastic only — Tripathi nuclear inelastic absorption; diagnostic mode |
 
-Mode 1 is the physically complete setting for proton transport in tissue:
+Mode 1 is the most complete current setting for proton transport in tissue:
 inelastic reactions on oxygen and other nuclei remove primaries from the beam
 (Tripathi cross section), while pp nuclear elastic scattering deflects primaries
 and produces recoil proton secondaries scored at generation ≥ 1.
 
 Mode 2 is useful for isolating the pp elastic contribution, for example when
 cross-validating secondary proton spectra against analytic estimates.
+
+Mode 3 is useful for isolating inelastic primary attenuation without pp elastic
+energy transfer.
 
 Disabling nuclear reactions entirely (`NUCRE 0`) is useful for pure
 range/dose validation where hadronic secondaries would complicate comparison

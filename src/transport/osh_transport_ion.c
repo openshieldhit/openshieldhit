@@ -74,7 +74,8 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                                               struct osh_gemca_runtime const *geom_rt,
                                               struct osh_material_runtime const *material_rt,
                                               struct osh_scoring_runtime *score_rt) {
-    struct osh_rng rng;
+    struct osh_rng beam_rng;
+    struct osh_rng physics_rng;
     struct osh_transport_params const *params;
     struct osh_particle_pool *pool = NULL;
     struct osh_zone_ref zone_refs[OSH_TRANSPORT_POOL_CAPACITY];
@@ -117,7 +118,10 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         return rc;
     }
 
-    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, (uint64_t) params->rndseed, (uint64_t) params->rndoffset);
+    /* Keep source sampling independent of stochastic transport physics.  This
+     * makes NUCRE/MSCAT/STRAGG comparisons launch the same primary histories. */
+    osh_rng_init(&beam_rng, OSH_RNG_TYPE_PCG32, (uint64_t) params->rndseed, (uint64_t) params->rndoffset);
+    osh_rng_init(&physics_rng, OSH_RNG_TYPE_PCG32, (uint64_t) params->rndseed, (uint64_t) params->rndoffset + 1u);
 
     /* Total step budget: nstat × max_steps, capped at SIZE_MAX to avoid overflow. */
     if (params->nstat > (size_t) -1 / OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY) {
@@ -142,7 +146,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             if (n_fill > pool->capacity) {
                 n_fill = pool->capacity;
             }
-            rc = osh_beam_runtime_fill_pool(beam_rt, &rng, pool, n_fill);
+            rc = osh_beam_runtime_fill_pool(beam_rt, &beam_rng, pool, n_fill);
             if (rc != OSH_OK) {
                 goto cleanup;
             }
@@ -184,7 +188,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             step_seg.ds = dist_batch[i];
 
             rc = osh_transport_ion_step(
-                pool, i, &zone_refs[i], &step_seg, 1u, geom_rt, transport_ctx, material_rt, score_rt, &rng);
+                pool, i, &zone_refs[i], &step_seg, 1u, geom_rt, transport_ctx, material_rt, score_rt, &physics_rng);
             if (rc != OSH_OK) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, "

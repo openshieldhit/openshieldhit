@@ -40,6 +40,9 @@ struct particle;
 /** Maximum secondaries per nuclear event (sized for Fermi breakup / SMM). */
 #define OSH_NUCLEAR_MAX_SECONDARIES 32
 
+/** Maximum residual nuclear fragments handed to the future breakup stage. */
+#define OSH_NUCLEAR_MAX_FRAGMENTS 1
+
 /** Classification of the nuclear event that fired on a given step. */
 enum osh_nuclear_event_kind {
     OSH_NUCLEAR_EVENT_NONE = 0,     /**< No nuclear event this step.                          */
@@ -56,6 +59,13 @@ struct osh_nuclear_secondary {
     struct particle const *species; /**< Borrowed from particle registry.        */
 };
 
+/** One residual nuclear fragment produced by an inelastic event. */
+struct osh_nuclear_fragment {
+    unsigned int z;                 /**< Residual atomic number.                 */
+    unsigned int a;                 /**< Residual mass number.                   */
+    double excitation_energy;       /**< Placeholder for future breakup [MeV].   */
+};
+
 /**
  * @brief Result of one nuclear step.
  *
@@ -69,6 +79,8 @@ struct osh_nuclear_event {
     double primary_dir[3]; /**< Primary exit direction; unchanged if ABSORB. */
     size_t n_secondaries;
     struct osh_nuclear_secondary secondaries[OSH_NUCLEAR_MAX_SECONDARIES];
+    size_t n_fragments;
+    struct osh_nuclear_fragment fragments[OSH_NUCLEAR_MAX_FRAGMENTS];
 };
 
 /* ---- Handler ------------------------------------------------------------- */

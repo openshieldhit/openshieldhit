@@ -178,8 +178,8 @@ struct osh_beam_workspace {
     char straggl;                       /**< Energy straggling model: 0=off, 1=Gaussian, 2=Vavilov (STRAGG). */
     char scatter;                       /**< Multiple Coulomb scattering model: 0=off, 1=Gaussian/Rossi-Greisen,
                                              2=Molière (MSCAT). */
-    char nuclear_inelastic;             /**< Non-zero to enable inelastic nuclear reactions (NUCRE >= 1). */
-    char nuclear_elastic;               /**< Non-zero to enable pp nuclear elastic scattering (NUCRE >= 1). */
+    char nuclear_inelastic;             /**< Non-zero to enable inelastic nuclear reactions (NUCRE 1 or 3). */
+    char nuclear_elastic;               /**< Non-zero to enable pp nuclear elastic scattering (NUCRE 1 or 2). */
     char emtrans;                       /**< Non-zero to enable electromagnetic transport corrections. */
     char apcorr;                        /**< Non-zero to apply AP correction factor (APCORR). */
     char beam_mode;                     /**< Internal beam delivery mode flag. */

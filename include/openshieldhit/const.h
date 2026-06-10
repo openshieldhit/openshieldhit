@@ -16,6 +16,7 @@
 #define OSH_NAVOGADRO 6.02214076e23  /* Avogadro constant [mol⁻¹] */
 #define OSH_MEVG2GY 1.602176634e-10  /* 1 MeV/g in J/kg */
 #define OSH_EV2JOULE 1.602176634e-19 /* 1 eV in J */
+#define OSH_MB_TO_CM2 1.0e-27        /* 1 millibarn in cm² */
 
 #define OSH_M_PI 3.14159265358979323846       /* pi */
 #define OSH_M_1_PI 0.31830988618379067154     /* 1/pi */

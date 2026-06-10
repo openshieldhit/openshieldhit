@@ -233,8 +233,8 @@ Do not use `/tmp`, `mkdtemp`, or `getpid`-based naming.
 
 | Preset | Binary dir | Flags | Use for |
 |---|---|---|---|
-| `debug` | `build/` | `-O0 -g` | Day-to-day development, sanitisers |
-| `release` | `build_rel/` | `-O3` | Fastest baseline benchmarking |
+| `debug` | `build_debug/` | `-O0 -g` | Day-to-day development, sanitisers |
+| `release` | `build/` | `-O3` | Fastest baseline benchmarking |
 | `relwithdebinfo` | `build-rel/` | `-O3 -g` | Optimised benchmarking with symbols |
 | `prof` | `build_prof/` | `-O3 -g -fno-omit-frame-pointer` | `perf record` / flamegraphs |
 
