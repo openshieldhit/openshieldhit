@@ -11,7 +11,7 @@
 OpenShieldHIT is a modern and lean Monte Carlo particle transport framework written entirely from scratch in C.
 
 > **Work in progress** — OpenShieldHIT is under active development; APIs, input formats, and behaviour may change between releases.
-> Documentation (also work in progress) is at [nbassler.github.io/openshieldhit](https://nbassler.github.io/openshieldhit).
+> Documentation (also work in progress) is at [openshieldhit.github.io/openshieldhit](https://openshieldhit.github.io/openshieldhit).
 
 ## Philosophy
 
