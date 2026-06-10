@@ -186,3 +186,21 @@ void osh_rng_u32_vec(struct osh_rng *rng, uint32_t *restrict x, int n) {
         i++;
     }
 }
+
+int osh_rng_poisson(struct osh_rng *rng, double lambda) {
+    double L;
+    double p;
+    int k;
+
+    if (lambda <= 0.0) {
+        return 0;
+    }
+    L = exp(-lambda);
+    p = 1.0;
+    k = 0;
+    do {
+        ++k;
+        p *= osh_rng_double(rng);
+    } while (p > L && k <= 64);
+    return k - 1;
+}

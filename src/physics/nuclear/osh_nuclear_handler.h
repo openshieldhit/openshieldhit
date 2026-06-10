@@ -42,10 +42,11 @@ struct particle;
 
 /** Classification of the nuclear event that fired on a given step. */
 enum osh_nuclear_event_kind {
-    OSH_NUCLEAR_EVENT_NONE = 0,     /**< No nuclear event this step.        */
-    OSH_NUCLEAR_EVENT_ABSORB,       /**< Inelastic kill (Tripathi).          */
-    OSH_NUCLEAR_EVENT_ELASTIC_PP,   /**< pp elastic scatter.                 */
-    OSH_NUCLEAR_EVENT_FRAGMENTATION /**< Future: SMM / Fermi breakup.        */
+    OSH_NUCLEAR_EVENT_NONE = 0,     /**< No nuclear event this step.                          */
+    OSH_NUCLEAR_EVENT_ABSORB,       /**< Inelastic kill, no secondaries (threshold / fallback). */
+    OSH_NUCLEAR_EVENT_ELASTIC_PP,   /**< pp elastic scatter.                                  */
+    OSH_NUCLEAR_EVENT_ABRASION,     /**< Inelastic: primary absorbed, fast nucleons emitted (AA model). */
+    OSH_NUCLEAR_EVENT_FRAGMENTATION /**< Future: FermiBreakup / SMM de-excitation.            */
 };
 
 /** One secondary particle produced by a nuclear event. */

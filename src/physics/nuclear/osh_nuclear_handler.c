@@ -8,6 +8,7 @@
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
+#include "physics/nuclear/osh_nuclear_abrasion.h"
 #include "physics/nuclear/osh_nuclear_pp.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "physics/osh_kinematics.h"
@@ -91,6 +92,7 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     size_t nelem;
     size_t i;
     double at;
+    double zt;
     double e_per_nucleon;
     double sigma_inel;
     double lambda_inel;
@@ -146,14 +148,12 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             wsum += (double) elems[i].mass_fraction;
         }
         at = (wsum > 0.0) ? (a_sum / wsum) : 1.0;
-        {
-            double zt = (wsum > 0.0) ? (z_sum / wsum) : 1.0;
-            a_proj = (projectile->a > 0u) ? (double) projectile->a : 1.0;
-            e_per_nucleon = rate_energy_mev / a_proj;
-            sigma_inel = params->nuclear_inelastic
-                             ? osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zt, at, e_per_nucleon)
-                             : 0.0;
-        }
+        zt = (wsum > 0.0) ? (z_sum / wsum) : 1.0;
+        a_proj = (projectile->a > 0u) ? (double) projectile->a : 1.0;
+        e_per_nucleon = rate_energy_mev / a_proj;
+        sigma_inel = params->nuclear_inelastic
+                         ? osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zt, at, e_per_nucleon)
+                         : 0.0;
     }
     if (sigma_inel > 0.0) {
         lambda_inel = osh_nuclear_lambda_gcm2(at, sigma_inel);
@@ -225,8 +225,8 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         event_out->secondaries[0].energy = e2;
         event_out->secondaries[0].species = projectile; /* proton = same species */
     } else {
-        /* Inelastic absorption */
-        event_out->kind = OSH_NUCLEAR_EVENT_ABSORB;
-        event_out->primary_energy = 0.0;
+        /* Inelastic: Abrasion-Ablation model — emit fast nucleons */
+        osh_nuclear_abrasion_step(final_energy_mev, incident_dir, at, zt,
+                                  sigma_inel, rng, event_out);
     }
 }

@@ -216,6 +216,20 @@ void osh_rng_gauss01_vec(struct osh_rng *rng, double *restrict x, int n);
 void osh_rng_gauss_vec(struct osh_rng *rng, double mu, double sigma, double *restrict x, int n);
 
 /**
+ * @brief Sample a Poisson-distributed integer with mean lambda (Knuth algorithm).
+ *
+ * @details
+ * Uses Knuth's product-of-uniforms method, O(lambda) on average.
+ * Suitable for lambda up to ~30; returns at most OSH_NUCLEAR_MAX_SECONDARIES
+ * to bound cost for unexpectedly large lambda values.
+ *
+ * @param rng     RNG state (mutated).
+ * @param lambda  Mean of the Poisson distribution; must be >= 0.
+ * @returns       Non-negative integer drawn from Poisson(lambda).
+ */
+int osh_rng_poisson(struct osh_rng *rng, double lambda);
+
+/**
  * @brief Convenience alias for generating a double in the range [0, 1).
  *
  * @param rng Pointer to the RNG state.
