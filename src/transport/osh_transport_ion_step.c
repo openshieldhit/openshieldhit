@@ -507,7 +507,7 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         && !transport_ctx->warned_boundary_demin_override) {
         OSH_DIAG_WARNF(transport_ctx->diag,
                        "transport: boundary-limited step shorter than DEMIN; allowing sub-DEMIN step near boundary "
-                       "(boundary_ds=%.17g cm, demin_loss=%.17g MeV, e0=%.17g MeV, zone=%zu)",
+                       "(boundary_ds=%.4g cm, demin_loss=%.4g MeV, e0=%.4g MeV, zone=%zu)",
                        ctx->boundary_ds,
                        ctx->demin_total,
                        ctx->e0,

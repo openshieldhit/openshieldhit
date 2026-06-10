@@ -551,19 +551,19 @@ static void log_runtime_column_summary(char const *material_name,
      * This has proven useful for surfacing runtime-table summaries during
      * validate-mode dry runs without adding noise to the hot path.
      */
-    OSH_DIAG_INFOF(diag,
-                   "    %s projectile[%zu] Z=%u A=%u: SP(%.3f)=%.6g SP(%.1f)=%.6g Range(%.1f)=%.6g [%s]",
-                   material_name ? material_name : "(unnamed)",
-                   proj_idx,
-                   z,
-                   a,
-                   t->emin,
-                   sp0,
-                   t->emax,
-                   sp1,
-                   t->emax,
-                   r1,
-                   source_tag ? source_tag : "runtime");
+    OSH_DIAG_DEBUGF(diag,
+                    "    %s projectile[%zu] Z=%u A=%u: SP(%.3f)=%.6g SP(%.1f)=%.6g Range(%.1f)=%.6g [%s]",
+                    material_name ? material_name : "(unnamed)",
+                    proj_idx,
+                    z,
+                    a,
+                    t->emin,
+                    sp0,
+                    t->emax,
+                    sp1,
+                    t->emax,
+                    r1,
+                    source_tag ? source_tag : "runtime");
 }
 
 /* ---- Public API ------------------------------------------------------------ */
@@ -650,7 +650,7 @@ enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
         t.projectile_z[proj_idx] = z;
         t.projectile_a[proj_idx] = a;
         t.projectile_mass_mev[proj_idx] = mass_mev;
-        OSH_DIAG_INFOF(diag, "    projectile[%zu]: Z=%u A=%u mass=%.4f MeV", proj_idx, z, a, mass_mev);
+        OSH_DIAG_DEBUGF(diag, "    projectile[%zu]: Z=%u A=%u mass=%.4f MeV", proj_idx, z, a, mass_mev);
     }
 
     /* ---- Table storage --------------------------------------------------- */
@@ -687,12 +687,12 @@ enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
          * straggling.  These depend only on composition, not on projectile or
          * energy, so they are computed once here and stored in the flat arrays. */
         compute_material_atomic(mat, &t.z_mean[mat_idx], &t.z_over_a[mat_idx], &t.rad_length[mat_idx]);
-        OSH_DIAG_INFOF(diag,
-                       "Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2",
-                       mat->name,
-                       (double) t.z_mean[mat_idx],
-                       (double) t.z_over_a[mat_idx],
-                       (double) t.rad_length[mat_idx]);
+        OSH_DIAG_DEBUGF(diag,
+                        "Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2",
+                        mat->name,
+                        (double) t.z_mean[mat_idx],
+                        (double) t.z_over_a[mat_idx],
+                        (double) t.rad_length[mat_idx]);
 
         /* ================================================================
          * Override and Bethe paths
