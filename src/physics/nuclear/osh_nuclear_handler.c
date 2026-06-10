@@ -102,9 +102,14 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     double rate_tot;
     double p_event;
     double cos_cm;
-    double cos_phi, sin_phi;
-    double cos1, e1, cos2, e2;
-    double sin1, sin2;
+    double cos_phi;
+    double sin_phi;
+    double cos1;
+    double e1;
+    double cos2;
+    double e2;
+    double sin1;
+    double sin2;
     double a_proj;
 
     event_out->kind = OSH_NUCLEAR_EVENT_NONE;
@@ -120,8 +125,11 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         return;
     }
 
-    elems = handler->elem_pool + handler->elem_offset[material_idx];
     nelem = handler->elem_count[material_idx];
+    if (nelem == 0u) {
+        return;
+    }
+    elems = handler->elem_pool + handler->elem_offset[material_idx];
 
     /*
      * Tripathi inelastic rate at rate_energy_mev.
@@ -129,7 +137,9 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
      * Compute effective Z and A from the element list.
      */
     {
-        double z_sum = 0.0, a_sum = 0.0, wsum = 0.0;
+        double z_sum = 0.0;
+        double a_sum = 0.0;
+        double wsum = 0.0;
         for (i = 0u; i < nelem; ++i) {
             z_sum += (double) elems[i].z * (double) elems[i].mass_fraction;
             a_sum += (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u) * (double) elems[i].mass_fraction;
@@ -145,12 +155,15 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
                              : 0.0;
         }
     }
-    lambda_inel = (sigma_inel > 0.0) ? osh_nuclear_lambda_gcm2(at, sigma_inel) : 1.0e30;
-    rate_inel = 1.0 / lambda_inel;
+    if (sigma_inel > 0.0) {
+        lambda_inel = osh_nuclear_lambda_gcm2(at, sigma_inel);
+        rate_inel = 1.0 / lambda_inel;
+    } else {
+        rate_inel = 0.0;
+    }
 
     /* pp elastic rate — only for proton projectile */
     rate_pp = 0.0;
-    lambda_pp = 1.0e30;
     if (params->nuclear_elastic && projectile->pdg == OSH_PART_PDG_PROTON) {
         hydrogen_mf = 0.0;
         for (i = 0u; i < nelem; ++i) {
@@ -160,8 +173,10 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         }
         if (hydrogen_mf > 0.0) {
             sigma_el = osh_nuclear_pp_sigma_el(rate_energy_mev);
-            lambda_pp = osh_nuclear_pp_lambda_gcm2(hydrogen_mf, sigma_el);
-            rate_pp = 1.0 / lambda_pp;
+            if (sigma_el > 0.0) {
+                lambda_pp = osh_nuclear_pp_lambda_gcm2(hydrogen_mf, sigma_el);
+                rate_pp = 1.0 / lambda_pp;
+            }
         }
     }
 
@@ -198,8 +213,8 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             sin_phi = -sin_phi;
         }
 
-        sin1 = sqrt(1.0 - cos1 * cos1);
-        sin2 = sqrt(1.0 - cos2 * cos2);
+        sin1 = sqrt(1.0 - (cos1 * cos1));
+        sin2 = sqrt(1.0 - (cos2 * cos2));
 
         osh_kinematics_rotate_dir_cos(incident_dir, event_out->primary_dir, cos1, sin1, cos_phi, sin_phi);
         osh_kinematics_rotate_dir_cos(incident_dir, event_out->secondaries[0].dir, cos2, sin2, -cos_phi, -sin_phi);
