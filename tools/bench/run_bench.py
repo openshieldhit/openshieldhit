@@ -118,6 +118,44 @@ def binary_path(build_dir: Path) -> Path:
     return build_dir / "bin" / "openshieldhit"
 
 
+def build_type_of(binary: Path):
+    """CMAKE_BUILD_TYPE from the CMakeCache.txt of the binary's build tree.
+
+    Returns the build type string, "" when the cache has no explicit type,
+    or None when no cache is found (binary outside a CMake build tree).
+    """
+    cache = binary.resolve().parent.parent / "CMakeCache.txt"
+    try:
+        for line in cache.read_text().splitlines():
+            if line.startswith("CMAKE_BUILD_TYPE:"):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        return None
+    return None
+
+
+def reject_unoptimized(binary: Path) -> bool:
+    """Methodology rule 1: never measure debug builds — even via --bin.
+
+    Returns True when the binary must not be measured.  A binary without a
+    discoverable CMake cache only gets a warning; we cannot prove anything
+    about it either way.
+    """
+    build_type = build_type_of(binary)
+    if build_type is None:
+        print(f"WARNING: cannot determine build type of {binary} (no CMakeCache.txt); make sure it is an optimized build")
+        return False
+    if build_type.lower() in ("debug", ""):
+        print(
+            f"error: {binary} comes from a '{build_type or 'unset'}' build; "
+            "profiles of unoptimized builds are meaningless (methodology rule 1). "
+            "Use the release or prof preset.",
+            file=sys.stderr,
+        )
+        return True
+    return False
+
+
 def cmake_build(preset: str, pool_capacity=None) -> Path:
     """Configure + build; returns the build directory."""
     bdir = build_dir_for(preset, pool_capacity)
@@ -429,6 +467,8 @@ def main(argv=None) -> int:
     default_binary = args.bin or binary_path(build_dir_for(args.preset))
     if not default_binary.exists():
         print(f"error: binary not found at {default_binary}; pass --build or --bin", file=sys.stderr)
+        return 2
+    if reject_unoptimized(default_binary):
         return 2
 
     results_dir = args.output.parent
