@@ -1,0 +1,13 @@
+# IDD benchmark scoring: laterally integrated energy deposition vs depth
+
+Geometry Mesh
+   Name IDDMesh
+    X -20.0   20.0    1
+    Y -20.0   20.0    1
+    Z   0.0   8.0  160
+
+Output
+         Filename idd.dat
+         Fileformat TEXT
+         Geo IDDMesh
+         Quantity Energy

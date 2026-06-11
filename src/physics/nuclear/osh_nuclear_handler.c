@@ -16,6 +16,20 @@
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 
+/* p+p has no inelastic channel below the single-pion production threshold
+ * (~280 MeV lab kinetic energy).  Without this gate, the Tripathi σ_R
+ * evaluated on hydrogen would fire the ABSORB fallback and unphysically
+ * swallow the full proton energy.  Above threshold the fallback remains in
+ * effect until a pion-production model exists. */
+#define H_INELASTIC_THRESHOLD_MEV 280.0
+
+/** 1 if the inelastic channel must be skipped for this target element:
+ *  hydrogen target, proton projectile, below the pion-production threshold. */
+static inline int
+_skip_hydrogen_inelastic(struct particle const *projectile, unsigned int target_z, double rate_energy_mev) {
+    return target_z == 1u && projectile->pdg == OSH_PART_PDG_PROTON && rate_energy_mev < H_INELASTIC_THRESHOLD_MEV;
+}
+
 /* ---- Handler lifecycle --------------------------------------------------- */
 
 enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const *ws, struct osh_nuclear_handler *out) {
@@ -166,16 +180,21 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     /*
      * Inelastic rate: sum per-element hazards, then sample the struck element
      * proportional to its hazard when the inelastic channel wins. This keeps
-     * compound materials physically meaningful for later fragmentation: water
-     * can be struck on oxygen or hydrogen, but only the oxygen branch currently
-     * has an abrasion final state.
+     * compound materials physically meaningful for fragmentation: water is
+     * struck on oxygen (abrasion + break-up), while hydrogen is excluded
+     * below the pion-production threshold (no p+p inelastic channel there;
+     * pp elastic is handled separately).
      */
     rate_inel = 0.0;
     if (params->nuclear_inelastic) {
         for (i = 0u; i < nelem; ++i) {
             double ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
             double zi = (double) elems[i].z;
-            double sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
+            double sigma_i;
+            if (_skip_hydrogen_inelastic(projectile, elems[i].z, rate_energy_mev)) {
+                continue;
+            }
+            sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
             if (sigma_i > 0.0) {
                 lambda_inel = osh_nuclear_lambda_gcm2(ai, sigma_i);
                 rate_inel += (double) elems[i].mass_fraction / lambda_inel;
@@ -259,7 +278,12 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         for (i = 0u; i < nelem; ++i) {
             double ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
             double zi = (double) elems[i].z;
-            double sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
+            double sigma_i;
+            /* Must mirror the rate_inel sum above so hazards stay consistent. */
+            if (_skip_hydrogen_inelastic(projectile, elems[i].z, rate_energy_mev)) {
+                continue;
+            }
+            sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
             if (sigma_i > 0.0) {
                 double elem_rate = (double) elems[i].mass_fraction / osh_nuclear_lambda_gcm2(ai, sigma_i);
                 selected_a = ai;
