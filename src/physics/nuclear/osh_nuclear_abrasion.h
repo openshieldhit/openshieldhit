@@ -12,12 +12,24 @@
  *   ⟨ν⟩ = σ_pN · A / σ_pA
  *
  * where σ_pN = OSH_ABRASION_SIGMA_PN_MB is a compile-time constant intended
- * for empirical tuning against public benchmark data.
+ * for empirical tuning against public benchmark data.  ν is sampled
+ * zero-truncated (the reaction cross-section already fired, so at least one
+ * nucleon participates).
+ *
+ * Intranuclear-cascade picture: the proton undergoes ν quasi-elastic
+ * collisions, knocking out one nucleon each and being deflected collision by
+ * collision; the degraded cascade proton then escapes as a transportable
+ * secondary (or is absorbed below ~1 MeV).  Each hole charges
+ * OSH_ABRASION_EXCITATION_PER_HOLE_MEV to the cascade proton, booked as
+ * prefragment excitation, so kinetic energy is conserved exactly:
+ *
+ *   T_in = Σ KE_knockout + KE_cascade + E*
+ *
  * The residual prefragment (A−ν, Z−ν_p) is handed to the Fermi break-up
- * stage with an excitation energy and a momentum from the event balance.
+ * stage with this excitation energy and a momentum from the event balance.
  *
  * This is deliberately a minimal development model: it gives the transport
- * layer realistic event topology (primary absorption plus fast nucleon
+ * layer realistic event topology (primary termination plus fast nucleon
  * secondaries) while the full fragmentation/de-excitation machinery is being
  * built.  It is not intended to be a comprehensive nuclear reaction model.
  */
@@ -29,10 +41,11 @@
 #define OSH_ABRASION_SIGMA_PN_MB 30.0
 #endif
 
-/** Mean prefragment excitation energy per abraded nucleon ("hole") [MeV],
- *  after Gaimard & Schmidt (1991).  The resulting E* is clamped to the
- *  leftover cascade-proton energy as an energy-conservation guard — that
- *  clamp is bookkeeping, not physics.  Override at compile time via
+/** Prefragment excitation energy per abraded nucleon ("hole") [MeV], after
+ *  Gaimard & Schmidt (1991).  Charged to the continuing cascade proton at
+ *  each collision and booked as prefragment excitation, so the event energy
+ *  balance is exact; if the proton cannot pay it is absorbed and its
+ *  remaining energy funds E*.  Override at compile time via
  *  -DOSH_ABRASION_EXCITATION_PER_HOLE_MEV=<value>. */
 #ifndef OSH_ABRASION_EXCITATION_PER_HOLE_MEV
 #define OSH_ABRASION_EXCITATION_PER_HOLE_MEV 13.3
@@ -49,19 +62,21 @@ struct osh_nuclear_event;
  * @brief Sample fast-nucleon emission for one nuclear abrasion event.
  *
  * @details
- * Samples ν ~ Poisson(⟨ν⟩), then for each participant emits a neutron (prob N/A)
- * or proton (prob Z/A) using quasi-elastic equal-mass kinematics with isotropic CM
- * scattering. The available proton energy is degraded after each sampled emission
- * so emitted kinetic energy does not exceed the incoming energy.
+ * Samples ν ~ Poisson(⟨ν⟩ | ν ≥ 1), then for each participant emits a neutron
+ * (prob N/A) or proton (prob Z/A) using quasi-elastic equal-mass kinematics
+ * with isotropic CM scattering, deflecting the continuing cascade proton at
+ * each collision.  After the cascade, the degraded proton escapes as an
+ * additional secondary (species proton, generation +1); below ~1 MeV it is
+ * absorbed into the prefragment instead.
  *
  * Always sets event_out->kind = OSH_NUCLEAR_EVENT_ABRASION and primary_energy = 0
- * (primary absorbed).
+ * (the primary slot is terminated; the cascade proton continues as a secondary).
  *
  * The surviving residual is written to event_out->fragments[0] with its mass
- * and atomic number reduced by the knocked-out nucleons, an excitation energy
- * E* = OSH_ABRASION_EXCITATION_PER_HOLE_MEV per abraded nucleon (clamped to
- * the leftover cascade-proton energy), and a lab momentum from the event
- * momentum balance — input for the Fermi break-up de-excitation stage.
+ * and atomic number reduced by the knocked-out nucleons, the accumulated
+ * hole-excitation energy E*, and a lab momentum from the event momentum
+ * balance — input for the Fermi break-up de-excitation stage.  Kinetic
+ * energy is conserved exactly: T_in = Σ KE_secondaries + E*.
  *
  * @param T_lab_mev      Incident proton kinetic energy [MeV].
  * @param incident_dir   Incident unit direction (length 3).
