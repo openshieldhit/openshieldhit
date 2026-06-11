@@ -166,6 +166,71 @@ static void test_create_free_lifecycle(void) {
     osh_scoring_workspace_free(scoring);
 }
 
+static void test_profiling_run_lifecycle(void) {
+    char geo_path[512];
+    char beam_path[512];
+    char mat_path[512];
+    char scoring_path[512];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+    struct osh_simulation_profile prof;
+    double phase_sum_s;
+
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/00_minimal/geo.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/00_minimal/beam.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/00_minimal/mat.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(scoring_path, sizeof(scoring_path), "%s/tests/cases/00_minimal/detect.dat", OSH_PROJECT_SOURCE_DIR);
+
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
+
+    beam->nstat = 50u; /* keep the transport run short */
+
+    ASSERT_TRUE(osh_simulation_set_profiling(NULL, 1) == OSH_EINVAL);
+
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
+
+    /* Profiling must be explicitly enabled before it can be queried. */
+    ASSERT_TRUE(osh_simulation_get_profile(sim, &prof) == OSH_ESTATE);
+    ASSERT_TRUE(osh_simulation_set_profiling(sim, 1) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_get_profile(sim, NULL) == OSH_EINVAL);
+    ASSERT_TRUE(osh_simulation_get_profile(sim, &prof) == OSH_OK);
+    ASSERT_TRUE(prof.steps > 0ull);
+    ASSERT_TRUE(prof.iterations > 0ull);
+    ASSERT_TRUE(prof.transport_s > 0.0);
+
+    /* Phase timers must decompose the transport wall time: every phase is
+     * non-negative and the sum cannot exceed the total (small slack for
+     * progress reporting and clock granularity). */
+    ASSERT_TRUE(prof.phase_fill_s >= 0.0);
+    ASSERT_TRUE(prof.phase_zone_ref_s >= 0.0);
+    ASSERT_TRUE(prof.phase_distance_s >= 0.0);
+    ASSERT_TRUE(prof.phase_step_s > 0.0);
+    ASSERT_TRUE(prof.phase_compact_s >= 0.0);
+    phase_sum_s = prof.phase_fill_s + prof.phase_zone_ref_s + prof.phase_distance_s + prof.phase_step_s
+                  + prof.phase_compact_s;
+    ASSERT_TRUE(phase_sum_s <= prof.transport_s * 1.02 + 1.0e-6);
+
+    /* Disabling profiling makes the profile unavailable again. */
+    ASSERT_TRUE(osh_simulation_set_profiling(sim, 0) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_get_profile(sim, &prof) == OSH_ESTATE);
+
+    ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
+
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+}
+
 static void test_create_rejects_voxel_geometry_without_hutable(void) {
     char beam_path[512];
     char mat_path[256];
@@ -232,6 +297,7 @@ int main(void) {
     test_create_rejects_unprepared_geometry();
     test_create_rejects_unknown_zone_material();
     test_create_free_lifecycle();
+    test_profiling_run_lifecycle();
     test_create_rejects_voxel_geometry_without_hutable();
     return 0;
 }

@@ -41,6 +41,7 @@ struct osh_simulation {
     struct osh_nuclear_handler nuclear_handler;
     struct osh_fragment_pool fragment_pool;
     struct osh_neutron_pool neutron_pool;
+    struct osh_transport_profile profile;
 
     unsigned long long requested_nstat;
     unsigned long long completed_nstat;
@@ -282,6 +283,37 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
 fail:
     osh_simulation_free(sim);
     return rc;
+}
+
+enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int enable) {
+    if (!sim) {
+        return OSH_EINVAL;
+    }
+    memset(&sim->profile, 0, sizeof(sim->profile));
+    sim->transport_ctx.profile = enable ? &sim->profile : NULL;
+    return OSH_OK;
+}
+
+enum osh_status osh_simulation_get_profile(struct osh_simulation const *sim, struct osh_simulation_profile *out) {
+    if (!sim || !out) {
+        return OSH_EINVAL;
+    }
+    if (!sim->transport_ctx.profile) {
+        return OSH_ESTATE;
+    }
+    out->transport_s = sim->profile.total_s;
+    out->phase_fill_s = sim->profile.fill_s;
+    out->phase_zone_ref_s = sim->profile.zone_ref_s;
+    out->phase_distance_s = sim->profile.distance_s;
+    out->phase_step_s = sim->profile.step_s;
+    out->phase_compact_s = sim->profile.compact_s;
+    out->steps = sim->profile.steps;
+    out->iterations = sim->profile.iterations;
+    out->nuclear_events = sim->profile.nuclear_events;
+    out->secondaries = sim->profile.secondaries;
+    out->neutrons_banked = (unsigned long long) sim->neutron_pool.n_created;
+    out->fragments_banked = (unsigned long long) sim->fragment_pool.n_created;
+    return OSH_OK;
 }
 
 enum osh_status osh_simulation_run(struct osh_simulation *sim) {

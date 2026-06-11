@@ -46,6 +46,62 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
                                       struct osh_simulation **sim_out);
 
 /**
+ * @brief Transport-phase wall-clock timers and event counters for one run.
+ *
+ * @details
+ * Filled by osh_simulation_get_profile() after a completed run when profiling
+ * was enabled with osh_simulation_set_profiling().  The five phase timers
+ * decompose transport_s; their sum is slightly below transport_s because
+ * progress reporting and loop bookkeeping are not attributed to any phase.
+ *
+ * Profiling reads only the monotonic clock and pre-existing counters; it never
+ * touches the RNG streams or physics state, so profiled runs produce
+ * bit-identical scoring output to unprofiled ones.
+ */
+struct osh_simulation_profile {
+    double transport_s;                /**< Total transport wall time [s]. */
+    double phase_fill_s;               /**< Pool refill from the beam source [s]. */
+    double phase_zone_ref_s;           /**< Batched zone-ref lookup [s]. */
+    double phase_distance_s;           /**< Batched boundary-distance query [s]. */
+    double phase_step_s;               /**< Per-particle physics step loop [s]. */
+    double phase_compact_s;            /**< Dead-slot pool compaction [s]. */
+    unsigned long long steps;          /**< Total transport steps taken. */
+    unsigned long long iterations;     /**< Wavefront loop iterations. */
+    unsigned long long nuclear_events; /**< Nuclear interactions sampled. */
+    unsigned long long secondaries;    /**< Secondaries produced by nuclear events. */
+    unsigned long long neutrons_banked;  /**< Neutrons routed to the (untransported) neutron pool. */
+    unsigned long long fragments_banked; /**< Residual fragments banked for future breakup. */
+};
+
+/**
+ * @brief Enable or disable transport profiling for subsequent runs.
+ *
+ * @details
+ * Must be called after osh_simulation_create() and before
+ * osh_simulation_run().  When enabled, the transport loop accumulates phase
+ * timers and counters retrievable via osh_simulation_get_profile().  The
+ * off-path cost is a single pointer test per loop phase; results are
+ * bit-identical either way.
+ *
+ * @param[in] sim     Simulation handle created by osh_simulation_create().
+ * @param[in] enable  Non-zero to enable, zero to disable.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL when @p sim is NULL.
+ */
+enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int enable);
+
+/**
+ * @brief Retrieve the transport profile of the last completed run.
+ *
+ * @param[in]  sim  Simulation handle created by osh_simulation_create().
+ * @param[out] out  Receives a copy of the profile.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL on NULL arguments, OSH_ESTATE when
+ *          profiling was not enabled before the run.
+ */
+enum osh_status osh_simulation_get_profile(struct osh_simulation const *sim, struct osh_simulation_profile *out);
+
+/**
  * @brief Run the simulation transport and finalize scoring accumulators.
  *
  * @details

@@ -1,11 +1,10 @@
 #include "transport/osh_transport_ion.h"
 
-#include <time.h>
-
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
 #include "common/osh_step_segment.h"
+#include "common/osh_time.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/runtime/osh_material_runtime.h"
 #include "random/osh_rng.h"
@@ -31,7 +30,11 @@
  * through realistic geometry; a proton Bragg peak typically takes O(1 000)
  * steps with DELTAE = 0.02.
  */
+/* Overridable from the build line (e.g. -DOSH_TRANSPORT_POOL_CAPACITY=256)
+ * so the benchmark harness can sweep capacities without editing sources. */
+#ifndef OSH_TRANSPORT_POOL_CAPACITY
 #define OSH_TRANSPORT_POOL_CAPACITY 4096u
+#endif
 #define OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY 1000000u
 
 #define OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S 1.0
@@ -41,7 +44,6 @@
 
 /* ---- Forward declarations ------------------------------------------------ */
 
-static double monotonic_seconds(void);
 static size_t transport_progress_chunk_size(size_t total);
 static void
 report_transport_progress(struct osh_diag_sink const *diag, size_t completed, size_t total, double elapsed_s);
@@ -92,13 +94,16 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     size_t progress_chunk;
     size_t next_report_completed;
     struct osh_step_segment step_seg;
+    struct osh_transport_profile *prof;
     double t_start;
     double t_last_report;
+    double t_phase = 0.0;
     enum osh_status rc = OSH_OK;
 
     if (!transport_ctx || !beam_rt || !geom_rt || !material_rt || !score_rt) {
         return OSH_EINVAL;
     }
+    prof = transport_ctx->profile;
     params = &transport_ctx->params;
     if (params->nstat == 0u) {
         return OSH_EINVAL;
@@ -134,19 +139,29 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     last_report_completed = 0u;
     progress_chunk = transport_progress_chunk_size(params->nstat);
     next_report_completed = progress_chunk;
-    t_start = monotonic_seconds();
+    t_start = osh_monotonic_seconds();
     t_last_report = t_start;
 
     report_transport_progress(transport_ctx->diag, 0u, params->nstat, 0.0);
 
     while (primaries_done < params->nstat || pool->n > 0u) {
+        if (prof) {
+            prof->iterations++;
+        }
+
         /* Fill the pool when it is empty and primaries remain */
         if (pool->n == 0u && primaries_done < params->nstat) {
             n_fill = params->nstat - primaries_done;
             if (n_fill > pool->capacity) {
                 n_fill = pool->capacity;
             }
+            if (prof) {
+                t_phase = osh_monotonic_seconds();
+            }
             rc = osh_beam_runtime_fill_pool(beam_rt, &beam_rng, pool, n_fill);
+            if (prof) {
+                prof->fill_s += osh_monotonic_seconds() - t_phase;
+            }
             if (rc != OSH_OK) {
                 goto cleanup;
             }
@@ -155,16 +170,30 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
 
         /* Batch geometry: zone-ref lookup (zone + current HU/material) and
          * current-medium boundary distance for all live particles. */
+        if (prof) {
+            t_phase = osh_monotonic_seconds();
+        }
         osh_gemca_runtime_get_zone_ref_batch(
             geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, pool->n, zone_refs);
+        if (prof) {
+            double const t_now = osh_monotonic_seconds();
+            prof->zone_ref_s += t_now - t_phase;
+            t_phase = t_now;
+        }
         osh_gemca_runtime_get_distance_batch(
             geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, zone_refs, pool->n, dist_batch);
+        if (prof) {
+            prof->distance_s += osh_monotonic_seconds() - t_phase;
+        }
 
         /* Snapshot wavefront size — secondaries injected this pass are processed
          * on the next iteration, not in the current one. */
         n_wavefront = pool->n;
 
         /* Advance every live particle by one step */
+        if (prof) {
+            t_phase = osh_monotonic_seconds();
+        }
         for (i = 0u; i < n_wavefront; ++i) {
             if (steps_taken >= step_budget) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
@@ -208,12 +237,20 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             }
             ++steps_taken;
         }
+        if (prof) {
+            double const t_now = osh_monotonic_seconds();
+            prof->step_s += t_now - t_phase;
+            t_phase = t_now;
+        }
 
         /* Compact dead entries (e[i] <= 0) */
         osh_particle_pool_compact(pool);
+        if (prof) {
+            prof->compact_s += osh_monotonic_seconds() - t_phase;
+        }
         primaries_completed = primaries_done - pool->n;
         if (primaries_completed > last_report_completed) {
-            double const t_now = monotonic_seconds();
+            double const t_now = osh_monotonic_seconds();
             int const chunk_reached = (primaries_completed >= next_report_completed);
             int const min_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S);
             int const max_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MAX_INTERVAL_S);
@@ -233,12 +270,17 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     }
 
     {
-        double const t_end = monotonic_seconds();
+        double const t_end = osh_monotonic_seconds();
         double const total_s = t_end - t_start;
         double const avg_pps = (total_s > 0.0) ? ((double) params->nstat / total_s) : 0.0;
         unsigned int const th = (unsigned int) (total_s / 3600.0);
         unsigned int const tm = (unsigned int) ((total_s - th * 3600.0) / 60.0);
         unsigned int const ts = (unsigned int) (total_s - th * 3600.0 - tm * 60.0);
+
+        if (prof) {
+            prof->total_s = total_s;
+            prof->steps = (unsigned long long) steps_taken;
+        }
 
         if (last_report_completed < params->nstat) {
             report_transport_progress(transport_ctx->diag, params->nstat, params->nstat, total_s);
@@ -274,28 +316,6 @@ cleanup:
 }
 
 /* ---- Progress helpers ---------------------------------------------------- */
-
-static double monotonic_seconds(void) {
-#if defined(CLOCK_MONOTONIC)
-    {
-        struct timespec ts;
-        if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
-            return (double) ts.tv_sec + 1.0e-9 * (double) ts.tv_nsec;
-        }
-    }
-#endif
-
-#if defined(TIME_UTC)
-    {
-        struct timespec ts;
-        if (timespec_get(&ts, TIME_UTC) == TIME_UTC) {
-            return (double) ts.tv_sec + 1.0e-9 * (double) ts.tv_nsec;
-        }
-    }
-#endif
-
-    return (double) time(NULL);
-}
 
 static size_t transport_progress_chunk_size(size_t total) {
     size_t chunk;
