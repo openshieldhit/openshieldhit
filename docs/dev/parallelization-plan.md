@@ -175,8 +175,16 @@ Restructure the per-slot scalar loop into **batch phases over the SoA pool**
 
 1. Batch RNG draws for the whole wavefront (`osh_rng_*_vec` already exists).
 2. Batch stopping-power / range lookups (TODO: "batch/SIMD lookup helpers").
-3. Batch geometry distances (TODO: AVX2 `get_distance_batch`; the voxel
-   Jacobs path is the most valuable target for the CT use case).
+3. Batch geometry distances (TODO: AVX2 `get_distance_batch`).  For analytic
+   GEMCA this has two prerequisites that are worth doing early because they
+   also unblock the GPU port: (a) the flattened `insns_flat[]` +
+   `insn_begin[]` runtime layout (TODO item) so zone evaluation reads a
+   relocatable blob instead of per-zone heap pointers, and (b) **zone-sorted
+   batching** — bin live pool slots by current zone ref each wavefront round
+   so that SIMD lanes (and later GPU warps) evaluate the same instruction
+   stream.  This is the same divergence-reduction technique as Celeritas
+   track sorting, and it can be measured on CPU long before any GPU work.
+   The voxel Jacobs path is the other high-value target for the CT use case.
 4. Vectorized step update: advance positions, apply energy loss, Molière
    MCS, straggling across lanes; handle rare divergent events (nuclear
    interactions, boundary crossings) with a scalar tail pass over a
@@ -184,7 +192,11 @@ Restructure the per-slot scalar loop into **batch phases over the SoA pool**
 
 Strategy: portable C first (`restrict`, `#pragma omp simd`), then
 intrinsics (AVX2/AVX-512/NEON) behind the existing gemca-style runtime
-dispatch *only* where profiling shows the compiler failed.  MCsquare
+dispatch *only* where profiling shows the compiler failed.  Note that
+x86 is not the only CPU target: GH200-based systems (e.g. Cyfronet
+Helios GPU partition) pair Hopper GPUs with ARM Grace host CPUs, so the
+portable-C path is the primary implementation and AVX2 an optimization,
+never the only path.  MCsquare
 demonstrates that this combination yields order-of-magnitude gains over
 scalar history-based transport on CPUs.
 
@@ -213,11 +225,15 @@ translation, not a redesign.
   distance kernel → step kernel → scoring kernel → compact
   (stream-compaction) → refill.  Family queues (the existing scheduler
   seam) and optional energy/material sorting limit divergence.
-- **Order of attack:** the **CT/voxel case first** — Jacobs traversal over a
-  regular grid is GPU-friendly and it is the clinically relevant workload
-  (FRED, gPMC, MOQUI all do exactly this).  Analytic GEMCA zone evaluation
-  (instruction-tree traversal) is more divergent; port it second, with the
-  flattened `insns_flat[]` layout (TODO item) as a prerequisite.
+- **Order of attack:** first an end-to-end **plumbing spike on the simplest
+  case** (water box / `00_minimal`: device pool, device RNG, atomic dose
+  tally, partial-tally merge — goal is correctness of the pipeline, not
+  speed).  Then the **CT/voxel case** — Jacobs traversal over a regular grid
+  is GPU-friendly and clinically relevant (FRED, gPMC, MOQUI all do exactly
+  this).  Analytic GEMCA follows by uploading the flattened instruction
+  blob and reusing the zone-sorted batching from Phase 3 to keep warps
+  coherent; if flattening and sorting land early in Phase 3, GEMCA-on-GPU
+  moves up nearly for free.
 
 ### Phase 5 — dispatcher and HPC integration
 
