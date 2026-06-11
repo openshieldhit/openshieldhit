@@ -425,6 +425,55 @@ static void test_moving_parent(void) {
     osh_nuclear_fermi_breakup_free(&model);
 }
 
+static void test_g4_multiplicity_anchors(void) {
+    /* Anchor points from the canonical G4FermiBreakUp (Geant4 9.1 fixed),
+     * extracted from I. Pshenichnov's standalone FermiTest (used with
+     * permission; see examples/05_fermi_breakup_validation/).  Both lie in
+     * the low-excitation region populated by the abrasion stage, where the
+     * sequential-binary approximation reproduces the canonical model:
+     *   C-12 at E* = 12.6 MeV (1.05 MeV/nucleon): <mult> = 3.015 (3-alpha)
+     *   C-12 at E* = 22.2 MeV (1.85 MeV/nucleon): <mult> = 2.356
+     * The high-excitation region (above ~3 MeV/nucleon) is a known deficit
+     * of the binary scheme and is deliberately not pinned here. */
+    struct osh_nuclear_fermi_breakup model;
+    struct osh_rng rng;
+    struct osh_nuclear_event ev;
+    double p0[3];
+    double mult_sum;
+    double mean;
+    int i;
+    int n_events;
+
+    memset(&model, 0, sizeof(model));
+    ASSERT_TRUE(osh_nuclear_fermi_breakup_compile(&model) == OSH_OK);
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 314u, 0u);
+
+    p0[0] = 0.0;
+    p0[1] = 0.0;
+    p0[2] = 0.0;
+    n_events = 4000;
+
+    mult_sum = 0.0;
+    for (i = 0; i < n_events; ++i) {
+        init_abrasion_event(&ev, 6u, 12u, 12.6, p0);
+        osh_nuclear_fermi_breakup_step(&model, &ev.fragments[0], &rng, &ev);
+        mult_sum += (double) (ev.n_secondaries + ev.n_fragments);
+    }
+    mean = mult_sum / n_events;
+    ASSERT_NEAR(mean, 3.015, 3.015 * 0.05);
+
+    mult_sum = 0.0;
+    for (i = 0; i < n_events; ++i) {
+        init_abrasion_event(&ev, 6u, 12u, 22.2, p0);
+        osh_nuclear_fermi_breakup_step(&model, &ev.fragments[0], &rng, &ev);
+        mult_sum += (double) (ev.n_secondaries + ev.n_fragments);
+    }
+    mean = mult_sum / n_events;
+    ASSERT_NEAR(mean, 2.356, 2.356 * 0.05);
+
+    osh_nuclear_fermi_breakup_free(&model);
+}
+
 int main(void) {
     test_compile_channels();
     test_be8_breaks_to_two_alphas();
@@ -434,5 +483,6 @@ int main(void) {
     test_c12_three_alpha_channel();
     test_capacity_truncation();
     test_moving_parent();
+    test_g4_multiplicity_anchors();
     return 0;
 }
