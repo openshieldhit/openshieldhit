@@ -33,6 +33,9 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     double cos_sec;  /* lab cos of the knocked-out nucleon */
     double e_sec;    /* lab KE of the knocked-out nucleon [MeV] */
     double sin_sec;
+    double p_in;  /* incident lab momentum magnitude [MeV/c] */
+    double p_sec; /* emitted nucleon lab momentum magnitude [MeV/c] */
+    double e_star;
     int is_neutron;
     int n_knockout_p;
     int n_knockout_n;
@@ -51,12 +54,20 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         return;
     }
 
-    /* The residual target nucleus is stored for the future Fermi-breakup
-     * stage.  Fast nucleon emission below will update A/Z before return. */
+    /* The residual target prefragment is handed to the Fermi break-up stage.
+     * Fast nucleon emission below will update A/Z, E*, and momentum before
+     * return.  Momentum balance: the prefragment starts with the full
+     * incident momentum (the absorbed cascade proton is captured, its
+     * direction is not tracked — model simplification) and each knocked-out
+     * nucleon's momentum is subtracted as it is emitted. */
     event_out->n_fragments = 1u;
     event_out->fragments[0].a = (unsigned int) floor(a_eff + 0.5);
     event_out->fragments[0].z = (unsigned int) floor(z_eff + 0.5);
     event_out->fragments[0].excitation_energy = 0.0;
+    p_in = sqrt(T_lab_mev * (T_lab_mev + 2.0 * OSH_PART_MASS_PROTON));
+    event_out->fragments[0].p[0] = p_in * incident_dir[0];
+    event_out->fragments[0].p[1] = p_in * incident_dir[1];
+    event_out->fragments[0].p[2] = p_in * incident_dir[2];
 
     /* Wounded-nucleon mean (Glauber 1970):
      *   <nu> = sigma_pN * A / sigma_pA
@@ -132,6 +143,12 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         event_out->secondaries[j].species = species;
         event_out->n_secondaries = (size_t) j + 1u;
 
+        /* Momentum balance: subtract the emitted nucleon from the fragment. */
+        p_sec = sqrt(e_sec * (e_sec + 2.0 * OSH_PART_MASS_PROTON));
+        event_out->fragments[0].p[0] -= p_sec * event_out->secondaries[j].dir[0];
+        event_out->fragments[0].p[1] -= p_sec * event_out->secondaries[j].dir[1];
+        event_out->fragments[0].p[2] -= p_sec * event_out->secondaries[j].dir[2];
+
         /* Degrade the proton for the next collision. */
         T_current = e_prim;
     }
@@ -145,5 +162,18 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         if (event_out->fragments[0].a == 0u || event_out->fragments[0].z == 0u) {
             event_out->n_fragments = 0u;
         }
+    }
+
+    if (event_out->n_fragments > 0u) {
+        /* Hole excitation (Gaimard & Schmidt 1991): a fixed mean energy per
+         * abraded nucleon.  Clamped to the leftover cascade-proton energy as
+         * an energy-conservation guard (bookkeeping, not physics): E* may not
+         * exceed the kinetic energy actually absorbed with the cascade
+         * proton. */
+        e_star = OSH_ABRASION_EXCITATION_PER_HOLE_MEV * (double) (n_knockout_p + n_knockout_n);
+        if (e_star > T_current) {
+            e_star = T_current;
+        }
+        event_out->fragments[0].excitation_energy = e_star;
     }
 }

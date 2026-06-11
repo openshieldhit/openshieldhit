@@ -9,6 +9,7 @@
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
 #include "physics/nuclear/osh_nuclear_abrasion.h"
+#include "physics/nuclear/osh_nuclear_fermi_breakup.h"
 #include "physics/nuclear/osh_nuclear_pp.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "physics/osh_kinematics.h"
@@ -22,6 +23,7 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
     size_t i;
     size_t j;
     struct osh_nuclear_elem *ep;
+    enum osh_status rc;
 
     if (!ws || !out) {
         return OSH_EINVAL;
@@ -67,6 +69,13 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         }
     }
 
+    /* Fermi break-up channel table for prefragment de-excitation. */
+    rc = osh_nuclear_fermi_breakup_compile(&out->fbu);
+    if (rc != OSH_OK) {
+        osh_nuclear_handler_free(out);
+        return rc;
+    }
+
     return OSH_OK;
 }
 
@@ -74,6 +83,7 @@ void osh_nuclear_handler_free(struct osh_nuclear_handler *h) {
     if (!h) {
         return;
     }
+    osh_nuclear_fermi_breakup_free(&h->fbu);
     free(h->elem_pool);
     free(h->elem_offset);
     free(h->elem_count);
@@ -270,8 +280,14 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             return;
         }
 
-        /* Minimal development final state until Fermi breakup/SMM is wired. */
+        /* Abrasion (fast stage) followed by Fermi break-up de-excitation of
+         * the surviving prefragment (ablation stage).  The break-up consumes
+         * the fragment slot when it fires and appends its products to the
+         * same event; un-broken residues stay for the fragment pool. */
         osh_nuclear_abrasion_step(
             final_energy_mev, incident_dir, selected_a, selected_z, selected_sigma_inel, rng, event_out);
+        if (event_out->n_fragments > 0u) {
+            osh_nuclear_fermi_breakup_step(&handler->fbu, &event_out->fragments[0], rng, event_out);
+        }
     }
 }

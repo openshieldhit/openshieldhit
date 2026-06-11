@@ -13,8 +13,8 @@
  *
  * where σ_pN = OSH_ABRASION_SIGMA_PN_MB is a compile-time constant intended
  * for empirical tuning against public benchmark data.
- * The residual nucleus (A−ν, Z−ν_p) is discarded; FermiBreakup de-excitation
- * is a planned follow-on.
+ * The residual prefragment (A−ν, Z−ν_p) is handed to the Fermi break-up
+ * stage with an excitation energy and a momentum from the event balance.
  *
  * This is deliberately a minimal development model: it gives the transport
  * layer realistic event topology (primary absorption plus fast nucleon
@@ -27,6 +27,15 @@
  *  via -DOSH_ABRASION_SIGMA_PN_MB=<value>. */
 #ifndef OSH_ABRASION_SIGMA_PN_MB
 #define OSH_ABRASION_SIGMA_PN_MB 30.0
+#endif
+
+/** Mean prefragment excitation energy per abraded nucleon ("hole") [MeV],
+ *  after Gaimard & Schmidt (1991).  The resulting E* is clamped to the
+ *  leftover cascade-proton energy as an energy-conservation guard — that
+ *  clamp is bookkeeping, not physics.  Override at compile time via
+ *  -DOSH_ABRASION_EXCITATION_PER_HOLE_MEV=<value>. */
+#ifndef OSH_ABRASION_EXCITATION_PER_HOLE_MEV
+#define OSH_ABRASION_EXCITATION_PER_HOLE_MEV 13.3
 #endif
 
 #ifdef __cplusplus
@@ -47,6 +56,12 @@ struct osh_nuclear_event;
  *
  * Always sets event_out->kind = OSH_NUCLEAR_EVENT_ABRASION and primary_energy = 0
  * (primary absorbed).
+ *
+ * The surviving residual is written to event_out->fragments[0] with its mass
+ * and atomic number reduced by the knocked-out nucleons, an excitation energy
+ * E* = OSH_ABRASION_EXCITATION_PER_HOLE_MEV per abraded nucleon (clamped to
+ * the leftover cascade-proton energy), and a lab momentum from the event
+ * momentum balance — input for the Fermi break-up de-excitation stage.
  *
  * @param T_lab_mev      Incident proton kinetic energy [MeV].
  * @param incident_dir   Incident unit direction (length 3).

@@ -157,6 +157,12 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     /* ---- 3. Transport tables --------------------------------------------- */
 
     z_max = (beam->primary.z > 0u) ? (unsigned int) beam->primary.z : 1u;
+    if (beam->nuclear_inelastic && z_max < OSH_FERMI_BREAKUP_ZMAX) {
+        /* Fermi break-up emits ions up to Z = OSH_FERMI_BREAKUP_ZMAX; without
+         * their stopping-power columns the transport loop would silently kill
+         * every charged break-up product (find_projectile_index). */
+        z_max = OSH_FERMI_BREAKUP_ZMAX;
+    }
     rc = osh_material_compile(mat, z_max, diag, &sim->transport_tables);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to compile transport tables");
@@ -244,6 +250,8 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     sim->transport_ctx.params.nuclear_elastic = beam->nuclear_elastic ? 1 : 0;
     sim->transport_ctx.diag = diag;
     sim->fragment_pool.n_created = 0u;
+    sim->fragment_pool.n_sent_breakup = 0u;
+    sim->fragment_pool.n_breakup = 0u;
     sim->neutron_pool.n_created = 0u;
     sim->transport_ctx.fragment_pool = &sim->fragment_pool;
     sim->transport_ctx.neutron_pool = &sim->neutron_pool;
@@ -297,11 +305,17 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
                        "simulation: %zu neutron(s) created but not transported (neutron transport not yet implemented)",
                        sim->neutron_pool.n_created);
     }
+    if (sim->fragment_pool.n_sent_breakup > 0u) {
+        OSH_DIAG_INFOF(sim->diag,
+                       "simulation: %zu prefragment(s) sent to Fermi break-up, %zu de-excited",
+                       sim->fragment_pool.n_sent_breakup,
+                       sim->fragment_pool.n_breakup);
+    }
     if (sim->fragment_pool.n_created > 0u) {
-        OSH_DIAG_INFOF(
-            sim->diag,
-            "simulation: %zu nuclear fragment(s) created but not processed (Fermi breakup not yet implemented)",
-            sim->fragment_pool.n_created);
+        OSH_DIAG_INFOF(sim->diag,
+                       "simulation: %zu nuclear fragment(s) left unprocessed (outside Fermi break-up domain; "
+                       "evaporation/SMM not yet implemented)",
+                       sim->fragment_pool.n_created);
     }
 
     rc = osh_scoring_postprocess(&sim->scoring_runtime);

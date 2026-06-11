@@ -99,4 +99,52 @@ void osh_kinematics_elastic_equal_mass_lab(double T_lab,
                                            double *cos_theta2_lab,
                                            double *e2_lab_mev);
 
+/**
+ * @brief CM momentum magnitude of the two-body decay M → m1 + m2.
+ *
+ * @details
+ * Standard relativistic two-body decay momentum (Källén triangle function):
+ *   p* = sqrt( (M² − (m1+m2)²) · (M² − (m1−m2)²) ) / (2M)
+ *
+ * The parent mass @p m_parent may be an effective mass M = M_gs + E*
+ * (ground-state mass plus excitation energy), which is how an excited
+ * prefragment is treated in the Fermi break-up stage.
+ *
+ * @param[in] m_parent  Parent rest mass (possibly excited) [MeV/c²]; must be > 0.
+ * @param[in] m1        First product rest mass [MeV/c²].
+ * @param[in] m2        Second product rest mass [MeV/c²].
+ *
+ * @returns CM momentum magnitude [MeV/c]; 0 if the channel is closed
+ *          (m_parent <= m1 + m2) or @p m_parent <= 0.
+ */
+double osh_kinematics_two_body_decay_p(double m_parent, double m1, double m2);
+
+/**
+ * @brief Boost a product 4-momentum from the parent rest frame to the lab.
+ *
+ * @details
+ * The parent is specified by its (possibly effective) rest mass M and its lab
+ * momentum vector P; its lab energy is E_P = sqrt(M² + |P|²).  The product is
+ * given by its total energy e_cm and momentum vector p_cm in the parent rest
+ * frame.  The general (direction-preserving) Lorentz boost is:
+ *
+ *   e_lab = (E_P·e_cm + P·p_cm) / M
+ *   p_lab = p_cm + P·( (p_cm·P) / (M·(E_P + M)) + e_cm / M )
+ *
+ * For P = 0 this reduces to the identity.  No trigonometric functions.
+ *
+ * @param[in]  m_parent   Parent rest mass [MeV/c²]; must be > 0.
+ * @param[in]  p_parent   Parent lab momentum vector [MeV/c] (length 3).
+ * @param[in]  e_cm       Product total energy in the parent rest frame [MeV].
+ * @param[in]  p_cm       Product momentum in the parent rest frame [MeV/c] (length 3).
+ * @param[out] e_lab_out  Product total energy in the lab [MeV].
+ * @param[out] p_lab_out  Product lab momentum [MeV/c] (length 3); may alias @p p_cm.
+ */
+void osh_kinematics_boost_to_lab(double m_parent,
+                                 double const p_parent[3],
+                                 double e_cm,
+                                 double const p_cm[3],
+                                 double *e_lab_out,
+                                 double p_lab_out[3]);
+
 #endif /* OSH_KINEMATICS_H */
