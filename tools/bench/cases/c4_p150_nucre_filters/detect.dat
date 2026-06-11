@@ -1,0 +1,21 @@
+# C4: filtered pages - per-step filter-rule evaluation, secondary pool dynamics
+Geometry Mesh
+    Name DepthDose
+    X -10.0  10.0    1
+    Y -10.0  10.0    1
+    Z   0.0  18.0  360
+
+Filter
+    Name Primaries     # generation 0 only
+    GEN = 0
+
+Filter
+    Name Protons       # primary and secondary protons
+    Z = 1
+
+Output
+    Filename dose_filtered.bdo
+    Geo DepthDose
+    Quantity Dose
+    Quantity Dose Primaries
+    Quantity Dose Protons

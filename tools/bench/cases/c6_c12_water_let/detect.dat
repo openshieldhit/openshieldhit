@@ -1,0 +1,13 @@
+# C6: heavy-ion physics (z_eff) with LET scoring on ions
+Geometry Mesh
+    Name DepthDose
+    X -10.0  10.0    1
+    Y -10.0  10.0    1
+    Z   0.0  30.0  600
+
+Output
+    Filename c12_dose_let.bdo
+    Geo DepthDose
+    Quantity Dose
+    Quantity DLET
+    Quantity TLET

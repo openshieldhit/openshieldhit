@@ -1,0 +1,11 @@
+RNDSEED        89736501            # Fixed seed: benchmark runs must be reproducible
+PRIMARY        6        12         # Carbon-12 ion (Z=6, A=12)
+TMAX0          400.0    0.0        # Incident energy (MeV/nucleon)
+BEAMSIGMA      0.0      0.0        # Pencil beam
+BEAMPOS        0.0      0.0  -2.0  # Beam XYZ start position [cm]
+NSTAT          5000    -1          # Overridden by the harness via -n
+DELTAE         0.005               # Max relative energy loss per step
+DEMIN          0.025               # Minimum energy step (MeV/nucleon)
+STRAGG         1                   # Gaussian straggling
+MSCAT          2                   # Moliere multiple scattering
+NUCRE          1                   # Nuclear reactions on
