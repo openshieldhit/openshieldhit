@@ -49,6 +49,9 @@ static void test_event_kind(void) {
 }
 
 static void test_energy_conservation(void) {
+    /* Exact kinetic-energy budget: T_in = sum(KE_secondaries) + E*.
+     * The knocked-out nucleons, the escaping cascade proton, and the
+     * prefragment excitation account for the full incident energy. */
     struct osh_rng rng;
     struct osh_nuclear_event ev;
     double dir[3];
@@ -70,6 +73,9 @@ static void test_energy_conservation(void) {
             sum_e += ev.secondaries[j].energy;
         }
         ASSERT_TRUE(sum_e <= T_incident + 1.0e-6);
+        if (ev.n_fragments > 0u) {
+            ASSERT_NEAR(sum_e + ev.fragments[0].excitation_energy, T_incident, 1.0e-6);
+        }
     }
 }
 
@@ -97,7 +103,9 @@ static void test_secondary_dir_unit(void) {
 }
 
 static void test_species_ratio(void) {
-    /* For O-16, N/A = 0.5 → expect ~50% neutron secondaries. */
+    /* Knock-outs are 50/50 n/p for O-16 (N/A = 0.5), but the escaping cascade
+     * proton dilutes the neutron fraction: with mean knock-out count m and
+     * escape probability close to 1, expect ~ 0.5·m / (m + 1). */
     struct osh_rng rng;
     struct osh_nuclear_event ev;
     double dir[3];
@@ -123,19 +131,22 @@ static void test_species_ratio(void) {
             }
         }
     }
-    if (n_total > 0) {
-        frac = (double) n_neutron / (double) n_total;
-        ASSERT_NEAR(frac, 0.5, 0.05);
-    }
+    ASSERT_TRUE(n_total > 0);
+    frac = (double) n_neutron / (double) n_total;
+    ASSERT_TRUE(frac > 0.20 && frac < 0.40);
 }
 
 static void test_mean_nu(void) {
-    /* Mean ν should match (sigma_pN * A / sigma_pA) within 10% over many events. */
+    /* Knock-out count follows a zero-truncated Poisson with mean
+     * λ/(1−e^{−λ}); the escaping cascade proton adds at most one more
+     * secondary (slightly less due to absorption below ~1 MeV). */
     struct osh_rng rng;
     struct osh_nuclear_event ev;
     double dir[3];
     double total_nu;
-    double expected_nu;
+    double lambda;
+    double expected_ztp;
+    double mean;
     int n_events;
     int i;
 
@@ -145,26 +156,29 @@ static void test_mean_nu(void) {
     total_nu = 0.0;
     n_events = 20000;
 
-    expected_nu = (OSH_ABRASION_SIGMA_PN_MB * OSH_MB_TO_CM2 * O16_A) / SIGMA_PA_CM2;
+    lambda = (OSH_ABRASION_SIGMA_PN_MB * OSH_MB_TO_CM2 * O16_A) / SIGMA_PA_CM2;
+    expected_ztp = lambda / (1.0 - exp(-lambda));
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 42u, 0u);
     for (i = 0; i < n_events; ++i) {
         osh_nuclear_abrasion_step(140.0, dir, O16_A, O16_Z, SIGMA_PA_CM2, &rng, &ev);
         total_nu += (double) ev.n_secondaries;
     }
-    ASSERT_NEAR(total_nu / n_events, expected_nu, expected_nu * 0.10);
+    mean = total_nu / n_events;
+    ASSERT_TRUE(mean > expected_ztp * 0.9);
+    ASSERT_TRUE(mean < expected_ztp + 1.0 + 1.0e-9);
 }
 
 static void test_excitation_energy(void) {
-    /* E* = per-hole constant × abraded nucleons, clamped to the leftover
-     * cascade energy: never negative, never above the per-hole estimate, and
-     * exactly 0 when no nucleon was knocked out. */
+    /* E* accumulates the per-hole charge taken from the cascade proton (plus
+     * an absorbed sub-MeV remnant): never negative, bounded by the per-hole
+     * cost of the knock-outs unless the cascade proton was absorbed, and
+     * always closing the exact energy budget (checked in
+     * test_energy_conservation). */
     struct osh_rng rng;
     struct osh_nuclear_event ev;
     double dir[3];
     double e_star;
-    double sum_e;
-    size_t j;
     int i;
 
     dir[0] = 0.0;
@@ -179,19 +193,11 @@ static void test_excitation_energy(void) {
         }
         e_star = ev.fragments[0].excitation_energy;
         ASSERT_TRUE(e_star >= 0.0);
-        ASSERT_TRUE(e_star <= OSH_ABRASION_EXCITATION_PER_HOLE_MEV * (double) ev.n_secondaries + 1.0e-9);
-        if (ev.n_secondaries == 0u) {
-            ASSERT_TRUE(e_star == 0.0);
-        }
-
-        /* Four-vector budget at the abrasion → break-up boundary: the emitted
-         * kinetic energy plus the excitation may never exceed the incident
-         * kinetic energy (no double counting of the leftover cascade energy). */
-        sum_e = 0.0;
-        for (j = 0u; j < ev.n_secondaries; ++j) {
-            sum_e += ev.secondaries[j].energy;
-        }
-        ASSERT_TRUE(sum_e + e_star <= 140.0 + 1.0e-6);
+        ASSERT_TRUE(e_star < 140.0);
+        /* At least one knock-out happened (zero-truncated ν), so some hole
+         * excitation must have been booked. */
+        ASSERT_TRUE(ev.n_secondaries >= 1u);
+        ASSERT_TRUE(e_star > 0.0);
     }
 }
 
