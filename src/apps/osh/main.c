@@ -56,6 +56,7 @@ int main(int argc, char *argv[]) {
     osh_path_normalize((char *) opt.mat_path);
     osh_path_normalize((char *) opt.detect_path);
     osh_path_normalize((char *) opt.out_dir);
+    osh_path_normalize((char *) opt.profile_path);
 
     run_opt.workdir = opt.workdir;
     run_opt.out_dir = opt.out_dir;
@@ -68,6 +69,7 @@ int main(int argc, char *argv[]) {
     run_opt.seed_offset = opt.seed_offset;
     run_opt.has_seed_offset = opt.has_seed_offset;
     run_opt.validate_only = opt.dry_run ? 1 : 0;
+    run_opt.profile_path = opt.profile_path;
     run_opt.diag = &diag;
 
     rc = osh_run(&run_opt, stdout, stderr);

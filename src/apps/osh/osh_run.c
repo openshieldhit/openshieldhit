@@ -15,6 +15,7 @@
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
 #include "common/osh_patient_position.h"
+#include "common/osh_time.h"
 #include "common/osh_vect.h"
 #include "openshieldhit/const.h"
 #include "openshieldhit/dicom.h"
@@ -22,6 +23,7 @@
 #include "openshieldhit/geometry_defs.h"
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/simulation.h"
+#include "openshieldhit/version.h"
 
 /* ---- Default file names -------------------------------------------------- */
 
@@ -41,6 +43,16 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
                                                char const *detect_path,
                                                struct osh_diag_sink const *diag);
 static int run_file_exists(char const *path);
+static enum osh_status run_write_profile_json(char const *path,
+                                              struct osh_simulation_profile const *prof,
+                                              size_t nstat,
+                                              int rndseed,
+                                              int rndoffset,
+                                              double parse_s,
+                                              double compile_s,
+                                              double run_s,
+                                              double save_s,
+                                              struct osh_diag_sink const *diag);
 
 /* ---- Run ----------------------------------------------------------------- */
 
@@ -76,6 +88,11 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     struct osh_material_workspace *mat = NULL;
     struct osh_scoring_workspace *scoring = NULL;
     struct osh_simulation *sim = NULL;
+    double t_mark;
+    double parse_s = 0.0;
+    double compile_s = 0.0;
+    double run_s = 0.0;
+    double save_s = 0.0;
     enum osh_status rc = OSH_OK;
 
     if (!opt) {
@@ -121,6 +138,8 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         fprintf(out, "  Material input   : %s\n", mat_path);
         fprintf(out, "  Detect input     : %s\n", detect_path);
     }
+
+    t_mark = osh_monotonic_seconds();
 
     if (!run_file_exists(beam_path)) {
         if (err) {
@@ -225,14 +244,21 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
+    parse_s = osh_monotonic_seconds() - t_mark;
+
     if (opt->validate_only) {
+        if (opt->profile_path && opt->profile_path[0]) {
+            OSH_DIAG_WARNF(opt->diag, "%s", "profile requested with --dry-run; no profile written");
+        }
         if (out) {
             fprintf(out, "Validation completed.\n");
         }
         goto cleanup;
     }
 
+    t_mark = osh_monotonic_seconds();
     rc = osh_simulation_create(beam, geom, mat, scoring, opt->diag, &sim);
+    compile_s = osh_monotonic_seconds() - t_mark;
     if (rc != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to compile simulation\n");
@@ -240,14 +266,23 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
+    if (opt->profile_path && opt->profile_path[0]) {
+        osh_simulation_set_profiling(sim, 1);
+    }
+
+    t_mark = osh_monotonic_seconds();
     rc = osh_simulation_run(sim);
+    run_s = osh_monotonic_seconds() - t_mark;
     if (rc != OSH_OK) {
         if (err) {
             fprintf(err, "Error: simulation run failed\n");
         }
         goto cleanup;
     }
+
+    t_mark = osh_monotonic_seconds();
     rc = osh_simulation_save(sim);
+    save_s = osh_monotonic_seconds() - t_mark;
     if (rc != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to save scoring outputs\n");
@@ -256,6 +291,32 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     }
     if (out) {
         fprintf(out, "Run completed. Outputs saved under %s\n", abs_outdir);
+    }
+
+    if (opt->profile_path && opt->profile_path[0]) {
+        struct osh_simulation_profile prof;
+        rc = osh_simulation_get_profile(sim, &prof);
+        if (rc == OSH_OK) {
+            rc = run_write_profile_json(opt->profile_path,
+                                        &prof,
+                                        beam->nstat,
+                                        beam->rndseed,
+                                        beam->rndoffset,
+                                        parse_s,
+                                        compile_s,
+                                        run_s,
+                                        save_s,
+                                        opt->diag);
+        }
+        if (rc != OSH_OK) {
+            if (err) {
+                fprintf(err, "Error: failed to write profile JSON: %s\n", opt->profile_path);
+            }
+            goto cleanup;
+        }
+        if (out) {
+            fprintf(out, "Profile written to %s\n", opt->profile_path);
+        }
     }
 
 cleanup:
@@ -757,6 +818,109 @@ static enum osh_status run_resolve_output_paths(struct osh_scoring_workspace *sc
         scoring->outputs[i].filename = resolved;
     }
 
+    return OSH_OK;
+}
+
+/**
+ * @brief Identify the compiler that produced this binary.
+ *
+ * @details
+ * Profiling numbers are meaningless without their toolchain; this string is
+ * embedded in the profile JSON so result files remain self-describing.
+ */
+static char const *run_compiler_string(void) {
+#if defined(__clang__)
+    return "clang " __clang_version__;
+#elif defined(__GNUC__)
+    return "gcc " __VERSION__;
+#elif defined(_MSC_VER)
+    return "msvc";
+#else
+    return "unknown";
+#endif
+}
+
+/**
+ * @brief Write a one-line JSON profile record for a completed run.
+ *
+ * @details
+ * The record is self-contained: binary metadata (version, compiler), run
+ * parameters (nstat, seed), the app-level phase wall times (parse, compile,
+ * run, save), the transport-loop phase decomposition, and event counters.
+ * The benchmark harness in tools/bench/ wraps this record with case and
+ * machine metadata; the binary emits only what it can know itself.
+ *
+ * @returns OSH_OK on success, OSH_EIO when the file cannot be written.
+ */
+static enum osh_status run_write_profile_json(char const *path,
+                                              struct osh_simulation_profile const *prof,
+                                              size_t nstat,
+                                              int rndseed,
+                                              int rndoffset,
+                                              double parse_s,
+                                              double compile_s,
+                                              double run_s,
+                                              double save_s,
+                                              struct osh_diag_sink const *diag) {
+    FILE *fp;
+    double const phase_sum_s =
+        prof->phase_fill_s + prof->phase_zone_ref_s + prof->phase_distance_s + prof->phase_step_s
+        + prof->phase_compact_s;
+    double const prim_per_s = (prof->transport_s > 0.0) ? ((double) nstat / prof->transport_s) : 0.0;
+    double const steps_per_primary = (nstat > 0u) ? ((double) prof->steps / (double) nstat) : 0.0;
+
+#if defined(_MSC_VER)
+    if (fopen_s(&fp, path, "w") != 0) {
+        fp = NULL;
+    }
+#else
+    fp = fopen(path, "w");
+#endif
+    if (!fp) {
+        OSH_DIAG_ERRORF(diag, "profile: cannot open '%s' for writing", path);
+        return OSH_EIO;
+    }
+
+    fprintf(fp,
+            "{\"schema\":1,\"version\":\"%s\",\"compiler\":\"%s\","
+            "\"nstat\":%zu,\"rndseed\":%d,\"rndoffset\":%d,"
+            "\"setup_parse_s\":%.9g,\"setup_compile_s\":%.9g,"
+            "\"run_s\":%.9g,\"transport_s\":%.9g,\"save_s\":%.9g,"
+            "\"prim_per_s\":%.9g,"
+            "\"phases\":{\"fill_s\":%.9g,\"zone_ref_s\":%.9g,\"distance_s\":%.9g,"
+            "\"step_s\":%.9g,\"compact_s\":%.9g,\"sum_s\":%.9g},"
+            "\"counters\":{\"steps\":%llu,\"steps_per_primary\":%.9g,"
+            "\"iterations\":%llu,\"nuclear_events\":%llu,\"secondaries\":%llu,"
+            "\"neutrons_banked\":%llu,\"fragments_banked\":%llu}}\n",
+            osh_version_string(),
+            run_compiler_string(),
+            nstat,
+            rndseed,
+            rndoffset,
+            parse_s,
+            compile_s,
+            run_s,
+            prof->transport_s,
+            save_s,
+            prim_per_s,
+            prof->phase_fill_s,
+            prof->phase_zone_ref_s,
+            prof->phase_distance_s,
+            prof->phase_step_s,
+            prof->phase_compact_s,
+            phase_sum_s,
+            prof->steps,
+            steps_per_primary,
+            prof->iterations,
+            prof->nuclear_events,
+            prof->secondaries,
+            prof->neutrons_banked,
+            prof->fragments_banked);
+
+    if (fclose(fp) != 0) {
+        OSH_DIAG_ERRORF(diag, "profile: failed to finalize '%s'", path);
+        return OSH_EIO;
+    }
     return OSH_OK;
 }
 

@@ -32,6 +32,7 @@ struct osh_cli_options {
     int has_nstat;                  /**< Non-zero if --nstat/-n was explicitly given. */
     unsigned long long seed_offset; /**< Random-seed stream offset override. */
     int has_seed_offset;            /**< Non-zero if --seedoffset/-N was explicitly given. */
+    char const *profile_path;       /**< Profile JSON output path; NULL disables profiling. */
 };
 
 /**

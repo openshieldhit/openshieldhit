@@ -125,6 +125,31 @@ static void test_rejects_extra_positional_argument(void) {
     ASSERT_TRUE(strstr(err, "unexpected positional argument") != NULL);
 }
 
+static void test_profile_option(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--profile", "out/prof.json", "run_17", NULL};
+    char *argv_eq[] = {"openshieldhit", "--profile=prof.json", NULL};
+    char *argv_plain[] = {"openshieldhit", "run_17", NULL};
+    char *argv_missing[] = {"openshieldhit", "--profile", NULL};
+
+    int rc = osh_cli_parse(4, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.profile_path != NULL && strcmp(opt.profile_path, "out/prof.json") == 0);
+    ASSERT_TRUE(opt.workdir != NULL && strcmp(opt.workdir, "run_17") == 0);
+
+    rc = osh_cli_parse(2, argv_eq, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.profile_path != NULL && strcmp(opt.profile_path, "prof.json") == 0);
+
+    rc = osh_cli_parse(2, argv_plain, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.profile_path == NULL);
+
+    rc = osh_cli_parse(2, argv_missing, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+}
+
 static int run_named_test(char const *name) {
     if (strcmp(name, "version_short_flag") == 0) {
         test_version_short_flag();
@@ -162,6 +187,10 @@ static int run_named_test(char const *name) {
         test_rejects_extra_positional_argument();
         return 0;
     }
+    if (strcmp(name, "profile_option") == 0) {
+        test_profile_option();
+        return 0;
+    }
     return 1;
 }
 
@@ -179,5 +208,6 @@ int main(int argc, char *argv[]) {
     test_seedoffset_rejects_sign_prefix();
     test_seedoffset_rejects_above_9999();
     test_rejects_extra_positional_argument();
+    test_profile_option();
     return 0;
 }

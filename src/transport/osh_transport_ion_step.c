@@ -251,6 +251,12 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         return rc;
     }
 
+    /* Profiling counters only; never touches RNG or physics state. */
+    if (transport_ctx->profile && ctx.nuclear_event.kind != OSH_NUCLEAR_EVENT_NONE) {
+        transport_ctx->profile->nuclear_events++;
+        transport_ctx->profile->secondaries += (unsigned long long) ctx.nuclear_event.n_secondaries;
+    }
+
     /* Inject secondaries produced by a nuclear event (pp elastic recoil,
      * abrasion nucleons, Fermi break-up products).  Secondaries are appended
      * past the current wavefront and are processed on the next pass.

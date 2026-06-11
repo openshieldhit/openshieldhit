@@ -40,6 +40,7 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
     opt->has_nstat = 0;
     opt->seed_offset = 0;
     opt->has_seed_offset = 0;
+    opt->profile_path = NULL;
 
     if (argc <= 1) {
         opt->action = OSH_CLI_ACTION_HELP;
@@ -99,6 +100,7 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "  -m, --mat <file>      Override material input file\n");
     fprintf(out, "  -d, --detect <file>   Override scoring input file\n");
     fprintf(out, "  -o, --outdir <dir>    Override output directory\n");
+    fprintf(out, "      --profile <file>  Write a one-line JSON timing/counter profile to <file>\n");
     fprintf(out, "\n");
     fprintf(out, "Notes:\n");
     fprintf(out, "  WORKDIR defaults input files to WORKDIR/{geo,beam,mat,detect}.dat.\n");
@@ -265,6 +267,13 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
             return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
         }
         opt->detect_path = value;
+        return 0;
+    }
+    if ((name_len == 7) && (strncmp(name, "profile", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->profile_path = value;
         return 0;
     }
     if (((name_len == 6) && (strncmp(name, "outdir", name_len) == 0))

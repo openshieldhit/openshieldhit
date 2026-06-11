@@ -67,6 +67,37 @@ struct osh_transport_params {
 };
 
 /**
+ * @brief Wall-clock phase timers and event counters for one transport run.
+ *
+ * @details
+ * Filled by the wavefront loop when profiling is enabled (the context's
+ * profile pointer is non-NULL).  The five phase timers decompose the
+ * transport wall time:
+ *
+ *   fill_s      pool refill from the beam source
+ *   zone_ref_s  batched zone-ref lookup (zone + current HU/material)
+ *   distance_s  batched current-medium boundary distance query
+ *   step_s      per-particle physics step loop (osh_transport_ion_step)
+ *   compact_s   dead-slot compaction and progress bookkeeping
+ *
+ * Profiling reads only the monotonic clock and pre-existing counters; it
+ * never touches the RNG streams or any physics state, so instrumented runs
+ * are bit-identical to un-instrumented ones.
+ */
+struct osh_transport_profile {
+    double fill_s;                     /**< Time spent refilling the pool [s]. */
+    double zone_ref_s;                 /**< Time in the zone-ref batch query [s]. */
+    double distance_s;                 /**< Time in the boundary-distance batch query [s]. */
+    double step_s;                     /**< Time in the per-particle step loop [s]. */
+    double compact_s;                  /**< Time in pool compaction [s]. */
+    double total_s;                    /**< Total transport wall time [s]. */
+    unsigned long long steps;          /**< Total transport steps taken. */
+    unsigned long long iterations;     /**< Wavefront loop iterations. */
+    unsigned long long nuclear_events; /**< Nuclear interactions sampled (any kind). */
+    unsigned long long secondaries;    /**< Secondaries produced by nuclear events. */
+};
+
+/**
  * @brief Per-run transport context: immutable knobs plus mutable run state.
  *
  * @details
@@ -84,6 +115,7 @@ struct osh_transport_context {
     struct osh_nuclear_handler const *nuclear_handler; /**< Borrowed; NULL disables handler. */
     struct osh_fragment_pool *fragment_pool;           /**< Borrowed; residual fragments for future breakup. */
     struct osh_neutron_pool *neutron_pool;             /**< Borrowed; neutrons routed here instead of CSDA pool. */
+    struct osh_transport_profile *profile;             /**< Borrowed; NULL disables phase timers/counters. */
     char warned_boundary_demin_override;
 };
 
