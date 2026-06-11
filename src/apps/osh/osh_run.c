@@ -863,9 +863,8 @@ static enum osh_status run_write_profile_json(char const *path,
                                               double save_s,
                                               struct osh_diag_sink const *diag) {
     FILE *fp;
-    double const phase_sum_s =
-        prof->phase_fill_s + prof->phase_zone_ref_s + prof->phase_distance_s + prof->phase_step_s
-        + prof->phase_compact_s;
+    double const phase_sum_s = prof->phase_fill_s + prof->phase_zone_ref_s + prof->phase_distance_s + prof->phase_step_s
+                               + prof->phase_compact_s;
     double const prim_per_s = (prof->transport_s > 0.0) ? ((double) nstat / prof->transport_s) : 0.0;
     double const steps_per_primary = (nstat > 0u) ? ((double) prof->steps / (double) nstat) : 0.0;
 
