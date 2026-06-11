@@ -1,0 +1,51 @@
+--------------------------------------------------------------------------------
+Profile data file '/tmp/profrun2/callgrind.c8_z1000.out' (creator: callgrind-3.22.0)
+--------------------------------------------------------------------------------
+I1 cache: 
+D1 cache: 
+LL cache: 
+Timerange: Basic block 0 - 579670658
+Trigger: Program termination
+Profiled target:  /home/user/openshieldhit/build/bin/openshieldhit --workdir /tmp/oshbench_s00u3yny/c8_z1000 -n 7 -o /tmp/profrun2/callgrind_run --profile /tmp/profrun2/callgrind_run/profile.json (PID 5602, part 1)
+Events recorded:  Ir
+Events shown:     Ir
+Event sort order: Ir
+Thresholds:       99
+Include dirs:     
+User annotated:   
+Auto-annotation:  on
+
+--------------------------------------------------------------------------------
+Ir                     
+--------------------------------------------------------------------------------
+3,784,300,154 (100.0%)  PROGRAM TOTALS
+
+--------------------------------------------------------------------------------
+Ir                      file:function
+--------------------------------------------------------------------------------
+2,683,019,824 (70.90%)  ???:eval_distance [/home/user/openshieldhit/build/bin/openshieldhit]
+  665,441,801 (17.58%)  ???:osh_gemca_runtime_get_zone [/home/user/openshieldhit/build/bin/openshieldhit]
+  168,853,074 ( 4.46%)  ???:osh_vect_dot [/home/user/openshieldhit/build/bin/openshieldhit]
+  155,864,412 ( 4.12%)  ???:osh_vect_len2 [/home/user/openshieldhit/build/bin/openshieldhit]
+   26,149,266 ( 0.69%)  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:__memset_avx2_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   12,407,363 ( 0.33%)  ./string/../sysdeps/x86_64/multiarch/strcmp-avx2.S:__strcmp_avx2 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    5,892,589 ( 0.16%)  ???:osh_gemca_zone_compile_expr [/home/user/openshieldhit/build/bin/openshieldhit]
+    4,777,846 ( 0.13%)  ./math/../sysdeps/ieee754/dbl-64/e_log.c:__ieee754_log_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+    4,545,042 ( 0.12%)  ???:osh_transport_ion_step [/home/user/openshieldhit/build/bin/openshieldhit]
+    4,240,230 ( 0.11%)  ???:osh_ray_transform [/home/user/openshieldhit/build/bin/openshieldhit]
+    4,019,418 ( 0.11%)  ./malloc/./malloc/malloc.c:_int_malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    3,842,460 ( 0.10%)  ./math/../sysdeps/ieee754/dbl-64/e_pow.c:__ieee754_pow_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+    2,787,745 ( 0.07%)  ???:osh_readline_key [/home/user/openshieldhit/build/bin/openshieldhit]
+    2,610,342 ( 0.07%)  ./libio/./libio/getc.c:getc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    2,421,966 ( 0.06%)  ???:osh_scoring_score_step [/home/user/openshieldhit/build/bin/openshieldhit]
+
+--------------------------------------------------------------------------------
+The following files chosen for auto-annotation could not be found:
+--------------------------------------------------------------------------------
+  ./libio/./libio/getc.c
+  ./malloc/./malloc/malloc.c
+  ./math/../sysdeps/ieee754/dbl-64/e_log.c
+  ./math/../sysdeps/ieee754/dbl-64/e_pow.c
+  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S
+  ./string/../sysdeps/x86_64/multiarch/strcmp-avx2.S
+
