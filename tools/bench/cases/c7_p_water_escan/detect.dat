@@ -1,0 +1,11 @@
+# C7: energy scaling - steps-per-primary and setup-vs-transport ratio
+Geometry Mesh
+    Name DepthDose
+    X -10.0  10.0    1
+    Y -10.0  10.0    1
+    Z   0.0  30.0  300
+
+Output
+    Filename escan_dose.bdo
+    Geo DepthDose
+    Quantity Dose

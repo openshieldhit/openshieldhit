@@ -1,0 +1,11 @@
+# C1: clean reference - 1-D depth-dose only
+Geometry Mesh
+    Name DepthDose
+    X -10.0  10.0    1
+    Y -10.0  10.0    1
+    Z   0.0  10.0  200
+
+Output
+    Filename depth_dose.bdo
+    Geo DepthDose
+    Quantity Dose
