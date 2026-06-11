@@ -108,9 +108,10 @@ struct osh_transport_context {
  *   - CSDA energy loss (residual-range tables)
  *   - multiple Coulomb scattering (Highland/Molière, random-hinge method)
  *   - Gaussian energy straggling (Bohr variance)
+ *   - nuclear interactions (pp elastic, abrasion + Fermi break-up secondaries)
  *
  * Not yet implemented:
- *   - secondaries from nuclear interactions (SMM)
+ *   - de-excitation of heavy nuclear residues, A > 16 (evaporation/SMM)
  *
  * DELTAE is treated as a maximum fractional energy-loss step criterion in
  * material. Boundary-limited steps are truncated and the exit energy is

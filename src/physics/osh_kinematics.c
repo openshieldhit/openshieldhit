@@ -161,3 +161,49 @@ void osh_kinematics_elastic_equal_mass_lab(double T_lab,
     if (*e2_lab_mev < 0.0)
         *e2_lab_mev = 0.0;
 }
+
+/* ---- Two-body decay ------------------------------------------------------- */
+
+double osh_kinematics_two_body_decay_p(double m_parent, double m1, double m2) {
+    double sum;
+    double diff;
+    double num;
+
+    if (m_parent <= 0.0) {
+        return 0.0;
+    }
+
+    sum = m1 + m2;
+    diff = m1 - m2;
+    num = (m_parent * m_parent - sum * sum) * (m_parent * m_parent - diff * diff);
+    if (num <= 0.0) {
+        return 0.0;
+    }
+    return sqrt(num) / (2.0 * m_parent);
+}
+
+/* ---- Lorentz boost to lab ------------------------------------------------- */
+
+void osh_kinematics_boost_to_lab(double m_parent,
+                                 double const p_parent[3],
+                                 double e_cm,
+                                 double const p_cm[3],
+                                 double *e_lab_out,
+                                 double p_lab_out[3]) {
+    double p2;
+    double e_parent;
+    double dot;
+    double coef;
+
+    p2 = p_parent[0] * p_parent[0] + p_parent[1] * p_parent[1] + p_parent[2] * p_parent[2];
+    e_parent = sqrt(m_parent * m_parent + p2);
+    dot = p_cm[0] * p_parent[0] + p_cm[1] * p_parent[1] + p_cm[2] * p_parent[2];
+
+    /* coef = (p_cm·P)/(M(E_P+M)) + e_cm/M; for P = 0 the whole P-term vanishes */
+    coef = dot / (m_parent * (e_parent + m_parent)) + e_cm / m_parent;
+
+    *e_lab_out = (e_parent * e_cm + dot) / m_parent;
+    p_lab_out[0] = p_cm[0] + p_parent[0] * coef;
+    p_lab_out[1] = p_cm[1] + p_parent[1] * coef;
+    p_lab_out[2] = p_cm[2] + p_parent[2] * coef;
+}

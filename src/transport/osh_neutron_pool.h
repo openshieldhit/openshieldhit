@@ -8,8 +8,8 @@
  * @brief Neutron secondary pool — infrastructure stub for future neutron transport.
  *
  * @details
- * Neutrons produced by nuclear reactions (abrasion, future FermiBreakup) are
- * not transported through the CSDA charged-particle loop.  They are collected
+ * Neutrons produced by nuclear reactions (abrasion, Fermi break-up) are not
+ * transported through the CSDA charged-particle loop.  They are collected
  * here instead.  Currently only the count is stored; actual position/direction/
  * energy arrays will be added when neutron transport is implemented.
  */

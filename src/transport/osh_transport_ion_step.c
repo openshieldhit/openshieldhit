@@ -186,6 +186,12 @@ static void step_from_pool(struct step *st,
                            int medium,
                            int zone);
 
+/** 1 if the nuclear event kind destroys the primary (inelastic channels). */
+static inline int _nuclear_event_kills_primary(enum osh_nuclear_event_kind kind) {
+    return kind == OSH_NUCLEAR_EVENT_ABSORB || kind == OSH_NUCLEAR_EVENT_ABRASION
+           || kind == OSH_NUCLEAR_EVENT_FRAGMENTATION;
+}
+
 /* ---- Public API ---------------------------------------------------------- */
 
 /**
@@ -245,9 +251,10 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         return rc;
     }
 
-    /* Inject secondaries produced by a nuclear event (pp elastic recoil, future
-     * fragments).  Secondaries are appended past the current wavefront and are
-     * processed on the next pass.  Silently skip if the pool is full. */
+    /* Inject secondaries produced by a nuclear event (pp elastic recoil,
+     * abrasion nucleons, Fermi break-up products).  Secondaries are appended
+     * past the current wavefront and are processed on the next pass.
+     * Silently skip if the pool is full. */
     if (ctx.nuclear_event.n_secondaries > 0u) {
         size_t si;
         struct osh_nuclear_event const *ev = &ctx.nuclear_event;
@@ -279,8 +286,18 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         }
     }
 
-    if (ctx.nuclear_event.n_fragments > 0u && transport_ctx->fragment_pool != NULL) {
-        transport_ctx->fragment_pool->n_created += ctx.nuclear_event.n_fragments;
+    if (transport_ctx->fragment_pool != NULL) {
+        struct osh_fragment_pool *fp = transport_ctx->fragment_pool;
+        /* Every surviving abrasion prefragment is handed to the break-up
+         * stage: FRAGMENTATION means it fired; ABRASION with a remaining
+         * fragment means it declined (out of domain or no open channel). */
+        if (ctx.nuclear_event.kind == OSH_NUCLEAR_EVENT_FRAGMENTATION) {
+            fp->n_sent_breakup++;
+            fp->n_breakup++;
+        } else if (ctx.nuclear_event.kind == OSH_NUCLEAR_EVENT_ABRASION && ctx.nuclear_event.n_fragments > 0u) {
+            fp->n_sent_breakup++;
+        }
+        fp->n_created += ctx.nuclear_event.n_fragments;
     }
 
     return OSH_OK;
@@ -831,7 +848,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     st.voxel_idx = ctx->voxel_idx;
     st.has_voxel = ctx->has_voxel;
 
-    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABRASION) {
+    if (_nuclear_event_kills_primary(ctx->nuclear_event.kind)) {
         /* Primary destroyed by inelastic nuclear reaction.  st.de already
          * holds the ionisation energy deposited — do not modify it.
          * st.q[3] = 0 signals that the primary exits dead. */
@@ -864,7 +881,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     pool->x[slot] = qx;
     pool->y[slot] = qy;
     pool->z[slot] = qz;
-    if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABSORB || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ABRASION) {
+    if (_nuclear_event_kills_primary(ctx->nuclear_event.kind)) {
         pool->e[slot] = 0.0;
         pool->ux[slot] = ctx->w_scat[0];
         pool->uy[slot] = ctx->w_scat[1];

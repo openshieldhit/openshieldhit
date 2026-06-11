@@ -93,12 +93,29 @@ to the proton mass exceeding 1 u).
 Key references:
 - Tripathi, Cucinotta & Wilson, NASA/TP-1999-209726 (1999)
 
+### Abrasion + Fermi break-up — `osh_nuclear_abrasion`, `osh_nuclear_fermi_breakup`
+
+When the inelastic channel fires, the **abrasion** stage (wounded-nucleon
+picture, Bowman–Swiatecki–Tsang 1973) emits fast knock-out nucleons and leaves
+an excited prefragment with E* from a per-hole estimate (Gaimard & Schmidt
+1991, clamped to the absorbed cascade energy) and a momentum from the event
+balance.  Light prefragments (A ≤ 16) are then de-excited by the **Fermi
+break-up** stage: sequential binary splits weighted by two-body phase space
+(g₁g₂ μ^(3/2) √E_kin), resolved over a startup-compiled channel table built
+from the isotope database.  Only n, p, d, t, ³He and α are emitted as
+transportable products; other residues are counted in the fragment pool.
+The sequential-binary scheme is a development approximation of the full
+simultaneous n-body Fermi model.
+
+Key references:
+- Fermi, Prog. Theor. Phys. 5 (1950) 570
+- Gaimard & Schmidt, Nucl. Phys. A 531 (1991) 709
+
 ### Coming next
 
 - **SMM** (Statistical Multifragmentation Model, Bondorf et al. 1995):
-  generates the fragment distribution after a nuclear reaction.  The seam
-  for plugging it in is already present in `src/transport/osh_transport_ion_step.c`
-  (`ion_step_commit`, `ctx->nuclear_kill`).
+  de-excitation of heavy residues (A > 16) that the Fermi break-up stage
+  leaves unprocessed, and a full simultaneous n-body break-up.
 - **BNAB-26**: 26-group neutron cross sections for simple neutron transport.
 
 ---

@@ -183,6 +183,11 @@ Nuclear physics:
 - pp nuclear elastic scattering — recoil proton secondaries tracked with full
   relativistic kinematics (Arndt PSA 1998 + Jones 2010 data); secondary protons
   scored at generation ≥ 1
+- abrasion + Fermi break-up — fast nucleon knock-out followed by statistical
+  de-excitation of the light residual (A ≤ 16) into n, p, d, t, ³He, α;
+  charged products are transported, neutrons collected in the neutron pool.
+  The break-up is a sequential-binary development approximation of the full
+  simultaneous n-body Fermi model
 
 CT voxel transport is working end-to-end:
 
@@ -198,7 +203,9 @@ CT voxel transport is working end-to-end:
 Not yet implemented:
 
 - elastic p-hadron reactions (pn, pα, …) — only pp elastic is currently modelled
-- nuclear fragmentation and secondary hadron production — Fermi break-up model planned (before SMM)
+- full simultaneous n-body Fermi break-up and SMM — current break-up is a
+  sequential-binary approximation; heavy residues (A > 16) are counted but not
+  de-excited
 - neutron transport
 - phase-space (PHSP) source and output support
 - ridge filter / range modulator support

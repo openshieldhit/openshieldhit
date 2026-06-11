@@ -15,6 +15,7 @@
  * Currently supported channels:
  *   - pp elastic scattering (hydrogen target, projectile = proton)
  *   - Tripathi inelastic absorption (all ion projectiles)
+ *   - abrasion + Fermi break-up de-excitation (proton projectile)
  *
  * The step entry point is pool-independent: it takes scalar inputs and writes
  * a result struct; only RNG state is mutated as a side effect.  This makes the
@@ -25,6 +26,7 @@
 #include <stddef.h>
 
 #include "openshieldhit/status.h"
+#include "physics/nuclear/osh_nuclear_fermi_breakup.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,8 +42,10 @@ struct particle;
 /** Maximum secondaries per nuclear event (sized for Fermi breakup / SMM). */
 #define OSH_NUCLEAR_MAX_SECONDARIES 32
 
-/** Maximum residual nuclear fragments handed to the future breakup stage. */
-#define OSH_NUCLEAR_MAX_FRAGMENTS 1
+/** Maximum residual nuclear fragments per event: the abrasion prefragment
+ *  plus unprocessed Fermi break-up residues (non-whitelist nuclides without
+ *  open channels, or truncation overflow). */
+#define OSH_NUCLEAR_MAX_FRAGMENTS 4
 
 /** Classification of the nuclear event that fired on a given step. */
 enum osh_nuclear_event_kind {
@@ -49,7 +53,7 @@ enum osh_nuclear_event_kind {
     OSH_NUCLEAR_EVENT_ABSORB,       /**< Inelastic kill, no secondaries (threshold / fallback). */
     OSH_NUCLEAR_EVENT_ELASTIC_PP,   /**< pp elastic scatter.                                  */
     OSH_NUCLEAR_EVENT_ABRASION,     /**< Inelastic: primary absorbed, fast nucleons emitted (AA model). */
-    OSH_NUCLEAR_EVENT_FRAGMENTATION /**< Future: FermiBreakup / SMM de-excitation.            */
+    OSH_NUCLEAR_EVENT_FRAGMENTATION /**< Inelastic: abrasion + Fermi break-up products emitted. */
 };
 
 /** One secondary particle produced by a nuclear event. */
@@ -61,9 +65,10 @@ struct osh_nuclear_secondary {
 
 /** One residual nuclear fragment produced by an inelastic event. */
 struct osh_nuclear_fragment {
+    double excitation_energy; /**< Excitation energy E* [MeV].             */
+    double p[3];              /**< Lab momentum vector [MeV/c].            */
     unsigned int z;           /**< Residual atomic number.                 */
     unsigned int a;           /**< Residual mass number.                   */
-    double excitation_energy; /**< Placeholder for future breakup [MeV].   */
 };
 
 /**
@@ -104,9 +109,10 @@ struct osh_nuclear_elem {
  * Free with osh_nuclear_handler_free().
  */
 struct osh_nuclear_handler {
-    struct osh_nuclear_elem *elem_pool; /**< Flat array: all materials, all elements. */
-    size_t *elem_offset;                /**< elem_offset[i]: start of material i.    */
-    size_t *elem_count;                 /**< elem_count[i]:  element count.          */
+    struct osh_nuclear_fermi_breakup fbu; /**< Fermi break-up channel table.            */
+    struct osh_nuclear_elem *elem_pool;   /**< Flat array: all materials, all elements. */
+    size_t *elem_offset;                  /**< elem_offset[i]: start of material i.    */
+    size_t *elem_count;                   /**< elem_count[i]:  element count.          */
     size_t nmaterials;
 };
 
