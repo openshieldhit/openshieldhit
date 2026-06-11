@@ -215,8 +215,8 @@ static void test_profiling_run_lifecycle(void) {
     ASSERT_TRUE(prof.phase_distance_s >= 0.0);
     ASSERT_TRUE(prof.phase_step_s > 0.0);
     ASSERT_TRUE(prof.phase_compact_s >= 0.0);
-    phase_sum_s = prof.phase_fill_s + prof.phase_zone_ref_s + prof.phase_distance_s + prof.phase_step_s
-                  + prof.phase_compact_s;
+    phase_sum_s =
+        prof.phase_fill_s + prof.phase_zone_ref_s + prof.phase_distance_s + prof.phase_step_s + prof.phase_compact_s;
     ASSERT_TRUE(phase_sum_s <= prof.transport_s * 1.02 + 1.0e-6);
 
     /* Disabling profiling makes the profile unavailable again. */

@@ -59,16 +59,16 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
  * bit-identical scoring output to unprofiled ones.
  */
 struct osh_simulation_profile {
-    double transport_s;                /**< Total transport wall time [s]. */
-    double phase_fill_s;               /**< Pool refill from the beam source [s]. */
-    double phase_zone_ref_s;           /**< Batched zone-ref lookup [s]. */
-    double phase_distance_s;           /**< Batched boundary-distance query [s]. */
-    double phase_step_s;               /**< Per-particle physics step loop [s]. */
-    double phase_compact_s;            /**< Dead-slot pool compaction [s]. */
-    unsigned long long steps;          /**< Total transport steps taken. */
-    unsigned long long iterations;     /**< Wavefront loop iterations. */
-    unsigned long long nuclear_events; /**< Nuclear interactions sampled. */
-    unsigned long long secondaries;    /**< Secondaries produced by nuclear events. */
+    double transport_s;                  /**< Total transport wall time [s]. */
+    double phase_fill_s;                 /**< Pool refill from the beam source [s]. */
+    double phase_zone_ref_s;             /**< Batched zone-ref lookup [s]. */
+    double phase_distance_s;             /**< Batched boundary-distance query [s]. */
+    double phase_step_s;                 /**< Per-particle physics step loop [s]. */
+    double phase_compact_s;              /**< Dead-slot pool compaction [s]. */
+    unsigned long long steps;            /**< Total transport steps taken. */
+    unsigned long long iterations;       /**< Wavefront loop iterations. */
+    unsigned long long nuclear_events;   /**< Nuclear interactions sampled. */
+    unsigned long long secondaries;      /**< Secondaries produced by nuclear events. */
     unsigned long long neutrons_banked;  /**< Neutrons routed to the (untransported) neutron pool. */
     unsigned long long fragments_banked; /**< Residual fragments banked for future breakup. */
 };
