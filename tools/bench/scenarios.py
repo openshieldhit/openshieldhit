@@ -110,7 +110,7 @@ SCENARIOS = [
         id="c6_c12_let",
         title="C-12 400 MeV/u, water, dose + DLET/TLET (heavy-ion physics)",
         case=f"{_CASES}/c6_c12_water_let",
-        nstat=3000,
+        nstat=20000,
         tags=("core",),
     ),
     Scenario(
@@ -188,6 +188,9 @@ SCENARIOS = [
         tags=("sweep", "s1"),
     ),
     # ---- S2: transport pool capacity (one rebuild per point) -------------
+    # Note: the wavefront loop keeps per-slot scratch arrays (~40 B/slot) on
+    # the stack, so capacity 65536 needs ~2.5 MiB of stack. Fine on Linux
+    # (8 MiB default), would overflow the 1 MiB default stack on Windows.
     Scenario(
         id="s2_pool1",
         title="C1 base, pool capacity 1 (scalar reference)",
