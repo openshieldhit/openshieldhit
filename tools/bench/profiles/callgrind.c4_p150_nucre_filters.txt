@@ -1,0 +1,87 @@
+--------------------------------------------------------------------------------
+Profile data file '/tmp/profrun1/callgrind.c4_p150_nucre_filters.out' (creator: callgrind-3.22.0)
+--------------------------------------------------------------------------------
+I1 cache: 
+D1 cache: 
+LL cache: 
+Timerange: Basic block 0 - 237977214
+Trigger: Program termination
+Profiled target:  /home/user/openshieldhit/build/bin/openshieldhit --workdir /home/user/openshieldhit/tools/bench/cases/c4_p150_nucre_filters -n 250 -o /tmp/profrun1/callgrind_run --profile /tmp/profrun1/callgrind_run/profile.json (PID 4144, part 1)
+Events recorded:  Ir
+Events shown:     Ir
+Event sort order: Ir
+Thresholds:       99
+Include dirs:     
+User annotated:   
+Auto-annotation:  on
+
+--------------------------------------------------------------------------------
+Ir                     
+--------------------------------------------------------------------------------
+1,677,278,945 (100.0%)  PROGRAM TOTALS
+
+--------------------------------------------------------------------------------
+Ir                    file:function
+--------------------------------------------------------------------------------
+251,355,070 (14.99%)  ???:eval_distance [/home/user/openshieldhit/build/bin/openshieldhit]
+165,190,465 ( 9.85%)  ???:osh_ray_transform [/home/user/openshieldhit/build/bin/openshieldhit]
+147,221,122 ( 8.78%)  ???:osh_transport_ion_step [/home/user/openshieldhit/build/bin/openshieldhit]
+128,759,099 ( 7.68%)  ./math/../sysdeps/ieee754/dbl-64/e_log.c:__ieee754_log_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+104,293,980 ( 6.22%)  ./math/../sysdeps/ieee754/dbl-64/e_pow.c:__ieee754_pow_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 92,596,100 ( 5.52%)  ???:osh_scoring_score_step [/home/user/openshieldhit/build/bin/openshieldhit]
+ 75,279,204 ( 4.49%)  ./math/../sysdeps/ieee754/dbl-64/e_exp.c:__ieee754_exp_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 71,016,029 ( 4.23%)  ./math/../sysdeps/ieee754/dbl-64/s_cbrt.c:cbrt [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 55,019,756 ( 3.28%)  ???:osh_raytrace_traverse [/home/user/openshieldhit/build/bin/openshieldhit]
+ 45,623,760 ( 2.72%)  ./math/./w_exp_template.c:exp@@GLIBC_2.29 [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 44,982,208 ( 2.68%)  ???:osh_nuclear_tripathi_sigma [/home/user/openshieldhit/build/bin/openshieldhit]
+ 43,945,404 ( 2.62%)  ???:osh_physics_bethe_z_eff [/home/user/openshieldhit/build/bin/openshieldhit]
+ 40,031,243 ( 2.39%)  ???:osh_nuclear_handler_step [/home/user/openshieldhit/build/bin/openshieldhit]
+ 33,482,400 ( 2.00%)  ???:osh_rng_pcg32_u32 [/home/user/openshieldhit/build/bin/openshieldhit]
+ 28,161,800 ( 1.68%)  ./math/../sysdeps/ieee754/dbl-64/s_frexp.c:frexp [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 28,161,800 ( 1.68%)  ./math/../sysdeps/ieee754/dbl-64/s_scalbn.c:__scalbn [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 28,161,800 ( 1.68%)  ./math/./s_ldexp_template.c:ldexp [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 27,325,975 ( 1.63%)  ???:osh_gemca_runtime_get_zone [/home/user/openshieldhit/build/bin/openshieldhit]
+ 25,632,025 ( 1.53%)  ???:osh_rng_gauss01.part.0 [/home/user/openshieldhit/build/bin/openshieldhit]
+ 25,494,084 ( 1.52%)  ./math/./w_pow_template.c:pow@@GLIBC_2.29 [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 17,078,712 ( 1.02%)  ???:osh_scoring_page_passes_filters [/home/user/openshieldhit/build/bin/openshieldhit]
+ 16,190,412 ( 0.97%)  ???:osh_gemca_runtime_get_distance [/home/user/openshieldhit/build/bin/openshieldhit]
+ 15,127,288 ( 0.90%)  ???:osh_gemca_runtime_get_distance_batch [/home/user/openshieldhit/build/bin/openshieldhit]
+ 14,841,211 ( 0.88%)  ???:osh_physics_moliere_scatter [/home/user/openshieldhit/build/bin/openshieldhit]
+ 14,003,440 ( 0.83%)  ./math/./w_log_template.c:log@@GLIBC_2.29 [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 12,446,290 ( 0.74%)  ???:osh_vect_orthogonal_basis_norm [/home/user/openshieldhit/build/bin/openshieldhit]
+ 10,807,104 ( 0.64%)  ???:osh_vect_norm [/home/user/openshieldhit/build/bin/openshieldhit]
+  9,494,825 ( 0.57%)  ???:osh_rng_double [/home/user/openshieldhit/build/bin/openshieldhit]
+  8,673,435 ( 0.52%)  ???:osh_physics_moliere_theta0 [/home/user/openshieldhit/build/bin/openshieldhit]
+  8,658,351 ( 0.52%)  ???:osh_binary_search_f [/home/user/openshieldhit/build/bin/openshieldhit]
+  7,394,692 ( 0.44%)  ???:osh_gemca_runtime_get_zone_ref_batch [/home/user/openshieldhit/build/bin/openshieldhit]
+  6,843,564 ( 0.41%)  ./math/../sysdeps/ieee754/dbl-64/math_config.h:__ieee754_exp_fma
+  6,553,262 ( 0.39%)  ???:osh_physics_moliere_s_theta [/home/user/openshieldhit/build/bin/openshieldhit]
+  6,075,288 ( 0.36%)  ???:osh_nuclear_pp_sigma_el [/home/user/openshieldhit/build/bin/openshieldhit]
+  5,603,740 ( 0.33%)  ???:0x000000000485a340 [???]
+  5,601,376 ( 0.33%)  ???:0x000000000010b670 [???]
+  4,928,499 ( 0.29%)  ???:osh_transport_ion_run_minimal [/home/user/openshieldhit/build/bin/openshieldhit]
+  4,635,288 ( 0.28%)  ./math/../sysdeps/ieee754/dbl-64/math_config.h:__ieee754_pow_fma
+  4,562,376 ( 0.27%)  ???:0x000000000010b8b0 [???]
+  4,562,376 ( 0.27%)  ???:0x000000000485a400 [???]
+  3,569,982 ( 0.21%)  ./math/../sysdeps/x86_64/fpu/s_fmax.S:fmax [/usr/lib/x86_64-linux-gnu/libm.so.6]
+  3,306,933 ( 0.20%)  ???:osh_nuclear_lambda_gcm2 [/home/user/openshieldhit/build/bin/openshieldhit]
+  2,891,145 ( 0.17%)  ???:osh_physics_straggling_sigma [/home/user/openshieldhit/build/bin/openshieldhit]
+  2,801,870 ( 0.17%)  ./math/../sysdeps/ieee754/dbl-64/math_config.h:__ieee754_log_fma
+  2,602,033 ( 0.16%)  ???:osh_rng_gauss [/home/user/openshieldhit/build/bin/openshieldhit]
+
+--------------------------------------------------------------------------------
+The following files chosen for auto-annotation could not be found:
+--------------------------------------------------------------------------------
+  ./math/../sysdeps/ieee754/dbl-64/e_exp.c
+  ./math/../sysdeps/ieee754/dbl-64/e_log.c
+  ./math/../sysdeps/ieee754/dbl-64/e_pow.c
+  ./math/../sysdeps/ieee754/dbl-64/math_config.h
+  ./math/../sysdeps/ieee754/dbl-64/s_cbrt.c
+  ./math/../sysdeps/ieee754/dbl-64/s_frexp.c
+  ./math/../sysdeps/ieee754/dbl-64/s_scalbn.c
+  ./math/../sysdeps/x86_64/fpu/s_fmax.S
+  ./math/./s_ldexp_template.c
+  ./math/./w_exp_template.c
+  ./math/./w_log_template.c
+  ./math/./w_pow_template.c
+

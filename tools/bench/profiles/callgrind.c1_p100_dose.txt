@@ -1,0 +1,73 @@
+--------------------------------------------------------------------------------
+Profile data file '/tmp/profrun1/callgrind.c1_p100_dose.out' (creator: callgrind-3.22.0)
+--------------------------------------------------------------------------------
+I1 cache: 
+D1 cache: 
+LL cache: 
+Timerange: Basic block 0 - 362919339
+Trigger: Program termination
+Profiled target:  /home/user/openshieldhit/build/bin/openshieldhit --workdir /home/user/openshieldhit/tools/bench/cases/c1_p100_water_dose -n 500 -o /tmp/profrun1/callgrind_run --profile /tmp/profrun1/callgrind_run/profile.json (PID 2669, part 1)
+Events recorded:  Ir
+Events shown:     Ir
+Event sort order: Ir
+Thresholds:       99
+Include dirs:     
+User annotated:   
+Auto-annotation:  on
+
+--------------------------------------------------------------------------------
+Ir                     
+--------------------------------------------------------------------------------
+2,740,361,758 (100.0%)  PROGRAM TOTALS
+
+--------------------------------------------------------------------------------
+Ir                    file:function
+--------------------------------------------------------------------------------
+516,089,695 (18.83%)  ???:eval_distance [/home/user/openshieldhit/build/bin/openshieldhit]
+340,672,565 (12.43%)  ???:osh_ray_transform [/home/user/openshieldhit/build/bin/openshieldhit]
+294,497,402 (10.75%)  ???:osh_transport_ion_step [/home/user/openshieldhit/build/bin/openshieldhit]
+265,263,411 ( 9.68%)  ./math/../sysdeps/ieee754/dbl-64/e_log.c:__ieee754_log_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+214,864,380 ( 7.84%)  ./math/../sysdeps/ieee754/dbl-64/e_pow.c:__ieee754_pow_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+156,926,090 ( 5.73%)  ???:osh_scoring_score_step [/home/user/openshieldhit/build/bin/openshieldhit]
+118,208,409 ( 4.31%)  ./math/../sysdeps/ieee754/dbl-64/e_exp.c:__ieee754_exp_fma [/usr/lib/x86_64-linux-gnu/libm.so.6]
+107,697,044 ( 3.93%)  ???:osh_raytrace_traverse [/home/user/openshieldhit/build/bin/openshieldhit]
+ 90,630,684 ( 3.31%)  ???:osh_physics_bethe_z_eff [/home/user/openshieldhit/build/bin/openshieldhit]
+ 71,641,460 ( 2.61%)  ./math/./w_exp_template.c:exp@@GLIBC_2.29 [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 57,400,590 ( 2.09%)  ???:osh_rng_pcg32_u32 [/home/user/openshieldhit/build/bin/openshieldhit]
+ 56,351,423 ( 2.06%)  ???:osh_gemca_runtime_get_zone [/home/user/openshieldhit/build/bin/openshieldhit]
+ 52,802,625 ( 1.93%)  ???:osh_rng_gauss01.part.0 [/home/user/openshieldhit/build/bin/openshieldhit]
+ 52,522,404 ( 1.92%)  ./math/./w_pow_template.c:pow@@GLIBC_2.29 [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 33,390,252 ( 1.22%)  ???:osh_gemca_runtime_get_distance [/home/user/openshieldhit/build/bin/openshieldhit]
+ 31,133,578 ( 1.14%)  ???:osh_gemca_runtime_get_distance_batch [/home/user/openshieldhit/build/bin/openshieldhit]
+ 30,607,731 ( 1.12%)  ???:osh_physics_moliere_scatter [/home/user/openshieldhit/build/bin/openshieldhit]
+ 28,848,540 ( 1.05%)  ./math/./w_log_template.c:log@@GLIBC_2.29 [/usr/lib/x86_64-linux-gnu/libm.so.6]
+ 25,636,598 ( 0.94%)  ???:osh_vect_orthogonal_basis_norm [/home/user/openshieldhit/build/bin/openshieldhit]
+ 22,288,168 ( 0.81%)  ???:osh_vect_norm [/home/user/openshieldhit/build/bin/openshieldhit]
+ 17,887,635 ( 0.65%)  ???:osh_physics_moliere_theta0 [/home/user/openshieldhit/build/bin/openshieldhit]
+ 15,190,210 ( 0.55%)  ???:osh_gemca_runtime_get_zone_ref_batch [/home/user/openshieldhit/build/bin/openshieldhit]
+ 13,515,102 ( 0.49%)  ???:osh_physics_moliere_s_theta [/home/user/openshieldhit/build/bin/openshieldhit]
+ 11,541,780 ( 0.42%)  ???:0x000000000485a340 [???]
+ 11,539,416 ( 0.42%)  ???:0x000000000010b670 [???]
+ 10,746,219 ( 0.39%)  ./math/../sysdeps/ieee754/dbl-64/math_config.h:__ieee754_exp_fma
+ 10,039,153 ( 0.37%)  ???:osh_transport_ion_run_minimal [/home/user/openshieldhit/build/bin/openshieldhit]
+  9,937,575 ( 0.36%)  ???:osh_rng_double [/home/user/openshieldhit/build/bin/openshieldhit]
+  9,549,528 ( 0.35%)  ./math/../sysdeps/ieee754/dbl-64/math_config.h:__ieee754_pow_fma
+  7,164,146 ( 0.26%)  ???:0x000000000010b8b0 [???]
+  7,164,146 ( 0.26%)  ???:0x000000000485a400 [???]
+  6,153,840 ( 0.22%)  ./math/../sysdeps/x86_64/fpu/s_fmax.S:fmax [/usr/lib/x86_64-linux-gnu/libm.so.6]
+  5,962,545 ( 0.22%)  ???:osh_physics_straggling_sigma [/home/user/openshieldhit/build/bin/openshieldhit]
+  5,770,890 ( 0.21%)  ./math/../sysdeps/ieee754/dbl-64/math_config.h:__ieee754_log_fma
+  5,366,293 ( 0.20%)  ???:osh_rng_gauss [/home/user/openshieldhit/build/bin/openshieldhit]
+
+--------------------------------------------------------------------------------
+The following files chosen for auto-annotation could not be found:
+--------------------------------------------------------------------------------
+  ./math/../sysdeps/ieee754/dbl-64/e_exp.c
+  ./math/../sysdeps/ieee754/dbl-64/e_log.c
+  ./math/../sysdeps/ieee754/dbl-64/e_pow.c
+  ./math/../sysdeps/ieee754/dbl-64/math_config.h
+  ./math/../sysdeps/x86_64/fpu/s_fmax.S
+  ./math/./w_exp_template.c
+  ./math/./w_log_template.c
+  ./math/./w_pow_template.c
+
