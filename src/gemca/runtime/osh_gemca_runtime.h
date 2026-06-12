@@ -207,6 +207,10 @@ enum osh_gemca_zone_batch_dispatch {
     OSH_GEMCA_ZONE_BATCH_DISPATCH_AVX2 = 2
 };
 
+/* Optional spatial acceleration structure; full definition in
+ * gemca/runtime/osh_gemca_runtime_accel.h. */
+struct osh_gemca_accel;
+
 /**
  * @brief Compiled runtime representation of the full GEMCA geometry.
  *
@@ -240,12 +244,13 @@ struct osh_gemca_runtime {
     struct gemca_rt_surface *surfaces;          /**< Flat surface array (owned). */
     struct gemca_rt_body *bodies;               /**< Flat body array (owned). */
     struct gemca_rt_zone *zones;                /**< Flat zone array; each zone owns its insns[]. */
-    uint8_t *hu_bin_lut;       /**< HU→bin index, 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
-    size_t hu_material_offset; /**< Added to hu_bin_lut entries to get actual material runtime index. */
-    size_t nsurfaces;          /**< Number of entries in surfaces[]. */
-    size_t nbodies;            /**< Number of entries in bodies[]. */
-    size_t nzones;             /**< Number of entries in zones[]. */
-    int zone_batch_dispatch;   /**< enum osh_gemca_zone_batch_dispatch */
+    uint8_t *hu_bin_lut; /**< HU→bin index, 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
+    struct osh_gemca_accel *accel; /**< Optional spatial index built by osh_gemca_accel_build(); NULL = linear scan. */
+    size_t hu_material_offset;     /**< Added to hu_bin_lut entries to get actual material runtime index. */
+    size_t nsurfaces;              /**< Number of entries in surfaces[]. */
+    size_t nbodies;                /**< Number of entries in bodies[]. */
+    size_t nzones;                 /**< Number of entries in zones[]. */
+    int zone_batch_dispatch;       /**< enum osh_gemca_zone_batch_dispatch */
 };
 
 /* ---- Lifecycle ------------------------------------------------------------ */

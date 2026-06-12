@@ -11,6 +11,7 @@
 #include "common/raytrace/osh_raytrace.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
+#include "gemca/runtime/osh_gemca_runtime_accel.h"
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
 #include "voxel/osh_voxel_hu_lut.h"
 
@@ -61,8 +62,20 @@ static int find_body_index(struct osh_gemca_prepared const *wg, struct body cons
 
 /* RPN evaluators — inline so the compiler can fold body evaluations across the
  * guard/push boundary and into the zone-iteration outer loop. */
+static inline int eval_membership_insns(struct osh_gemca_runtime const *rt,
+                                        struct gemca_rt_insn const *insns,
+                                        int ninsns,
+                                        struct ray const *r);
 static inline int
 eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r);
+
+/* Accelerated query helpers (active when rt->accel is non-NULL). */
+static size_t accel_get_zone(struct osh_gemca_runtime const *rt, struct ray const *r);
+static inline int accel_zone_membership(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r);
+static double
+accel_dda_distance(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r, double min_d);
+static inline double
+eval_distance_zone(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r, int *is_inside);
 static void eval_membership_batch_active(struct osh_gemca_runtime const *rt,
                                          struct gemca_rt_zone const *z,
                                          double const *x,
@@ -194,6 +207,9 @@ enum osh_status osh_gemca_compile(struct osh_gemca_prepared const *wg,
         return rc;
     }
 
+    /* Optional spatial index; a NULL rt->accel falls back to linear scans. */
+    osh_gemca_accel_build(rt);
+
     return OSH_OK;
 }
 
@@ -248,6 +264,9 @@ void osh_gemca_runtime_free(struct osh_gemca_runtime *rt) {
     free(rt->hu_bin_lut);
     rt->hu_bin_lut = NULL;
 
+    osh_gemca_accel_free(rt->accel);
+    rt->accel = NULL;
+
     rt->nsurfaces = 0;
     rt->nbodies = 0;
     rt->nzones = 0;
@@ -273,6 +292,10 @@ size_t osh_gemca_runtime_get_zone(struct osh_gemca_runtime const *rt, struct ray
 
     if (!rt || !r) {
         return OSH_GEMCA_ZONE_INDEX_INVALID;
+    }
+
+    if (rt->accel) {
+        return accel_get_zone(rt, r);
     }
 
     for (i = 0; i < rt->nzones; i++) {
@@ -324,7 +347,7 @@ double osh_gemca_runtime_get_distance(struct osh_gemca_runtime const *rt, size_t
     total = 0.0;
 
     while (1) {
-        d = eval_distance(rt, &rt->zones[zone_idx], &rr, &is_inside);
+        d = eval_distance_zone(rt, zone_idx, &rr, &is_inside);
         if (!is_inside) {
             break;
         }
@@ -1082,7 +1105,7 @@ void osh_gemca_runtime_get_distance_batch(struct osh_gemca_runtime const *rt,
 
         total = 0.0;
         while (1) {
-            d = eval_distance(rt, &rt->zones[zone_idx], &rr, &is_inside);
+            d = eval_distance_zone(rt, zone_idx, &rr, &is_inside);
             if (!is_inside) {
                 break;
             }
@@ -1619,8 +1642,10 @@ static int find_body_index(struct osh_gemca_prepared const *wg, struct body cons
  *
  * @returns 1 if the ray is inside the zone, 0 otherwise.
  */
-static inline int
-eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r) {
+static inline int eval_membership_insns(struct osh_gemca_runtime const *rt,
+                                        struct gemca_rt_insn const *insns,
+                                        int ninsns,
+                                        struct ray const *r) {
     int stack[OSH_GEMCA_RT_MAX_STACK];
     int sp;
     int i;
@@ -1631,14 +1656,14 @@ eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *
      * optimisation removed guards for leaf zones) need no stack machinery.
      * This is the common case for simple body-per-zone geometry.
      */
-    if (z->ninsns == 1) {
-        return in_body_rt(rt, z->insns[0].operand, r);
+    if (ninsns == 1) {
+        return in_body_rt(rt, insns[0].operand, r);
     }
 
     sp = 0;
 
-    for (i = 0; i < z->ninsns; i++) {
-        insn = &z->insns[i];
+    for (i = 0; i < ninsns; i++) {
+        insn = &insns[i];
 
         switch (insn->op) {
 
@@ -1688,6 +1713,347 @@ eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *
     }
 
     return (sp > 0) ? stack[0] : 0;
+}
+
+static inline int
+eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r) {
+    return eval_membership_insns(rt, z->insns, z->ninsns, r);
+}
+
+/* ---- Accelerated queries (rt->accel != NULL) ------------------------------ */
+
+/*
+ * Locate the grid cell containing a point.  Returns 1 and writes the linear
+ * cell index when the point lies inside the grid domain, 0 otherwise.  Points
+ * exactly on the domain maximum are clamped into the last cell.
+ */
+static inline int accel_locate_idx(struct osh_gemca_accel const *accel, double const *p, int *idx) {
+    int axis;
+
+    for (axis = 0; axis < 3; axis++) {
+        if (!(p[axis] >= accel->lo[axis]) || !(p[axis] <= accel->hi[axis])) {
+            return 0;
+        }
+        idx[axis] = (int) ((p[axis] - accel->lo[axis]) * accel->inv_cell[axis]);
+        if (idx[axis] >= accel->n[axis]) {
+            idx[axis] = accel->n[axis] - 1;
+        }
+        if (idx[axis] < 0) {
+            idx[axis] = 0;
+        }
+    }
+    return 1;
+}
+
+static inline int accel_locate(struct osh_gemca_accel const *accel, double const *p, size_t *cell_out) {
+    int idx[3];
+
+    if (!accel_locate_idx(accel, p, idx)) {
+        return 0;
+    }
+    *cell_out = ((size_t) idx[2] * (size_t) accel->n[1] + (size_t) idx[1]) * (size_t) accel->n[0] + (size_t) idx[0];
+    return 1;
+}
+
+/*
+ * Zone lookup through the spatial index.  Merges the cell's candidate list
+ * (bounded zones with cell-specialized programs) with the global list of
+ * unbounded zones, in ascending zone order, preserving the linear scan's
+ * first-match-wins semantics.  Bounded zones absent from the cell candidates
+ * provably cannot contain the point (their AABB misses the cell).
+ */
+static size_t accel_get_zone(struct osh_gemca_runtime const *rt, struct ray const *r) {
+    struct osh_gemca_accel const *accel = rt->accel;
+    struct gemca_accel_cand const *cand;
+    struct gemca_accel_cand const *cand_end;
+    size_t cell;
+    size_t ai;
+    size_t azone;
+    size_t czone;
+
+    cand = NULL;
+    cand_end = NULL;
+    if (accel_locate(accel, r->p, &cell)) {
+        cand = &accel->cands[accel->cand_begin[cell]];
+        cand_end = &accel->cands[accel->cand_begin[cell + 1]];
+    }
+
+    ai = 0;
+    while (cand < cand_end || ai < accel->nalways) {
+        czone = (cand < cand_end) ? (size_t) cand->zone_idx : (size_t) -1;
+        azone = (ai < accel->nalways) ? (size_t) accel->always[ai] : (size_t) -1;
+
+        if (czone < azone) {
+            if (eval_membership_insns(rt, &accel->insns[cand->insn_begin], (int) cand->ninsns, r)) {
+                return czone;
+            }
+            cand++;
+        } else {
+            if (eval_membership(rt, &rt->zones[azone], r)) {
+                return azone;
+            }
+            ai++;
+        }
+    }
+
+    return OSH_GEMCA_ZONE_INDEX_INVALID;
+}
+
+/*
+ * Membership test for one known zone, using the cell-specialized program
+ * when available.  A bounded zone that is not a candidate of the point's
+ * cell (or whose cell program folded to constant false, or whose point lies
+ * outside the grid domain) is outside by construction.
+ */
+static inline int accel_zone_membership(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r) {
+    struct osh_gemca_accel const *accel = rt->accel;
+    struct gemca_accel_cand const *cand;
+    struct gemca_accel_cand const *cand_end;
+    size_t cell;
+
+    if (!accel->zone_bounded[zone_idx]) {
+        return eval_membership(rt, &rt->zones[zone_idx], r);
+    }
+    if (!accel_locate(accel, r->p, &cell)) {
+        return 0;
+    }
+    cand = &accel->cands[accel->cand_begin[cell]];
+    cand_end = &accel->cands[accel->cand_begin[cell + 1]];
+    for (; cand < cand_end; cand++) {
+        if ((size_t) cand->zone_idx == zone_idx) {
+            return eval_membership_insns(rt, &accel->insns[cand->insn_begin], (int) cand->ninsns, r);
+        }
+        if ((size_t) cand->zone_idx > zone_idx) {
+            break; /* candidate lists are sorted ascending */
+        }
+    }
+    return 0;
+}
+
+/*
+ * Forward ray/AABB slab test: returns 1 when the box could contain a surface
+ * intersection closer than `tmax` along the (normalised) ray direction.
+ * Conservative: the boxes are inflated at build time, so a 0 here proves the
+ * body cannot contribute a boundary distance below the running minimum.
+ */
+static inline int ray_hits_aabb_before(struct gemca_rt_aabb const *bb, struct ray const *r, double tmax) {
+    double t0 = -OSH_GEMCA_INFINITY;
+    double t1 = OSH_GEMCA_INFINITY;
+    double inv;
+    double ta;
+    double tb;
+    int axis;
+
+    for (axis = 0; axis < 3; axis++) {
+        if (r->cp[axis] > 1e-300 || r->cp[axis] < -1e-300) {
+            inv = 1.0 / r->cp[axis];
+            ta = (bb->lo[axis] - r->p[axis]) * inv;
+            tb = (bb->hi[axis] - r->p[axis]) * inv;
+            if (ta > tb) {
+                double tmp = ta;
+                ta = tb;
+                tb = tmp;
+            }
+            if (ta > t0) {
+                t0 = ta;
+            }
+            if (tb < t1) {
+                t1 = tb;
+            }
+        } else if (r->p[axis] < bb->lo[axis] || r->p[axis] > bb->hi[axis]) {
+            return 0;
+        }
+    }
+
+    return (t1 >= t0) && (t1 > 0.0) && (t0 < tmax);
+}
+
+/*
+ * 3D-DDA grid walk for the boundary distance of a bounded zone (Amanatides &
+ * Woo, "A Fast Voxel Traversal Algorithm for Ray Tracing", 1987).  Visits the
+ * grid cells pierced by the ray in order and evaluates only the bodies pushed
+ * by this zone's cell-specialized program — exactly the leaf bodies whose
+ * AABB overlaps the visited cell and that still influence the zone there.
+ * The walk stops as soon as the running minimum is closer than the exit of
+ * the current cell (no later cell can produce a closer surface), or when the
+ * ray leaves the grid domain (the zone is bounded, so the membership flip is
+ * guaranteed to have been found by then).
+ *
+ * Unbounded leaf bodies must already be folded into min_d by the caller;
+ * they appear in every cell program and are skipped here.
+ */
+static double
+accel_dda_distance(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r, double min_d) {
+    struct osh_gemca_accel const *accel = rt->accel;
+    struct gemca_accel_cand const *cand;
+    struct gemca_accel_cand const *cand_end;
+    struct gemca_rt_insn const *insn;
+    struct gemca_rt_insn const *insn_end;
+    double tnext[3];
+    double tdelta[3];
+    double cs;
+    double t_exit;
+    double d;
+    int idx[3];
+    int stepdir[3];
+    int axis;
+    int body_idx;
+    size_t cell;
+
+    if (!accel_locate_idx(accel, r->p, idx)) {
+        /* Defensive: membership said inside, so the point should be in the
+         * domain.  Fall back to the flat slab-culled minimum. */
+        uint32_t lb = accel->zone_leaf_begin[zone_idx] + accel->zone_leaf_unbounded[zone_idx];
+        uint32_t le = accel->zone_leaf_begin[zone_idx + 1];
+        for (; lb < le; lb++) {
+            body_idx = (int) accel->zone_leaves[lb];
+            if (!ray_hits_aabb_before(&accel->body_aabb[body_idx], r, min_d)) {
+                continue;
+            }
+            d = dist_body_rt(rt, body_idx, r);
+            if (d < min_d) {
+                min_d = d;
+            }
+        }
+        return min_d;
+    }
+
+    for (axis = 0; axis < 3; axis++) {
+        cs = 1.0 / accel->inv_cell[axis];
+        if (r->cp[axis] > 0.0) {
+            stepdir[axis] = 1;
+            tnext[axis] = (accel->lo[axis] + (double) (idx[axis] + 1) * cs - r->p[axis]) / r->cp[axis];
+            tdelta[axis] = cs / r->cp[axis];
+        } else if (r->cp[axis] < 0.0) {
+            stepdir[axis] = -1;
+            tnext[axis] = (accel->lo[axis] + (double) idx[axis] * cs - r->p[axis]) / r->cp[axis];
+            tdelta[axis] = -cs / r->cp[axis];
+        } else {
+            stepdir[axis] = 0;
+            tnext[axis] = OSH_GEMCA_INFINITY;
+            tdelta[axis] = 0.0;
+        }
+    }
+
+    while (1) {
+        cell = ((size_t) idx[2] * (size_t) accel->n[1] + (size_t) idx[1]) * (size_t) accel->n[0] + (size_t) idx[0];
+
+        /* Candidate lists are sorted by zone index; find this zone's
+         * cell-specialized program, if it exists here. */
+        cand = &accel->cands[accel->cand_begin[cell]];
+        cand_end = &accel->cands[accel->cand_begin[cell + 1]];
+        for (; cand < cand_end && (size_t) cand->zone_idx < zone_idx; cand++) {
+        }
+        if (cand < cand_end && (size_t) cand->zone_idx == zone_idx) {
+            insn = &accel->insns[cand->insn_begin];
+            insn_end = insn + cand->ninsns;
+            for (; insn < insn_end; insn++) {
+                if (insn->op != GEMCA_RT_PUSH_BODY || insn->operand < 0) {
+                    continue;
+                }
+                body_idx = insn->operand;
+                if (!accel->body_bounded[body_idx] || !ray_hits_aabb_before(&accel->body_aabb[body_idx], r, min_d)) {
+                    continue;
+                }
+                d = dist_body_rt(rt, body_idx, r);
+                if (d < min_d) {
+                    min_d = d;
+                }
+            }
+        }
+
+        t_exit = tnext[0];
+        axis = 0;
+        if (tnext[1] < t_exit) {
+            t_exit = tnext[1];
+            axis = 1;
+        }
+        if (tnext[2] < t_exit) {
+            t_exit = tnext[2];
+            axis = 2;
+        }
+
+        if (min_d <= t_exit) {
+            return min_d;
+        }
+
+        idx[axis] += stepdir[axis];
+        if (idx[axis] < 0 || idx[axis] >= accel->n[axis]) {
+            return min_d;
+        }
+        tnext[axis] += tdelta[axis];
+    }
+}
+
+/*
+ * Boundary distance for one zone.  Every CSG operator in eval_distance()
+ * combines child distances with minpos(), and each leaf distance is strictly
+ * positive (or infinite), so the zone boundary distance equals the plain
+ * minimum over leaf-body distances.  With per-body AABBs this allows slab
+ * culling against the running minimum; membership comes from the (much
+ * cheaper) boolean evaluator, which short-circuits via GUARD_BODY and the
+ * cell-specialized programs.
+ *
+ * Falls back to the RPN walk when no accelerator is available or the zone
+ * contains a voxel body.
+ */
+static inline double
+eval_distance_zone(struct osh_gemca_runtime const *rt, size_t zone_idx, struct ray const *r, int *is_inside) {
+    struct osh_gemca_accel const *accel = rt->accel;
+    struct gemca_rt_zone const *z = &rt->zones[zone_idx];
+    double min_d;
+    double d;
+    uint32_t lb;
+    uint32_t le;
+    uint32_t body_idx;
+
+    if (!accel || z->voxel_body_idx >= 0
+        || accel->zone_leaf_begin[zone_idx + 1] - accel->zone_leaf_begin[zone_idx]
+               < (uint32_t) OSH_GEMCA_ACCEL_DIST_MIN_LEAVES) {
+        /* Small zones: the plain RPN walk is cheaper than grid bookkeeping. */
+        return eval_distance(rt, z, r, is_inside);
+    }
+
+    *is_inside = accel_zone_membership(rt, zone_idx, r);
+    if (!*is_inside) {
+        /* Caller ignores the distance once the ray has left the zone. */
+        return 0.0;
+    }
+
+    /* Unbounded leaves can never be culled: evaluate them once, upfront.
+     * They sit at the head of the zone's leaf slice. */
+    min_d = OSH_GEMCA_INFINITY;
+    lb = accel->zone_leaf_begin[zone_idx];
+    le = lb + accel->zone_leaf_unbounded[zone_idx];
+    for (; lb < le; lb++) {
+        d = dist_body_rt(rt, (int) accel->zone_leaves[lb], r);
+        if (d < min_d) {
+            min_d = d;
+        }
+    }
+
+    /* Bounded zones: walk the grid cells along the ray (3D-DDA) and test only
+     * the bodies of this zone's cell-specialized programs, stopping once the
+     * running minimum is closer than the current cell's exit. */
+    if (accel->zone_bounded[zone_idx]) {
+        return accel_dda_distance(rt, zone_idx, r, min_d);
+    }
+
+    /* Unbounded zone: flat minimum over the remaining (bounded) leaves with
+     * ray/AABB slab culling against the running minimum. */
+    le = accel->zone_leaf_begin[zone_idx + 1];
+    for (; lb < le; lb++) {
+        body_idx = accel->zone_leaves[lb];
+        if (!ray_hits_aabb_before(&accel->body_aabb[body_idx], r, min_d)) {
+            continue;
+        }
+        d = dist_body_rt(rt, (int) body_idx, r);
+        if (d < min_d) {
+            min_d = d;
+        }
+    }
+
+    return min_d;
 }
 
 static void eval_membership_batch_active(struct osh_gemca_runtime const *rt,

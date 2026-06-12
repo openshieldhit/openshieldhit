@@ -1,5 +1,6 @@
 add_library(osh_gemca_runtime
     osh_gemca_runtime.c
+    osh_gemca_runtime_accel.c
     osh_gemca_runtime_voxel.c
 )
 
