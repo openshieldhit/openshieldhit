@@ -48,5 +48,10 @@ jobs:
             exit 0
           fi
 
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "Diff base ${BASE} is not available in this checkout; skipping clang-tidy."
+            exit 0
+          fi
+
           git diff --diff-filter=AMRT -U0 "$BASE" "$HEAD" -- src examples tests \
             | clang-tidy-diff-19.py -p1 -path build -quiet
