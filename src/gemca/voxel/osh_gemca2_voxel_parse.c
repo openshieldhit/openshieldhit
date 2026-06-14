@@ -224,10 +224,10 @@ int _parse_header(struct oshfile *shf, struct voxelct *ct) {
                 ct->ztable_thickness[ui] = b;
                 ct->ztable_gantry_tilt[ui] = c;
             } /* end of z-table read while loop */
-            free(line);
         } /* end of SLICENO else if */
 
         free(line);
+        line = NULL;
     } /* end of while loop */
     free(line);
     return 1;
