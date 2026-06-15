@@ -44,7 +44,6 @@ static struct osh_scoring_geometry_def make_geo(void) {
 }
 
 static void free_geo(struct osh_scoring_geometry_def *geo) {
-    size_t i;
     free(geo->kind);
     free(geo->name);
     free(geo->axes);

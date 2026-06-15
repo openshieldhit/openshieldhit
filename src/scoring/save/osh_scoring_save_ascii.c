@@ -24,6 +24,7 @@
 
 #include "scoring/save/osh_scoring_save_ascii.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,6 +88,16 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         return rc;
     }
 
+    nx = (size_t) geo->axes[ix_axis].nbins;
+    ny = (size_t) geo->axes[iy_axis].nbins;
+    nz = (size_t) geo->axes[iz_axis].nbins;
+    x0 = geo->axes[ix_axis].lo;
+    y0 = geo->axes[iy_axis].lo;
+    z0 = geo->axes[iz_axis].lo;
+    dx = (geo->axes[ix_axis].hi - geo->axes[ix_axis].lo) / (double) geo->axes[ix_axis].nbins;
+    dy = (geo->axes[iy_axis].hi - geo->axes[iy_axis].lo) / (double) geo->axes[iy_axis].nbins;
+    dz = (geo->axes[iz_axis].hi - geo->axes[iz_axis].lo) / (double) geo->axes[iz_axis].nbins;
+
     fp = fopen(out->filename, "w");
     if (!fp) {
         return OSH_EIO;
@@ -97,26 +108,40 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
     format_now_rfc2822(datestr, sizeof(datestr));
     fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);
     fprintf(fp, "# Calculated %s\n", datestr);
-    fprintf(fp, "# Geometry %s\n", geo->name ? geo->name : "(unnamed)");
-    fprintf(fp, "# nstat %llu\n", nstat);
-    fprintf(fp, "# Data are written in canonical flat mesh order: idx = ix + nx * (iy + ny * iz)\n");
-    fprintf(fp, "# Values: NORM/SUM pages divided by nstat; AVER pages (DLET/TLET/…) written as physical mean\n");
+    fprintf(fp, "# DETECTOR OUTPUT MSH\n");
+    fprintf(fp, "# X BIN: %5d Y BIN: %5d Z BIN: %5d\n", (int) nx, (int) ny, (int) nz);
+    fprintf(fp, "# DETECTOR TYPE:");
+    for (ip = 0; ip < out->npages; ++ip) {
+        size_t page_idx = out->page_indices[ip];
+        char const *qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
+        char const *c;
+        fputc(' ', fp);
+        for (c = qty; *c; ++c) {
+            fputc(toupper((unsigned char) *c), fp);
+        }
+    }
+    fputc('\n', fp);
+    fprintf(fp, "# X START: %12.6E Y START: %12.6E Z START: %12.6E\n", x0, y0, z0);
+    fprintf(fp,
+            "# X END  : %12.6E Y END  : %12.6E Z END  : %12.6E\n",
+            geo->axes[ix_axis].hi,
+            geo->axes[iy_axis].hi,
+            geo->axes[iz_axis].hi);
+    fprintf(fp, "# PRIMARIES: %.6E\n", (double) nstat);
+    fprintf(fp, "# Data written in canonical flat mesh order: idx = ix + nx * (iy + ny * iz)\n");
+    fprintf(fp,
+            "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical mean\n");
     fprintf(fp, "# X Y Z");
     for (ip = 0; ip < out->npages; ++ip) {
         size_t page_idx = out->page_indices[ip];
-        fprintf(fp, " Page(%zu:%s)", ip, rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?");
+        char const *qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
+        char const *c;
+        fputc(' ', fp);
+        for (c = qty; *c; ++c) {
+            fputc(toupper((unsigned char) *c), fp);
+        }
     }
-    fprintf(fp, "\n");
-
-    nx = (size_t) geo->axes[ix_axis].nbins;
-    ny = (size_t) geo->axes[iy_axis].nbins;
-    nz = (size_t) geo->axes[iz_axis].nbins;
-    x0 = geo->axes[ix_axis].lo;
-    y0 = geo->axes[iy_axis].lo;
-    z0 = geo->axes[iz_axis].lo;
-    dx = (geo->axes[ix_axis].hi - geo->axes[ix_axis].lo) / (double) geo->axes[ix_axis].nbins;
-    dy = (geo->axes[iy_axis].hi - geo->axes[iy_axis].lo) / (double) geo->axes[iy_axis].nbins;
-    dz = (geo->axes[iz_axis].hi - geo->axes[iz_axis].lo) / (double) geo->axes[iz_axis].nbins;
+    fputc('\n', fp);
 
     for (iz = 0; iz < nz; ++iz) {
         for (iy = 0; iy < ny; ++iy) {
