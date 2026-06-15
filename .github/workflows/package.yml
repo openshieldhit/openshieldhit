@@ -26,7 +26,7 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
 
     - name: Build project
       run: cmake --build build --parallel
@@ -61,7 +61,7 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
 
     - name: Build project
       run: cmake --build build --parallel
@@ -94,7 +94,7 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
 
     - name: Build project
       run: cmake --build build --config Release --parallel

@@ -153,7 +153,7 @@ if(BUILD_TESTING)
 endif()
 
 # ---- Examples ----
-option(OSH_BUILD_EXAMPLES "Build example programs" ON)
+option(OSH_BUILD_EXAMPLES "Build example programs" OFF)
 if(OSH_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
