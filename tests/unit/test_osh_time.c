@@ -1,16 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "test_assert.h"
 
 #include "common/osh_time.h"
-
-#define ASSERT_TRUE(cond)                                                                                              \
-    do {                                                                                                               \
-        if (!(cond)) {                                                                                                 \
-            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);                                 \
-            exit(1);                                                                                                   \
-        }                                                                                                              \
-    } while (0)
 
 static void test_monotonic_seconds_is_monotonic(void) {
     double t0;
