@@ -121,8 +121,8 @@ def binary_path(build_dir: Path) -> Path:
 def build_type_of(binary: Path):
     """CMAKE_BUILD_TYPE from the CMakeCache.txt of the binary's build tree.
 
-    Returns the build type string, "" when the cache has no explicit type,
-    or None when no cache is found (binary outside a CMake build tree).
+    Returns the build type string, or None when it cannot be determined (no
+    cache file, or the cache has no CMAKE_BUILD_TYPE entry).
     """
     cache = binary.resolve().parent.parent / "CMakeCache.txt"
     try:
@@ -145,7 +145,7 @@ def reject_unoptimized(binary: Path) -> bool:
     if build_type is None:
         print(f"WARNING: cannot determine build type of {binary} (no CMakeCache.txt); make sure it is an optimized build")
         return False
-    if build_type.lower() in ("debug", ""):
+    if build_type.lower() == "debug":
         print(
             f"error: {binary} comes from a '{build_type or 'unset'}' build; "
             "profiles of unoptimized builds are meaningless (methodology rule 1). "
@@ -166,7 +166,7 @@ def cmake_build(preset: str, pool_capacity=None) -> Path:
         "-B",
         str(bdir),
         "-DOSH_BUILD_EXAMPLES=OFF",
-        "-DCMAKE_BUILD_TYPE=" + ("RelWithDebInfo" if preset == "prof" else "Release"),
+        "-DCMAKE_BUILD_TYPE=" + ("RelWithDebInfo" if preset in ("prof", "relwithdebinfo") else "Release"),
     ]
     flags = []
     if preset == "prof":

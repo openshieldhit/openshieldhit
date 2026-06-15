@@ -7,7 +7,7 @@ NB*
 *.log
 build-*/
 build_*/
-perf*
+perf.data*
 *.pyc
 
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,cmake,linux
