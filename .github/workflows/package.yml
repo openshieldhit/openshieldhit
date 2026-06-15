@@ -25,11 +25,8 @@ jobs:
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
-    - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
-
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=ON
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
     - name: Build project
       run: cmake --build build --parallel
@@ -63,11 +60,8 @@ jobs:
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
-    - name: Install dependencies
-      run: brew install sdl2
-
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=ON
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
     - name: Build project
       run: cmake --build build --parallel
@@ -99,8 +93,8 @@ jobs:
     - name: Set up CMake
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
-    - name: Configure project (Release, examples off — no SDL2 on Windows CI)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
+    - name: Configure project (Release)
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
     - name: Build project
       run: cmake --build build --config Release --parallel
