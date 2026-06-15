@@ -109,7 +109,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
     fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);
     fprintf(fp, "# Calculated %s\n", datestr);
     fprintf(fp, "# DETECTOR OUTPUT MSH\n");
-    fprintf(fp, "# X BIN: %5d Y BIN: %5d Z BIN: %5d\n", (int) nx, (int) ny, (int) nz);
+    fprintf(fp, "# X BIN: %5zu Y BIN: %5zu Z BIN: %5zu\n", nx, ny, nz);
     fprintf(fp, "# DETECTOR TYPE:");
     for (ip = 0; ip < out->npages; ++ip) {
         size_t page_idx = out->page_indices[ip];
@@ -127,7 +127,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             geo->axes[ix_axis].hi,
             geo->axes[iy_axis].hi,
             geo->axes[iz_axis].hi);
-    fprintf(fp, "# PRIMARIES: %.6E\n", (double) nstat);
+    fprintf(fp, "# PRIMARIES: %llu\n", nstat);
     fprintf(fp, "# Data written in canonical flat mesh order: idx = ix + nx * (iy + ny * iz)\n");
     fprintf(fp,
             "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical mean\n");
