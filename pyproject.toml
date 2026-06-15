@@ -26,7 +26,7 @@ fallback_version = "0.0.0"
 
 [tool.scikit-build]
 cmake.build-type = "Release"
-cmake.args = ["-DOSH_BUILD_EXAMPLES=OFF"]  # SDL2 examples are never part of the Python wheel
+cmake.args = ["-DOSH_BUILD_EXAMPLES=OFF"]  # examples are developer tools, not shipped in any release
 wheel.packages = []          # no Python packages yet; remove when bindings are added
 
 [tool.ruff]
