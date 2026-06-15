@@ -38,8 +38,7 @@
 ## Transport
 
 - [ ] Gaussian MCS mode
-- [x] Vavilov energy straggling
-- [x] Nuclear interactions — Tripathi total reaction cross section, primary attenuation (NUCRE flag)
+- [ ] Vavilov energy straggling
 - [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
 - [ ] Batch ion-step phases around runtime lookup hot spots
 
@@ -47,30 +46,10 @@
 
 - [ ] Cylindrical `(R,Z)` mesh scoring
 - [ ] Zone scoring
-- [x] LET scoring (`DLET`, `TLET`) — table-based `S(medium,E)·ρ`; material overrides via Settings block
-- [x] `DQEFF`, `TQEFF` — dose/track-averaged (z_eff/β)²
 - [ ] Alanine detector response
 - [ ] MCPL phase-space output
 
 ## CT / Voxel / RTDOSE Workflow
-
-Completed (branches 66-1 … 66-6, 101):
-- [x] Schneider 2000 + Permatassari 2020 HU calibration tables
-- [x] `DCM` parser card: reads DICOM CT into a `VOX` body at parse time
-- [x] Morton-8 and row-major voxel array layouts; `tile_order` field on grid
-- [x] HU→bin and HU→rho runtime lookup tables (O(1), L1-resident)
-- [x] Jacobs voxel traversal in `dist_voxel_body_rt()`
-- [x] Current-medium transport: GEMCA returns zone/material/HU ref; transport
-      queries material runtime for density and stopping power
-- [x] `DicomRTDOSE` scoring geometry: app converts it to a plain Mesh in
-      patient frame; co-rotates with the CT body; library is agnostic
-- [x] `DicomCT` scoring geometry: app converts the CT voxel body extent to a
-      plain Mesh in patient frame; rotates with the CT body automatically
-- [x] RTDOSE write-back: `FileFormat RTDOSE` in detect.dat reads the DICOM
-      template, overwrites pixel data, and saves a modified `.dcm`
-- [x] IEC 61217 gantry and couch rotation for transport: `DCM` card accepts
-      gantry/couch angles and isocenter in DICOM LPS (mm); patient body
-      correctly oriented for all eight IEC patient positions
 
 Open:
 - [ ] DOSE scoring with per-voxel density weighting for CT geometries (current

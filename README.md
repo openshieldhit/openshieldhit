@@ -44,8 +44,9 @@ of lines of framework infrastructure.
 
 ## Requirements
 
-CMake ≥ 3.21 is required to build.  SDL2 is required for the interactive
-examples (optional): `sudo apt-get install libsdl2-dev`.
+CMake ≥ 3.21 is required to build.  SDL2 is an optional developer dependency
+for the interactive geometry viewers in `examples/` (not shipped in releases):
+`sudo apt-get install libsdl2-dev`.
 
 ## How to build
 
@@ -72,7 +73,7 @@ sudo cmake --install build --prefix /usr     # → /usr/bin/openshieldhit
 cmake --install build --prefix ~/.local      # no sudo, user-local install
 ```
 
-Installs the main executable, documentation, and selected examples.
+Installs the main executable and documentation.
 Public library/header installation is still incomplete.
 
 ## The `openshieldhit` application
