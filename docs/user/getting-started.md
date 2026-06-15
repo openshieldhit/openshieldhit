@@ -4,7 +4,7 @@
 
 - CMake ≥ 3.16
 - C11 compiler (GCC, Clang, or MSVC)
-- Optional: zlib (compressed `.bdz` output files), libSDL2 (interactive geometry viewers)
+- Optional: zlib (compressed `.bdz` output files), libSDL2 (interactive geometry viewers in `examples/`, not needed for the main application)
 - DICOM: no external library needed — openshieldhit includes a minimal self-contained reader/writer
 
 ## Build

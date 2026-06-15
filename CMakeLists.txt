@@ -164,18 +164,6 @@ install(TARGETS openshieldhit
     RUNTIME DESTINATION bin
 )
 
-# Install example executables if built
-if(OSH_BUILD_EXAMPLES)
-    install(TARGETS gemca_sdl_viewer bnct_sdl
-        RUNTIME DESTINATION bin
-    )
-    # Install example data files
-    install(DIRECTORY examples/
-        DESTINATION share/openshieldhit/examples
-        FILES_MATCHING PATTERN "*.dat"
-    )
-endif()
-
 # Install documentation
 install(FILES README.md LICENSE
     DESTINATION share/openshieldhit
@@ -201,10 +189,6 @@ set(CPACK_DEBIAN_PACKAGE_VERSION "${DEBIAN_VERSION}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OpenShieldHIT Contributors")
 set(CPACK_DEBIAN_PACKAGE_SECTION "science")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/openshieldhit/openshieldhit")
-# Optionally require libsdl2 if examples are built
-if(OSH_BUILD_EXAMPLES)
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0 (>= 2.0.0)")
-endif()
 
 # RPM package specific settings (optional)
 set(CPACK_RPM_PACKAGE_LICENSE "MIT")

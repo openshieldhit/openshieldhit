@@ -49,12 +49,12 @@ cmake -B build
 
 Install dependencies:
 ```bash
-sudo apt-get install cmake build-essential libsdl2-dev
+sudo apt-get install cmake build-essential
 ```
 
 Build and package:
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 ```
 
 ```bash
@@ -70,12 +70,12 @@ sudo apt-get install ./build/openshieldhit-*.deb
 
 Install dependencies:
 ```bash
-brew install cmake sdl2
+brew install cmake
 ```
 
 Build and package:
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 ```
 
 ```bash
@@ -84,9 +84,9 @@ cmake --build build --target package
 
 ### Windows
 
-Configure (without examples):
+Configure:
 ```bash
-cmake -S . -B build -DOSH_BUILD_EXAMPLES=OFF
+cmake -S . -B build
 ```
 
 Build:
@@ -98,8 +98,6 @@ cmake --build build --config Release --target package
 
 **DEB package** (`/usr/local/`):
 - `bin/openshieldhit` - Main executable
-- `bin/gemca_sdl_viewer`, `bin/bnct_sdl` - Examples (if enabled)
-- `share/openshieldhit/examples/` - Example data
 - `share/openshieldhit/README.md`, `LICENSE`
 
 **Formats**: DEB (Linux), TGZ (all), ZIP (Windows)
