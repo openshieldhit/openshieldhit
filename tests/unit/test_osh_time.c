@@ -1,6 +1,5 @@
-#include "test_assert.h"
-
 #include "common/osh_time.h"
+#include "test_assert.h"
 
 static void test_monotonic_seconds_is_monotonic(void) {
     double t0;
