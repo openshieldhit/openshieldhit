@@ -40,10 +40,16 @@ struct osh_raytrace_grid {
 
 /**
  * @brief One voxel entered by a ray, with the path length spent inside it.
+ *
+ * @note vol_inv is NOT filled by the traversal functions.  The scoring layer
+ *       fills it immediately after traversal using geometry-type-specific logic
+ *       (uniform scalar for Mesh; per-R-bin lookup table for Cyl).  This keeps
+ *       both traversal and scoring accumulation functions geometry-agnostic.
  */
 struct osh_voxel_crossing {
     size_t idx;      /* flat voxel index in the layout given by grid->tile_order */
     double path_len; /* track length through this voxel [cm] */
+    double vol_inv;  /* 1/voxel_volume [1/cm³]; filled by scoring layer, not traversal */
 };
 
 /**

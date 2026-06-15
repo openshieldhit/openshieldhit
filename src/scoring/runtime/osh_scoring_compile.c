@@ -1,5 +1,6 @@
 #include "scoring/runtime/osh_scoring_compile.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -198,12 +199,11 @@ static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind
     }
 }
 
-/* Only Cartesian mesh geometry is wired to the hot-path scorer for now. */
 static int runtime_supports_geometry(struct osh_scoring_geometry_runtime const *geo) {
     if (!geo) {
         return 0;
     }
-    return geo->geo_kind == OSH_SCORING_GEO_MESH;
+    return geo->geo_kind == OSH_SCORING_GEO_MESH || geo->geo_kind == OSH_SCORING_GEO_CYL;
 }
 
 static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
@@ -456,6 +456,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
             free(rt->geometries[i].axes);
             free(rt->geometries[i].groups);
             free(rt->geometries[i].rtdose_template_path);
+            free(rt->geometries[i].cyl_vol_inv);
         }
     }
     free(rt->geometries);
@@ -838,8 +839,14 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         for (i = 0; i < rt->ngeometries; ++i) {
             size_t cap_i = 0;
             size_t a;
-            for (a = 0; a < rt->geometries[i].naxes; ++a) {
-                cap_i += (size_t) rt->geometries[i].axes[a].nbins;
+            if (rt->geometries[i].geo_kind == OSH_SCORING_GEO_CYL && rt->geometries[i].naxes == 2u) {
+                /* CYL: max crossings = 2*nr + nz (quadratic R-shell intersections
+                 * give up to two per R bin, plus one per Z plane). */
+                cap_i = 2u * (size_t) rt->geometries[i].axes[0].nbins + (size_t) rt->geometries[i].axes[1].nbins;
+            } else {
+                for (a = 0; a < rt->geometries[i].naxes; ++a) {
+                    cap_i += (size_t) rt->geometries[i].axes[a].nbins;
+                }
             }
             if (cap_i > max_cap) {
                 max_cap = cap_i;
@@ -852,6 +859,29 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 return OSH_ENOMEM;
             }
             rt->crossing_cap = max_cap;
+        }
+    }
+
+    /* Precompute per-R-bin 1/volume LUT for CYL geometries. */
+    for (i = 0; i < rt->ngeometries; ++i) {
+        struct osh_scoring_geometry_runtime *g = &rt->geometries[i];
+        if (g->geo_kind == OSH_SCORING_GEO_CYL && g->naxes == 2u) {
+            size_t ir;
+            size_t nr = (size_t) g->axes[0].nbins;
+            double r_min = g->axes[0].lo;
+            double dr = (g->axes[0].hi - r_min) / (double) nr;
+            double dz = (g->axes[1].hi - g->axes[1].lo) / (double) g->axes[1].nbins;
+            g->cyl_vol_inv = (double *) malloc(nr * sizeof(double));
+            if (!g->cyl_vol_inv) {
+                osh_scoring_runtime_free(rt);
+                return OSH_ENOMEM;
+            }
+            g->cyl_nr = nr;
+            for (ir = 0; ir < nr; ++ir) {
+                double r0 = r_min + (double) ir * dr;
+                double r1 = r0 + dr;
+                g->cyl_vol_inv[ir] = 1.0 / (M_PI * (r1 * r1 - r0 * r0) * dz);
+            }
         }
     }
 

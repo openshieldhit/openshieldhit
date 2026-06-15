@@ -58,6 +58,8 @@ struct osh_scoring_geometry_runtime {
     int zone_stop;                                   /* Last zone  (Zone geometry only). */
     char has_rotation;                               /* Non-zero when t[] is valid and axes are in local frame. */
     char *rtdose_template_path; /* Non-NULL when FileFormat RTDOSE; owned; path to RTDOSE template. */
+    double *cyl_vol_inv;        /* [cyl_nr] 1/V per R-bin, precomputed at compile; NULL for non-CYL */
+    size_t cyl_nr;              /* R bin count (nr); 0 for non-CYL */
 };
 
 #ifdef __cplusplus

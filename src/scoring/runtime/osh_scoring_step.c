@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "common/raytrace/osh_raytrace.h"
+#include "common/raytrace/osh_raytrace_cyl.h"
 #include "material/runtime/osh_material_runtime.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
@@ -13,6 +14,8 @@ static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int
 static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                              struct osh_raytrace_grid *grid,
                                              double *voxel_volume_inv_out);
+static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
+                                            struct osh_raytrace_grid *grid);
 static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
                                           struct osh_scoring_geometry_score_group const *group,
                                           struct osh_voxel_crossing const *crossings,
@@ -25,16 +28,14 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            struct osh_voxel_crossing const *crossings,
                                            size_t ncross,
                                            struct particle const *part,
-                                           struct step const *st,
-                                           double voxel_volume_inv);
+                                           struct step const *st);
 static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
                                         struct particle const *part,
                                         struct step const *st,
-                                        double score_len,
-                                        double voxel_volume_inv);
+                                        double score_len);
 static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
@@ -67,15 +68,16 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
 enum osh_status
 osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *part, struct step const *st) {
     size_t i;
+    size_t j;
     size_t cap;
     size_t ncross;
-    double voxel_volume_inv;
     double score_dir[3];
     double score_len;
     struct osh_raytrace_grid grid = {0};
     struct osh_voxel_crossing *crossings;
     enum osh_status rc;
     int hit;
+    int is_cyl;
 
     if (!rt || !part || !st) {
         return OSH_EINVAL;
@@ -102,42 +104,80 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
             continue;
         }
 
-        rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
-        if (rc != OSH_OK) {
-            return rc;
-        }
-
-        cap = grid.n[0] + grid.n[1] + grid.n[2];
-        if (cap == 0u) {
-            continue;
-        }
-        if (cap > rt->crossing_cap || !rt->crossing_buf) {
-            return OSH_ESTATE;
-        }
-        crossings = rt->crossing_buf;
-
-        /* For rotated scoring geometries, transform the step endpoints from
-         * universe frame to the geometry's local frame before raytracing.
-         * The same affine t[16] layout as the geometry body transform is used:
-         *   p_local[i] = sum_k p_universe[k]*t[i*4+k] - t[i*4+3]  */
-        if (geo->has_rotation) {
-            for (k = 0; k < 3; k++) {
-                int row = k * 4;
-                p_local[k] =
-                    st->p[0] * geo->t[row] + st->p[1] * geo->t[row + 1] + st->p[2] * geo->t[row + 2] - geo->t[row + 3];
-                dir_local[k] =
-                    score_dir[0] * geo->t[row] + score_dir[1] * geo->t[row + 1] + score_dir[2] * geo->t[row + 2];
+        is_cyl = (geo->geo_kind == OSH_SCORING_GEO_CYL);
+        if (!is_cyl) {
+            double voxel_volume_inv;
+            rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
+            if (rc != OSH_OK) {
+                return rc;
             }
-            p_trace = p_local;
-            dir_trace = dir_local;
+            cap = grid.n[0] + grid.n[1] + grid.n[2];
+            if (cap == 0u) {
+                continue;
+            }
+            if (cap > rt->crossing_cap || !rt->crossing_buf) {
+                return OSH_ESTATE;
+            }
+            crossings = rt->crossing_buf;
+
+            /* For rotated scoring geometries, transform the step endpoints from
+             * universe frame to the geometry's local frame before raytracing.
+             * The same affine t[16] layout as the geometry body transform is used:
+             *   p_local[i] = sum_k p_universe[k]*t[i*4+k] - t[i*4+3]  */
+            if (geo->has_rotation) {
+                for (k = 0; k < 3; k++) {
+                    int row = k * 4;
+                    p_local[k] = st->p[0] * geo->t[row] + st->p[1] * geo->t[row + 1] + st->p[2] * geo->t[row + 2]
+                                 - geo->t[row + 3];
+                    dir_local[k] =
+                        score_dir[0] * geo->t[row] + score_dir[1] * geo->t[row + 1] + score_dir[2] * geo->t[row + 2];
+                }
+                p_trace = p_local;
+                dir_trace = dir_local;
+            } else {
+                p_trace = st->p;
+                dir_trace = score_dir;
+            }
+
+            hit = osh_raytrace_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
+            if (!hit || ncross == 0u) {
+                continue;
+            }
+
+            /* Fill vol_inv: uniform across all voxels for Mesh. */
+            for (j = 0; j < ncross; ++j) {
+                crossings[j].vol_inv = voxel_volume_inv;
+            }
         } else {
+            rc = cyl_geometry_to_grid(geo, &grid);
+            if (rc != OSH_OK) {
+                return rc;
+            }
+            cap = 2u * grid.n[0] + grid.n[2];
+            if (cap == 0u) {
+                continue;
+            }
+            if (cap > rt->crossing_cap || !rt->crossing_buf) {
+                return OSH_ESTATE;
+            }
+            crossings = rt->crossing_buf;
+            /* CYL rotation not yet supported. */
             p_trace = st->p;
             dir_trace = score_dir;
-        }
 
-        hit = osh_raytrace_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
-        if (!hit || ncross == 0u) {
-            continue;
+            hit = osh_raytrace_cyl_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
+            if (!hit || ncross == 0u) {
+                continue;
+            }
+
+            /* Fill vol_inv: per-R-bin lookup table for Cyl. */
+            {
+                double const *lut = geo->cyl_vol_inv;
+                size_t nr = geo->cyl_nr;
+                for (j = 0; j < ncross; ++j) {
+                    crossings[j].vol_inv = lut[crossings[j].idx % nr];
+                }
+            }
         }
 
         for (g = 0; g < geo->ngroups; ++g) {
@@ -146,11 +186,11 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
                 rc = score_group_energy(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_FLUENCE:
-                rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st, voxel_volume_inv);
+                rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st);
                 break;
             case OSH_SCORING_SCORE_DOSE:
             case OSH_SCORING_SCORE_DOSEGY:
-                rc = score_group_dose(rt, &geo->groups[g], crossings, ncross, part, st, score_len, voxel_volume_inv);
+                rc = score_group_dose(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_DLET:
                 rc = score_group_dlet(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
@@ -330,6 +370,58 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
 }
 
 /**
+ * @brief Fill an osh_raytrace_grid from a cylindrical (R,Z) scoring geometry.
+ *
+ * Requires exactly two axes: "R" at index 0 and "Z" at index 1.
+ * Field convention: origin/spacing/n[0] = r_min/dr/nr; origin/spacing/n[2] = z_min/dz/nz;
+ * origin/spacing/n[1] = 0/0/1 (unused).
+ */
+static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
+                                            struct osh_raytrace_grid *grid) {
+    int ir;
+    int iz;
+    double dr;
+    double dz;
+
+    if (!geo || !grid) {
+        return OSH_EINVAL;
+    }
+    if (geo->geo_kind != OSH_SCORING_GEO_CYL) {
+        return OSH_ENOTSUP;
+    }
+    if (geo->naxes != 2u) {
+        return OSH_EINVAL;
+    }
+
+    ir = axis_index(geo, "R");
+    iz = axis_index(geo, "Z");
+    if (ir < 0 || iz < 0) {
+        return OSH_EINVAL;
+    }
+    if (geo->axes[ir].nbins <= 0 || geo->axes[iz].nbins <= 0) {
+        return OSH_EINVAL;
+    }
+
+    dr = (geo->axes[ir].hi - geo->axes[ir].lo) / (double) geo->axes[ir].nbins;
+    dz = (geo->axes[iz].hi - geo->axes[iz].lo) / (double) geo->axes[iz].nbins;
+    if (!(dr > 0.0) || !(dz > 0.0)) {
+        return OSH_EINVAL;
+    }
+
+    grid->origin[0] = geo->axes[ir].lo;
+    grid->origin[1] = 0.0;
+    grid->origin[2] = geo->axes[iz].lo;
+    grid->spacing[0] = dr;
+    grid->spacing[1] = 0.0;
+    grid->spacing[2] = dz;
+    grid->n[0] = (size_t) geo->axes[ir].nbins;
+    grid->n[1] = 1u;
+    grid->n[2] = (size_t) geo->axes[iz].nbins;
+    grid->tile_order = OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT;
+    return OSH_OK;
+}
+
+/**
  * @brief Accumulate energy deposition [MeV] into the ENERGY scorer pages.
  *
  * Distributes st->de proportionally to path length in each crossed voxel.
@@ -367,15 +459,15 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
 /**
  * @brief Accumulate fluence [1/cm²] into the FLUENCE scorer pages.
  *
- * Scores track_length / voxel_volume per voxel crossing.
+ * Scores track_length * vol_inv per voxel crossing.  vol_inv is pre-filled into
+ * each crossing by the caller (uniform for Mesh; per-R-bin LUT for Cyl).
  */
 static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            struct osh_scoring_geometry_score_group const *group,
                                            struct osh_voxel_crossing const *crossings,
                                            size_t ncross,
                                            struct particle const *part,
-                                           struct step const *st,
-                                           double voxel_volume_inv) {
+                                           struct step const *st) {
     size_t i;
     size_t j;
     struct osh_scoring_page_runtime *page;
@@ -389,9 +481,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
             if (crossings[j].idx >= page->len) {
                 return OSH_ESTATE;
             }
-            /* Fluence = track length / voxel volume  [1/cm²].
-             * voxel_volume_inv is precomputed once per geometry. */
-            page->data[crossings[j].idx] += crossings[j].path_len * voxel_volume_inv;
+            page->data[crossings[j].idx] += crossings[j].path_len * crossings[j].vol_inv;
         }
     }
     return OSH_OK;
@@ -404,14 +494,23 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
  * a stopping-power ratio correction S(ovr,E)/S(tr,E) for dose-to-medium scoring.
  * Pure density overrides do not change the dose (Fano theorem).
  */
+/**
+ * @brief Accumulate dose [MeV/g] into the DOSE scorer pages.
+ *
+ * vol_inv is read per-crossing from crossings[j].vol_inv (pre-filled by caller:
+ * uniform for Mesh; per-R-bin LUT for Cyl).
+ *
+ * When mat_tables is available and a Settings block specifies a medium, applies
+ * a stopping-power ratio correction S(ovr,E)/S(tr,E) for dose-to-medium scoring.
+ * Pure density overrides do not change the dose (Fano theorem).
+ */
 static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
                                         struct particle const *part,
                                         struct step const *st,
-                                        double score_len,
-                                        double voxel_volume_inv) {
+                                        double score_len) {
     size_t i;
     size_t j;
     double base_scale;
@@ -429,9 +528,9 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
     if (!(st->rho > 0.0)) {
         return OSH_OK;
     }
-    /* base_scale = de / (voxel_volume * rho * score_len)
+    /* base_scale = de / (rho * score_len)  — vol_inv applied per crossing below.
      * Accumulates in [MeV/g]; postprocess converts to [Gy] (× OSH_MEVG2GY). */
-    base_scale = st->de * voxel_volume_inv / (score_len * st->rho);
+    base_scale = st->de / (score_len * st->rho);
 
     /* Precompute projectile index and transport SP once per step. */
     have_proj = 0;
@@ -466,7 +565,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             if (crossings[j].idx >= page->len) {
                 return OSH_ESTATE;
             }
-            page->data[crossings[j].idx] += crossings[j].path_len * dose_scale;
+            page->data[crossings[j].idx] += crossings[j].path_len * crossings[j].vol_inv * dose_scale;
         }
     }
     return OSH_OK;

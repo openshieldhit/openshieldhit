@@ -18,6 +18,9 @@ else()
         "Valid options: SIMPLE, SIDDON, JACOBS.")
 endif()
 
+# CYL traversal is always compiled in (not gated on OSH_RAYTRACE_ALGORITHM).
+target_sources(osh_raytrace PRIVATE osh_raytrace_jacobs_cyl.c)
+
 # Expose the active algorithm as a compile definition so diagnostic code
 # can report which implementation is in use.
 target_compile_definitions(osh_raytrace
