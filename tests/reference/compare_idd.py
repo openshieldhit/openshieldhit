@@ -62,9 +62,16 @@ def load_curve(path):
     pairs = sorted(zip(zs, vs))
     zs = [p[0] for p in pairs]
     vs = [p[1] for p in pairs]
-    dz = (zs[-1] - zs[0]) / (len(zs) - 1)
+    dz = zs[1] - zs[0]
     if dz <= 0.0:
         raise ValueError(f"{path}: non-increasing z grid")
+    tol = 1e-6 * max(1.0, abs(dz))
+    for i in range(1, len(zs) - 1):
+        dzi = zs[i + 1] - zs[i]
+        if dzi <= 0.0:
+            raise ValueError(f"{path}: non-increasing z grid")
+        if abs(dzi - dz) > tol:
+            raise ValueError(f"{path}: non-uniform z grid (dz varies)")
     dens = [v / dz for v in vs]
     return zs, dens
 
@@ -115,10 +122,13 @@ def main():
         return 2
 
     common_z = [z for z in tz if z_lo <= z <= z_hi]
+    if len(common_z) < 2:
+        print(f"ERROR {label}overlapping z range contains fewer than 2 bins", file=sys.stderr)
+        return 2
     test_c = [interp(tz, tv, z) for z in common_z]
     ref_c = [interp(rz, rv, z) for z in common_z]
 
-    dz = (common_z[-1] - common_z[0]) / (len(common_z) - 1)
+    dz = common_z[1] - common_z[0]
     integral_test = sum(test_c) * dz
     integral_ref = sum(ref_c) * dz
     if integral_ref <= 0.0:
@@ -130,8 +140,8 @@ def main():
     ref_max = max(ref_c)
     bin_dev = max(abs(t - r) for t, r in zip(test_c, ref_c)) / ref_max
 
-    peak_test = peak_position(tz, tv)
-    peak_ref = peak_position(rz, rv)
+    peak_test = peak_position(common_z, test_c)
+    peak_ref = peak_position(common_z, ref_c)
     peak_dev_mm = abs(peak_test - peak_ref) * 10.0  # cm -> mm
 
     failures = []
