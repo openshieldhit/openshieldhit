@@ -7,8 +7,8 @@ faster.  Exits non-zero when any scenario regresses by more than --threshold
 percent, so it can serve as a CI regression gate.
 
 Usage:
-  python3 tools/bench/compare.py tools/bench/baseline.json results.json
-  python3 tools/bench/compare.py old.json new.json --threshold 5
+  python3 benchmarks/performance/compare.py benchmarks/performance/baseline.json results.json
+  python3 benchmarks/performance/compare.py old.json new.json --threshold 5
 """
 
 from __future__ import annotations

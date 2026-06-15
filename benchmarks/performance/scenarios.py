@@ -22,6 +22,7 @@ Scenario fields:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 
@@ -67,7 +68,8 @@ def _s4_detect(nfilters: int) -> str:
     return "\n".join(parts) + "\n"
 
 
-_CASES = "tools/bench/cases"
+_REPO_ROOT = Path(__file__).parents[2]
+_CASES = str(Path(__file__).parent.relative_to(_REPO_ROOT) / "cases")
 
 SCENARIOS = [
     # ---- Core scenarios --------------------------------------------------

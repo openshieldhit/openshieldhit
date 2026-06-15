@@ -1,4 +1,4 @@
-# Smoke tests for the benchmark tooling in tools/bench/.
+# Smoke tests for the benchmark tooling in benchmarks/performance/.
 #
 # These do not measure anything; they protect the harness against silent
 # breakage in CI:
@@ -9,7 +9,7 @@
 find_program(BENCH_PYTHON NAMES python3 python)
 
 # ---- Bench case inputs: one validation test per case directory ----
-file(GLOB BENCH_CASE_DIRS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tools/bench/cases/*/")
+file(GLOB BENCH_CASE_DIRS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/benchmarks/performance/cases/*/")
 foreach(case_dir ${BENCH_CASE_DIRS})
     if(NOT IS_DIRECTORY "${case_dir}")
         continue()
@@ -29,7 +29,7 @@ if(BENCH_PYTHON)
         COMMAND ${CMAKE_COMMAND}
             -DBENCH_PYTHON=${BENCH_PYTHON}
             -DOSH_EXECUTABLE=$<TARGET_FILE:openshieldhit>
-            -DGEN_SCRIPT=${PROJECT_SOURCE_DIR}/tools/bench/gen_gemca_stress.py
+            -DGEN_SCRIPT=${PROJECT_SOURCE_DIR}/benchmarks/performance/gen_gemca_stress.py
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/gen_gemca_stress
             -P ${CMAKE_CURRENT_SOURCE_DIR}/run_gen_stress.cmake
     )
@@ -38,7 +38,7 @@ if(BENCH_PYTHON)
     # ---- Scenario registry / runner: import and self-consistency ----
     add_test(
         NAME "bench::run_bench_list"
-        COMMAND ${BENCH_PYTHON} ${PROJECT_SOURCE_DIR}/tools/bench/run_bench.py --list
+        COMMAND ${BENCH_PYTHON} ${PROJECT_SOURCE_DIR}/benchmarks/performance/run_bench.py --list
     )
     set_tests_properties("bench::run_bench_list" PROPERTIES LABELS "bench")
 

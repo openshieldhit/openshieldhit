@@ -6,7 +6,7 @@ the scenario matrix, emits machine-readable JSON plus a human-readable summary
 table, and (optionally) callgrind / perf flat profiles per scenario.
 
 ```
-tools/bench/
+benchmarks/performance/
 ├── run_bench.py          # the harness: build, run matrix, aggregate, summarize
 ├── scenarios.py          # scenario registry (C1–C8 core cases, S1–S4 sweeps)
 ├── compare.py            # diff two result files; optional CI regression gate
@@ -21,23 +21,23 @@ tools/bench/
 
 ```bash
 # build the release preset and run the core scenarios (C1–C8), 3 repeats each
-python3 tools/bench/run_bench.py --build
+python3 benchmarks/performance/run_bench.py --build
 
 # list scenarios; * marks what the current --filter selects
-python3 tools/bench/run_bench.py --list
+python3 benchmarks/performance/run_bench.py --list
 
 # everything including sweeps; S2 needs one rebuild per pool capacity
-python3 tools/bench/run_bench.py --build --filter all --allow-rebuild
+python3 benchmarks/performance/run_bench.py --build --filter all --allow-rebuild
 
 # quick sanity pass (scaled-down statistics, not for committed numbers)
-python3 tools/bench/run_bench.py --filter core --nstat-scale 0.05
+python3 benchmarks/performance/run_bench.py --filter core --nstat-scale 0.05
 
 # compare a run against the frozen baseline; fail on >5% transport regression
-python3 tools/bench/compare.py tools/bench/baseline.json \
-    tools/bench/results/results.json --threshold 5
+python3 benchmarks/performance/compare.py benchmarks/performance/baseline.json \
+    benchmarks/performance/results/results.json --threshold 5
 ```
 
-Results land in `tools/bench/results/` (gitignored) unless `--output` says
+Results land in `benchmarks/performance/results/` (gitignored) unless `--output` says
 otherwise.
 
 ## How a measurement works
@@ -85,7 +85,7 @@ boolean expression carries one negative term per sphere. Generate one by hand
 with:
 
 ```bash
-python3 tools/bench/gen_gemca_stress.py --zones 1000 --out /tmp/c8
+python3 benchmarks/performance/gen_gemca_stress.py --zones 1000 --out /tmp/c8
 ```
 
 New scoring or physics features should land together with a scenario here
@@ -121,9 +121,9 @@ for frame-pointer-friendly binaries.
 Run on a quiet, mains-powered machine at a tagged commit:
 
 ```bash
-python3 tools/bench/run_bench.py --build --filter all --allow-rebuild \
-    --output tools/bench/baseline.json
-git add tools/bench/baseline.json && git commit
+python3 benchmarks/performance/run_bench.py --build --filter all --allow-rebuild \
+    --output benchmarks/performance/baseline.json
+git add benchmarks/performance/baseline.json && git commit
 ```
 
 `compare.py` renders per-scenario transport-time and throughput deltas plus

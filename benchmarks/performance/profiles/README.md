@@ -3,7 +3,7 @@
 Reference instruction-count profiles for representative scenarios, produced by
 
 ```bash
-python3 tools/bench/run_bench.py \
+python3 benchmarks/performance/run_bench.py \
     --filter c1_p100_dose,c4_p150_nucre_filters,c6_c12_let,c8_z1000 \
     --nstat-scale 0.2 --repeats 1 --callgrind --prof-nstat-divisor 8
 ```
@@ -28,4 +28,4 @@ Headline shares (Ir %, gcc 13 -O3, x86-64):
 | RNG (`osh_rng_*`) | ~4.0 | ~3.5 | ~2.5 | — |
 
 Regenerate after any transport/geometry/physics change that aims at these
-buckets, and compare with `tools/bench/compare.py` on the wall-clock side.
+buckets, and compare with `benchmarks/performance/compare.py` on the wall-clock side.
