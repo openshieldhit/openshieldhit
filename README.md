@@ -186,7 +186,7 @@ Nuclear physics:
 - abrasion + Fermi break-up — fast nucleon knock-out followed by statistical
   de-excitation of the light residual (A ≤ 16) into n, p, d, t, ³He, α;
   charged products are transported, neutrons collected in the neutron pool.
-  The break-up is a sequential-binary development approximation of the full
+  The break-up is a sequential-binary semiphysical placeholder for the full
   simultaneous n-body Fermi model
 
 CT voxel transport is working end-to-end:

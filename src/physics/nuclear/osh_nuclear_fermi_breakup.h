@@ -10,9 +10,9 @@
  * stage into nucleons and light ions (Fermi 1950 statistical break-up,
  * applicable to light nuclei A <= 16).
  *
- * This is a *development approximation* of the full Fermi break-up model:
+ * This is a semiphysical placeholder for the full Fermi break-up model:
  * instead of sampling simultaneous n-body partitions of the parent, the
- * de-excitation is realised as *sequential binary splits*, each weighted by
+ * de-excitation is realised as sequential binary splits, each weighted by
  * the two-body phase-space factor
  *
  *   w = g1 * g2 * mu^(3/2) * sqrt(E_kin),   E_kin = E* + Q
@@ -20,10 +20,10 @@
  * where g = 2J+1 are ground-state spin degeneracies and mu is the reduced
  * mass.  Repeated two-body decay can bias multiplicities and kinetic-energy
  * spectra relative to the canonical simultaneous break-up; this is accepted
- * for the development model (full n-body Fermi break-up / SMM are planned
- * follow-ons).  Particle-unstable nuclides present in the isotope database
- * (Be-8, He-5, Li-5, ...) participate as intermediate states and decay
- * further through their own open channels (e.g. Be-8 -> 2 alpha).
+ * for the placeholder model while the full n-body Fermi break-up / SMM work
+ * remains pending.  Particle-unstable nuclides present in the isotope
+ * database (Be-8, He-5, Li-5, ...) participate as intermediate states and
+ * decay further through their own open channels (e.g. Be-8 -> 2 alpha).
  *
  * Final-product policy (strict): only the whitelist n, p, d, t, He-3, He-4
  * is ever emitted as transportable secondaries.  Any other nuclide without

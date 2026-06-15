@@ -104,7 +104,7 @@ break-up** stage: sequential binary splits weighted by two-body phase space
 (g₁g₂ μ^(3/2) √E_kin), resolved over a startup-compiled channel table built
 from the isotope database.  Only n, p, d, t, ³He and α are emitted as
 transportable products; other residues are counted in the fragment pool.
-The sequential-binary scheme is a development approximation of the full
+The sequential-binary scheme is a semiphysical placeholder for the full
 simultaneous n-body Fermi model.
 
 Key references:
