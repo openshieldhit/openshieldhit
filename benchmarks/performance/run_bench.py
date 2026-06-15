@@ -9,18 +9,18 @@ machine-readable results file plus a human-readable summary table.
 Typical use:
 
   # build the release preset and run the core matrix, 3 repeats each
-  python3 tools/bench/run_bench.py --build
+  python3 benchmarks/performance/run_bench.py --build
 
   # everything, including sweeps that need per-point rebuilds (S2)
-  python3 tools/bench/run_bench.py --build --filter all --allow-rebuild
+  python3 benchmarks/performance/run_bench.py --build --filter all --allow-rebuild
 
   # a single scenario with profiler wrappers (requires prof preset tools)
-  python3 tools/bench/run_bench.py --filter c1_p100_dose --preset prof --build \\
+  python3 benchmarks/performance/run_bench.py --filter c1_p100_dose --preset prof --build \\
       --callgrind --perf
 
   # freeze a baseline
-  python3 tools/bench/run_bench.py --build --filter all --allow-rebuild \\
-      --output tools/bench/baseline.json
+  python3 benchmarks/performance/run_bench.py --build --filter all --allow-rebuild \\
+      --output benchmarks/performance/baseline.json
 
 Methodology guard-rails baked in (see issue #138):
   - refuses to measure debug builds,
@@ -437,8 +437,8 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=REPO_ROOT / "tools/bench/results/results.json",
-        help="aggregated results file (default tools/bench/results/results.json)",
+        default=REPO_ROOT / "benchmarks/performance/results/results.json",
+        help="aggregated results file (default benchmarks/performance/results/results.json)",
     )
     parser.add_argument("--callgrind", action="store_true", help="also produce a callgrind flat profile per scenario")
     parser.add_argument("--perf", action="store_true", help="also produce perf stat + perf report per scenario")

@@ -18,7 +18,7 @@ nearest count realizable with a full n x n x n lattice plus the 3 shell zones
 realizable count if you need to hit a number precisely).
 
 Usage:
-  python3 tools/bench/gen_gemca_stress.py --zones 1000 --out /tmp/c8_z1000
+  python3 benchmarks/performance/gen_gemca_stress.py --zones 1000 --out /tmp/c8_z1000
 """
 
 from __future__ import annotations
