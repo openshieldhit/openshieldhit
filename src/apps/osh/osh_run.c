@@ -3,13 +3,7 @@
 #if defined(_WIN32)
 #include <direct.h>
 #define getcwd _getcwd
-#include <errno.h>
-#include <sys/stat.h>
-#define mkdir(path, mode) _mkdir(path)
 #else
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 #endif
 
@@ -43,7 +37,6 @@ static char const *const OSH_DETECT_FILENAME = "detect.dat";
 
 static char *run_resolve_path(char const *workdir, char const *override_path, char const *filename);
 static char *run_resolve_absolute_path(char const *path);
-static enum osh_status run_ensure_output_dir(char const *path);
 static enum osh_status run_resolve_output_paths(struct osh_scoring_workspace *scoring, char const *out_dir);
 static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace const *geom,
                                                struct osh_scoring_workspace *scoring,
@@ -129,7 +122,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         rc = OSH_EIO;
         goto cleanup;
     }
-    rc = run_ensure_output_dir(abs_outdir);
+    rc = osh_path_ensure_dir(abs_outdir);
     if (rc != OSH_OK) {
         if (err) {
             fprintf(err, "Error: failed to create output directory: %s\n", abs_outdir);
@@ -425,66 +418,6 @@ static char *run_resolve_absolute_path(char const *path) {
     }
     osh_path_normalize(resolved);
     return resolved;
-}
-
-/**
- * @brief Create @p path and any missing parent directories.
- *
- * @details
- * The CLI accepts `--outdir` as a convenience destination, so callers should
- * not have to pre-create it. Existing directories are treated as success.
- */
-static enum osh_status run_ensure_output_dir(char const *path) {
-    char *tmp;
-    char *p;
-    size_t len;
-
-    struct stat st;
-
-    if (!path || !path[0]) {
-        return OSH_EINVAL;
-    }
-
-    if (stat(path, &st) == 0) {
-        return S_ISDIR(st.st_mode) ? OSH_OK : OSH_EIO;
-    }
-
-    len = strlen(path);
-    tmp = (char *) malloc(len + 1u);
-    if (!tmp) {
-        return OSH_ENOMEM;
-    }
-    memcpy(tmp, path, len + 1u);
-
-    for (p = tmp + 1; *p; ++p) {
-        if (*p != '/') {
-            continue;
-        }
-        *p = '\0';
-        if (tmp[0] != '\0' && stat(tmp, &st) != 0) {
-            if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
-                free(tmp);
-                return OSH_EIO;
-            }
-        } else if (!S_ISDIR(st.st_mode)) {
-            free(tmp);
-            return OSH_EIO;
-        }
-        *p = '/';
-    }
-
-    if (stat(tmp, &st) != 0) {
-        if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
-            free(tmp);
-            return OSH_EIO;
-        }
-    } else if (!S_ISDIR(st.st_mode)) {
-        free(tmp);
-        return OSH_EIO;
-    }
-
-    free(tmp);
-    return OSH_OK;
 }
 
 /**

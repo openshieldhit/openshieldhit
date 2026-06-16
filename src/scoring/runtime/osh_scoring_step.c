@@ -226,7 +226,7 @@ static void step_scoring_segment(struct step const *st, double dir_out[3], doubl
     dx = st->q[0] - st->p[0];
     dy = st->q[1] - st->p[1];
     dz = st->q[2] - st->p[2];
-    chord_len = sqrt(dx * dx + dy * dy + dz * dz);
+    chord_len = sqrt((dx * dx) + (dy * dy) + (dz * dz));
 
     if (chord_len > 1.0e-12) {
         dir_out[0] = dx / chord_len;
@@ -251,7 +251,7 @@ static void step_scoring_segment(struct step const *st, double dir_out[3], doubl
 /** @brief Relativistic speed β = v/c from total kinetic energy and rest mass [MeV/c²]. */
 static inline double particle_beta(double e_kin_mev, double rest_mass_mev) {
     double gamma_inv = rest_mass_mev / (e_kin_mev + rest_mass_mev);
-    return sqrt(1.0 - gamma_inv * gamma_inv);
+    return sqrt(1.0 - (gamma_inv * gamma_inv));
 }
 
 /**
@@ -440,7 +440,7 @@ static inline double diff_bin_center(struct osh_scoring_page_runtime const *page
         double hi = page->diff_hi;
         return sqrt(pow(hi / lo, t0) * pow(hi / lo, t1)) * lo;
     }
-    return page->diff_lo + 0.5 * (t0 + t1) * (page->diff_hi - page->diff_lo);
+    return page->diff_lo + (0.5 * (t0 + t1) * (page->diff_hi - page->diff_lo));
 }
 
 /* Compute LET [MeV/cm] in an explicit medium at step midpoint.
@@ -702,19 +702,23 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
             /* Skip the page when the axis value cannot be determined (e.g. LET
              * for a neutral particle) or lies outside the configured [lo, hi). */
             dv = diff_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok)
+            if (!dv_ok) {
                 continue;
+            }
             db = diff_axis_bin(page, dv);
-            if (db >= page->diff_nbins)
+            if (db >= page->diff_nbins) {
                 continue;
+            }
         }
         if (page->diff2_nbins > 0u) {
             dv = diff2_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok)
+            if (!dv_ok) {
                 continue;
+            }
             db2 = diff2_axis_bin(page, dv);
-            if (db2 >= page->diff2_nbins)
+            if (db2 >= page->diff2_nbins) {
                 continue;
+            }
         }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
@@ -723,7 +727,7 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
             frac = crossings[j].path_len / score_len;
-            page->data[crossings[j].idx + db * page->diff_stride + db2 * page->diff2_stride] += st->de * frac;
+            page->data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] += st->de * frac;
         }
     }
     return OSH_OK;
@@ -764,19 +768,23 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
             /* Skip the page when the axis value cannot be determined (e.g. LET
              * for a neutral particle) or lies outside the configured [lo, hi). */
             dv = diff_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok)
+            if (!dv_ok) {
                 continue;
+            }
             db = diff_axis_bin(page, dv);
-            if (db >= page->diff_nbins)
+            if (db >= page->diff_nbins) {
                 continue;
+            }
         }
         if (page->diff2_nbins > 0u) {
             dv = diff2_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok)
+            if (!dv_ok) {
                 continue;
+            }
             db2 = diff2_axis_bin(page, dv);
-            if (db2 >= page->diff2_nbins)
+            if (db2 >= page->diff2_nbins) {
                 continue;
+            }
         }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
@@ -784,7 +792,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
             }
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
-            page->data[crossings[j].idx + db * page->diff_stride + db2 * page->diff2_stride] +=
+            page->data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] +=
                 crossings[j].path_len * crossings[j].vol_inv;
         }
     }
@@ -872,19 +880,23 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             /* Skip the page when the axis value cannot be determined (e.g. LET
              * for a neutral particle) or lies outside the configured [lo, hi). */
             dv = diff_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok)
+            if (!dv_ok) {
                 continue;
+            }
             db = diff_axis_bin(page, dv);
-            if (db >= page->diff_nbins)
+            if (db >= page->diff_nbins) {
                 continue;
+            }
         }
         if (page->diff2_nbins > 0u) {
             dv = diff2_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok)
+            if (!dv_ok) {
                 continue;
+            }
             db2 = diff2_axis_bin(page, dv);
-            if (db2 >= page->diff2_nbins)
+            if (db2 >= page->diff2_nbins) {
                 continue;
+            }
         }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
@@ -892,7 +904,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             }
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
-            page->data[crossings[j].idx + db * page->diff_stride + db2 * page->diff2_stride] +=
+            page->data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] +=
                 crossings[j].path_len * crossings[j].vol_inv * dose_scale;
         }
     }
