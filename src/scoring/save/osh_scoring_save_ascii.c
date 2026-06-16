@@ -40,6 +40,8 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_output_runtime const **out_out,
                                        struct osh_scoring_geometry_runtime const **geo_out);
 static void format_now_rfc2822(char *buf, size_t cap);
+static void
+fprint_quantity_names(FILE *fp, struct osh_scoring_runtime const *rt, struct osh_scoring_output_runtime const *out);
 
 enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const *ws,
                                               struct osh_scoring_runtime const *rt,
@@ -105,15 +107,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         fprintf(fp, "# DETECTOR OUTPUT CYL\n");
         fprintf(fp, "# R BIN: %5zu Z BIN: %5zu\n", nr, nz);
         fprintf(fp, "# DETECTOR TYPE:");
-        for (ip = 0; ip < out->npages; ++ip) {
-            size_t page_idx = out->page_indices[ip];
-            char const *qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
-            char const *c;
-            fputc(' ', fp);
-            for (c = qty; *c; ++c) {
-                fputc(toupper((unsigned char) *c), fp);
-            }
-        }
+        fprint_quantity_names(fp, rt, out);
         fputc('\n', fp);
         fprintf(fp, "# R START: %12.6E Z START: %12.6E\n", r0, z0);
         fprintf(fp, "# R END  : %12.6E Z END  : %12.6E\n", geo->axes[ir_axis].hi, geo->axes[iz_axis].hi);
@@ -123,15 +117,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fp,
             "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical mean\n");
         fprintf(fp, "# R Z");
-        for (ip = 0; ip < out->npages; ++ip) {
-            size_t page_idx = out->page_indices[ip];
-            char const *qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
-            char const *c;
-            fputc(' ', fp);
-            for (c = qty; *c; ++c) {
-                fputc(toupper((unsigned char) *c), fp);
-            }
-        }
+        fprint_quantity_names(fp, rt, out);
         fputc('\n', fp);
 
         for (iz = 0; iz < nz; ++iz) {
@@ -195,15 +181,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         fprintf(fp, "# DETECTOR OUTPUT MSH\n");
         fprintf(fp, "# X BIN: %5zu Y BIN: %5zu Z BIN: %5zu\n", nx, ny, nz);
         fprintf(fp, "# DETECTOR TYPE:");
-        for (ip = 0; ip < out->npages; ++ip) {
-            size_t page_idx = out->page_indices[ip];
-            char const *qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
-            char const *c;
-            fputc(' ', fp);
-            for (c = qty; *c; ++c) {
-                fputc(toupper((unsigned char) *c), fp);
-            }
-        }
+        fprint_quantity_names(fp, rt, out);
         fputc('\n', fp);
         fprintf(fp, "# X START: %12.6E Y START: %12.6E Z START: %12.6E\n", x0, y0, z0);
         fprintf(fp,
@@ -217,15 +195,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fp,
             "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical mean\n");
         fprintf(fp, "# X Y Z");
-        for (ip = 0; ip < out->npages; ++ip) {
-            size_t page_idx = out->page_indices[ip];
-            char const *qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
-            char const *c;
-            fputc(' ', fp);
-            for (c = qty; *c; ++c) {
-                fputc(toupper((unsigned char) *c), fp);
-            }
-        }
+        fprint_quantity_names(fp, rt, out);
         fputc('\n', fp);
 
         for (iz = 0; iz < nz; ++iz) {
@@ -254,6 +224,23 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         return OSH_EIO;
     }
     return OSH_OK;
+}
+
+static void
+fprint_quantity_names(FILE *fp, struct osh_scoring_runtime const *rt, struct osh_scoring_output_runtime const *out) {
+    size_t ip;
+    size_t page_idx;
+    char const *qty;
+    char const *c;
+
+    for (ip = 0; ip < out->npages; ++ip) {
+        page_idx = out->page_indices[ip];
+        qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
+        fputc(' ', fp);
+        for (c = qty; *c; ++c) {
+            fputc(toupper((unsigned char) *c), fp);
+        }
+    }
 }
 
 static enum osh_status

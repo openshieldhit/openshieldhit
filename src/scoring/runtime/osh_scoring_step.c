@@ -111,10 +111,10 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         if (geo->has_rotation) {
             osh_vect_trans_point_affine(st->p, p_local, geo->t);
             osh_vect_trans_vector_affine(score_dir, dir_local, geo->t);
-            p_trace   = p_local;
+            p_trace = p_local;
             dir_trace = dir_local;
         } else {
-            p_trace   = st->p;
+            p_trace = st->p;
             dir_trace = score_dir;
         }
 
@@ -156,7 +156,7 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
             if (!hit || ncross == 0u) {
                 continue;
             }
-            lut    = geo->cyl_vol_inv;
+            lut = geo->cyl_vol_inv;
             nr_cyl = geo->cyl_nr;
             for (j = 0; j < ncross; ++j) {
                 crossings[j].vol_inv = lut[crossings[j].idx % nr_cyl];

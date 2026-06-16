@@ -151,6 +151,37 @@ static void test_vol_inv_initialised_zero(void) {
     }
 }
 
+static void test_turning_point_through_axis(void) {
+    /* Ray whose R decreases to a minimum then increases: the genuinely hard case.
+     * Grid: r_min=0, dr=1, nr=5, z_min=0, dz=1, nz=5 (from make_grid).
+     * p=(-3, 0.5, 2.5): r=sqrt(9.25)≈3.04 → ir=3, iz=2.
+     * v=(1,0,0): sweeps x from -3 to +3 (ds=6), minimum r=0.5 at x=0.
+     * The same R shells ir=3,2,1 are each crossed TWICE (in then out).
+     * Expected ir sequence: 3,2,1,0,1,2,3 (all iz=2). sum(path_len)==ds. */
+    struct osh_raytrace_grid grid = make_grid();
+    struct osh_voxel_crossing crossings[MAX_CROSS];
+    double p[3] = {-3.0, 0.5, 2.5};
+    double v[3] = {1.0, 0.0, 0.0};
+    double ds = 6.0;
+    size_t n = 0u;
+    int rc;
+    size_t j;
+    double sum = 0.0;
+    /* Expected ir sequence at iz=2 (idx = ir + 5*2 = ir + 10) */
+    size_t expected_idx[7] = {13u, 12u, 11u, 10u, 11u, 12u, 13u};
+
+    rc = osh_raytrace_cyl_traverse(&grid, p, v, ds, crossings, &n);
+    ASSERT_TRUE(rc == 1);
+    ASSERT_TRUE(n == 7u);
+
+    for (j = 0; j < n; ++j) {
+        ASSERT_TRUE(crossings[j].path_len > 0.0);
+        ASSERT_TRUE(crossings[j].idx == expected_idx[j]);
+        sum += crossings[j].path_len;
+    }
+    ASSERT_TRUE(fabs(sum - ds) < 1.0e-9);
+}
+
 static void test_hollow_start_inside_hole(void) {
     /* Hollow cylinder (r_min=2): particle starts inside the hole and exits radially.
      * Grid: r=[2,5] (nr=3, dr=1), z=[0,5] (nz=5, dz=1).
@@ -220,6 +251,7 @@ int main(int argc, char **argv) {
         {"test_miss_inside_hollow_hole", test_miss_inside_hollow_hole},
         {"test_miss_outside_z_range", test_miss_outside_z_range},
         {"test_vol_inv_initialised_zero", test_vol_inv_initialised_zero},
+        {"test_turning_point_through_axis", test_turning_point_through_axis},
         {"test_hollow_start_inside_hole", test_hollow_start_inside_hole},
         {"test_hollow_through_hole", test_hollow_through_hole},
     };
