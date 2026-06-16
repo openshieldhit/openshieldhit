@@ -46,7 +46,9 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
                                        size_t output_idx,
                                        struct osh_scoring_output_runtime const **out_out,
                                        struct osh_scoring_geometry_runtime const **geo_out);
-static void geometry_mesh_arrays(struct osh_scoring_geometry_runtime const *geo, double p[3], double q[3], int n[3]);
+static enum osh_status
+geometry_arrays(struct osh_scoring_geometry_runtime const *geo, double p[3], double q[3], int n[3]);
+static enum osh_status axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label, size_t *idx_out);
 static void format_now_rfc2822(char *buf, size_t cap);
 static int legacy_geo_kind(struct osh_scoring_geometry_runtime const *geo);
 static int legacy_score_kind(struct osh_scoring_page_runtime const *page);
@@ -96,7 +98,11 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
     est_count = (int) output_idx;
     est_npages = (int) out->npages;
     est_rescale_nstat = 1.0;
-    geometry_mesh_arrays(geo, p, q, n);
+    rc = geometry_arrays(geo, p, q, n);
+    if (rc != OSH_OK) {
+        fclose(fp);
+        return rc;
+    }
 
     rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_SHVERSION, OSH_VERSION);
     if (rc == OSH_OK) {
@@ -238,7 +244,7 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         return OSH_ESTATE;
     }
     geo = &rt->geometries[out->geometry_idx];
-    if (geo->geo_kind != OSH_SCORING_GEO_MESH) {
+    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL) {
         return OSH_ENOTSUP;
     }
     for (ip = 0; ip < out->npages; ++ip) {
@@ -256,28 +262,68 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
     return OSH_OK;
 }
 
-static void geometry_mesh_arrays(struct osh_scoring_geometry_runtime const *geo, double p[3], double q[3], int n[3]) {
-    size_t i;
+static enum osh_status
+geometry_arrays(struct osh_scoring_geometry_runtime const *geo, double p[3], double q[3], int n[3]) {
+    size_t i0;
+    size_t i1;
+    size_t i2;
+
+    if (!geo || !p || !q || !n) {
+        return OSH_EINVAL;
+    }
 
     p[0] = p[1] = p[2] = 0.0;
     q[0] = q[1] = q[2] = 0.0;
     n[0] = n[1] = n[2] = 1;
 
+    if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
+        if (axis_index(geo, "R", &i0) != OSH_OK || axis_index(geo, "Z", &i2) != OSH_OK) {
+            return OSH_EINVAL;
+        }
+        /* Legacy BDO CYL payloads are three-component arrays.  The current
+         * scoring implementation is rotationally symmetric in R/Z only, so we
+         * encode the implicit full-azimuth span as phi = [0, 360] with one bin. */
+        p[0] = geo->axes[i0].lo;
+        q[0] = geo->axes[i0].hi;
+        n[0] = geo->axes[i0].nbins;
+        p[1] = 0.0;
+        q[1] = 360.0;
+        n[1] = 1;
+        p[2] = geo->axes[i2].lo;
+        q[2] = geo->axes[i2].hi;
+        n[2] = geo->axes[i2].nbins;
+        return OSH_OK;
+    }
+
+    if (axis_index(geo, "X", &i0) != OSH_OK || axis_index(geo, "Y", &i1) != OSH_OK
+        || axis_index(geo, "Z", &i2) != OSH_OK) {
+        return OSH_EINVAL;
+    }
+    p[0] = geo->axes[i0].lo;
+    q[0] = geo->axes[i0].hi;
+    n[0] = geo->axes[i0].nbins;
+    p[1] = geo->axes[i1].lo;
+    q[1] = geo->axes[i1].hi;
+    n[1] = geo->axes[i1].nbins;
+    p[2] = geo->axes[i2].lo;
+    q[2] = geo->axes[i2].hi;
+    n[2] = geo->axes[i2].nbins;
+    return OSH_OK;
+}
+
+static enum osh_status axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label, size_t *idx_out) {
+    size_t i;
+
+    if (!geo || !label || !idx_out) {
+        return OSH_EINVAL;
+    }
     for (i = 0; i < geo->naxes; ++i) {
-        if (strcmp(geo->axes[i].label, "X") == 0) {
-            p[0] = geo->axes[i].lo;
-            q[0] = geo->axes[i].hi;
-            n[0] = geo->axes[i].nbins;
-        } else if (strcmp(geo->axes[i].label, "Y") == 0) {
-            p[1] = geo->axes[i].lo;
-            q[1] = geo->axes[i].hi;
-            n[1] = geo->axes[i].nbins;
-        } else if (strcmp(geo->axes[i].label, "Z") == 0) {
-            p[2] = geo->axes[i].lo;
-            q[2] = geo->axes[i].hi;
-            n[2] = geo->axes[i].nbins;
+        if (strcmp(geo->axes[i].label, label) == 0) {
+            *idx_out = i;
+            return OSH_OK;
         }
     }
+    return OSH_ENOTSUP;
 }
 
 static void format_now_rfc2822(char *buf, size_t cap) {

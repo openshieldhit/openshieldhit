@@ -14,9 +14,10 @@ extern "C" {
  * @brief Score one transport step into the compiled scoring runtime.
  *
  * @details
- * This is the hot-path entry for step-based scorers. The current
- * implementation supports unrotated Cartesian mesh geometries and the
- * `ENERGY` / `FLUENCE` page kinds.
+ * This is the hot-path entry for step-based scorers.  The current
+ * implementation supports Mesh (X,Y,Z) and Cyl (R,Z) geometries and the
+ * step-based page kinds implemented in osh_scoring_step.c (ENERGY, FLUENCE,
+ * DOSE, DOSEGY, DLET, TLET, DQEFF, TQEFF).
  */
 enum osh_status
 osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *part, struct step const *st);
