@@ -428,20 +428,6 @@ static inline size_t diff_axis_bin(struct osh_scoring_page_runtime const *page, 
     return (bin < page->diff_nbins) ? bin : page->diff_nbins - 1u;
 }
 
-/* Compute diff bin centre (linear: arithmetic midpoint; log: geometric midpoint). */
-static inline double diff_bin_center(struct osh_scoring_page_runtime const *page, size_t db) {
-    double t0; /* normalised left edge of bin db */
-    double t1; /* normalised right edge of bin db */
-
-    t0 = (double) db / (double) page->diff_nbins;
-    t1 = (double) (db + 1u) / (double) page->diff_nbins;
-    if (page->diff_log) {
-        double lo = page->diff_lo;
-        double hi = page->diff_hi;
-        return sqrt(pow(hi / lo, t0) * pow(hi / lo, t1)) * lo;
-    }
-    return page->diff_lo + (0.5 * (t0 + t1) * (page->diff_hi - page->diff_lo));
-}
 
 /* Compute LET [MeV/cm] in an explicit medium at step midpoint.
  * Uses the SP table; returns 0 when tables are unavailable or particle is neutral.

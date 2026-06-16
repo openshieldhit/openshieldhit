@@ -146,10 +146,12 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                         p0->has_diff2_sset ? "  (SP override active)" : "");
             }
             fprintf(fp, "# Z R");
-            if (diff_nbins > 0u)
+            if (diff_nbins > 0u) {
                 fprintf(fp, " %s", diff_kind_label(p0->diff_kind));
-            if (diff2_nbins > 0u)
+            }
+            if (diff2_nbins > 0u) {
                 fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
+            }
             fprint_quantity_names(fp, rt, out);
             fputc('\n', fp);
 
@@ -163,10 +165,12 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                     for (db = 0; db < ndb; ++db) {
                         for (db2 = 0; db2 < ndb2; ++db2) {
                             fprintf(fp, " %.12e %.12e", z0 + dz * ((double) iz + 0.5), r0 + dr * ((double) ir + 0.5));
-                            if (diff_nbins > 0u)
+                            if (diff_nbins > 0u) {
                                 fprintf(fp, " %.12e", ascii_diff_center(p0, db));
-                            if (diff2_nbins > 0u)
+                            }
+                            if (diff2_nbins > 0u) {
                                 fprintf(fp, " %.12e", ascii_diff2_center(p0, db2));
+                            }
                             for (ip = 0; ip < out->npages; ++ip) {
                                 size_t page_idx = out->page_indices[ip];
                                 struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
@@ -273,10 +277,12 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                         p0->has_diff2_sset ? "  (SP override active)" : "");
             }
             fprintf(fp, "# X Y Z");
-            if (diff_nbins > 0u)
+            if (diff_nbins > 0u) {
                 fprintf(fp, " %s", diff_kind_label(p0->diff_kind));
-            if (diff2_nbins > 0u)
+            }
+            if (diff2_nbins > 0u) {
                 fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
+            }
             fprint_quantity_names(fp, rt, out);
             fputc('\n', fp);
 
@@ -295,10 +301,12 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                                         x0 + dx * ((double) ix + 0.5),
                                         y0 + dy * ((double) iy + 0.5),
                                         z0 + dz * ((double) iz + 0.5));
-                                if (diff_nbins > 0u)
+                                if (diff_nbins > 0u) {
                                     fprintf(fp, " %.12e", ascii_diff_center(p0, db));
-                                if (diff2_nbins > 0u)
+                                }
+                                if (diff2_nbins > 0u) {
                                     fprintf(fp, " %.12e", ascii_diff2_center(p0, db2));
+                                }
                                 for (ip = 0; ip < out->npages; ++ip) {
                                     size_t page_idx = out->page_indices[ip];
                                     struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
