@@ -106,9 +106,15 @@ struct osh_scoring_output_def {
  * @brief One scored quantity/page attached to an output.
  */
 struct osh_scoring_page_def {
-    char *quantity;      /* Quantity keyword, e.g. "DOSE", "FLUENCE". */
+    char *quantity;      /* Quantity keyword, e.g. "DOSE", "FLUENCE" (owned). */
     char **filter_names; /* Referenced filter names (owned). */
     size_t nfilter_names;
+    /* Differential axis — all zero/NULL when no differential scoring. */
+    size_t diff_nbins;   /* > 0 activates differential mode. */
+    double diff_lo;      /* Lower bound of the differential axis. */
+    double diff_hi;      /* Upper bound of the differential axis. */
+    int diff_log;        /* 0 = linear binning, 1 = logarithmic binning. */
+    char *diff_kind_str; /* Axis type keyword: "ekin", "let", "qeff", etc. (owned). */
 };
 
 /* ---- Geometry ------------------------------------------------------------ */

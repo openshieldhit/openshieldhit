@@ -56,12 +56,26 @@ static enum osh_status output_quantity(struct osh_scoring_output_def *out,
                                        int nwords,
                                        char const *path,
                                        unsigned int lineno);
+static enum osh_status output_diff1(struct osh_scoring_output_def *out,
+                                    struct osh_diag_sink const *diag,
+                                    char **words,
+                                    int nwords,
+                                    char const *path,
+                                    unsigned int lineno);
+static enum osh_status output_diff1type(struct osh_scoring_output_def *out,
+                                        struct osh_diag_sink const *diag,
+                                        char **words,
+                                        int nwords,
+                                        char const *path,
+                                        unsigned int lineno);
 
 static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_filename},
                                              {OSH_SCORING_KEY_GEO_REF, output_geo},
                                              {OSH_SCORING_KEY_FILEFORMAT, output_fileformat},
                                              {"format", output_fileformat},
                                              {OSH_SCORING_KEY_QUANTITY, output_quantity},
+                                             {"diff1", output_diff1},
+                                             {"diff1type", output_diff1type},
                                              {NULL, NULL}};
 
 /**
@@ -204,5 +218,94 @@ static enum osh_status output_quantity(struct osh_scoring_output_def *out,
         if (rc != OSH_OK)
             return rc;
     }
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse `Diff1 <lo> <hi> <nbins> [LOG]`.
+ *
+ * Applies to the most recently added Quantity page.  Activates differential
+ * scoring along a single axis whose type is set by the subsequent Diff1Type line.
+ */
+static enum osh_status output_diff1(struct osh_scoring_output_def *out,
+                                    struct osh_diag_sink const *diag,
+                                    char **words,
+                                    int nwords,
+                                    char const *path,
+                                    unsigned int lineno) {
+    struct osh_scoring_page_def *page;
+    double lo;
+    double hi;
+    double nbins_d;
+    char log_buf[8];
+
+    if (out->npages == 0u) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Diff1 must follow a Quantity line", path, lineno);
+        return OSH_EPARSE;
+    }
+    if (nwords < 4) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Diff1 requires lo hi nbins [LOG]", path, lineno);
+        return OSH_EPARSE;
+    }
+    lo = strtod(words[1], NULL);
+    hi = strtod(words[2], NULL);
+    nbins_d = strtod(words[3], NULL);
+    if (!(hi > lo) || !(nbins_d >= 1.0)) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Diff1: invalid lo/hi/nbins", path, lineno);
+        return OSH_EPARSE;
+    }
+
+    page = &out->pages[out->npages - 1u];
+    page->diff_lo = lo;
+    page->diff_hi = hi;
+    page->diff_nbins = (size_t) nbins_d;
+    page->diff_log = 0;
+
+    if (nwords >= 5) {
+        strncpy(log_buf, words[4], sizeof(log_buf) - 1u);
+        log_buf[sizeof(log_buf) - 1u] = '\0';
+        osh_lower_inplace(log_buf);
+        if (strcmp(log_buf, "log") == 0) {
+            if (!(lo > 0.0)) {
+                OSH_DIAG_ERRORF(diag, "%s:%u: Diff1 LOG requires lo > 0", path, lineno);
+                return OSH_EPARSE;
+            }
+            page->diff_log = 1;
+        }
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse `Diff1Type <type>`.
+ *
+ * Applies to the most recently added Quantity page.  Sets the physical quantity
+ * used for differential binning (ekin, let, qeff, enuc, eamu, or synonyms e/dedx).
+ */
+static enum osh_status output_diff1type(struct osh_scoring_output_def *out,
+                                        struct osh_diag_sink const *diag,
+                                        char **words,
+                                        int nwords,
+                                        char const *path,
+                                        unsigned int lineno) {
+    struct osh_scoring_page_def *page;
+    char *kind;
+
+    if (out->npages == 0u) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Diff1Type must follow a Quantity line", path, lineno);
+        return OSH_EPARSE;
+    }
+    if (nwords < 2) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Diff1Type requires a type keyword", path, lineno);
+        return OSH_EPARSE;
+    }
+
+    page = &out->pages[out->npages - 1u];
+    free(page->diff_kind_str);
+    kind = strdup(words[1]);
+    if (!kind)
+        return OSH_ENOMEM;
+    osh_lower_inplace(kind);
+    page->diff_kind_str = kind;
     return OSH_OK;
 }

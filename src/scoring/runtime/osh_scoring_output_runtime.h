@@ -59,6 +59,13 @@ struct osh_scoring_page_runtime {
     char has_data2;                         /* Non-zero when data2/data2_var are allocated. */
     char variance;                          /* Non-zero when variance tracking is active. */
     char divide;                            /* Non-zero when bin values should be divided by bin volume. */
+    /* Differential axis — all zero when no differential scoring (diff_nbins == 0). */
+    size_t diff_nbins;                    /* Number of differential bins; 0 = plain scorer. */
+    size_t diff_stride;                   /* Spatial bin count (= geo_nbins); stride per diff bin in data[]. */
+    double diff_lo;                       /* Lower bound of the differential axis. */
+    double diff_hi;                       /* Upper bound of the differential axis. */
+    int diff_log;                         /* 0 = linear binning, 1 = logarithmic binning. */
+    enum osh_scoring_diff_kind diff_kind; /* Physical quantity that determines the diff bin. */
 };
 
 /**

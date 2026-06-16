@@ -29,7 +29,8 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            struct osh_voxel_crossing const *crossings,
                                            size_t ncross,
                                            struct particle const *part,
-                                           struct step const *st);
+                                           struct step const *st,
+                                           double score_len);
 static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
@@ -169,7 +170,7 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
                 rc = score_group_energy(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_FLUENCE:
-                rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st);
+                rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_DOSE:
             case OSH_SCORING_SCORE_DOSEGY:
@@ -405,6 +406,137 @@ static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime 
     return OSH_OK;
 }
 
+/* ---- Differential scoring helpers ---------------------------------------- */
+
+/* Compute the 0-based bin index for a differential axis value.
+ * Returns diff_nbins (out-of-range sentinel) when val is outside [lo, hi). */
+static inline size_t diff_axis_bin(struct osh_scoring_page_runtime const *page, double val) {
+    double frac; /* normalised position within [lo, hi) */
+    size_t bin;  /* candidate bin index */
+
+    if (!(val > page->diff_lo) || !(val < page->diff_hi)) {
+        return page->diff_nbins; /* sentinel: out of range */
+    }
+    if (page->diff_log) {
+        frac = log10(val / page->diff_lo) / log10(page->diff_hi / page->diff_lo);
+    } else {
+        frac = (val - page->diff_lo) / (page->diff_hi - page->diff_lo);
+    }
+    bin = (size_t) floor(frac * (double) page->diff_nbins);
+    return (bin < page->diff_nbins) ? bin : page->diff_nbins - 1u;
+}
+
+/* Compute diff bin centre (linear: arithmetic midpoint; log: geometric midpoint). */
+static inline double diff_bin_center(struct osh_scoring_page_runtime const *page, size_t db) {
+    double t0; /* normalised left edge of bin db */
+    double t1; /* normalised right edge of bin db */
+
+    t0 = (double) db / (double) page->diff_nbins;
+    t1 = (double) (db + 1u) / (double) page->diff_nbins;
+    if (page->diff_log) {
+        double lo = page->diff_lo;
+        double hi = page->diff_hi;
+        return sqrt(pow(hi / lo, t0) * pow(hi / lo, t1)) * lo;
+    }
+    return page->diff_lo + 0.5 * (t0 + t1) * (page->diff_hi - page->diff_lo);
+}
+
+/* Compute LET in the transport medium [MeV/cm] at step midpoint.
+ * Uses the SP table at mean step energy; falls back to de/ds when tables are unavailable.
+ * No per-page Settings override — callers that need override apply it themselves. */
+static double
+compute_step_let(struct osh_scoring_runtime const *rt, struct particle const *part, struct step const *st) {
+    double mean_energy; /* kinetic energy at step midpoint [MeV] */
+    double e_per_nuc;   /* mean_energy / A [MeV/u] */
+    size_t proj_idx;    /* projectile row in SP table */
+
+    if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
+        return 0.0;
+    }
+    if (rt->mat_tables && st->medium >= 0) {
+        mean_energy = 0.5 * (st->p[3] + st->q[3]);
+        e_per_nuc = mean_energy / (double) part->a;
+        if (find_proj_idx(rt->mat_tables, (unsigned int) part->z, &proj_idx)) {
+            return osh_material_runtime_sp_lookup(rt->mat_tables, (size_t) st->medium, proj_idx, e_per_nuc) * st->rho;
+        }
+    }
+    return (st->ds > 0.0) ? st->de / st->ds : 0.0;
+}
+
+/* Compute (z_eff/β)² at step midpoint.
+ * Returns 0 for neutrals or when tables are unavailable. */
+static double
+compute_step_qeff(struct osh_scoring_runtime const *rt, struct particle const *part, struct step const *st) {
+    double mean_energy; /* kinetic energy at step midpoint [MeV] */
+    double beta;        /* particle velocity / c */
+    size_t proj_idx;    /* projectile row in table (provides rest mass) */
+
+    if (part->z == 0) {
+        return 0.0;
+    }
+    if (!rt->mat_tables) {
+        return 0.0;
+    }
+    if (!find_proj_idx(rt->mat_tables, (unsigned int) part->z, &proj_idx)) {
+        return 0.0;
+    }
+    mean_energy = 0.5 * (st->p[3] + st->q[3]);
+    beta = particle_beta(mean_energy, rt->mat_tables->projectile_mass_mev[proj_idx]);
+    if (!(beta > 0.0)) {
+        return 0.0;
+    }
+    return particle_qeff((int) part->z, beta);
+}
+
+/* Compute the diff axis value for a page given the current step.
+ * Returns 0 and sets *ok=0 when the value cannot be determined
+ * (e.g. LET for a neutral particle). */
+static double diff_step_val(struct osh_scoring_page_runtime const *page,
+                            struct osh_scoring_runtime const *rt,
+                            struct particle const *part,
+                            struct step const *st,
+                            int *ok) {
+    double mean_ekin; /* kinetic energy at midpoint [MeV] */
+
+    *ok = 1;
+    mean_ekin = 0.5 * (st->p[3] + st->q[3]);
+    switch (page->diff_kind) {
+    case OSH_SCORING_DIFF_EKIN:
+        return mean_ekin;
+    case OSH_SCORING_DIFF_ENUC:
+        if (part->a <= 0) {
+            *ok = 0;
+            return 0.0;
+        }
+        return mean_ekin / (double) part->a;
+    case OSH_SCORING_DIFF_EAMU:
+        if (part->a <= 0) {
+            *ok = 0;
+            return 0.0;
+        }
+        return mean_ekin / (double) part->a; /* same as ENUC for integer A */
+    case OSH_SCORING_DIFF_LET: {
+        double let = compute_step_let(rt, part, st);
+        if (!(let > 0.0)) {
+            *ok = 0;
+            return 0.0;
+        }
+        return let;
+    }
+    case OSH_SCORING_DIFF_QEFF: {
+        double qeff = compute_step_qeff(rt, part, st);
+        if (!(qeff > 0.0)) {
+            *ok = 0;
+            return 0.0;
+        }
+        return qeff;
+    }
+    default:
+        *ok = 0;
+        return 0.0;
+    }
+}
+
 /**
  * @brief Accumulate energy deposition [MeV] into the ENERGY scorer pages.
  *
@@ -423,18 +555,31 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
     struct osh_scoring_page_runtime *page;
 
     for (i = 0; i < group->npages; ++i) {
+        size_t db; /* differential bin index (0 for non-differential pages) */
+        int dv_ok; /* flag: differential value is valid */
+        double dv; /* differential axis value */
+
         page = &rt->pages[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
+        db = 0u;
+        if (page->diff_nbins > 0u) {
+            dv = diff_step_val(page, rt, part, st, &dv_ok);
+            if (!dv_ok)
+                continue;
+            db = diff_axis_bin(page, dv);
+            if (db >= page->diff_nbins)
+                continue; /* out of range */
+        }
         for (j = 0; j < ncross; ++j) {
-            if (crossings[j].idx >= page->len) {
+            if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
             /* Distribute energy deposit proportionally to path length in voxel.
              * Accumulates in [MeV]; save layer divides by nstat. */
             frac = crossings[j].path_len / score_len;
-            page->data[crossings[j].idx] += st->de * frac;
+            page->data[crossings[j].idx + db * page->diff_stride] += st->de * frac;
         }
     }
     return OSH_OK;
@@ -451,21 +596,36 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            struct osh_voxel_crossing const *crossings,
                                            size_t ncross,
                                            struct particle const *part,
-                                           struct step const *st) {
+                                           struct step const *st,
+                                           double score_len) {
     size_t i;
     size_t j;
     struct osh_scoring_page_runtime *page;
+    (void) score_len; /* unused for non-differential fluence; kept for diff LET/QEFF */
 
     for (i = 0; i < group->npages; ++i) {
+        size_t db; /* differential bin index (0 for non-differential pages) */
+        int dv_ok;
+        double dv;
+
         page = &rt->pages[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
+        db = 0u;
+        if (page->diff_nbins > 0u) {
+            dv = diff_step_val(page, rt, part, st, &dv_ok);
+            if (!dv_ok)
+                continue;
+            db = diff_axis_bin(page, dv);
+            if (db >= page->diff_nbins)
+                continue;
+        }
         for (j = 0; j < ncross; ++j) {
-            if (crossings[j].idx >= page->len) {
+            if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            page->data[crossings[j].idx] += crossings[j].path_len * crossings[j].vol_inv;
+            page->data[crossings[j].idx + db * page->diff_stride] += crossings[j].path_len * crossings[j].vol_inv;
         }
     }
     return OSH_OK;
@@ -524,6 +684,10 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
     }
 
     for (i = 0; i < group->npages; ++i) {
+        size_t db;
+        int dv_ok;
+        double dv;
+
         page = &rt->pages[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
@@ -539,11 +703,21 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             /* Density-only override: Fano theorem — dose is density-independent,
              * so no correction is needed for pure density overrides. */
         }
+        db = 0u;
+        if (page->diff_nbins > 0u) {
+            dv = diff_step_val(page, rt, part, st, &dv_ok);
+            if (!dv_ok)
+                continue;
+            db = diff_axis_bin(page, dv);
+            if (db >= page->diff_nbins)
+                continue;
+        }
         for (j = 0; j < ncross; ++j) {
-            if (crossings[j].idx >= page->len) {
+            if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            page->data[crossings[j].idx] += crossings[j].path_len * crossings[j].vol_inv * dose_scale;
+            page->data[crossings[j].idx + db * page->diff_stride] +=
+                crossings[j].path_len * crossings[j].vol_inv * dose_scale;
         }
     }
     return OSH_OK;
@@ -615,7 +789,7 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
             }
         }
         for (j = 0; j < ncross; ++j) {
-            if (crossings[j].idx >= page->len) {
+            if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
             /* Two-pass dose-averaged LET:
@@ -694,7 +868,7 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
             }
         }
         for (j = 0; j < ncross; ++j) {
-            if (crossings[j].idx >= page->len) {
+            if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
             /* Two-pass track-averaged LET:
@@ -759,7 +933,7 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
             continue;
         }
         for (j = 0; j < ncross; ++j) {
-            if (crossings[j].idx >= page->len) {
+            if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
             /* Two-pass dose-averaged (z_eff/β)²:
@@ -823,7 +997,7 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
             continue;
         }
         for (j = 0; j < ncross; ++j) {
-            if (crossings[j].idx >= page->len) {
+            if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
             /* Two-pass track-averaged (z_eff/β)²:

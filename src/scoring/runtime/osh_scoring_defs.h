@@ -75,6 +75,26 @@ enum osh_scoring_postproc {
     OSH_SCORING_POSTPROC_APPEND = 4
 };
 
+/* ---- Differential axis kind --------------------------------------------- */
+
+/**
+ * @brief Physical quantity used as the axis of a differential scorer.
+ *
+ * @details
+ * When a page has diff_nbins > 0, each step's contribution is placed into the
+ * bin determined by this quantity evaluated at the step midpoint.  The same
+ * diff_kind is stored in osh_scoring_page_runtime so the hot path can dispatch
+ * without string comparisons.
+ */
+enum osh_scoring_diff_kind {
+    OSH_SCORING_DIFF_NONE = 0, /* no differential axis */
+    OSH_SCORING_DIFF_EKIN = 1, /* kinetic energy [MeV] */
+    OSH_SCORING_DIFF_ENUC = 2, /* kinetic energy per nucleon [MeV/u] */
+    OSH_SCORING_DIFF_EAMU = 3, /* kinetic energy per atomic mass unit [MeV/u] */
+    OSH_SCORING_DIFF_LET = 4,  /* electronic stopping power in transport medium [MeV/cm] */
+    OSH_SCORING_DIFF_QEFF = 5  /* (z_eff/beta)^2 */
+};
+
 /* ---- Filter rule compilation -------------------------------------------- */
 
 /**
