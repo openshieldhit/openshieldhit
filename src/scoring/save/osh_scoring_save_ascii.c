@@ -107,9 +107,17 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         dz = (geo->axes[iz_axis].hi - z0) / (double) nz;
 
         {
-            struct osh_scoring_page_runtime const *p0 = (out->npages > 0u) ? &rt->pages[out->page_indices[0]] : NULL;
-            size_t diff_nbins = p0 ? p0->diff_nbins : 0u;
-            size_t diff2_nbins = p0 ? p0->diff2_nbins : 0u;
+            struct osh_scoring_page_runtime const *p0;
+            size_t diff_nbins;
+            size_t diff2_nbins;
+
+            if (out->npages == 0u) {
+                fclose(fp);
+                return OSH_OK;
+            }
+            p0 = &rt->pages[out->page_indices[0]];
+            diff_nbins = p0->diff_nbins;
+            diff2_nbins = p0->diff2_nbins;
 
             fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);
             fprintf(fp, "# Calculated %s\n", datestr);
@@ -234,9 +242,17 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         dz = (geo->axes[iz_axis].hi - z0) / (double) nz;
 
         {
-            struct osh_scoring_page_runtime const *p0 = (out->npages > 0u) ? &rt->pages[out->page_indices[0]] : NULL;
-            size_t diff_nbins = p0 ? p0->diff_nbins : 0u;
-            size_t diff2_nbins = p0 ? p0->diff2_nbins : 0u;
+            struct osh_scoring_page_runtime const *p0;
+            size_t diff_nbins;
+            size_t diff2_nbins;
+
+            if (out->npages == 0u) {
+                fclose(fp);
+                return OSH_OK;
+            }
+            p0 = &rt->pages[out->page_indices[0]];
+            diff_nbins = p0->diff_nbins;
+            diff2_nbins = p0->diff2_nbins;
 
             fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);
             fprintf(fp, "# Calculated %s\n", datestr);
