@@ -23,11 +23,9 @@ trap 'rm -f "${before}" "${after}" "${files_list}"' EXIT
 # Snapshot currently modified tracked C/H files before formatting.
 git diff --name-only -- '*.c' '*.h' | sort > "${before}"
 
-find . -type f \( -name '*.c' -o -name '*.h' \) \
-    -not -path './build/*' \
-    -not -path './build-*/*' \
-    -not -path './_temp_shieldhit/*' \
-    -print0 > "${files_list}"
+git ls-files -z -- '*.c' '*.h' \
+    ':(exclude)build*/*' \
+    ':(exclude)_temp_shieldhit/*' > "${files_list}"
 
 if [[ ! -s "${files_list}" ]]; then
     echo "No .c/.h files found."

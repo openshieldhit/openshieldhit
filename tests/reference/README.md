@@ -51,5 +51,7 @@ pin against regressions.
 
 ## `shieldhit/`, `topas/`
 
-Mirrored input decks for the external codes used to produce reference data;
-not registered as tests.
+`shieldhit/` contains both mirrored SH12A-compatible input decks and curated
+SH12A gold-standard result fixtures for manual comparison. `topas/` currently
+holds mirrored input decks only. Neither subtree is registered as a CTest
+suite directly.

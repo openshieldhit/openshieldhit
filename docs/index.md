@@ -20,6 +20,9 @@ cmake --build build --parallel
 # run a case (reads geo.dat, beam.dat, mat.dat, detect.dat from the directory)
 build/bin/openshieldhit tests/cases/00_minimal/
 
+# write outputs to a separate directory (created automatically if needed)
+build/bin/openshieldhit --outdir /tmp/osh-run tests/cases/00_minimal/
+
 # dry-run — parse and compile inputs, skip transport
 build/bin/openshieldhit --dry-run tests/cases/00_minimal/
 ```
@@ -34,6 +37,10 @@ Every simulation case lives in a directory with four plain-text files:
 | [`geo.dat`](user/geo.dat.md) | Geometry definition (bodies, zones, or DICOM CT) |
 | [`mat.dat`](user/mat.dat.md) | Material compositions |
 | [`detect.dat`](user/detect.dat.md) | Scoring geometries and quantities |
+
+## Command line
+
+- [`user/command-line.md`](user/command-line.md) — CLI options, `--outdir`, dry-run, and file overrides
 
 ## SH12A compatibility
 

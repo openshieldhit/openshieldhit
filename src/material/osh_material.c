@@ -294,15 +294,15 @@ void osh_material_print(struct osh_material_workspace const *wm, struct osh_diag
         }
         k = 0u;
         while (k < mat->ndedx_overrides) {
-            OSH_DIAG_INFOF(diag,
-                           "    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
-                           k,
-                           mat->dedx_overrides[k].projectile_z,
-                           mat->dedx_overrides[k].npoints,
-                           mat->dedx_overrides[k].energy_mev_per_u[0],
-                           mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
-                           mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
-                           mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
+            OSH_DIAG_DEBUGF(diag,
+                            "    dedx[%zu]: Z=%u points=%zu E=[%.6g, %.6g] SP=[%.6g, %.6g]",
+                            k,
+                            mat->dedx_overrides[k].projectile_z,
+                            mat->dedx_overrides[k].npoints,
+                            mat->dedx_overrides[k].energy_mev_per_u[0],
+                            mat->dedx_overrides[k].energy_mev_per_u[mat->dedx_overrides[k].npoints - 1u],
+                            mat->dedx_overrides[k].dedx_mev_cm2_per_g[0],
+                            mat->dedx_overrides[k].dedx_mev_cm2_per_g[mat->dedx_overrides[k].npoints - 1u]);
             k++;
         }
         i++;

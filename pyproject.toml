@@ -12,6 +12,11 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
 dynamic = ["version"]
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "pymchelper",
+]
 
 [project.optional-dependencies]
 docs = [

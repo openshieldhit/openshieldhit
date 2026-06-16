@@ -9,6 +9,7 @@ build-*/
 build_*/
 perf.data*
 *.pyc
+*.pdf
 
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,cmake,linux
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,cmake,linux
