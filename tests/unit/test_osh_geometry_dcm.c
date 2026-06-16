@@ -23,7 +23,7 @@
 static void test_dcm_card_populates_vox_body_arguments(void);
 static void test_dcm_prepare_compile_propagates_ct_grid(void);
 static void test_dcm_transform_matrix_is_orthonormal(void);
-static void test_legacy_vox_card_reports_todo(void);
+static void test_legacy_vox_card_reports_unsupported(void);
 static void assert_rotation_orthonormal(double const t[16], double eps);
 static void write_basic_dcm_geo(char const *geo_path);
 static void write_dcm_geo_with_angles(char const *geo_path, double gantry_deg, double couch_deg);
@@ -36,7 +36,7 @@ int main(void) {
     test_dcm_card_populates_vox_body_arguments();
     test_dcm_prepare_compile_propagates_ct_grid();
     test_dcm_transform_matrix_is_orthonormal();
-    test_legacy_vox_card_reports_todo();
+    test_legacy_vox_card_reports_unsupported();
     return 0;
 }
 
@@ -250,7 +250,7 @@ static void test_dcm_transform_matrix_is_orthonormal(void) {
     }
 }
 
-static void test_legacy_vox_card_reports_todo(void) {
+static void test_legacy_vox_card_reports_unsupported(void) {
     char const *geo_path = "osh_test_geo_legacy_vox.dat";
     struct oshfile *geo = NULL;
     struct osh_geometry_workspace *ws = NULL;

@@ -84,7 +84,6 @@ struct body {
     struct surface **surfs;           /**< Array of pointers to the surfaces that bound this body */
     size_t lineno;                    /**< Line number in geo.dat where this body was defined */
     char *name;                       /**< User-given name (string key, never converted to an integer ID) */
-    char *filename_vox;               /**< Path to voxel file, only set for voxel body types */
     double *a;                        /**< Raw argument list as given in geo.dat */
     int na;                           /**< Number of entries in a[] */
     int type;                         /**< Body type identifier (OSH_GEMCA_BODY_* defines) */

@@ -843,8 +843,7 @@ _parse_bodies(struct oshfile *shf, struct osh_diag_sink const *diag, struct osh_
             allow_continuation = 1;
 
             if (strcasecmp(key, OSH_GEO_KEY_VOX) == 0) {
-                OSH_DIAG_ERRORF(
-                    diag, "%s line %d: legacy VOX card parsing is TODO; use DCM for now", shf->filename, lineno);
+                OSH_DIAG_ERRORF(diag, "%s line %d: legacy VOX card is not supported; use DCM", shf->filename, lineno);
                 rc = OSH_EPARSE;
                 goto done;
             }
