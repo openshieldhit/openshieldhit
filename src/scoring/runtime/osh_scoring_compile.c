@@ -4,10 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "openshieldhit/const.h"
-
 #include "common/osh_diag.h"
 #include "common/raytrace/osh_raytrace.h"
+#include "openshieldhit/const.h"
 
 /* Scratch record built during the first compile pass; sorted by geometry+kind
  * so pages that share a geometry and scorer type end up in the same hot group. */
@@ -883,16 +882,17 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             /* Resolve R and Z axes by label — order in detect.dat does not matter. */
             for (a = 0; a < g->naxes; ++a) {
                 if (strcmp(g->axes[a].label, "R") == 0) {
-                    nr   = (size_t) g->axes[a].nbins;
+                    nr = (size_t) g->axes[a].nbins;
                     r_lo = g->axes[a].lo;
                     r_hi = g->axes[a].hi;
                 } else if (strcmp(g->axes[a].label, "Z") == 0) {
                     nz_bins = (size_t) g->axes[a].nbins;
-                    z_lo    = g->axes[a].lo;
-                    z_hi    = g->axes[a].hi;
+                    z_lo = g->axes[a].lo;
+                    z_hi = g->axes[a].hi;
                 }
             }
-            if (nr == 0 || nz_bins == 0) continue; /* malformed; compile already rejected */
+            if (nr == 0 || nz_bins == 0)
+                continue; /* malformed; compile already rejected */
             dr = (r_hi - r_lo) / (double) nr;
             dz = (z_hi - z_lo) / (double) nz_bins;
             g->cyl_vol_inv = (double *) malloc(nr * sizeof(double));
