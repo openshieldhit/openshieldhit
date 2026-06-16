@@ -171,8 +171,12 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                                 size_t page_idx = out->page_indices[ip];
                                 struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
                                 double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
-                                size_t data_idx = spatial_idx + (diff_nbins > 0u ? db * page->diff_stride : 0u)
-                                                  + (diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
+                                /* Use each page's own diff_nbins to gate the offset: non-differential
+                                 * pages (diff_nbins==0) have len==geo_nbins and must not use db/db2
+                                 * offsets, even when other pages in the same output are differential.
+                                 * Their scalar value is repeated across all diff-bin rows. */
+                                size_t data_idx = spatial_idx + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
+                                                  + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
                                 fprintf(fp, " %.12e", page->data[data_idx] * scale);
                             }
                             fprintf(fp, "\n");
@@ -301,8 +305,12 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                                     /* AVER pages (e.g. DLET/TLET) hold a physical mean after
                                      * postprocessing — do not normalise per primary. */
                                     double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
-                                    size_t data_idx = spatial_idx + (diff_nbins > 0u ? db * page->diff_stride : 0u)
-                                                      + (diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
+                                    /* Use each page's own diff_nbins to gate the offset: non-differential
+                                     * pages have len==geo_nbins and must not have db/db2 offsets applied,
+                                     * even when other pages in the same output are differential. */
+                                    size_t data_idx = spatial_idx
+                                                      + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
+                                                      + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
                                     fprintf(fp, " %.12e", page->data[data_idx] * scale);
                                 }
                                 fprintf(fp, "\n");

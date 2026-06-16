@@ -323,9 +323,13 @@ static enum osh_status output_diff1type(struct osh_scoring_output_def *out,
     page->diff_kind_str = kind;
 
     /* Optional third word is a Settings name that overrides the stopping-power
-     * medium used for LET/QEFF axis binning — e.g. "Diff1Type DEDX in_Si". */
+     * medium used for LET/QEFF axis binning — e.g. "Diff1Type DEDX in_Si".
+     * Always clear any previous name first so that "Diff1Type EKIN" (no third
+     * word) does not inherit the override from an earlier Diff1Type call on
+     * the same page. */
+    free(page->diff_kind_sset_name);
+    page->diff_kind_sset_name = NULL;
     if (nwords >= 3) {
-        free(page->diff_kind_sset_name);
         page->diff_kind_sset_name = strdup(words[2]);
         if (!page->diff_kind_sset_name)
             return OSH_ENOMEM;
@@ -357,6 +361,10 @@ static enum osh_status output_diff2(struct osh_scoring_output_def *out,
     }
     if (nwords < 4) {
         OSH_DIAG_ERRORF(diag, "%s:%u: Diff2 requires lo hi nbins [LOG]", path, lineno);
+        return OSH_EPARSE;
+    }
+    if (out->pages[out->npages - 1u].diff_nbins == 0u) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Diff2 requires Diff1 to be set first on this Quantity", path, lineno);
         return OSH_EPARSE;
     }
     lo = strtod(words[1], NULL);
@@ -420,9 +428,11 @@ static enum osh_status output_diff2type(struct osh_scoring_output_def *out,
     page->diff2_kind_str = kind;
 
     /* Optional third word is a Settings name for the diff2 axis SP override
-     * — e.g. "Diff2Type LET in_Water". */
+     * — e.g. "Diff2Type LET in_Water".  Always clear first so that a bare
+     * "Diff2Type EKIN" does not inherit a previous override on the same page. */
+    free(page->diff2_kind_sset_name);
+    page->diff2_kind_sset_name = NULL;
     if (nwords >= 3) {
-        free(page->diff2_kind_sset_name);
         page->diff2_kind_sset_name = strdup(words[2]);
         if (!page->diff2_kind_sset_name)
             return OSH_ENOMEM;

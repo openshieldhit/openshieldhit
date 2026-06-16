@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 import os
 import re
 from pathlib import Path
@@ -287,8 +286,9 @@ def plot_one(filename: str,
                 fontsize=9,
                 bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "0.7"})
 
-    if is_differential_plot(filename):
+    if logx or is_differential_plot(filename):
         ax.set_xscale("log")
+    if is_differential_plot(filename):
         ax.set_yscale("log")
     ax.set_xlabel(axis_label(filename))
     ylabel = plot_metadata(filename).get("y", "Value")
