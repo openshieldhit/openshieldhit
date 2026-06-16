@@ -60,6 +60,30 @@ extern "C" {
 
 /** @} */
 
+/**
+ * @name HU-to-WEPL helper algorithm selectors
+ *
+ * @brief Select which legacy HU→WEPL conversion helper to use.
+ *
+ * @details
+ * These selectors are used by @ref osh_voxel_hu2wepl as a lightweight utility
+ * for external callers. They are intentionally kept here, in the shared public
+ * voxel header, rather than in the removed legacy VOXELPLAN parser code.
+ *
+ * @{
+ */
+
+/** Minohara 1993 HU→WEPL helper. */
+#define OSH_VOXEL_HU2WEPL_ALG1 1
+
+/** Jacob 1996 HU→WEPL helper. */
+#define OSH_VOXEL_HU2WEPL_ALG2 2
+
+/** Geiss 1999 HU→WEPL helper (reserved; currently unimplemented). */
+#define OSH_VOXEL_HU2WEPL_ALG3 3
+
+/** @} */
+
 #ifdef __cplusplus
 }
 #endif

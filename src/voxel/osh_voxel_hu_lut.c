@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "common/osh_interpolate.h"
-#include "gemca/voxel/osh_gemca2_voxel_defines.h"
 #include "openshieldhit/material.h"
 #include "voxel/osh_voxel_mat_schneider2000.h"
 
@@ -242,10 +241,10 @@ float osh_voxel_hu2wepl(int16_t hu, char alg) {
     }
 
     switch (alg) {
-    case OSH_GEMCA_VOXEL_HU2WEPL_ALG1:
+    case OSH_VOXEL_HU2WEPL_ALG1:
         wepl = _wepl_minohara1993(hu);
         break;
-    case OSH_GEMCA_VOXEL_HU2WEPL_ALG2:
+    case OSH_VOXEL_HU2WEPL_ALG2:
         wepl = _wepl_jacob1996(hu);
         break;
     default:
