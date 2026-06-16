@@ -537,6 +537,68 @@ static double diff_step_val(struct osh_scoring_page_runtime const *page,
     }
 }
 
+/* Same as diff_axis_bin but operates on the second differential axis (diff2_*) fields.
+ * Returns diff2_nbins as an out-of-range sentinel when val is outside [diff2_lo, diff2_hi). */
+static inline size_t diff2_axis_bin(struct osh_scoring_page_runtime const *page, double val) {
+    double frac; /* normalised position within [diff2_lo, diff2_hi) */
+    size_t bin;  /* candidate bin index */
+
+    if (!(val > page->diff2_lo) || !(val < page->diff2_hi)) {
+        return page->diff2_nbins; /* out-of-range sentinel */
+    }
+    if (page->diff2_log) {
+        frac = log10(val / page->diff2_lo) / log10(page->diff2_hi / page->diff2_lo);
+    } else {
+        frac = (val - page->diff2_lo) / (page->diff2_hi - page->diff2_lo);
+    }
+    bin = (size_t) floor(frac * (double) page->diff2_nbins);
+    return (bin < page->diff2_nbins) ? bin : page->diff2_nbins - 1u;
+}
+
+/* Same as diff_step_val but dispatches on page->diff2_kind.
+ * Returns 0 and sets *ok=0 when the value cannot be determined
+ * (e.g. LET for a neutral particle, or unknown kind). */
+static double diff2_step_val(struct osh_scoring_page_runtime const *page,
+                             struct osh_scoring_runtime const *rt,
+                             struct particle const *part,
+                             struct step const *st,
+                             int *ok) {
+    double mean_ekin;
+
+    *ok = 1;
+    mean_ekin = 0.5 * (st->p[3] + st->q[3]);
+    switch (page->diff2_kind) {
+    case OSH_SCORING_DIFF_EKIN:
+        return mean_ekin;
+    case OSH_SCORING_DIFF_ENUC:
+    case OSH_SCORING_DIFF_EAMU:
+        if (part->a <= 0) {
+            *ok = 0;
+            return 0.0;
+        }
+        return mean_ekin / (double) part->a;
+    case OSH_SCORING_DIFF_LET: {
+        double let = compute_step_let(rt, part, st);
+        if (!(let > 0.0)) {
+            *ok = 0;
+            return 0.0;
+        }
+        return let;
+    }
+    case OSH_SCORING_DIFF_QEFF: {
+        double qeff = compute_step_qeff(rt, part, st);
+        if (!(qeff > 0.0)) {
+            *ok = 0;
+            return 0.0;
+        }
+        return qeff;
+    }
+    default:
+        *ok = 0;
+        return 0.0;
+    }
+}
+
 /**
  * @brief Accumulate energy deposition [MeV] into the ENERGY scorer pages.
  *
@@ -551,35 +613,48 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
                                           double score_len) {
     size_t i;
     size_t j;
+    size_t db;
+    size_t db2;
+    int dv_ok;
+    double dv;
     double frac;
     struct osh_scoring_page_runtime *page;
 
     for (i = 0; i < group->npages; ++i) {
-        size_t db; /* differential bin index (0 for non-differential pages) */
-        int dv_ok; /* flag: differential value is valid */
-        double dv; /* differential axis value */
-
         page = &rt->pages[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
+        /* Determine diff bin indices.  For non-differential pages diff_nbins == 0
+         * so both db and db2 stay 0, and the index offsets below collapse to 0. */
         db = 0u;
+        db2 = 0u;
         if (page->diff_nbins > 0u) {
+            /* Skip the page when the axis value cannot be determined (e.g. LET
+             * for a neutral particle) or lies outside the configured [lo, hi). */
             dv = diff_step_val(page, rt, part, st, &dv_ok);
             if (!dv_ok)
                 continue;
             db = diff_axis_bin(page, dv);
             if (db >= page->diff_nbins)
-                continue; /* out of range */
+                continue;
+        }
+        if (page->diff2_nbins > 0u) {
+            dv = diff2_step_val(page, rt, part, st, &dv_ok);
+            if (!dv_ok)
+                continue;
+            db2 = diff2_axis_bin(page, dv);
+            if (db2 >= page->diff2_nbins)
+                continue;
         }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            /* Distribute energy deposit proportionally to path length in voxel.
-             * Accumulates in [MeV]; save layer divides by nstat. */
+            /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
+             * When differential axes are inactive the extra terms evaluate to 0. */
             frac = crossings[j].path_len / score_len;
-            page->data[crossings[j].idx + db * page->diff_stride] += st->de * frac;
+            page->data[crossings[j].idx + db * page->diff_stride + db2 * page->diff2_stride] += st->de * frac;
         }
     }
     return OSH_OK;
@@ -600,20 +675,25 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
                                            double score_len) {
     size_t i;
     size_t j;
+    size_t db;  /* diff1 bin index for current page (0 when no diff axis) */
+    size_t db2; /* diff2 bin index for current page (0 when no second diff axis) */
+    int dv_ok;  /* flag: differential axis value is physically valid for this step */
+    double dv;  /* value on the diff axis (energy, LET, or Qeff at step midpoint) */
     struct osh_scoring_page_runtime *page;
     (void) score_len; /* unused for non-differential fluence; kept for diff LET/QEFF */
 
     for (i = 0; i < group->npages; ++i) {
-        size_t db; /* differential bin index (0 for non-differential pages) */
-        int dv_ok;
-        double dv;
-
         page = &rt->pages[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
+        /* Determine diff bin indices.  For non-differential pages diff_nbins == 0
+         * so both db and db2 stay 0, and the index offsets below collapse to 0. */
         db = 0u;
+        db2 = 0u;
         if (page->diff_nbins > 0u) {
+            /* Skip the page when the axis value cannot be determined (e.g. LET
+             * for a neutral particle) or lies outside the configured [lo, hi). */
             dv = diff_step_val(page, rt, part, st, &dv_ok);
             if (!dv_ok)
                 continue;
@@ -621,11 +701,22 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
             if (db >= page->diff_nbins)
                 continue;
         }
+        if (page->diff2_nbins > 0u) {
+            dv = diff2_step_val(page, rt, part, st, &dv_ok);
+            if (!dv_ok)
+                continue;
+            db2 = diff2_axis_bin(page, dv);
+            if (db2 >= page->diff2_nbins)
+                continue;
+        }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            page->data[crossings[j].idx + db * page->diff_stride] += crossings[j].path_len * crossings[j].vol_inv;
+            /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
+             * When differential axes are inactive the extra terms evaluate to 0. */
+            page->data[crossings[j].idx + db * page->diff_stride + db2 * page->diff2_stride] +=
+                crossings[j].path_len * crossings[j].vol_inv;
         }
     }
     return OSH_OK;
@@ -651,6 +742,10 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
                                         double score_len) {
     size_t i;
     size_t j;
+    size_t db;  /* diff1 bin index for current page (0 when no diff axis) */
+    size_t db2; /* diff2 bin index for current page (0 when no second diff axis) */
+    int dv_ok;  /* flag: differential axis value is physically valid for this step */
+    double dv;  /* value on the diff axis (energy, LET, or Qeff at step midpoint) */
     double base_scale;
     double dose_scale;
     double mean_energy;
@@ -684,10 +779,6 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
     }
 
     for (i = 0; i < group->npages; ++i) {
-        size_t db;
-        int dv_ok;
-        double dv;
-
         page = &rt->pages[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
@@ -703,8 +794,13 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             /* Density-only override: Fano theorem — dose is density-independent,
              * so no correction is needed for pure density overrides. */
         }
+        /* Determine diff bin indices.  For non-differential pages diff_nbins == 0
+         * so both db and db2 stay 0, and the index offsets below collapse to 0. */
         db = 0u;
+        db2 = 0u;
         if (page->diff_nbins > 0u) {
+            /* Skip the page when the axis value cannot be determined (e.g. LET
+             * for a neutral particle) or lies outside the configured [lo, hi). */
             dv = diff_step_val(page, rt, part, st, &dv_ok);
             if (!dv_ok)
                 continue;
@@ -712,11 +808,21 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             if (db >= page->diff_nbins)
                 continue;
         }
+        if (page->diff2_nbins > 0u) {
+            dv = diff2_step_val(page, rt, part, st, &dv_ok);
+            if (!dv_ok)
+                continue;
+            db2 = diff2_axis_bin(page, dv);
+            if (db2 >= page->diff2_nbins)
+                continue;
+        }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            page->data[crossings[j].idx + db * page->diff_stride] +=
+            /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
+             * When differential axes are inactive the extra terms evaluate to 0. */
+            page->data[crossings[j].idx + db * page->diff_stride + db2 * page->diff2_stride] +=
                 crossings[j].path_len * crossings[j].vol_inv * dose_scale;
         }
     }

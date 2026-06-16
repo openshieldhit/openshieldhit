@@ -115,6 +115,12 @@ struct osh_scoring_page_def {
     double diff_hi;      /* Upper bound of the differential axis. */
     int diff_log;        /* 0 = linear binning, 1 = logarithmic binning. */
     char *diff_kind_str; /* Axis type keyword: "ekin", "let", "qeff", etc. (owned). */
+    /* Second differential axis — all zero/NULL when unused (requires diff_nbins > 0). */
+    size_t diff2_nbins; /* > 0 activates double-differential mode. */
+    double diff2_lo;
+    double diff2_hi;
+    int diff2_log;
+    char *diff2_kind_str; /* Axis type keyword (owned). */
 };
 
 /* ---- Geometry ------------------------------------------------------------ */
