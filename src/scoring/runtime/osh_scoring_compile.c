@@ -755,6 +755,26 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 goto fail;
             }
             dst_page->len = dst_page->diff_stride * dst_page->diff_nbins;
+
+            /* Double-differential axis (requires diff1 to be set). */
+            if (src_page->diff2_nbins > 0u) {
+                dst_page->diff2_nbins = src_page->diff2_nbins;
+                dst_page->diff2_lo = src_page->diff2_lo;
+                dst_page->diff2_hi = src_page->diff2_hi;
+                dst_page->diff2_log = src_page->diff2_log;
+                dst_page->diff2_kind = diff_kind_from_str(src_page->diff2_kind_str);
+                if (dst_page->diff2_kind == OSH_SCORING_DIFF_NONE) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring page '%s': unknown Diff2Type '%s'",
+                                    src_page->quantity ? src_page->quantity : "(unnamed)",
+                                    src_page->diff2_kind_str ? src_page->diff2_kind_str : "(null)");
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+                /* diff2_stride = diff_nbins * diff_stride = geo_nbins * diff_nbins. */
+                dst_page->diff2_stride = dst_page->diff_nbins * dst_page->diff_stride;
+                dst_page->len = dst_page->diff2_stride * dst_page->diff2_nbins;
+            }
         } else {
             dst_page->diff_nbins = 0u;
             dst_page->len = dst_page->diff_stride;

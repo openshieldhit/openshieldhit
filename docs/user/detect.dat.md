@@ -77,9 +77,10 @@ For `Geometry Cyl`:
 
 ## Differential scoring
 
-A `Quantity` line can be followed by `Diff1` and `Diff1Type` to produce a
-differential (spectral) scorer.  The accumulator is expanded to
-`geo_nbins × diff_nbins` bins.
+A `Quantity` line can be followed by `Diff1`/`Diff1Type` (and optionally `Diff2`/`Diff2Type`)
+to produce a differential (spectral) scorer.  The accumulator is expanded to
+`geo_nbins × diff1_nbins` (single) or `geo_nbins × diff1_nbins × diff2_nbins` (double)
+bins, matching the SH12A BDO data layout.
 
 ```text
 Output
@@ -92,14 +93,16 @@ Output
     Quantity Dose                     # plain dose — no differential axis
 ```
 
-`Diff1` applies to the most recently parsed `Quantity` line.
+`Diff1` and `Diff2` each apply to the most recently parsed `Quantity` line.
 
 | Sub-keyword | Required | Description |
 |-------------|----------|-------------|
-| `Diff1 lo hi nbins [LOG]` | no | Activates differential mode.  `LOG` selects logarithmic binning (requires `lo > 0`). |
-| `Diff1Type <kind>` | no | Physical quantity for the axis (default: `EKIN`). |
+| `Diff1 lo hi nbins [LOG]` | no | Activates single-differential mode.  `LOG` selects logarithmic binning (requires `lo > 0`). |
+| `Diff1Type <kind>` | no | Physical quantity for the first axis (default: `EKIN`). |
+| `Diff2 lo hi nbins [LOG]` | no | Activates double-differential mode (requires `Diff1`). |
+| `Diff2Type <kind>` | no | Physical quantity for the second axis (default: `EKIN`). |
 
-Supported `Diff1Type` values:
+Supported axis type keywords (same for Diff1Type and Diff2Type):
 
 | Keyword | Synonyms | Axis quantity |
 |---------|----------|---------------|
@@ -110,16 +113,21 @@ Supported `Diff1Type` values:
 | `QEFF` | `ZEFF2BETA2` | (z_eff/β)² |
 
 Differential scoring is supported for `Fluence`, `Dose`, `DoseGy`, and `Energy`.
-Averaged quantities (`DLET`, `TLET`, `DQEFF`, `TQEFF`) cannot carry a differential
-axis.
+Averaged quantities (`DLET`, `TLET`, `DQEFF`, `TQEFF`) cannot carry a differential axis.
 
-In `TEXT` output the diff-axis bin centre is written as an extra column between the
-spatial coordinates and the quantity values:
+In `TEXT` output each diff-axis bin centre is written as an extra column between the
+spatial coordinates and the quantity values.  For double-differential, Diff1 bins are the
+outer (slow) loop and Diff2 bins are the inner (fast) loop:
 
 ```
-# Z R EKIN FLUENCE
- 5.000000e-01  5.000000e-01  1.954e+00  3.456789e-03
- 5.000000e-01  5.000000e-01  2.389e+00  8.765432e-03
+# Diff1Type: EKIN  lo=0  hi=500  nbins=5
+# Diff2Type: LET  lo=0.1  hi=100  nbins=5 LOG
+# X Y Z EKIN LET FLUENCE
+ 0.0  0.0  10.0   50.0  0.200  0.000000e+00
+ 0.0  0.0  10.0   50.0  0.794  0.000000e+00
+ 0.0  0.0  10.0   50.0  3.162  3.654e-03
+ ...  (next EKIN bin)
+ 0.0  0.0  10.0  150.0  0.200  0.000000e+00
  ...
 ```
 

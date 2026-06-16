@@ -44,6 +44,7 @@ static void format_now_rfc2822(char *buf, size_t cap);
 static void
 fprint_quantity_names(FILE *fp, struct osh_scoring_runtime const *rt, struct osh_scoring_output_runtime const *out);
 static double ascii_diff_center(struct osh_scoring_page_runtime const *page, size_t db);
+static double ascii_diff2_center(struct osh_scoring_page_runtime const *page, size_t db);
 static char const *diff_kind_label(enum osh_scoring_diff_kind kind);
 
 enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const *ws,
@@ -106,7 +107,9 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         dz = (geo->axes[iz_axis].hi - z0) / (double) nz;
 
         {
-            size_t diff_nbins = (out->npages > 0u) ? rt->pages[out->page_indices[0]].diff_nbins : 0u;
+            struct osh_scoring_page_runtime const *p0 = (out->npages > 0u) ? &rt->pages[out->page_indices[0]] : NULL;
+            size_t diff_nbins = p0 ? p0->diff_nbins : 0u;
+            size_t diff2_nbins = p0 ? p0->diff2_nbins : 0u;
 
             fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);
             fprintf(fp, "# Calculated %s\n", datestr);
@@ -123,7 +126,6 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                     "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical "
                     "mean\n");
             if (diff_nbins > 0u) {
-                struct osh_scoring_page_runtime const *p0 = &rt->pages[out->page_indices[0]];
                 fprintf(fp,
                         "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
                         diff_kind_label(p0->diff_kind),
@@ -131,10 +133,21 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                         p0->diff_hi,
                         p0->diff_nbins,
                         p0->diff_log ? " LOG" : "");
-                fprintf(fp, "# Z R %s", diff_kind_label(p0->diff_kind));
-            } else {
-                fprintf(fp, "# Z R");
             }
+            if (diff2_nbins > 0u) {
+                fprintf(fp,
+                        "# Diff2Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
+                        diff_kind_label(p0->diff2_kind),
+                        p0->diff2_lo,
+                        p0->diff2_hi,
+                        p0->diff2_nbins,
+                        p0->diff2_log ? " LOG" : "");
+            }
+            fprintf(fp, "# Z R");
+            if (diff_nbins > 0u)
+                fprintf(fp, " %s", diff_kind_label(p0->diff_kind));
+            if (diff2_nbins > 0u)
+                fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
             fprint_quantity_names(fp, rt, out);
             fputc('\n', fp);
 
@@ -142,21 +155,26 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                 for (ir = 0; ir < nr; ++ir) {
                     size_t spatial_idx = ir + nr * iz;
                     size_t db;
+                    size_t db2;
                     size_t ndb = (diff_nbins > 0u) ? diff_nbins : 1u;
+                    size_t ndb2 = (diff2_nbins > 0u) ? diff2_nbins : 1u;
                     for (db = 0; db < ndb; ++db) {
-                        fprintf(fp, " %.12e %.12e", z0 + dz * ((double) iz + 0.5), r0 + dr * ((double) ir + 0.5));
-                        if (diff_nbins > 0u) {
-                            struct osh_scoring_page_runtime const *p0 = &rt->pages[out->page_indices[0]];
-                            fprintf(fp, " %.12e", ascii_diff_center(p0, db));
+                        for (db2 = 0; db2 < ndb2; ++db2) {
+                            fprintf(fp, " %.12e %.12e", z0 + dz * ((double) iz + 0.5), r0 + dr * ((double) ir + 0.5));
+                            if (diff_nbins > 0u)
+                                fprintf(fp, " %.12e", ascii_diff_center(p0, db));
+                            if (diff2_nbins > 0u)
+                                fprintf(fp, " %.12e", ascii_diff2_center(p0, db2));
+                            for (ip = 0; ip < out->npages; ++ip) {
+                                size_t page_idx = out->page_indices[ip];
+                                struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
+                                double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
+                                size_t data_idx = spatial_idx + (diff_nbins > 0u ? db * page->diff_stride : 0u)
+                                                  + (diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
+                                fprintf(fp, " %.12e", page->data[data_idx] * scale);
+                            }
+                            fprintf(fp, "\n");
                         }
-                        for (ip = 0; ip < out->npages; ++ip) {
-                            size_t page_idx = out->page_indices[ip];
-                            struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
-                            double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
-                            size_t data_idx = (diff_nbins > 0u) ? spatial_idx + db * page->diff_stride : spatial_idx;
-                            fprintf(fp, " %.12e", page->data[data_idx] * scale);
-                        }
-                        fprintf(fp, "\n");
                     }
                 }
             }
@@ -206,7 +224,9 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         dz = (geo->axes[iz_axis].hi - z0) / (double) nz;
 
         {
-            size_t diff_nbins = (out->npages > 0u) ? rt->pages[out->page_indices[0]].diff_nbins : 0u;
+            struct osh_scoring_page_runtime const *p0 = (out->npages > 0u) ? &rt->pages[out->page_indices[0]] : NULL;
+            size_t diff_nbins = p0 ? p0->diff_nbins : 0u;
+            size_t diff2_nbins = p0 ? p0->diff2_nbins : 0u;
 
             fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);
             fprintf(fp, "# Calculated %s\n", datestr);
@@ -227,7 +247,6 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                     "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical "
                     "mean\n");
             if (diff_nbins > 0u) {
-                struct osh_scoring_page_runtime const *p0 = &rt->pages[out->page_indices[0]];
                 fprintf(fp,
                         "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
                         diff_kind_label(p0->diff_kind),
@@ -235,10 +254,21 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                         p0->diff_hi,
                         p0->diff_nbins,
                         p0->diff_log ? " LOG" : "");
-                fprintf(fp, "# X Y Z %s", diff_kind_label(p0->diff_kind));
-            } else {
-                fprintf(fp, "# X Y Z");
             }
+            if (diff2_nbins > 0u) {
+                fprintf(fp,
+                        "# Diff2Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
+                        diff_kind_label(p0->diff2_kind),
+                        p0->diff2_lo,
+                        p0->diff2_hi,
+                        p0->diff2_nbins,
+                        p0->diff2_log ? " LOG" : "");
+            }
+            fprintf(fp, "# X Y Z");
+            if (diff_nbins > 0u)
+                fprintf(fp, " %s", diff_kind_label(p0->diff_kind));
+            if (diff2_nbins > 0u)
+                fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
             fprint_quantity_names(fp, rt, out);
             fputc('\n', fp);
 
@@ -247,28 +277,32 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                     for (ix = 0; ix < nx; ++ix) {
                         size_t spatial_idx = ix + nx * (iy + ny * iz);
                         size_t db;
+                        size_t db2;
                         size_t ndb = (diff_nbins > 0u) ? diff_nbins : 1u;
+                        size_t ndb2 = (diff2_nbins > 0u) ? diff2_nbins : 1u;
                         for (db = 0; db < ndb; ++db) {
-                            fprintf(fp,
-                                    " %.12e %.12e %.12e",
-                                    x0 + dx * ((double) ix + 0.5),
-                                    y0 + dy * ((double) iy + 0.5),
-                                    z0 + dz * ((double) iz + 0.5));
-                            if (diff_nbins > 0u) {
-                                struct osh_scoring_page_runtime const *p0 = &rt->pages[out->page_indices[0]];
-                                fprintf(fp, " %.12e", ascii_diff_center(p0, db));
+                            for (db2 = 0; db2 < ndb2; ++db2) {
+                                fprintf(fp,
+                                        " %.12e %.12e %.12e",
+                                        x0 + dx * ((double) ix + 0.5),
+                                        y0 + dy * ((double) iy + 0.5),
+                                        z0 + dz * ((double) iz + 0.5));
+                                if (diff_nbins > 0u)
+                                    fprintf(fp, " %.12e", ascii_diff_center(p0, db));
+                                if (diff2_nbins > 0u)
+                                    fprintf(fp, " %.12e", ascii_diff2_center(p0, db2));
+                                for (ip = 0; ip < out->npages; ++ip) {
+                                    size_t page_idx = out->page_indices[ip];
+                                    struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
+                                    /* AVER pages (e.g. DLET/TLET) hold a physical mean after
+                                     * postprocessing — do not normalise per primary. */
+                                    double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
+                                    size_t data_idx = spatial_idx + (diff_nbins > 0u ? db * page->diff_stride : 0u)
+                                                      + (diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
+                                    fprintf(fp, " %.12e", page->data[data_idx] * scale);
+                                }
+                                fprintf(fp, "\n");
                             }
-                            for (ip = 0; ip < out->npages; ++ip) {
-                                size_t page_idx = out->page_indices[ip];
-                                struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
-                                /* AVER pages (e.g. DLET/TLET) hold a physical mean after
-                                 * postprocessing — do not normalise per primary. */
-                                double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
-                                size_t data_idx =
-                                    (diff_nbins > 0u) ? spatial_idx + db * page->diff_stride : spatial_idx;
-                                fprintf(fp, " %.12e", page->data[data_idx] * scale);
-                            }
-                            fprintf(fp, "\n");
                         }
                     }
                 }
@@ -377,6 +411,20 @@ static double ascii_diff_center(struct osh_scoring_page_runtime const *page, siz
         return page->diff_lo * sqrt(pow(ratio, t0) * pow(ratio, t1));
     }
     return page->diff_lo + 0.5 * (t0 + t1) * (page->diff_hi - page->diff_lo);
+}
+
+/* Compute the centre value of the second differential bin db2. */
+static double ascii_diff2_center(struct osh_scoring_page_runtime const *page, size_t db) {
+    double t0;
+    double t1;
+
+    t0 = (double) db / (double) page->diff2_nbins;
+    t1 = (double) (db + 1u) / (double) page->diff2_nbins;
+    if (page->diff2_log) {
+        double ratio = page->diff2_hi / page->diff2_lo;
+        return page->diff2_lo * sqrt(pow(ratio, t0) * pow(ratio, t1));
+    }
+    return page->diff2_lo + 0.5 * (t0 + t1) * (page->diff2_hi - page->diff2_lo);
 }
 
 /* Map diff_kind enum to a short ASCII label used in column headers. */

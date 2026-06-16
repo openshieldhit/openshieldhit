@@ -41,6 +41,16 @@ Output
     Diff1Type QEFF
 
 Output
+    Filename NB_diff2_ekin_let.dat
+    Fileformat TEXT
+    Geo MyMesh
+    Quantity Fluence PrimaryFilter
+    Diff1     0  500   5
+    Diff1Type EKIN
+    Diff2     0.1  100.0  5  LOG
+    Diff2Type LET
+
+Output
     Filename NB_plain.dat
     Fileformat TEXT
     Geo MyMesh

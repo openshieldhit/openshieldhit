@@ -66,6 +66,13 @@ struct osh_scoring_page_runtime {
     double diff_hi;                       /* Upper bound of the differential axis. */
     int diff_log;                         /* 0 = linear binning, 1 = logarithmic binning. */
     enum osh_scoring_diff_kind diff_kind; /* Physical quantity that determines the diff bin. */
+    /* Second differential axis — all zero when unused (diff2_nbins == 0). */
+    size_t diff2_nbins;  /* 0 = no second diff axis. */
+    size_t diff2_stride; /* = diff_nbins * diff_stride; stride per diff2 bin in data[]. */
+    double diff2_lo;
+    double diff2_hi;
+    int diff2_log;
+    enum osh_scoring_diff_kind diff2_kind;
 };
 
 /**
