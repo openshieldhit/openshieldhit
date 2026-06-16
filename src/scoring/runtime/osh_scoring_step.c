@@ -355,9 +355,10 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
 /**
  * @brief Fill an osh_raytrace_grid from a cylindrical (R,Z) scoring geometry.
  *
- * Requires exactly two axes: "R" at index 0 and "Z" at index 1.
- * Field convention: origin/spacing/n[0] = r_min/dr/nr; origin/spacing/n[2] = z_min/dz/nz;
- * origin/spacing/n[1] = 0/0/1 (unused).
+ * Requires exactly two axes labelled "R" and "Z"; declaration order in
+ * detect.dat does not matter.
+ * Field convention: origin/spacing/n[0] = r_min/dr/nr;
+ * origin/spacing/n[2] = z_min/dz/nz; origin/spacing/n[1] = 0/0/1 (unused).
  */
 static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                             struct osh_raytrace_grid *grid) {

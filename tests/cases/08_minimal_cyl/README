@@ -2,7 +2,8 @@ TEST 08_minimal_cyl — 150 MeV protons in water, cylindrical scoring
 2026-06-15 / Niels Bassler
 
 Same physics as 00_minimal (electromagnetic only, no nuclear reactions).
-Scoring uses Geometry Cyl instead of Geometry Mesh.
+Scoring uses Geometry Cyl instead of Geometry Mesh and saves both ASCII and
+BDO2019 outputs.
 
 Primary fluence is constant along depth in the on-axis R bin (ir=0).
 Energy deposition integrated over all R bins should match 00_minimal's

@@ -11,3 +11,10 @@ Output
          Geo MyCyl
          Quantity Energy
          Quantity Fluence
+
+Output
+         Filename NB_cyl.bdo
+         Fileformat BDO2019
+         Geo MyCyl
+         Quantity Energy
+         Quantity Fluence

@@ -1,18 +1,15 @@
 # detect.dat reference
 
-!!! note "Work in progress"
-    This page is a stub.  Full documentation coming soon.
-
-`detect.dat` defines scoring detectors: geometry (mesh, cylindrical, DICOM CT grid,
-DICOM RTDOSE), quantities (dose, LET, fluence), and output formats.
+`detect.dat` defines scoring geometries, quantities, optional filters/settings,
+and output formats.
 
 ## Geometry types
 
 ### Mesh
 
-Cartesian (X, Y, Z) scoring grid.
+Cartesian `(X, Y, Z)` scoring grid.
 
-```
+```text
 Geometry Mesh
     Name MyMesh
     X  -5.0   5.0   10    # lo  hi  nbins
@@ -20,44 +17,80 @@ Geometry Mesh
     Z   0.0  20.0  200
 ```
 
-Each axis line gives the lower bound, upper bound, and number of equally-spaced
-bins.  Axis order in the file does not matter.
+Each axis line gives the lower bound, upper bound, and number of equally spaced
+bins. Axis order in the file does not matter.
 
 ### Cyl
 
-Cylindrical (R, Z) scoring grid, rotationally symmetric around the Z axis.
+Cylindrical `(R, Z)` scoring grid, rotationally symmetric around its local
+`Z` axis.
 
-```
+```text
 Geometry Cyl
     Name MyCyl
     R   0.0   5.0    5    # lo  hi  nbins
     Z   0.0  20.0  200
 ```
 
-`R` is the radial axis (inner radius to outer radius); `Z` is the axial axis
-(along the beam direction).  Both axes must be present; order in the file does
-not matter.  The axis origin is at (0, 0) in the universe frame unless a
-rotation is specified.
+Rules and semantics:
 
-Voxel volumes are computed exactly: V(ir) = π (r₁² − r₀²) Δz, so dose and
-fluence are correctly normalised even for large radial bins.
+- `R` is the radial coordinate in cm, from inner radius to outer radius.
+- `Z` is the axial coordinate in cm.
+- Both `R` and `Z` must be present; their declaration order does not matter.
+- `Geometry Cyl` is an `R/Z` detector only. There is currently no explicit
+  `phi` binning; the detector always represents the full azimuth.
+- Without `Rotation`, the cylinder axis is aligned with the universe `Z` axis
+  and centered on `(x, y) = (0, 0)`.
+- `Rotation <theta_deg> <phi_deg>` applies a pure rotation from universe space
+  into the detector's local frame. It does not apply any translation. Axis
+  bounds remain local coordinates.
+
+Voxel volumes are computed exactly per radial bin:
+
+`V(ir) = pi * (r1^2 - r0^2) * dz`
+
+This exact annular volume is used for `Fluence`, `Dose`, and related scorers, so
+large radial bins are normalized correctly.
+
+## Output
+
+Example:
+
+```text
+Output
+    Filename NB_cyl.dat
+    FileFormat TEXT
+    Geo MyCyl
+    Quantity Energy
+    Quantity Fluence
+```
+
+For `Geometry Cyl`:
+
+- `TEXT`/`ASCII` output is supported.
+- `BDO2019` output is supported.
+- ASCII rows are written in local detector coordinates with columns
+  `Z R <QUANTITIES...>`.
+- Flat voxel order is `idx = ir + nr * iz`.
+- `BDO2019` stores the geometry as legacy `CYL` metadata with an implicit
+  full-azimuth span (`phi = 0..360`, one bin) for compatibility.
 
 ## Scored quantities
 
 | Keyword | Unit | Description |
 |---------|------|-------------|
-| `Dose` | MeV/g | Absorbed dose — no unit conversion, SH12A-compatible |
-| `DoseGy` | Gy | Absorbed dose in gray (`Dose × 1.602176634 × 10⁻¹⁰`) |
-| `Fluence` | 1/cm² | Particle fluence (ICRU definition) |
-| `Energy` | MeV | Mean energy deposited per voxel |
+| `Dose` | MeV/g | Absorbed dose, SH12A-compatible |
+| `DoseGy` | Gy | Absorbed dose in gray (`Dose * 1.602176634e-10`) |
+| `Fluence` | 1/cm² | Particle fluence |
+| `Energy` | MeV | Energy deposited in the voxel |
 | `DLET` | MeV/cm | Dose-averaged LET |
 | `TLET` | MeV/cm | Track-averaged LET |
-| `DQEFF` | dim.less | Dose-averaged (z_eff/β)² |
-| `TQEFF` | dim.less | Track-averaged (z_eff/β)² |
+| `DQEFF` | dim.less | Dose-averaged `(z_eff/beta)^2` |
+| `TQEFF` | dim.less | Track-averaged `(z_eff/beta)^2` |
 
 Quantities can be restricted to a material via `Settings`:
 
-```
+```text
 Settings
     Name inWater
     Material Water
@@ -69,4 +102,4 @@ Output
 ```
 
 `Dose inWater` and `DoseGy inWater` score using the stopping power of water
-regardless of the actual traversed material — equivalent to SH12A's dose-to-water.
+regardless of the actual traversed material, equivalent to SH12A dose-to-water.
