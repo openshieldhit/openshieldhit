@@ -1,9 +1,14 @@
 #include "osh_file.h"
 
 #if defined(_WIN32)
+#include <direct.h>
+#include <errno.h>
+#include <sys/stat.h>
 #include <windows.h>
+#define mkdir(path, mode) _mkdir(path)
 #else
 #include <dirent.h>
+#include <errno.h>
 #include <sys/stat.h>
 #endif
 #include <stdlib.h>
@@ -15,10 +20,12 @@
 static enum osh_status _mapfile(struct oshfile *oshf);
 static enum osh_status _rewind_file(struct oshfile *oshf);
 static int _is_sep(char c);
+static int _mode_is_dir(int mode);
 #if defined(_WIN32)
 static int _is_drive_letter(char c);
 #endif
 static int _path_is_absolute(char const *path);
+static size_t _path_root_len(char const *path);
 
 struct oshfile *osh_fopen(char const *filename) {
     FILE *fp;
@@ -300,6 +307,77 @@ char *osh_path_dirname(char const *path) {
     return dir;
 }
 
+/**
+ * @brief Create @p path and any missing parent directories.
+ *
+ * @details
+ * The helper treats an already existing directory as success and rejects
+ * existing non-directory paths. Absolute Windows drive roots such as `C:/`
+ * and POSIX roots such as `/` are preserved and not created as intermediate
+ * components.
+ *
+ * @param[in] path  Directory path to create.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for invalid input, OSH_ENOMEM for
+ *          allocation failure, or OSH_EIO when filesystem operations fail.
+ */
+enum osh_status osh_path_ensure_dir(char const *path) {
+    char *tmp;
+    char *p;
+    size_t len;
+    size_t root_len;
+    struct stat st;
+
+    if (!path || !path[0]) {
+        return OSH_EINVAL;
+    }
+
+    if (stat(path, &st) == 0) {
+        return _mode_is_dir(st.st_mode) ? OSH_OK : OSH_EIO;
+    }
+
+    len = strlen(path);
+    tmp = (char *) malloc(len + 1u);
+    if (!tmp) {
+        return OSH_ENOMEM;
+    }
+    memcpy(tmp, path, len + 1u);
+
+    root_len = _path_root_len(tmp);
+    for (p = tmp + root_len; *p; ++p) {
+        if (!_is_sep(*p)) {
+            continue;
+        }
+        if ((p > tmp) && _is_sep(*(p - 1))) {
+            continue;
+        }
+        *p = '\0';
+        if (tmp[0] != '\0' && stat(tmp, &st) != 0) {
+            if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+                free(tmp);
+                return OSH_EIO;
+            }
+        } else if (!_mode_is_dir(st.st_mode)) {
+            free(tmp);
+            return OSH_EIO;
+        }
+        *p = '/';
+    }
+
+    if (stat(tmp, &st) != 0) {
+        if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+            free(tmp);
+            return OSH_EIO;
+        }
+    } else if (!_mode_is_dir(st.st_mode)) {
+        free(tmp);
+        return OSH_EIO;
+    }
+
+    free(tmp);
+    return OSH_OK;
+}
+
 enum osh_status osh_dir_foreach_file(char const *dir, osh_dir_iter_fn fn, void *user) {
     if (!dir || !fn) {
         return OSH_EINVAL;
@@ -373,4 +451,68 @@ enum osh_status osh_dir_foreach_file(char const *dir, osh_dir_iter_fn fn, void *
         return OSH_OK;
     }
 #endif
+}
+
+/**
+ * @brief Return non-zero when @p mode describes a directory.
+ *
+ * @details
+ * MSVC does not provide POSIX `S_ISDIR` consistently as a macro in all build
+ * environments, so keep the check local and portable.
+ */
+static int _mode_is_dir(int mode) {
+#if defined(_WIN32)
+    return (mode & _S_IFMT) == _S_IFDIR;
+#else
+    return S_ISDIR(mode);
+#endif
+}
+
+/**
+ * @brief Return the rooted prefix length of @p path.
+ *
+ * @details
+ * Returns the number of bytes that belong to the non-creatable root portion of
+ * an absolute path. Examples: `/` -> 1, `C:/` -> 3, `//server/share/` -> the
+ * length up to and including the share separator. Relative paths return 0.
+ *
+ * @param[in] path  Path string to inspect.
+ *
+ * @returns Root prefix length in bytes, or 0 for relative paths.
+ */
+static size_t _path_root_len(char const *path) {
+#if defined(_WIN32)
+    size_t i;
+    int sep_count;
+#endif
+
+    if (!path || !path[0]) {
+        return 0u;
+    }
+
+#if defined(_WIN32)
+    if (_is_drive_letter(path[0]) && path[1] == ':' && _is_sep(path[2])) {
+        return 3u;
+    }
+    if (_is_sep(path[0]) && _is_sep(path[1])) {
+        i = 2u;
+        sep_count = 0;
+        while (path[i]) {
+            if (_is_sep(path[i])) {
+                sep_count++;
+                if (sep_count == 2) {
+                    return i + 1u;
+                }
+            }
+            i++;
+        }
+        return 2u;
+    }
+#endif
+
+    if (_is_sep(path[0])) {
+        return 1u;
+    }
+
+    return 0u;
 }

@@ -67,6 +67,18 @@ void osh_path_normalize(char *path);
 char *osh_path_dirname(char const *path);
 
 /**
+ * @brief Create a directory path and any missing parent directories.
+ *
+ * @details
+ * Existing directories are treated as success. The helper accepts both `/`
+ * and `\\` separators and handles rooted paths on the current platform.
+ *
+ * @return OSH_OK on success, OSH_EINVAL for invalid arguments, OSH_ENOMEM for
+ *         allocation failure, or OSH_EIO on filesystem errors.
+ */
+enum osh_status osh_path_ensure_dir(char const *path);
+
+/**
  * @brief Callback used by osh_dir_foreach_file().
  *
  * @param[in] path  Full path to one non-directory entry.
