@@ -200,6 +200,25 @@ static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind
     }
 }
 
+static enum osh_scoring_diff_kind diff_kind_from_str(char const *s) {
+    if (!s || strcmp(s, "ekin") == 0 || strcmp(s, "e") == 0) {
+        return OSH_SCORING_DIFF_EKIN;
+    }
+    if (strcmp(s, "enuc") == 0) {
+        return OSH_SCORING_DIFF_ENUC;
+    }
+    if (strcmp(s, "eamu") == 0) {
+        return OSH_SCORING_DIFF_EAMU;
+    }
+    if (strcmp(s, "let") == 0 || strcmp(s, "dedx") == 0) {
+        return OSH_SCORING_DIFF_LET;
+    }
+    if (strcmp(s, "qeff") == 0 || strcmp(s, "zeff2beta2") == 0) {
+        return OSH_SCORING_DIFF_QEFF;
+    }
+    return OSH_SCORING_DIFF_NONE;
+}
+
 static int runtime_supports_geometry(struct osh_scoring_geometry_runtime const *geo) {
     if (!geo) {
         return 0;
@@ -704,11 +723,43 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
         dst_page->output_idx = prepared_pages[page_idx].output_idx;
         dst_page->geometry_idx = prepared_pages[page_idx].geometry_idx;
-        dst_page->len = rt->geometries[dst_page->geometry_idx].nbins;
         dst_page->score_kind = prepared_pages[page_idx].score_kind;
         dst_page->has_data2 = score_kind_uses_data2(dst_page->score_kind);
         dst_page->divide = dst_page->has_data2;
         dst_page->postproc = score_kind_postproc(dst_page->score_kind, dst_page->divide);
+
+        /* Differential axis — expand data[] to geo_nbins × diff_nbins. */
+        dst_page->diff_stride = rt->geometries[dst_page->geometry_idx].nbins;
+        if (src_page->diff_nbins > 0u) {
+            if (dst_page->has_data2) {
+                /* Two-pass averaged quantities (DLET, TLET, DQEFF, TQEFF) cannot be
+                 * used as the primary quantity of a differential scorer because the
+                 * two-pass postprocessor operates on the full flat array. */
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring page '%s': differential axis not supported for averaged quantities",
+                                src_page->quantity ? src_page->quantity : "(unnamed)");
+                rc = OSH_ENOTSUP;
+                goto fail;
+            }
+            dst_page->diff_nbins = src_page->diff_nbins;
+            dst_page->diff_lo = src_page->diff_lo;
+            dst_page->diff_hi = src_page->diff_hi;
+            dst_page->diff_log = src_page->diff_log;
+            dst_page->diff_kind = diff_kind_from_str(src_page->diff_kind_str);
+            if (dst_page->diff_kind == OSH_SCORING_DIFF_NONE) {
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring page '%s': unknown Diff1Type '%s'",
+                                src_page->quantity ? src_page->quantity : "(unnamed)",
+                                src_page->diff_kind_str ? src_page->diff_kind_str : "(null)");
+                rc = OSH_ENOTSUP;
+                goto fail;
+            }
+            dst_page->len = dst_page->diff_stride * dst_page->diff_nbins;
+        } else {
+            dst_page->diff_nbins = 0u;
+            dst_page->len = dst_page->diff_stride;
+        }
+
         dst_page->data = (double *) calloc(dst_page->len ? dst_page->len : 1u, sizeof(*dst_page->data));
         if (!dst_page->data) {
             rc = OSH_ENOMEM;
