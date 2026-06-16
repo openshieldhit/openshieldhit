@@ -116,14 +116,14 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
         fprintf(
             fp,
             "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical mean\n");
-        fprintf(fp, "# R Z");
+        fprintf(fp, "# Z R");
         fprint_quantity_names(fp, rt, out);
         fputc('\n', fp);
 
         for (iz = 0; iz < nz; ++iz) {
             for (ir = 0; ir < nr; ++ir) {
                 size_t idx = ir + nr * iz;
-                fprintf(fp, " %.12e %.12e", r0 + dr * ((double) ir + 0.5), z0 + dz * ((double) iz + 0.5));
+                fprintf(fp, " %.12e %.12e", z0 + dz * ((double) iz + 0.5), r0 + dr * ((double) ir + 0.5));
                 for (ip = 0; ip < out->npages; ++ip) {
                     size_t page_idx = out->page_indices[ip];
                     double scale = (rt->pages[page_idx].postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
