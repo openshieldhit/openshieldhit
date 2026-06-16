@@ -57,7 +57,9 @@ enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
 
             free(ws->outputs[i].pages[j].quantity);
             free(ws->outputs[i].pages[j].diff_kind_str);
+            free(ws->outputs[i].pages[j].diff_kind_sset_name);
             free(ws->outputs[i].pages[j].diff2_kind_str);
+            free(ws->outputs[i].pages[j].diff2_kind_sset_name);
             for (k = 0; k < ws->outputs[i].pages[j].nfilter_names; ++k) {
                 free(ws->outputs[i].pages[j].filter_names[k]);
             }

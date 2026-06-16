@@ -115,12 +115,12 @@ Output
     Quantity Fluence Primary
     Diff1 0 2000 1000
     Diff1Type LET
-    Quantity Fluence in_Si
+    Quantity Fluence
     Diff1 0 2000 1000
-    Diff1Type DEDX
-    Quantity Fluence in_Si Primary
+    Diff1Type DEDX in_Si
+    Quantity Fluence Primary
     Diff1 0 2000 1000
-    Diff1Type DEDX
+    Diff1Type DEDX in_Si
 
 Output
     Filename NB_target_water.bdo
@@ -138,9 +138,9 @@ Output
     Filename NB_target_water_diff.bdo
     Fileformat BDO2019
     Geo TARGET
-    Quantity Fluence in_Water
+    Quantity Fluence
     Diff1 0 2000 1000
-    Diff1Type DEDX
-    Quantity Fluence Primary in_Water
+    Diff1Type DEDX in_Water
+    Quantity Fluence Primary
     Diff1 0 2000 1000
-    Diff1Type LET
+    Diff1Type LET in_Water

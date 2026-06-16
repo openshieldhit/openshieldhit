@@ -321,6 +321,15 @@ static enum osh_status output_diff1type(struct osh_scoring_output_def *out,
         return OSH_ENOMEM;
     osh_lower_inplace(kind);
     page->diff_kind_str = kind;
+
+    /* Optional third word is a Settings name that overrides the stopping-power
+     * medium used for LET/QEFF axis binning — e.g. "Diff1Type DEDX in_Si". */
+    if (nwords >= 3) {
+        free(page->diff_kind_sset_name);
+        page->diff_kind_sset_name = strdup(words[2]);
+        if (!page->diff_kind_sset_name)
+            return OSH_ENOMEM;
+    }
     return OSH_OK;
 }
 
@@ -409,5 +418,14 @@ static enum osh_status output_diff2type(struct osh_scoring_output_def *out,
         return OSH_ENOMEM;
     osh_lower_inplace(kind);
     page->diff2_kind_str = kind;
+
+    /* Optional third word is a Settings name for the diff2 axis SP override
+     * — e.g. "Diff2Type LET in_Water". */
+    if (nwords >= 3) {
+        free(page->diff2_kind_sset_name);
+        page->diff2_kind_sset_name = strdup(words[2]);
+        if (!page->diff2_kind_sset_name)
+            return OSH_ENOMEM;
+    }
     return OSH_OK;
 }
