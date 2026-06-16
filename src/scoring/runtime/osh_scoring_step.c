@@ -428,7 +428,6 @@ static inline size_t diff_axis_bin(struct osh_scoring_page_runtime const *page, 
     return (bin < page->diff_nbins) ? bin : page->diff_nbins - 1u;
 }
 
-
 /* Compute LET [MeV/cm] in an explicit medium at step midpoint.
  * Uses the SP table; returns 0 when tables are unavailable or particle is neutral.
  * ovr_medium selects which row in mat_tables to look up (may differ from st->medium).
