@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "openshieldhit/const.h"
+
 #include "common/osh_diag.h"
 #include "common/raytrace/osh_raytrace.h"
 
@@ -839,10 +841,17 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         for (i = 0; i < rt->ngeometries; ++i) {
             size_t cap_i = 0;
             size_t a;
-            if (rt->geometries[i].geo_kind == OSH_SCORING_GEO_CYL && rt->geometries[i].naxes == 2u) {
-                /* CYL: max crossings = 2*nr + nz (quadratic R-shell intersections
-                 * give up to two per R bin, plus one per Z plane). */
-                cap_i = 2u * (size_t) rt->geometries[i].axes[0].nbins + (size_t) rt->geometries[i].axes[1].nbins;
+            if (rt->geometries[i].geo_kind == OSH_SCORING_GEO_CYL) {
+                /* CYL: max crossings = 2*nr + nz. Look up R/Z by label so that
+                 * axis declaration order in detect.dat does not matter. */
+                size_t nr = 0, nz = 0;
+                for (a = 0; a < rt->geometries[i].naxes; ++a) {
+                    if (strcmp(rt->geometries[i].axes[a].label, "R") == 0)
+                        nr = (size_t) rt->geometries[i].axes[a].nbins;
+                    else if (strcmp(rt->geometries[i].axes[a].label, "Z") == 0)
+                        nz = (size_t) rt->geometries[i].axes[a].nbins;
+                }
+                cap_i = 2u * nr + nz;
             } else {
                 for (a = 0; a < rt->geometries[i].naxes; ++a) {
                     cap_i += (size_t) rt->geometries[i].axes[a].nbins;
@@ -865,12 +874,27 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
     /* Precompute per-R-bin 1/volume LUT for CYL geometries. */
     for (i = 0; i < rt->ngeometries; ++i) {
         struct osh_scoring_geometry_runtime *g = &rt->geometries[i];
-        if (g->geo_kind == OSH_SCORING_GEO_CYL && g->naxes == 2u) {
+        if (g->geo_kind == OSH_SCORING_GEO_CYL) {
+            size_t a;
+            size_t nr = 0, nz_bins = 0;
+            double r_lo = 0.0, r_hi = 0.0, z_lo = 0.0, z_hi = 0.0;
             size_t ir;
-            size_t nr = (size_t) g->axes[0].nbins;
-            double r_min = g->axes[0].lo;
-            double dr = (g->axes[0].hi - r_min) / (double) nr;
-            double dz = (g->axes[1].hi - g->axes[1].lo) / (double) g->axes[1].nbins;
+            double dr, dz;
+            /* Resolve R and Z axes by label — order in detect.dat does not matter. */
+            for (a = 0; a < g->naxes; ++a) {
+                if (strcmp(g->axes[a].label, "R") == 0) {
+                    nr   = (size_t) g->axes[a].nbins;
+                    r_lo = g->axes[a].lo;
+                    r_hi = g->axes[a].hi;
+                } else if (strcmp(g->axes[a].label, "Z") == 0) {
+                    nz_bins = (size_t) g->axes[a].nbins;
+                    z_lo    = g->axes[a].lo;
+                    z_hi    = g->axes[a].hi;
+                }
+            }
+            if (nr == 0 || nz_bins == 0) continue; /* malformed; compile already rejected */
+            dr = (r_hi - r_lo) / (double) nr;
+            dz = (z_hi - z_lo) / (double) nz_bins;
             g->cyl_vol_inv = (double *) malloc(nr * sizeof(double));
             if (!g->cyl_vol_inv) {
                 osh_scoring_runtime_free(rt);
@@ -878,9 +902,9 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             }
             g->cyl_nr = nr;
             for (ir = 0; ir < nr; ++ir) {
-                double r0 = r_min + (double) ir * dr;
+                double r0 = r_lo + (double) ir * dr;
                 double r1 = r0 + dr;
-                g->cyl_vol_inv[ir] = 1.0 / (M_PI * (r1 * r1 - r0 * r0) * dz);
+                g->cyl_vol_inv[ir] = 1.0 / (OSH_M_PI * (r1 * r1 - r0 * r0) * dz);
             }
         }
     }

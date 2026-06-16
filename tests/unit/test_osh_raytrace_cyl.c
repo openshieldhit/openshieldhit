@@ -151,6 +151,64 @@ static void test_vol_inv_initialised_zero(void) {
     }
 }
 
+static void test_hollow_start_inside_hole(void) {
+    /* Hollow cylinder (r_min=2): particle starts inside the hole and exits radially.
+     * Grid: r=[2,5] (nr=3, dr=1), z=[0,5] (nz=5, dz=1).
+     * p=(0.5,0,2.5): r=0.5 < r_min=2, inside hole, iz=2.
+     * v=(1,0,0): moving outward.  ds=4.0 → x goes from 0.5 to 4.5.
+     * Path inside hole [x=0.5 to x=2] must NOT be scored.
+     * Valid crossings: ir=0 [x=2..3], ir=1 [x=3..4], partial ir=2 [x=4..4.5].
+     * Sum of path_len must equal 2.5 (not 4.0). */
+    struct osh_raytrace_grid grid = make_grid();
+    struct osh_voxel_crossing crossings[MAX_CROSS];
+    double p[3] = {0.5, 0.0, 2.5};
+    double v[3] = {1.0, 0.0, 0.0};
+    double ds = 4.0;
+    size_t n = 0u;
+    int rc;
+    size_t j;
+    double sum = 0.0;
+
+    grid.origin[0] = 2.0; /* r_min=2 */
+    rc = osh_raytrace_cyl_traverse(&grid, p, v, ds, crossings, &n);
+    ASSERT_TRUE(rc == 1);
+    ASSERT_TRUE(n > 0u);
+    for (j = 0; j < n; ++j) {
+        ASSERT_TRUE(crossings[j].path_len > 0.0);
+        sum += crossings[j].path_len;
+    }
+    ASSERT_TRUE(fabs(sum - 2.5) < 1.0e-9);
+}
+
+static void test_hollow_through_hole(void) {
+    /* Hollow cylinder (r_min=2): particle traverses the hole mid-step.
+     * Grid: r=[2,5] (nr=3, dr=1), z=[0,5] (nz=5, dz=1).
+     * p=(-4.5,0,2.5), v=(1,0,0), ds=9.0 → x from -4.5 to 4.5.
+     * Crosses: r=4 at x=-4 (ir=2→1), r=3 at x=-3 (ir=1→0), r=2 at x=-2 (enters hole),
+     *           r=2 at x=2 (exits hole, ir=0), r=3 at x=3 (ir=0→1), r=4 at x=4 (ir=1→2).
+     * Scored lengths: ir=2: 0.5+0.5=1, ir=1: 1+1=2, ir=0: 1+1=2 → total 5.0 cm. */
+    struct osh_raytrace_grid grid = make_grid();
+    struct osh_voxel_crossing crossings[MAX_CROSS];
+    double p[3] = {-4.5, 0.0, 2.5};
+    double v[3] = {1.0, 0.0, 0.0};
+    double ds = 9.0;
+    size_t n = 0u;
+    int rc;
+    size_t j;
+    double sum = 0.0;
+
+    grid.origin[0] = 2.0; /* r_min=2 */
+    rc = osh_raytrace_cyl_traverse(&grid, p, v, ds, crossings, &n);
+    ASSERT_TRUE(rc == 1);
+    ASSERT_TRUE(n > 0u);
+    for (j = 0; j < n; ++j) {
+        ASSERT_TRUE(crossings[j].path_len > 0.0);
+        sum += crossings[j].path_len;
+    }
+    /* 4 cm of the step is inside the hollow hole and must not be scored */
+    ASSERT_TRUE(fabs(sum - 5.0) < 1.0e-9);
+}
+
 int main(int argc, char **argv) {
     static struct {
         char const *name;
@@ -162,6 +220,8 @@ int main(int argc, char **argv) {
         {"test_miss_inside_hollow_hole", test_miss_inside_hollow_hole},
         {"test_miss_outside_z_range", test_miss_outside_z_range},
         {"test_vol_inv_initialised_zero", test_vol_inv_initialised_zero},
+        {"test_hollow_start_inside_hole", test_hollow_start_inside_hole},
+        {"test_hollow_through_hole", test_hollow_through_hole},
     };
 
     size_t ncases = sizeof(cases) / sizeof(cases[0]);
