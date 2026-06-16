@@ -1,0 +1,146 @@
+# OpenSHIELDHIT scorer layout aligned with the SH12A result set.
+# Outputs are written as multi-page BDO files and can be postprocessed with
+# pymchelper/convertmc into the SH12A-style page-split ASCII files.
+
+Geometry Mesh
+    Name Z_narrow
+    X  -1.0   1.0   1
+    Y  -1.0   1.0   1
+    Z -10.25 10.25 205
+
+Geometry Mesh
+    Name TARGET
+    X -2.5  2.5  1
+    Y -2.5  2.5  1
+    Z -0.1  0.1  1
+
+Filter
+    Name Primary
+    GEN = 0
+    Z = 1
+    A = 1
+
+Filter
+    Name Protons
+    Z = 1
+    A = 1
+
+Settings
+    Name in_Water
+    Material Water
+
+Settings
+    Name in_Si
+    Material Si
+
+Output
+    Filename NB_Z_narrow_dose.bdo
+    Fileformat BDO2019
+    Geo Z_narrow
+    Quantity Fluence
+    Quantity Dose
+    Quantity Dose Protons
+    Quantity Fluence Primary
+    Quantity Fluence Protons
+
+Output
+    Filename NB_Z_narrow_dose_water.bdo
+    Fileformat BDO2019
+    Geo Z_narrow
+    Quantity Fluence
+    Quantity Dose in_Water
+    Quantity Dose Protons in_Water
+
+Output
+    Filename NB_Z_narrow_LET.bdo
+    Fileformat BDO2019
+    Geo Z_narrow
+    Quantity DLET
+    Quantity DLET Primary
+    Quantity DLET Protons
+    Quantity TLET
+    Quantity TLET Primary
+    Quantity TLET Protons
+
+Output
+    Filename NB_Z_narrow_LET_water.bdo
+    Fileformat BDO2019
+    Geo Z_narrow
+    Quantity DLET in_Water
+    Quantity DLET Primary in_Water
+    Quantity DLET Protons in_Water
+    Quantity TLET in_Water
+    Quantity TLET Primary in_Water
+    Quantity TLET Protons in_Water
+
+Output
+    Filename NB_Z_narrow_QEFF.bdo
+    Fileformat BDO2019
+    Geo Z_narrow
+    Quantity DQEFF
+    Quantity DQEFF Primary
+    Quantity DQEFF Protons
+    Quantity TQEFF
+    Quantity TQEFF Primary
+    Quantity TQEFF Protons
+
+Output
+    Filename NB_target.bdo
+    Fileformat BDO2019
+    Geo TARGET
+    Quantity Fluence
+    Quantity Dose
+    Quantity DLET
+    Quantity DLET Primary
+    Quantity DLET Protons
+    Quantity TLET
+    Quantity TLET Primary
+    Quantity TLET Protons
+    Quantity DQEFF
+    Quantity DQEFF Primary
+    Quantity DQEFF Protons
+    Quantity TQEFF
+    Quantity TQEFF Primary
+    Quantity TQEFF Protons
+    Quantity Fluence Primary
+    Quantity Fluence Protons
+
+Output
+    Filename NB_target_diff.bdo
+    Fileformat BDO2019
+    Geo TARGET
+    Quantity Fluence
+    Diff1 0 2000 1000
+    Diff1Type DEDX
+    Quantity Fluence Primary
+    Diff1 0 2000 1000
+    Diff1Type LET
+    Quantity Fluence in_Si
+    Diff1 0 2000 1000
+    Diff1Type DEDX
+    Quantity Fluence in_Si Primary
+    Diff1 0 2000 1000
+    Diff1Type DEDX
+
+Output
+    Filename NB_target_water.bdo
+    Fileformat BDO2019
+    Geo TARGET
+    Quantity Dose in_Water
+    Quantity DLET in_Water
+    Quantity DLET Primary in_Water
+    Quantity DLET Protons in_Water
+    Quantity TLET in_Water
+    Quantity TLET Primary in_Water
+    Quantity TLET Protons in_Water
+
+Output
+    Filename NB_target_water_diff.bdo
+    Fileformat BDO2019
+    Geo TARGET
+    Quantity Fluence in_Water
+    Diff1 0 2000 1000
+    Diff1Type DEDX
+    Quantity Fluence Primary in_Water
+    Diff1 0 2000 1000
+    Diff1Type LET

@@ -44,6 +44,9 @@ build/bin/openshieldhit -n 50000 path/to/case/
 
 # verbose logging
 build/bin/openshieldhit -v path/to/case/
+
+# write outputs somewhere else; the directory is created automatically
+build/bin/openshieldhit --outdir /tmp/osh-run path/to/case/
 ```
 
 ## Try the minimal example
@@ -56,6 +59,7 @@ Produces a Bragg-peak depth-dose profile for 200 MeV protons in water.
 
 ## Next steps
 
+- [command-line reference](command-line.md) — CLI options, output directories, dry-run, file overrides
 - [beam.dat reference](beam.dat.md) — particle, energy, beam geometry, physics switches
 - [geo.dat reference](geo.dat.md) — geometry bodies and zones
 - [detect.dat reference](detect.dat.md) — scoring detectors

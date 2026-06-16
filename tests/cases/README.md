@@ -19,3 +19,6 @@ A case directory may contain:
 These directories should be runnable as realistic user-style inputs, not just
 minimal parser snippets.
 
+Some heavier cases intentionally keep the default `--dry-run` CTest behavior and
+are meant for manual transport runs plus plotting against external reference
+fixtures rather than automated output comparison.

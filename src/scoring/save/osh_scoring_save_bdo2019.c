@@ -41,6 +41,7 @@
 
 static char const *geometry_type_name(struct osh_scoring_geometry_runtime const *geo);
 static char const *page_data_unit(struct osh_scoring_page_runtime const *page);
+static char const *page_diff_unit(struct osh_scoring_page_runtime const *page);
 static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
                                        size_t output_idx,
@@ -52,6 +53,7 @@ static enum osh_status axis_index(struct osh_scoring_geometry_runtime const *geo
 static void format_now_rfc2822(char *buf, size_t cap);
 static int legacy_geo_kind(struct osh_scoring_geometry_runtime const *geo);
 static int legacy_score_kind(struct osh_scoring_page_runtime const *page);
+static int legacy_diff_kind(struct osh_scoring_page_runtime const *page);
 
 enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace const *ws,
                                                 struct osh_scoring_runtime const *rt,
@@ -147,15 +149,31 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         int page_type;
         int page_count;
         int page_norm;
+        int page_diff_flag;
+        int page_diff_type[2];
+        int page_diff_size[2];
         double page_rescale;
         double page_offset;
+        double page_diff_start[2];
+        double page_diff_stop[2];
+        char diff_units[64];
         struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
 
         page_type = legacy_score_kind(page);
         page_count = (int) ip;
         page_norm = (int) page->postproc;
+        page_diff_flag = page->diff_nbins > 0u ? (page->diff_log ? -1 : 1) : 0;
+        page_diff_type[0] = legacy_diff_kind(page);
+        page_diff_type[1] = 0;
+        page_diff_size[0] = (int) page->diff_nbins;
+        page_diff_size[1] = 1;
         page_rescale = 1.0;
         page_offset = 0.0;
+        page_diff_start[0] = page->diff_lo;
+        page_diff_start[1] = 0.0;
+        page_diff_stop[0] = page->diff_hi;
+        page_diff_stop[1] = 1.0;
+        snprintf(diff_units, sizeof(diff_units), "%s;", page_diff_unit(page));
 
         rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_TYPE, &page_type, 1u);
         if (rc == OSH_OK) {
@@ -172,6 +190,24 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         }
         if (rc == OSH_OK) {
             rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DATA_UNIT, page_data_unit(page));
+        }
+        if (rc == OSH_OK && page->diff_nbins > 0u) {
+            rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_DIF_SET, &page_diff_flag, 1u);
+        }
+        if (rc == OSH_OK && page->diff_nbins > 0u) {
+            rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_DIF_TYPE, page_diff_type, 2u);
+        }
+        if (rc == OSH_OK && page->diff_nbins > 0u) {
+            rc = osh_scoring_bdo2019_write_token_double(fp, OSHBDO_PAG_DIF_START, page_diff_start, 2u);
+        }
+        if (rc == OSH_OK && page->diff_nbins > 0u) {
+            rc = osh_scoring_bdo2019_write_token_double(fp, OSHBDO_PAG_DIF_STOP, page_diff_stop, 2u);
+        }
+        if (rc == OSH_OK && page->diff_nbins > 0u) {
+            rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_DIF_SIZE, page_diff_size, 2u);
+        }
+        if (rc == OSH_OK && page->diff_nbins > 0u) {
+            rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DIF_UNITS, diff_units);
         }
         if (rc == OSH_OK) {
             /* TODO: current runtime does not yet carry full normalization
@@ -220,6 +256,22 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
         return "dim.less";
     default:
         return "arb";
+    }
+}
+
+static char const *page_diff_unit(struct osh_scoring_page_runtime const *page) {
+    switch (page->diff_kind) {
+    case OSH_SCORING_DIFF_EKIN:
+        return "MeV";
+    case OSH_SCORING_DIFF_ENUC:
+    case OSH_SCORING_DIFF_EAMU:
+        return "MeV/u";
+    case OSH_SCORING_DIFF_LET:
+        return "MeV/cm";
+    case OSH_SCORING_DIFF_QEFF:
+        return "dim.less";
+    default:
+        return "";
     }
 }
 
@@ -378,5 +430,22 @@ static int legacy_score_kind(struct osh_scoring_page_runtime const *page) {
         return 63;
     default:
         return -1;
+    }
+}
+
+static int legacy_diff_kind(struct osh_scoring_page_runtime const *page) {
+    switch (page->diff_kind) {
+    case OSH_SCORING_DIFF_EKIN:
+        return 1;
+    case OSH_SCORING_DIFF_ENUC:
+        return 2;
+    case OSH_SCORING_DIFF_EAMU:
+        return 3;
+    case OSH_SCORING_DIFF_LET:
+        return 4;
+    case OSH_SCORING_DIFF_QEFF:
+        return 5;
+    default:
+        return 0;
     }
 }
