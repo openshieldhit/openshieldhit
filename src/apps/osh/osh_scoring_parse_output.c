@@ -317,8 +317,9 @@ static enum osh_status output_diff1type(struct osh_scoring_output_def *out,
     page = &out->pages[out->npages - 1u];
     free(page->diff_kind_str);
     kind = strdup(words[1]);
-    if (!kind)
+    if (!kind) {
         return OSH_ENOMEM;
+    }
     osh_lower_inplace(kind);
     page->diff_kind_str = kind;
 
@@ -331,8 +332,9 @@ static enum osh_status output_diff1type(struct osh_scoring_output_def *out,
     page->diff_kind_sset_name = NULL;
     if (nwords >= 3) {
         page->diff_kind_sset_name = strdup(words[2]);
-        if (!page->diff_kind_sset_name)
+        if (!page->diff_kind_sset_name) {
             return OSH_ENOMEM;
+        }
     }
     return OSH_OK;
 }
@@ -422,8 +424,9 @@ static enum osh_status output_diff2type(struct osh_scoring_output_def *out,
     page = &out->pages[out->npages - 1u];
     free(page->diff2_kind_str);
     kind = strdup(words[1]);
-    if (!kind)
+    if (!kind) {
         return OSH_ENOMEM;
+    }
     osh_lower_inplace(kind);
     page->diff2_kind_str = kind;
 
@@ -434,8 +437,9 @@ static enum osh_status output_diff2type(struct osh_scoring_output_def *out,
     page->diff2_kind_sset_name = NULL;
     if (nwords >= 3) {
         page->diff2_kind_sset_name = strdup(words[2]);
-        if (!page->diff2_kind_sset_name)
+        if (!page->diff2_kind_sset_name) {
             return OSH_ENOMEM;
+        }
     }
     return OSH_OK;
 }
