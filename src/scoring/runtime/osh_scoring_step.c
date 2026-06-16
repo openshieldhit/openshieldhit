@@ -12,6 +12,8 @@
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
 static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out);
 static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out);
+static double
+compute_step_let(struct osh_scoring_runtime const *rt, struct particle const *part, struct step const *st);
 static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                              struct osh_raytrace_grid *grid,
                                              double *voxel_volume_inv_out);
@@ -441,6 +443,71 @@ static inline double diff_bin_center(struct osh_scoring_page_runtime const *page
     return page->diff_lo + 0.5 * (t0 + t1) * (page->diff_hi - page->diff_lo);
 }
 
+/* Compute LET [MeV/cm] in an explicit medium at step midpoint.
+ * Uses the SP table; returns 0 when tables are unavailable or particle is neutral.
+ * ovr_medium selects which row in mat_tables to look up (may differ from st->medium).
+ * ovr_rho is the density used to convert SP [MeV·cm²/g] → LET [MeV/cm]. */
+static double compute_step_let_medium(struct osh_scoring_runtime const *rt,
+                                      struct particle const *part,
+                                      struct step const *st,
+                                      size_t ovr_medium,
+                                      double ovr_rho) {
+    double mean_energy;
+    double e_per_nuc;
+    size_t proj_idx;
+
+    if (part->z == 0 || part->a == 0 || !rt->mat_tables) {
+        return 0.0;
+    }
+    mean_energy = 0.5 * (st->p[3] + st->q[3]);
+    e_per_nuc = mean_energy / (double) part->a;
+    if (!find_proj_idx(rt->mat_tables, (unsigned int) part->z, &proj_idx)) {
+        return 0.0;
+    }
+    return osh_material_runtime_sp_lookup(rt->mat_tables, ovr_medium, proj_idx, e_per_nuc) * ovr_rho;
+}
+
+/* Compute the differential LET/DEDX axis value [MeV/cm] with an optional
+ * per-axis Settings override.
+ *
+ * Semantics:
+ *   no override                -> rho_transport * S_transport(E)
+ *   density override only      -> rho_override  * S_transport(E)
+ *   medium override only       -> rho_medium    * S_medium(E)
+ *   medium + density override  -> rho_override  * S_medium(E)
+ *
+ * When a different medium is requested we need SP tables for that medium. If
+ * only the density is overridden and no tables are available, fall back to the
+ * transport-medium LET/de-ds and scale it by rho_override / rho_transport. */
+static double compute_step_let_with_override(struct osh_scoring_runtime const *rt,
+                                             struct particle const *part,
+                                             struct step const *st,
+                                             struct osh_scoring_page_override const *ovr) {
+    double let;
+    double rho;
+
+    if (!ovr || (!ovr->has_medium && !ovr->has_density_g_cm3)) {
+        return compute_step_let(rt, part, st);
+    }
+
+    if (ovr->has_medium && ovr->medium >= 0) {
+        rho = ovr->has_density_g_cm3 ? ovr->density_g_cm3
+                                     : (rt->mat_tables ? rt->mat_tables->rho[(size_t) ovr->medium] : st->rho);
+        return compute_step_let_medium(rt, part, st, (size_t) ovr->medium, rho);
+    }
+
+    rho = ovr->density_g_cm3;
+    if (rt->mat_tables && st->medium >= 0) {
+        return compute_step_let_medium(rt, part, st, (size_t) st->medium, rho);
+    }
+
+    let = compute_step_let(rt, part, st);
+    if (!(let > 0.0) || !(st->rho > 0.0)) {
+        return 0.0;
+    }
+    return let * (rho / st->rho);
+}
+
 /* Compute LET in the transport medium [MeV/cm] at step midpoint.
  * Uses the SP table at mean step energy; falls back to de/ds when tables are unavailable.
  * No per-page Settings override — callers that need override apply it themselves. */
@@ -516,7 +583,8 @@ static double diff_step_val(struct osh_scoring_page_runtime const *page,
         }
         return mean_ekin / (double) part->a; /* same as ENUC for integer A */
     case OSH_SCORING_DIFF_LET: {
-        double let = compute_step_let(rt, part, st);
+        double let = page->has_diff_sset ? compute_step_let_with_override(rt, part, st, &page->diff_sset)
+                                         : compute_step_let(rt, part, st);
         if (!(let > 0.0)) {
             *ok = 0;
             return 0.0;
@@ -578,7 +646,8 @@ static double diff2_step_val(struct osh_scoring_page_runtime const *page,
         }
         return mean_ekin / (double) part->a;
     case OSH_SCORING_DIFF_LET: {
-        double let = compute_step_let(rt, part, st);
+        double let = page->has_diff2_sset ? compute_step_let_with_override(rt, part, st, &page->diff2_sset)
+                                          : compute_step_let(rt, part, st);
         if (!(let > 0.0)) {
             *ok = 0;
             return 0.0;
@@ -755,6 +824,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
     e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table-based projectile data is available */
 
@@ -785,7 +855,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
         }
         dose_scale = base_scale;
         if (have_proj && page->has_sset) {
-            struct osh_scoring_page_override const *sset = &page->sset;
+            sset = &page->sset;
             if (sset->has_medium && sset->medium >= 0) {
                 /* Dose-to-medium: multiply by stopping-power ratio S(ovr)/S(tr). */
                 sp_ovr = osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc);
@@ -849,10 +919,12 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
     double let_step;
     double mean_energy;
     double e_per_nuc;
+    double rho_ovr; /* density used for the per-page LET override */
     double w;
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
     e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table-based projectile data is available */
 
@@ -885,9 +957,9 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
         }
         let_step = let_default;
         if (have_proj && page->has_sset) {
-            struct osh_scoring_page_override const *sset = &page->sset;
+            sset = &page->sset;
             if (sset->has_medium && sset->medium >= 0) {
-                double rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
+                rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
                 let_step =
                     osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
             } else if (sset->has_density_g_cm3) {
@@ -930,10 +1002,12 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
     double let_step;
     double mean_energy;
     double e_per_nuc;
+    double rho_ovr; /* density used for the per-page LET override */
     double ds_vox;
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
     e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table-based projectile data is available */
 
@@ -964,9 +1038,9 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
         }
         let_step = let_default;
         if (have_proj && page->has_sset) {
-            struct osh_scoring_page_override const *sset = &page->sset;
+            sset = &page->sset;
             if (sset->has_medium && sset->medium >= 0) {
-                double rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
+                rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
                 let_step =
                     osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
             } else if (sset->has_density_g_cm3) {

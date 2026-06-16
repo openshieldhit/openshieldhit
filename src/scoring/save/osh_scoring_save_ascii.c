@@ -127,21 +127,23 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                     "mean\n");
             if (diff_nbins > 0u) {
                 fprintf(fp,
-                        "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
+                        "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
                         diff_kind_label(p0->diff_kind),
                         p0->diff_lo,
                         p0->diff_hi,
                         p0->diff_nbins,
-                        p0->diff_log ? " LOG" : "");
+                        p0->diff_log ? " LOG" : "",
+                        p0->has_diff_sset ? "  (SP override active)" : "");
             }
             if (diff2_nbins > 0u) {
                 fprintf(fp,
-                        "# Diff2Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
+                        "# Diff2Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
                         diff_kind_label(p0->diff2_kind),
                         p0->diff2_lo,
                         p0->diff2_hi,
                         p0->diff2_nbins,
-                        p0->diff2_log ? " LOG" : "");
+                        p0->diff2_log ? " LOG" : "",
+                        p0->has_diff2_sset ? "  (SP override active)" : "");
             }
             fprintf(fp, "# Z R");
             if (diff_nbins > 0u)
@@ -248,21 +250,23 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                     "mean\n");
             if (diff_nbins > 0u) {
                 fprintf(fp,
-                        "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
+                        "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
                         diff_kind_label(p0->diff_kind),
                         p0->diff_lo,
                         p0->diff_hi,
                         p0->diff_nbins,
-                        p0->diff_log ? " LOG" : "");
+                        p0->diff_log ? " LOG" : "",
+                        p0->has_diff_sset ? "  (SP override active)" : "");
             }
             if (diff2_nbins > 0u) {
                 fprintf(fp,
-                        "# Diff2Type: %s  lo=%g  hi=%g  nbins=%zu%s\n",
+                        "# Diff2Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
                         diff_kind_label(p0->diff2_kind),
                         p0->diff2_lo,
                         p0->diff2_hi,
                         p0->diff2_nbins,
-                        p0->diff2_log ? " LOG" : "");
+                        p0->diff2_log ? " LOG" : "",
+                        p0->has_diff2_sset ? "  (SP override active)" : "");
             }
             fprintf(fp, "# X Y Z");
             if (diff_nbins > 0u)

@@ -419,30 +419,52 @@ static long find_settings_index(struct osh_scoring_runtime const *rt, char const
     return -1;
 }
 
+/* Populate a page_override struct from one settings entry. */
+static void apply_settings_to_override(struct osh_scoring_page_override *ovr,
+                                       struct osh_scoring_settings_runtime const *s) {
+    if (s->has_medium) {
+        ovr->medium = s->medium;
+        ovr->has_medium = 1;
+    }
+    if (s->has_density_g_cm3) {
+        ovr->density_g_cm3 = s->density_g_cm3;
+        ovr->has_density_g_cm3 = 1;
+    }
+}
+
 void osh_scoring_runtime_finalize_ssets(struct osh_scoring_runtime *rt) {
     size_t ip;
     size_t k;
+    struct osh_scoring_settings_runtime const *s;
 
     if (!rt) {
         return;
     }
     for (ip = 0; ip < rt->npages; ++ip) {
         struct osh_scoring_page_runtime *page = &rt->pages[ip];
-        if (page->nsettings == 0u) {
-            continue;
+
+        /* Quantity-level Settings override (e.g. "Quantity Dose in_Water"). */
+        if (page->nsettings > 0u) {
+            memset(&page->sset, 0, sizeof(page->sset));
+            page->has_sset = 1;
+            for (k = 0; k < page->nsettings; ++k) {
+                s = &rt->settings[page->settings[k].settings_idx];
+                apply_settings_to_override(&page->sset, s);
+            }
         }
-        memset(&page->sset, 0, sizeof(page->sset));
-        page->has_sset = 1;
-        for (k = 0; k < page->nsettings; ++k) {
-            struct osh_scoring_settings_runtime const *s = &rt->settings[page->settings[k].settings_idx];
-            if (s->has_medium) {
-                page->sset.medium = s->medium;
-                page->sset.has_medium = 1;
-            }
-            if (s->has_density_g_cm3) {
-                page->sset.density_g_cm3 = s->density_g_cm3;
-                page->sset.has_density_g_cm3 = 1;
-            }
+
+        /* Diff1 axis Settings override (e.g. "Diff1Type DEDX in_Si"). */
+        if (page->has_diff_sset) {
+            memset(&page->diff_sset, 0, sizeof(page->diff_sset));
+            s = &rt->settings[page->diff_sset_idx];
+            apply_settings_to_override(&page->diff_sset, s);
+        }
+
+        /* Diff2 axis Settings override (e.g. "Diff2Type LET in_Water"). */
+        if (page->has_diff2_sset) {
+            memset(&page->diff2_sset, 0, sizeof(page->diff2_sset));
+            s = &rt->settings[page->diff2_sset_idx];
+            apply_settings_to_override(&page->diff2_sset, s);
         }
     }
 }
@@ -756,6 +778,24 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             }
             dst_page->len = dst_page->diff_stride * dst_page->diff_nbins;
 
+            /* Optional per-axis Settings override — e.g. "Diff1Type DEDX in_Si".
+             * Resolve the name to a settings index now; the medium index is
+             * filled by osh_scoring_runtime_finalize_ssets() after material names
+             * are resolved by the simulation layer. */
+            if (src_page->diff_kind_sset_name) {
+                long sidx = find_settings_index(rt, src_page->diff_kind_sset_name);
+                if (sidx < 0L) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring page '%s': Diff1Type references unknown Settings '%s'",
+                                    src_page->quantity ? src_page->quantity : "(unnamed)",
+                                    src_page->diff_kind_sset_name);
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+                dst_page->diff_sset_idx = (size_t) sidx;
+                dst_page->has_diff_sset = 1;
+            }
+
             /* Double-differential axis (requires diff1 to be set). */
             if (src_page->diff2_nbins > 0u) {
                 dst_page->diff2_nbins = src_page->diff2_nbins;
@@ -774,6 +814,21 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 /* diff2_stride = diff_nbins * diff_stride = geo_nbins * diff_nbins. */
                 dst_page->diff2_stride = dst_page->diff_nbins * dst_page->diff_stride;
                 dst_page->len = dst_page->diff2_stride * dst_page->diff2_nbins;
+
+                /* Optional per-axis Settings override for the diff2 axis. */
+                if (src_page->diff2_kind_sset_name) {
+                    long sidx = find_settings_index(rt, src_page->diff2_kind_sset_name);
+                    if (sidx < 0L) {
+                        OSH_DIAG_ERRORF(diag,
+                                        "Scoring page '%s': Diff2Type references unknown Settings '%s'",
+                                        src_page->quantity ? src_page->quantity : "(unnamed)",
+                                        src_page->diff2_kind_sset_name);
+                        rc = OSH_ENOTSUP;
+                        goto fail;
+                    }
+                    dst_page->diff2_sset_idx = (size_t) sidx;
+                    dst_page->has_diff2_sset = 1;
+                }
             }
         } else {
             dst_page->diff_nbins = 0u;

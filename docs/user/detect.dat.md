@@ -98,9 +98,9 @@ Output
 | Sub-keyword | Required | Description |
 |-------------|----------|-------------|
 | `Diff1 lo hi nbins [LOG]` | no | Activates single-differential mode.  `LOG` selects logarithmic binning (requires `lo > 0`). |
-| `Diff1Type <kind>` | no | Physical quantity for the first axis (default: `EKIN`). |
+| `Diff1Type <kind> [settings]` | no | Physical quantity for the first axis (default: `EKIN`).  Optional `settings` name overrides the stopping-power medium and/or density used for LET/QEFF axis binning (see below). |
 | `Diff2 lo hi nbins [LOG]` | no | Activates double-differential mode (requires `Diff1`). |
-| `Diff2Type <kind>` | no | Physical quantity for the second axis (default: `EKIN`). |
+| `Diff2Type <kind> [settings]` | no | Physical quantity for the second axis (default: `EKIN`).  Same optional `settings` override as `Diff1Type`. |
 
 Supported axis type keywords (same for Diff1Type and Diff2Type):
 
@@ -114,6 +114,55 @@ Supported axis type keywords (same for Diff1Type and Diff2Type):
 
 Differential scoring is supported for `Fluence`, `Dose`, `DoseGy`, and `Energy`.
 Averaged quantities (`DLET`, `TLET`, `DQEFF`, `TQEFF`) cannot carry a differential axis.
+
+### Axis stopping-power override
+
+For `LET` and `QEFF` axis types, the stopping power used for bin determination is normally
+that of the transport medium at each step. An optional `Settings` reference on the
+`Diff1Type`/`Diff2Type` line can override the evaluation medium, the density, or both:
+
+```text
+Settings
+    Name in_Si
+    Material Si
+
+Output
+    Filename spectra_Si.dat
+    FileFormat TEXT
+    Geo MyMesh
+    Quantity Fluence
+    Diff1     0  2000  1000
+    Diff1Type DEDX in_Si       # bin by Si stopping power, not transport-medium SP
+```
+
+This is the correct way to compute dΦ/dLET_Si (fluence spectrum in silicon LET).
+The override applies only to the axis binning; the fluence accumulation itself remains
+material-independent.
+
+A density-only override is also valid:
+
+```text
+Settings
+    Name rho_half
+    Density 0.5
+
+Output
+    Quantity Fluence
+    Diff1     0  2000  1000
+    Diff1Type DEDX rho_half    # bin by 0.5 g/cm3 * S_transport(E)
+```
+
+The same syntax works for `Dose` + `LET` axis, where the dose is converted to
+dose-to-water while the axis is also binned in water LET:
+
+```text
+    Quantity Dose in_Water
+    Diff1     0  2000  1000
+    Diff1Type DEDX in_Water    # Quantity-level and Diff1Type overrides are independent
+```
+
+When a `Settings` override is active the ASCII output header reads:
+`# Diff1Type: LET  lo=…  hi=…  nbins=…  (SP override active)`
 
 In `TEXT` output each diff-axis bin centre is written as an extra column between the
 spatial coordinates and the quantity values.  For double-differential, Diff1 bins are the

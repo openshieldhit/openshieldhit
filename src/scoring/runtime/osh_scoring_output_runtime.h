@@ -73,6 +73,18 @@ struct osh_scoring_page_runtime {
     double diff2_hi;
     int diff2_log;
     enum osh_scoring_diff_kind diff2_kind;
+    /* Optional per-axis stopping-power override — e.g. "Diff1Type DEDX in_Si".
+     * When has_diff_sset/has_diff2_sset is set and the Settings resolves to a
+     * medium, LET and QEFF axis values are computed in that medium rather than
+     * the transport medium.  Indices are into osh_scoring_runtime::settings[].
+     * The resolved medium/density are cached in diff_sset/diff2_sset after
+     * osh_scoring_runtime_finalize_ssets() runs for the second time. */
+    size_t diff_sset_idx;                        /* index into rt->settings[]; valid when has_diff_sset */
+    size_t diff2_sset_idx;                       /* index into rt->settings[]; valid when has_diff2_sset */
+    struct osh_scoring_page_override diff_sset;  /* resolved override for diff1 axis */
+    struct osh_scoring_page_override diff2_sset; /* resolved override for diff2 axis */
+    char has_diff_sset;                          /* non-zero when diff1 axis has a settings override */
+    char has_diff2_sset;                         /* non-zero when diff2 axis has a settings override */
 };
 
 /**

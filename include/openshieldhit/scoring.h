@@ -120,7 +120,12 @@ struct osh_scoring_page_def {
     double diff2_lo;
     double diff2_hi;
     int diff2_log;
-    char *diff2_kind_str; /* Axis type keyword (owned). */
+    char *diff2_kind_str;       /* Axis type keyword (owned). */
+    char *diff2_kind_sset_name; /* Optional Settings name for diff2 axis SP override (owned). */
+    /* Optional Settings name that overrides the stopping-power medium used for
+     * the diff1 LET/QEFF axis — written as "Diff1Type DEDX in_Si".
+     * NULL means use the transport medium (default). */
+    char *diff_kind_sset_name; /* Optional Settings name for diff1 axis SP override (owned). */
 };
 
 /* ---- Geometry ------------------------------------------------------------ */
