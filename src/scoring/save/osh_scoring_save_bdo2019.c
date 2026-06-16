@@ -42,6 +42,8 @@
 static char const *geometry_type_name(struct osh_scoring_geometry_runtime const *geo);
 static char const *page_data_unit(struct osh_scoring_page_runtime const *page);
 static char const *page_diff_unit(struct osh_scoring_page_runtime const *page);
+static char const *page_diff2_unit(struct osh_scoring_page_runtime const *page);
+static int legacy_diff2_kind(struct osh_scoring_page_runtime const *page);
 static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
                                        size_t output_idx,
@@ -164,16 +166,20 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         page_norm = (int) page->postproc;
         page_diff_flag = page->diff_nbins > 0u ? (page->diff_log ? -1 : 1) : 0;
         page_diff_type[0] = legacy_diff_kind(page);
-        page_diff_type[1] = 0;
+        page_diff_type[1] = page->diff2_nbins > 0u ? legacy_diff2_kind(page) : 0;
         page_diff_size[0] = (int) page->diff_nbins;
-        page_diff_size[1] = 1;
+        page_diff_size[1] = page->diff2_nbins > 0u ? (int) page->diff2_nbins : 1;
         page_rescale = 1.0;
         page_offset = 0.0;
         page_diff_start[0] = page->diff_lo;
-        page_diff_start[1] = 0.0;
+        page_diff_start[1] = page->diff2_nbins > 0u ? page->diff2_lo : 0.0;
         page_diff_stop[0] = page->diff_hi;
-        page_diff_stop[1] = 1.0;
-        snprintf(diff_units, sizeof(diff_units), "%s;", page_diff_unit(page));
+        page_diff_stop[1] = page->diff2_nbins > 0u ? page->diff2_hi : 1.0;
+        if (page->diff2_nbins > 0u) {
+            snprintf(diff_units, sizeof(diff_units), "%s;%s;", page_diff_unit(page), page_diff2_unit(page));
+        } else {
+            snprintf(diff_units, sizeof(diff_units), "%s;", page_diff_unit(page));
+        }
 
         rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_TYPE, &page_type, 1u);
         if (rc == OSH_OK) {
@@ -272,6 +278,39 @@ static char const *page_diff_unit(struct osh_scoring_page_runtime const *page) {
         return "dim.less";
     default:
         return "";
+    }
+}
+
+static char const *page_diff2_unit(struct osh_scoring_page_runtime const *page) {
+    switch (page->diff2_kind) {
+    case OSH_SCORING_DIFF_EKIN:
+        return "MeV";
+    case OSH_SCORING_DIFF_ENUC:
+    case OSH_SCORING_DIFF_EAMU:
+        return "MeV/u";
+    case OSH_SCORING_DIFF_LET:
+        return "MeV/cm";
+    case OSH_SCORING_DIFF_QEFF:
+        return "dim.less";
+    default:
+        return "";
+    }
+}
+
+static int legacy_diff2_kind(struct osh_scoring_page_runtime const *page) {
+    switch (page->diff2_kind) {
+    case OSH_SCORING_DIFF_EKIN:
+        return 1;
+    case OSH_SCORING_DIFF_ENUC:
+        return 2;
+    case OSH_SCORING_DIFF_EAMU:
+        return 3;
+    case OSH_SCORING_DIFF_LET:
+        return 4;
+    case OSH_SCORING_DIFF_QEFF:
+        return 5;
+    default:
+        return 0;
     }
 }
 
