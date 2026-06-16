@@ -99,10 +99,18 @@ static inline double next_alpha_r(double ga,
                                   double alpha,
                                   double px,
                                   double py) {
-    int dir = ir_direction(ds, alpha, px, py);
-    double r1 = r_min + dr * (double) ir;
-    double r2 = r_min + dr * (double) ((size_t) ((int) ir + dir));
+    int dir;
+    int ir_next;
+    double r1;
+    double r2;
     double a11, a12, a21, a22;
+
+    dir     = ir_direction(ds, alpha, px, py);
+    ir_next = (int) ir + dir;
+    if (ir_next < 0)
+        ir_next = 0; /* clamp: prevents size_t wrap when ir==0 and dir==-1 */
+    r1 = r_min + dr * (double) ir;
+    r2 = r_min + dr * (double) ir_next;
     slv2(ga, gb, gc, r1 * r1, &a11, &a12);
     slv2(ga, gb, gc, r2 * r2, &a21, &a22);
     if (a11 <= alpha)
@@ -159,6 +167,7 @@ int osh_raytrace_cyl_traverse(struct osh_raytrace_grid const *grid,
     double aur, auz, ac;
     size_t n;
     int i;
+    int in_hole; /* 1 while r < r_min (inside hollow hole); scoring suppressed */
 
     *n_out = 0;
 
@@ -247,6 +256,7 @@ int osh_raytrace_cyl_traverse(struct osh_raytrace_grid const *grid,
     {
         int ir_int = ir_from_alpha(ga, gb, gc, ds_vec, r_min, dr, p[0], p[1], amin);
         int iz_int = iz_from_alpha(ds_vec, p[2], z_min, dz, amin);
+        in_hole = (ir_int < 0) ? 1 : 0;
         if (ir_int < 0)
             ir_int = 0;
         if (iz_int < 0)
@@ -275,7 +285,7 @@ int osh_raytrace_cyl_traverse(struct osh_raytrace_grid const *grid,
             /* Crossing a Z plane. */
             {
                 double seg = (auz - ac) * ds;
-                if (seg > 0.0 && valid_index(ir, iz, nr, nz)) {
+                if (seg > 0.0 && !in_hole && valid_index(ir, iz, nr, nz)) {
                     crossings[n].idx = flatten_idx(ir, iz, nr);
                     crossings[n].path_len = seg;
                     crossings[n].vol_inv = 0.0; /* filled by scoring layer */
@@ -294,7 +304,7 @@ int osh_raytrace_cyl_traverse(struct osh_raytrace_grid const *grid,
             /* Crossing an R shell (also handles the aur==auz tie). */
             {
                 double seg = (aur - ac) * ds;
-                if (seg > 0.0 && valid_index(ir, iz, nr, nz)) {
+                if (seg > 0.0 && !in_hole && valid_index(ir, iz, nr, nz)) {
                     crossings[n].idx = flatten_idx(ir, iz, nr);
                     crossings[n].path_len = seg;
                     crossings[n].vol_inv = 0.0;
@@ -304,6 +314,7 @@ int osh_raytrace_cyl_traverse(struct osh_raytrace_grid const *grid,
             ac = aur;
             {
                 int ir_new = ir_from_alpha(ga, gb, gc, ds_vec, r_min, dr, p[0], p[1], ac);
+                in_hole = (ir_new < 0) ? 1 : 0;
                 if (ir_new < 0)
                     ir_new = 0;
                 ir = (ir_new < (int) nr) ? (size_t) ir_new : nr - 1u;
@@ -315,7 +326,7 @@ int osh_raytrace_cyl_traverse(struct osh_raytrace_grid const *grid,
     /* Tail segment from last crossing to amax. */
     {
         double seg = (amax - ac) * ds;
-        if (n < 2u * nr + nz && seg > 0.0 && valid_index(ir, iz, nr, nz)) {
+        if (n < 2u * nr + nz && seg > 0.0 && !in_hole && valid_index(ir, iz, nr, nz)) {
             crossings[n].idx = flatten_idx(ir, iz, nr);
             crossings[n].path_len = seg;
             crossings[n].vol_inv = 0.0;

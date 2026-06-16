@@ -293,7 +293,13 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         return OSH_ESTATE;
     }
     geo = &rt->geometries[out->geometry_idx];
-    if ((geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL) || geo->has_rotation) {
+    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL) {
+        return OSH_ENOTSUP;
+    }
+    /* Rotated MESH ASCII output would emit local-frame X/Y/Z which is ambiguous;
+     * reject until a proper coordinate annotation is implemented.
+     * CYL R/Z output is always in local frame regardless of rotation, so it is allowed. */
+    if (geo->geo_kind == OSH_SCORING_GEO_MESH && geo->has_rotation) {
         return OSH_ENOTSUP;
     }
     for (ip = 0; ip < out->npages; ++ip) {

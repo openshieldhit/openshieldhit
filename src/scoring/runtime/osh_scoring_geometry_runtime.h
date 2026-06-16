@@ -41,11 +41,27 @@ struct osh_scoring_geometry_score_group {
  * Holds the resolved geometry kind, axis bounds, bin counts, and the
  * contiguous page range owned by this geometry in the flat page array.
  * Groups further subdivide the page span by score kind.
+ *
+ * ### Axis content by geometry kind
+ *
+ * @c axes[] carries axis descriptors identified by their @c label field.
+ * The array order reflects declaration order in @c detect.dat and must
+ * not be assumed to be fixed.  Always look up by label:
+ *
+ * | geo_kind              | axes present           | labels         |
+ * |-----------------------|------------------------|----------------|
+ * | OSH_SCORING_GEO_MESH  | 3 (X, Y, Z)            | "X", "Y", "Z" |
+ * | OSH_SCORING_GEO_CYL   | 2 (radial + axial)     | "R", "Z"      |
+ * | OSH_SCORING_GEO_ZONE  | 0 (zone range instead) | —             |
+ *
+ * For @c CYL the @c axes array contains exactly one entry labelled @c "R"
+ * and one labelled @c "Z"; which comes first depends on the input file.
+ * Code that needs nr or nz must scan by label, not by index.
  */
 struct osh_scoring_geometry_runtime {
     char *kind;                                      /* Geometry type keyword (lowercase, owned). */
     char *name;                                      /* User-visible name (owned). */
-    struct osh_scoring_axis_runtime *axes;           /* Axis array (owned). */
+    struct osh_scoring_axis_runtime *axes;           /* Axis array (owned); see label-lookup note above. */
     struct osh_scoring_geometry_score_group *groups; /* Score-kind groups (owned). */
     size_t naxes;                                    /* Number of axes. */
     double t[16];                                    /* Universe→local affine transform (row-major 4×4). */

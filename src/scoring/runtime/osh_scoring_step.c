@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/osh_vect.h"
 #include "common/raytrace/osh_raytrace.h"
 #include "common/raytrace/osh_raytrace_cyl.h"
 #include "material/runtime/osh_material_runtime.h"
@@ -97,16 +98,28 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         double dir_local[3];
         double const *p_trace;
         double const *dir_trace;
+        double voxel_volume_inv;
+        double const *lut;
+        size_t nr_cyl;
         size_t g;
-        int k;
 
         if (geo->ngroups == 0u) {
             continue;
         }
 
+        /* Universe→local rotation (shared by Mesh and Cyl: same t[16] layout). */
+        if (geo->has_rotation) {
+            osh_vect_trans_point_affine(st->p, p_local, geo->t);
+            osh_vect_trans_vector_affine(score_dir, dir_local, geo->t);
+            p_trace   = p_local;
+            dir_trace = dir_local;
+        } else {
+            p_trace   = st->p;
+            dir_trace = score_dir;
+        }
+
         is_cyl = (geo->geo_kind == OSH_SCORING_GEO_CYL);
         if (!is_cyl) {
-            double voxel_volume_inv;
             rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
             if (rc != OSH_OK) {
                 return rc;
@@ -119,32 +132,10 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
                 return OSH_ESTATE;
             }
             crossings = rt->crossing_buf;
-
-            /* For rotated scoring geometries, transform the step endpoints from
-             * universe frame to the geometry's local frame before raytracing.
-             * The same affine t[16] layout as the geometry body transform is used:
-             *   p_local[i] = sum_k p_universe[k]*t[i*4+k] - t[i*4+3]  */
-            if (geo->has_rotation) {
-                for (k = 0; k < 3; k++) {
-                    int row = k * 4;
-                    p_local[k] = st->p[0] * geo->t[row] + st->p[1] * geo->t[row + 1] + st->p[2] * geo->t[row + 2]
-                                 - geo->t[row + 3];
-                    dir_local[k] =
-                        score_dir[0] * geo->t[row] + score_dir[1] * geo->t[row + 1] + score_dir[2] * geo->t[row + 2];
-                }
-                p_trace = p_local;
-                dir_trace = dir_local;
-            } else {
-                p_trace = st->p;
-                dir_trace = score_dir;
-            }
-
             hit = osh_raytrace_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
             if (!hit || ncross == 0u) {
                 continue;
             }
-
-            /* Fill vol_inv: uniform across all voxels for Mesh. */
             for (j = 0; j < ncross; ++j) {
                 crossings[j].vol_inv = voxel_volume_inv;
             }
@@ -161,22 +152,14 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
                 return OSH_ESTATE;
             }
             crossings = rt->crossing_buf;
-            /* CYL rotation not yet supported. */
-            p_trace = st->p;
-            dir_trace = score_dir;
-
             hit = osh_raytrace_cyl_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
             if (!hit || ncross == 0u) {
                 continue;
             }
-
-            /* Fill vol_inv: per-R-bin lookup table for Cyl. */
-            {
-                double const *lut = geo->cyl_vol_inv;
-                size_t nr = geo->cyl_nr;
-                for (j = 0; j < ncross; ++j) {
-                    crossings[j].vol_inv = lut[crossings[j].idx % nr];
-                }
+            lut    = geo->cyl_vol_inv;
+            nr_cyl = geo->cyl_nr;
+            for (j = 0; j < ncross; ++j) {
+                crossings[j].vol_inv = lut[crossings[j].idx % nr_cyl];
             }
         }
 
@@ -490,19 +473,13 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
 /**
  * @brief Accumulate dose [MeV/g] into the DOSE scorer pages.
  *
- * When mat_tables is available and a Settings block specifies a medium, applies
- * a stopping-power ratio correction S(ovr,E)/S(tr,E) for dose-to-medium scoring.
- * Pure density overrides do not change the dose (Fano theorem).
- */
-/**
- * @brief Accumulate dose [MeV/g] into the DOSE scorer pages.
+ * @c vol_inv is read per-crossing from @c crossings[j].vol_inv (pre-filled by
+ * the caller: uniform scalar for Mesh; per-R-bin LUT for Cyl).
  *
- * vol_inv is read per-crossing from crossings[j].vol_inv (pre-filled by caller:
- * uniform for Mesh; per-R-bin LUT for Cyl).
- *
- * When mat_tables is available and a Settings block specifies a medium, applies
- * a stopping-power ratio correction S(ovr,E)/S(tr,E) for dose-to-medium scoring.
- * Pure density overrides do not change the dose (Fano theorem).
+ * When @c mat_tables is available and a Settings block specifies a medium,
+ * applies a stopping-power ratio correction S(ovr,E)/S(tr,E) for
+ * dose-to-medium scoring.  Pure density overrides do not change the dose
+ * (Fano theorem).
  */
 static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
                                         struct osh_scoring_geometry_score_group const *group,
