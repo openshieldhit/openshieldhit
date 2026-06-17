@@ -9,7 +9,12 @@
  * Used by src/apps/osh/main.c and the test_osh_cli test suite. */
 
 /** Actions the CLI parser may request the caller to perform. */
-enum osh_cli_action { OSH_CLI_ACTION_RUN = 0, OSH_CLI_ACTION_HELP = 1, OSH_CLI_ACTION_VERSION = 2 };
+enum osh_cli_action {
+    OSH_CLI_ACTION_RUN = 0,
+    OSH_CLI_ACTION_HELP = 1,
+    OSH_CLI_ACTION_VERSION = 2,
+    OSH_CLI_ACTION_PRINT_RESOURCES = 3 /**< Print detected host resources and exit. */
+};
 
 /**
  * @brief Parsed and validated command-line options.

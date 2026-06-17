@@ -70,4 +70,9 @@ endforeach()
 # ---- CLI smoke test via the built executable ----
 add_test(NAME "unit::cli::version" COMMAND $<TARGET_FILE:openshieldhit> --version)
 add_test(NAME "unit::cli::help"    COMMAND $<TARGET_FILE:openshieldhit> --help)
+add_test(NAME "unit::cli::print_resources" COMMAND $<TARGET_FILE:openshieldhit> --print-resources)
 set_tests_properties("unit::cli::version" "unit::cli::help" PROPERTIES LABELS "unit")
+# Exercises osh_sysinfo end-to-end on every CI OS; require the detected RAM line.
+set_tests_properties("unit::cli::print_resources" PROPERTIES
+    LABELS "unit"
+    PASS_REGULAR_EXPRESSION "Total RAM")

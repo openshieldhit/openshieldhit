@@ -92,6 +92,7 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "Options:\n");
     fprintf(out, "  -h, --help            Show this help message\n");
     fprintf(out, "  -V, --version         Print version information\n");
+    fprintf(out, "      --print-resources Detect and print host CPU/RAM, then exit\n");
     fprintf(out, "  -v, --verbose         Increase verbosity\n");
     fprintf(out, "  -n, --nstat <n>       Number of requested primary histories\n");
     fprintf(out, "  -N, --seedoffset <n>  Random seed offset override (max 9999)\n");
@@ -207,6 +208,10 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
     }
     if ((name_len == 7) && (strncmp(name, "version", name_len) == 0) && !value) {
         opt->action = OSH_CLI_ACTION_VERSION;
+        return 0;
+    }
+    if ((name_len == 15) && (strncmp(name, "print-resources", name_len) == 0) && !value) {
+        opt->action = OSH_CLI_ACTION_PRINT_RESOURCES;
         return 0;
     }
     if ((name_len == 7) && (strncmp(name, "verbose", name_len) == 0) && !value) {
