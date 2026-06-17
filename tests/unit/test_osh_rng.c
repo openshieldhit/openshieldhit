@@ -199,6 +199,113 @@ static void test_split_deterministic(void) {
     }
 }
 
+/* ---- Vector helpers (osh_rng_*_vec) ------------------------------------- */
+
+/*
+ * The *_vec helpers must produce exactly the same sequence as repeated scalar
+ * calls — they are just unrolled batch wrappers.  Seeding two RNGs identically
+ * and comparing a batch fill against element-by-element scalar draws locks
+ * that contract (and exercises the non-multiple-of-4 tail of each loop).
+ */
+#define VEC_N 10 /* not a multiple of 4 — covers the unrolled body and the tail */
+
+static void test_double_vec_matches_scalar(void) {
+    struct osh_rng a;
+    struct osh_rng b;
+    double vec[VEC_N];
+    int i;
+
+    osh_rng_init(&a, OSH_RNG_TYPE_PCG32, 7u, 3u);
+    osh_rng_init(&b, OSH_RNG_TYPE_PCG32, 7u, 3u);
+
+    osh_rng_double_vec(&a, vec, VEC_N);
+    for (i = 0; i < VEC_N; ++i) {
+        ASSERT_TRUE(vec[i] == osh_rng_double(&b));
+        ASSERT_TRUE(vec[i] >= 0.0 && vec[i] < 1.0);
+    }
+}
+
+static void test_float_vec_matches_scalar(void) {
+    struct osh_rng a;
+    struct osh_rng b;
+    float vec[VEC_N];
+    int i;
+
+    osh_rng_init(&a, OSH_RNG_TYPE_PCG32, 11u, 5u);
+    osh_rng_init(&b, OSH_RNG_TYPE_PCG32, 11u, 5u);
+
+    osh_rng_float_vec(&a, vec, VEC_N);
+    for (i = 0; i < VEC_N; ++i) {
+        ASSERT_TRUE(vec[i] == osh_rng_float(&b));
+        ASSERT_TRUE(vec[i] >= 0.0f && vec[i] < 1.0f);
+    }
+}
+
+static void test_u32_vec_matches_scalar(void) {
+    struct osh_rng a;
+    struct osh_rng b;
+    uint32_t vec[VEC_N];
+    int i;
+
+    osh_rng_init(&a, OSH_RNG_TYPE_XOSHIRO256SS, 13u, 1u);
+    osh_rng_init(&b, OSH_RNG_TYPE_XOSHIRO256SS, 13u, 1u);
+
+    osh_rng_u32_vec(&a, vec, VEC_N);
+    for (i = 0; i < VEC_N; ++i) {
+        ASSERT_TRUE(vec[i] == osh_rng_u32(&b));
+    }
+}
+
+static void test_gauss_vecs_match_scalar(void) {
+    struct osh_rng a;
+    struct osh_rng b;
+    double g01[VEC_N];
+    double g[VEC_N];
+    double const mu = 2.5;
+    double const sigma = 0.75;
+    int i;
+
+    osh_rng_init(&a, OSH_RNG_TYPE_PCG32, 21u, 2u);
+    osh_rng_init(&b, OSH_RNG_TYPE_PCG32, 21u, 2u);
+    osh_rng_gauss01_vec(&a, g01, VEC_N);
+    for (i = 0; i < VEC_N; ++i) {
+        ASSERT_TRUE(g01[i] == osh_rng_gauss01(&b));
+    }
+
+    /* gauss_vec is gauss01_vec scaled by (mu, sigma). */
+    osh_rng_init(&a, OSH_RNG_TYPE_PCG32, 21u, 2u);
+    osh_rng_init(&b, OSH_RNG_TYPE_PCG32, 21u, 2u);
+    osh_rng_gauss_vec(&a, mu, sigma, g, VEC_N);
+    for (i = 0; i < VEC_N; ++i) {
+        ASSERT_TRUE(fabs(g[i] - (mu + sigma * osh_rng_gauss01(&b))) < 1e-15);
+    }
+}
+
+static void test_poisson(void) {
+    struct osh_rng r;
+    long count;
+    int i;
+    double mean;
+    int const samples = 20000;
+    double const lambda = 3.0;
+
+    osh_rng_init(&r, OSH_RNG_TYPE_PCG32, 99u, 1u);
+
+    /* Non-positive lambda is defined to return 0. */
+    ASSERT_TRUE(osh_rng_poisson(&r, 0.0) == 0);
+    ASSERT_TRUE(osh_rng_poisson(&r, -1.0) == 0);
+
+    count = 0;
+    for (i = 0; i < samples; ++i) {
+        int k = osh_rng_poisson(&r, lambda);
+        ASSERT_TRUE(k >= 0);
+        count += k;
+    }
+    mean = (double) count / (double) samples;
+    /* Sample mean should be close to lambda (loose bound, ~5 sigma). */
+    ASSERT_TRUE(fabs(mean - lambda) < 0.1);
+}
+
 int main(void) {
     test_pcg32_known_sequence();
     test_xoshiro256ss_known_sequence();
@@ -208,6 +315,11 @@ int main(void) {
     test_seed_history_purpose_independence();
     test_seed_history_disjoint_ranges();
     test_split_deterministic();
+    test_double_vec_matches_scalar();
+    test_float_vec_matches_scalar();
+    test_u32_vec_matches_scalar();
+    test_gauss_vecs_match_scalar();
+    test_poisson();
 
     return 0;
 }

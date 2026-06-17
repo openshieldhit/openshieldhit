@@ -114,7 +114,11 @@ static int filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule
     case OSH_SCORING_FILTER_FIELD_GEN:
         return filter_compare_int((unsigned int) st->gen, rule->op, (unsigned int) rule->value);
     case OSH_SCORING_FILTER_FIELD_NPRIM:
-        return filter_compare_int((unsigned int) st->prim_idx, rule->op, (unsigned int) rule->value);
+        /* prim_idx is uint64_t; compare in double space against the (double)
+         * rule value rather than truncating to unsigned int.  This is exact
+         * for primary indices and thresholds up to 2^53 — far beyond any real
+         * run — and never wraps at UINT_MAX the way a 32-bit cast would. */
+        return filter_compare_double((double) st->prim_idx, rule->op, rule->value);
     default:
         return 0;
     }

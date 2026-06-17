@@ -62,6 +62,9 @@ base, other, tol = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), float(s
 names = sorted(p.name for p in base.glob('*.dat'))
 if not names:
     sys.exit('no .dat outputs found in ' + str(base))
+other_names = sorted(p.name for p in other.glob('*.dat'))
+if other_names != names:
+    sys.exit('output set differs: baseline %r vs %r' % (names, other_names))
 def rows(p):
     return [l.split() for l in p.read_text().splitlines()
             if l.strip() and not l.lstrip().startswith('#')]

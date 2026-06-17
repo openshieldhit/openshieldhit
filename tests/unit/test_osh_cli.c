@@ -150,6 +150,46 @@ static void test_profile_option(void) {
     ASSERT_TRUE(rc != 0);
 }
 
+static void test_pool_capacity_option(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--pool-capacity", "4096", "run_17", NULL};
+    char *argv_eq[] = {"openshieldhit", "--pool-capacity=256", NULL};
+    char *argv_zero[] = {"openshieldhit", "--pool-capacity=0", NULL};
+    char *argv_plain[] = {"openshieldhit", "run_17", NULL};
+    char *argv_bad[] = {"openshieldhit", "--pool-capacity=abc", NULL};
+    char *argv_missing[] = {"openshieldhit", "--pool-capacity", NULL};
+
+    int rc = osh_cli_parse(4, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_pool_capacity == 1);
+    ASSERT_TRUE(opt.pool_capacity == 4096ULL);
+    ASSERT_TRUE(opt.workdir != NULL && strcmp(opt.workdir, "run_17") == 0);
+
+    rc = osh_cli_parse(2, argv_eq, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_pool_capacity == 1);
+    ASSERT_TRUE(opt.pool_capacity == 256ULL);
+
+    /* 0 is valid and means "use the compiled default" — must not be rejected. */
+    rc = osh_cli_parse(2, argv_zero, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_pool_capacity == 1);
+    ASSERT_TRUE(opt.pool_capacity == 0ULL);
+
+    /* Absent flag leaves the override off. */
+    rc = osh_cli_parse(2, argv_plain, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_pool_capacity == 0);
+
+    rc = osh_cli_parse(2, argv_bad, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid integer value") != NULL);
+
+    rc = osh_cli_parse(2, argv_missing, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+}
+
 static int run_named_test(char const *name) {
     if (strcmp(name, "version_short_flag") == 0) {
         test_version_short_flag();
@@ -191,6 +231,10 @@ static int run_named_test(char const *name) {
         test_profile_option();
         return 0;
     }
+    if (strcmp(name, "pool_capacity_option") == 0) {
+        test_pool_capacity_option();
+        return 0;
+    }
     return 1;
 }
 
@@ -209,5 +253,6 @@ int main(int argc, char *argv[]) {
     test_seedoffset_rejects_above_9999();
     test_rejects_extra_positional_argument();
     test_profile_option();
+    test_pool_capacity_option();
     return 0;
 }
