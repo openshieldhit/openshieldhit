@@ -46,9 +46,10 @@ static void test_query_invariants(void) {
     /* GPU detection is not implemented yet: must be reset to 0. */
     ASSERT_TRUE(info.gpu_count == 0u);
 
-    /* On every CI target (Linux/macOS/Windows) these are reported. */
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__) || defined(__EMSCRIPTEN__)
     ASSERT_TRUE(info.logical_cores >= 1u);
     ASSERT_TRUE(info.ram_total_bytes > 0u);
+#endif
 
     /* Available is best-effort; when known it cannot exceed total. */
     if (info.ram_available_bytes > 0u) {

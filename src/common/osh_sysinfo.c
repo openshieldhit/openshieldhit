@@ -83,6 +83,8 @@ static void sysinfo_query_platform(struct osh_sysinfo *out) {
             uint64_t const reclaimable = (uint64_t) vm.free_count + (uint64_t) vm.inactive_count;
             out->ram_available_bytes = reclaimable * (uint64_t) page_size;
         }
+
+        (void) mach_port_deallocate(mach_task_self(), host);
     }
 }
 
