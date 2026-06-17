@@ -91,6 +91,27 @@ struct osh_simulation_profile {
 enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int enable);
 
 /**
+ * @brief Set the live-history pool capacity for the next run.
+ *
+ * @details
+ * Must be called after osh_simulation_create() and before
+ * osh_simulation_run().  The pool capacity is the number of particle
+ * histories transported simultaneously; it trades cache footprint (small)
+ * against batch parallelism (large).  It is a pure performance knob: because
+ * each history owns an independent RNG stream keyed by its global index, every
+ * history consumes the same random draws at any capacity, so scored results
+ * are independent of the capacity chosen up to floating-point summation order
+ * in the shared scoring accumulators.
+ *
+ * @param[in] sim       Simulation handle created by osh_simulation_create().
+ * @param[in] capacity  Number of simultaneous histories; 0 selects the
+ *                      compiled default.  Values above nstat are clamped.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL when @p sim is NULL.
+ */
+enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, size_t capacity);
+
+/**
  * @brief Retrieve the transport profile of the last completed run.
  *
  * @param[in]  sim  Simulation handle created by osh_simulation_create().

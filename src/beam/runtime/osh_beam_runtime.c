@@ -11,10 +11,14 @@
 
 static enum osh_status setup_spots(struct osh_beam_runtime *rt);
 static enum osh_status setup_phsp(struct osh_beam_runtime *rt);
-static enum osh_status
-fill_from_spots(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_particle_pool *pool, size_t n);
-static enum osh_status
-fill_from_phsp(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_particle_pool *pool, size_t n);
+static enum osh_status fill_from_spots(struct osh_beam_runtime *rt,
+                                       struct osh_rng_seeding const *seeding,
+                                       struct osh_particle_pool *pool,
+                                       size_t n);
+static enum osh_status fill_from_phsp(struct osh_beam_runtime *rt,
+                                      struct osh_rng_seeding const *seeding,
+                                      struct osh_particle_pool *pool,
+                                      size_t n);
 
 /* ---- Lifecycle ----------------------------------------------------------- */
 
@@ -79,9 +83,11 @@ void osh_beam_runtime_free(struct osh_beam_runtime *rt) {
 
 /* ---- Primary generation -------------------------------------------------- */
 
-enum osh_status
-osh_beam_runtime_fill_pool(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_particle_pool *pool, size_t n) {
-    if (!rt || !rng || !pool) {
+enum osh_status osh_beam_runtime_fill_pool(struct osh_beam_runtime *rt,
+                                           struct osh_rng_seeding const *seeding,
+                                           struct osh_particle_pool *pool,
+                                           size_t n) {
+    if (!rt || !seeding || !pool) {
         return OSH_EINVAL;
     }
     if (n == 0u) {
@@ -94,9 +100,9 @@ osh_beam_runtime_fill_pool(struct osh_beam_runtime *rt, struct osh_rng *rng, str
     switch (rt->workspace->beam_mode) {
     case OSH_BEAM_MODE_SPOTS:
     case OSH_BEAM_MODE_SOBP:
-        return fill_from_spots(rt, rng, pool, n);
+        return fill_from_spots(rt, seeding, pool, n);
     case OSH_BEAM_MODE_PHSP:
-        return fill_from_phsp(rt, rng, pool, n);
+        return fill_from_phsp(rt, seeding, pool, n);
     default:
         return OSH_ENOTSUP;
     }
@@ -124,8 +130,10 @@ static enum osh_status setup_spots(struct osh_beam_runtime *rt) {
     return OSH_OK;
 }
 
-static enum osh_status
-fill_from_spots(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_particle_pool *pool, size_t n) {
+static enum osh_status fill_from_spots(struct osh_beam_runtime *rt,
+                                       struct osh_rng_seeding const *seeding,
+                                       struct osh_particle_pool *pool,
+                                       size_t n) {
     size_t i;
     size_t slot;
     struct ray_v ray;
@@ -133,6 +141,13 @@ fill_from_spots(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_par
 
     /*
      * Scalar fill loop: one primary per iteration.
+     *
+     * Each primary owns two independent streams keyed by its global history
+     * index: a transient BEAM stream that samples the source phase space, and
+     * the slot's persistent PHYSICS stream (pool->rng[slot]) used later by the
+     * transport loop.  Seeding by index keeps the source sampling identical
+     * regardless of fill chunking, pool capacity, or physics options, and
+     * keeps it independent of the transport stream.
      *
      * osh_beam_new_primary() returns one ray_v (AoS) at a time. We copy the
      * seven phase-space scalars into the pool's SoA arrays and assign
@@ -143,12 +158,18 @@ fill_from_spots(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_par
      * auto-vectorization of the energy/position sampling arithmetic.
      */
     for (i = 0u; i < n; ++i) {
-        rc = osh_beam_new_primary(rt->workspace, rng, &ray);
+        uint64_t const prim_idx = rt->primaries_generated + i;
+        uint64_t const hist_index = seeding->hist_base + prim_idx;
+        struct osh_rng beam_rng;
+
+        slot = pool->n + i;
+
+        osh_rng_seed_history(&beam_rng, seeding->type, seeding->seed, hist_index, OSH_RNG_PURPOSE_BEAM);
+        rc = osh_beam_new_primary(rt->workspace, &beam_rng, &ray);
         if (rc != OSH_OK) {
             return rc;
         }
 
-        slot = pool->n + i;
         pool->x[slot] = ray.p[0];
         pool->y[slot] = ray.p[1];
         pool->z[slot] = ray.p[2];
@@ -159,9 +180,12 @@ fill_from_spots(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_par
         pool->wt[slot] = 1.0; /* SOBP spot weight is absorbed into the
                                * inverse-CDF spot selection; per-history
                                * weight remains 1.0 for unweighted transport */
-        pool->prim_idx[slot] = (uint32_t) (rt->primaries_generated + i);
+        pool->prim_idx[slot] = prim_idx;
         pool->gen[slot] = 0u;
         pool->species[slot] = &rt->primary;
+
+        /* Persistent transport stream for this slot, independent of BEAM. */
+        osh_rng_seed_history(&pool->rng[slot], seeding->type, seeding->seed, hist_index, OSH_RNG_PURPOSE_PHYSICS);
     }
 
     pool->n += n;
@@ -191,8 +215,10 @@ static enum osh_status setup_phsp(struct osh_beam_runtime *rt) {
     return OSH_ENOTSUP;
 }
 
-static enum osh_status
-fill_from_phsp(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_particle_pool *pool, size_t n) {
+static enum osh_status fill_from_phsp(struct osh_beam_runtime *rt,
+                                      struct osh_rng_seeding const *seeding,
+                                      struct osh_particle_pool *pool,
+                                      size_t n) {
     /*
      * PHSP (MCPL) fill — not yet implemented.
      *
@@ -201,6 +227,9 @@ fill_from_phsp(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_part
      *   2. Convert each MCPL particle record to pool SoA layout.
      *   3. Advance rt->source.phsp.file_pos; rewind when exhausted.
      *   4. Assign prim_idx from rt->primaries_generated and gen = 0.
+     *   5. Seed pool->rng[slot] via osh_rng_seed_history(..., hist_index,
+     *      OSH_RNG_PURPOSE_PHYSICS) exactly as the spots path does, so PHSP
+     *      transport is reproducible and capacity-independent too.
      *
      * Key design constraint: MCPL files can exceed several GB, so entries
      * must be read in chunks — never all at once.  The pool capacity acts
@@ -210,7 +239,7 @@ fill_from_phsp(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_part
      * TODO: implement once libmcpl integration is in place.
      */
     (void) rt;
-    (void) rng;
+    (void) seeding;
     (void) pool;
     (void) n;
     return OSH_ENOTSUP;

@@ -288,6 +288,10 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             pool->prim_idx[s] = pool->prim_idx[slot];
             pool->gen[s] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
             pool->species[s] = ev->secondaries[si].species;
+            /* Give the secondary its own stream, split from the parent's.  The
+             * parent's draw sequence is deterministic along its lineage, so the
+             * child stream is reproducible and independent of wavefront order. */
+            osh_rng_split(&pool->rng[s], rng);
             pool->n++;
         }
     }

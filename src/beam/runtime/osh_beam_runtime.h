@@ -136,17 +136,26 @@ void osh_beam_runtime_free(struct osh_beam_runtime *rt);
  * is assigned from rt->primaries_generated so that indices are unique and
  * contiguous across multiple fill calls on the same runtime.
  *
+ * Each primary is seeded independently from its global history index
+ * (@p seeding->hist_base + prim_idx): a transient BEAM stream samples the
+ * source phase space, and the slot's persistent PHYSICS stream
+ * (pool->rng[slot]) is initialised for the transport loop.  Seeding by index
+ * rather than from a shared stream makes the generated primaries — and the
+ * whole run — reproducible and independent of pool capacity, thread, or rank.
+ *
  * For PHSP mode: not yet implemented; returns OSH_ENOTSUP.
  *
- * @param[in,out] rt    Beam runtime (primaries_generated is updated).
- * @param[in,out] rng   Random-number generator state.
- * @param[in,out] pool  Pool to fill; must have capacity >= pool->n + n.
- * @param[in]     n     Number of primaries to generate.
+ * @param[in,out] rt       Beam runtime (primaries_generated is updated).
+ * @param[in]     seeding  Run-wide RNG seeding context (engine, seed, base).
+ * @param[in,out] pool     Pool to fill; must have capacity >= pool->n + n.
+ * @param[in]     n        Number of primaries to generate.
  *
  * @returns OSH_OK on success, OSH_E* on failure.
  */
-enum osh_status
-osh_beam_runtime_fill_pool(struct osh_beam_runtime *rt, struct osh_rng *rng, struct osh_particle_pool *pool, size_t n);
+enum osh_status osh_beam_runtime_fill_pool(struct osh_beam_runtime *rt,
+                                           struct osh_rng_seeding const *seeding,
+                                           struct osh_particle_pool *pool,
+                                           size_t n);
 
 #ifdef __cplusplus
 }

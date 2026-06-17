@@ -40,6 +40,8 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
     opt->has_nstat = 0;
     opt->seed_offset = 0;
     opt->has_seed_offset = 0;
+    opt->pool_capacity = 0;
+    opt->has_pool_capacity = 0;
     opt->profile_path = NULL;
 
     if (argc <= 1) {
@@ -100,6 +102,9 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "  -m, --mat <file>      Override material input file\n");
     fprintf(out, "  -d, --detect <file>   Override scoring input file\n");
     fprintf(out, "  -o, --outdir <dir>    Override output directory\n");
+    fprintf(out,
+            "      --pool-capacity <n>  Live-history pool size (perf knob; 0 = default; physics unchanged,\n"
+            "                           scored output matches up to FP rounding)\n");
     fprintf(out, "      --profile <file>  Write a one-line JSON timing/counter profile to <file>\n");
     fprintf(out, "\n");
     fprintf(out, "Notes:\n");
@@ -232,6 +237,18 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
             return set_err(err, err_cap, "invalid integer value for option '%s'", "-N/--seedoffset");
         }
         opt->has_seed_offset = 1;
+        return 0;
+    }
+    if ((name_len == 13) && (strncmp(name, "pool-capacity", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        /* 0 is accepted and means "use the compiled default", matching the
+         * pool_capacity semantics in the transport params and public API. */
+        if (!parse_u64(value, &opt->pool_capacity)) {
+            return set_err(err, err_cap, "invalid integer value for option '%s'", "--pool-capacity");
+        }
+        opt->has_pool_capacity = 1;
         return 0;
     }
     if ((name_len == 7) && (strncmp(name, "workdir", name_len) == 0)) {

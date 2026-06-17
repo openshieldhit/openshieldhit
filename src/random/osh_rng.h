@@ -75,6 +75,23 @@ enum osh_rng_type {
 };
 
 /**
+ * @enum osh_rng_purpose
+ *
+ * @brief Independent sub-stream selector for per-history seeding.
+ *
+ * @details
+ * A single history index can drive several mutually independent streams by
+ * mixing a distinct @ref osh_rng_purpose into the stream id (see
+ * osh_rng_seed_history()).  This keeps source sampling reproducible and
+ * decoupled from stochastic transport: the same primary phase space is drawn
+ * regardless of which physics options (MSCAT/STRAGG/NUCRE) are enabled.
+ */
+enum osh_rng_purpose {
+    OSH_RNG_PURPOSE_BEAM = 0,    /**< Source / beam phase-space sampling. */
+    OSH_RNG_PURPOSE_PHYSICS = 1, /**< In-transport stochastic physics. */
+};
+
+/**
  * @struct osh_rng
  *
  * @brief RNG state container.
@@ -111,6 +128,58 @@ struct osh_rng {
  * @param stream Stream/sequence ID.
  */
 void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t stream);
+
+/**
+ * @brief Run-wide RNG seeding context for per-history streams.
+ *
+ * @details
+ * Carries the three values needed to derive an independent stream for any
+ * history index: the engine @p type, the run @p seed (RNDSEED), and a
+ * @p hist_base offset (RNDOFFSET) added to every history index.  Disjoint
+ * @p hist_base ranges give disjoint, non-overlapping streams, which is what
+ * makes process- and MPI-level splitting trivially reproducible: rank r owns
+ * history indices [hist_base + r·N, hist_base + (r+1)·N).
+ */
+struct osh_rng_seeding {
+    enum osh_rng_type type; /**< Engine used for every stream in the run. */
+    uint64_t seed;          /**< Run seed (RNDSEED). */
+    uint64_t hist_base;     /**< Global history-index base (RNDOFFSET). */
+};
+
+/**
+ * @brief Seed an RNG for one history, keyed by its global index and purpose.
+ *
+ * @details
+ * Derives a stream id by mixing (@p seed, @p hist_index, @p purpose) through a
+ * SplitMix64 finaliser, then initialises @p rng on that stream.  The resulting
+ * stream depends only on its key, never on execution order, so the same
+ * history sees the same draws regardless of pool capacity, thread, or rank.
+ * Distinct @ref osh_rng_purpose values yield independent streams for the same
+ * history.
+ *
+ * @param rng        RNG state to initialise.
+ * @param type       Engine type.
+ * @param seed       Run seed.
+ * @param hist_index Global history index (already includes any hist_base).
+ * @param purpose    Sub-stream selector (see @ref osh_rng_purpose).
+ */
+void osh_rng_seed_history(
+    struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t hist_index, enum osh_rng_purpose purpose);
+
+/**
+ * @brief Derive an independent child stream from a parent (splittable RNG).
+ *
+ * @details
+ * Consumes two draws from @p parent to seed @p child on a fresh, independent
+ * stream.  Because the parent's own draw sequence is deterministic along its
+ * lineage, the child stream is reproducible and independent of how histories
+ * are scheduled — the seeding primitive for nuclear secondaries, whose count
+ * and order are fixed by the parent's physics, not by the pool layout.
+ *
+ * @param child  RNG state to initialise (engine type inherited from parent).
+ * @param parent Parent RNG; advanced by two draws.
+ */
+void osh_rng_split(struct osh_rng *child, struct osh_rng *parent);
 
 /**
  * @brief Generate a 32-bit unsigned integer.

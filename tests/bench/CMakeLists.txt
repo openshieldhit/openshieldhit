@@ -53,4 +53,16 @@ if(BENCH_PYTHON)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/run_bit_identity.cmake
     )
     set_tests_properties("bench::profile_bit_identity" PROPERTIES LABELS "bench")
+
+    # ---- Pool capacity must not change physics: per-history RNG streams ----
+    add_test(
+        NAME "bench::capacity_invariance"
+        COMMAND ${CMAKE_COMMAND}
+            -DBENCH_PYTHON=${BENCH_PYTHON}
+            -DOSH_EXECUTABLE=$<TARGET_FILE:openshieldhit>
+            -DCASE_DIR=${PROJECT_SOURCE_DIR}/tests/cases/08_minimal_cyl
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/capacity_invariance
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/run_capacity_invariance.cmake
+    )
+    set_tests_properties("bench::capacity_invariance" PROPERTIES LABELS "bench")
 endif()
