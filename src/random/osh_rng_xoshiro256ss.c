@@ -15,7 +15,13 @@ static inline uint64_t rotl64(uint64_t x, int k) {
     return (x << k) | (x >> (64 - k));
 }
 
-/* splitmix64: good for seeding other generators */
+/* splitmix64: a 64-bit SplitMix generator, recommended for seeding the larger
+ * xoshiro state from a single value.  The increment 0x9e3779b97f4a7c15 is the
+ * golden-ratio constant floor(2^64 / phi) (a maximal-period Weyl sequence); the
+ * trailing xorshift-multiply-xorshift block is David Stafford's "Mix13"
+ * finaliser.  See the constant-by-constant rationale and references in
+ * rng_mix_stream() (osh_rng.c), which reuses the same finaliser.
+ * Ref: Steele, Lea & Flood, OOPSLA 2014; https://prng.di.unimi.it/splitmix64.c */
 static inline uint64_t _splitmix64_next(uint64_t *x) {
     uint64_t z;
 

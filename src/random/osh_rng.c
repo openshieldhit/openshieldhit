@@ -23,16 +23,52 @@ void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, ui
 }
 
 /*
- * SplitMix64 finaliser — mixes three 64-bit inputs into a well-distributed
- * stream id.  The golden-ratio and prime odd multipliers de-correlate adjacent
- * history indices and purposes before the avalanche, so consecutive histories
- * map to far-apart, statistically independent streams.  This is the same
- * mixing used to seed xoshiro from (seed, stream); reusing it here keeps the
- * lane-separation properties identical across both engines.
+ * rng_mix_stream() — derive a 64-bit stream id from (seed, history index,
+ * purpose).  It hash-combines the three inputs, then runs the SplitMix64
+ * finaliser.  Being a pure function of its inputs is the whole point: a
+ * history maps to the same stream id no matter when, on which thread, or in
+ * which pool capacity it is seeded.
+ *
+ * Why each constant — these are standard mixing constants with known good
+ * diffusion, not arbitrary values:
+ *
+ *   Step 1 — spread each input across all 64 bits, then XOR-combine.
+ *   Each field is multiplied by a large ODD constant.  An odd constant is a
+ *   unit in the ring Z/2^64, so the multiply is a bijection (it cannot lose
+ *   information) and it scatters the entropy of low-magnitude inputs — a small
+ *   history index, a 0/1 purpose — across the full word so they survive the
+ *   XOR instead of sitting in the low bits.  The constants only need to be odd
+ *   and distinct so the index and purpose axes do not alias:
+ *     - 0x9E3779B97F4A7C15 = floor(2^64 / phi), the 64-bit golden-ratio
+ *       constant ("Fibonacci hashing").  Consecutive indices land far apart —
+ *       the classic Weyl-sequence spacing.  Refs: Knuth, TAOCP Vol. 3 sec. 6.4
+ *       (multiplicative hashing); Steele, Lea & Flood, "Fast Splittable
+ *       Pseudorandom Number Generators", OOPSLA 2014 (SplitMix's GOLDEN_GAMMA).
+ *     - 0xD1B54A32D192ED03 is a second large odd constant applied to the
+ *       (tiny) purpose enum so BEAM and PHYSICS get well-separated, full-width
+ *       offsets; its only required property is oddness (invertible multiply).
+ *
+ *   Step 2 — the SplitMix64 finaliser (David Stafford's "Mix13" variant), an
+ *   improvement on MurmurHash3's fmix64 with stronger avalanche: flipping one
+ *   input bit flips ~half the output bits with low bias.  The multipliers
+ *   (0xBF58476D1CE4E5B9, 0x94D049BB133111EB) and shift amounts (30, 27, 31)
+ *   are taken verbatim.  Each xorshift-multiply step is invertible, so the
+ *   finaliser is a bijection.  Refs: D. Stafford, "Better Bit Mixing —
+ *   Improving on MurmurHash3's 64-bit Finalizer" (2011),
+ *   http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html ;
+ *   public-domain reference implementation https://prng.di.unimi.it/splitmix64.c
+ *   This is the same finaliser used to seed xoshiro256** in
+ *   osh_rng_xoshiro256ss_init(), so both engines get identical lane
+ *   separation.  Disjointness over the index ranges we actually use is also
+ *   checked empirically by test_seed_history_disjoint_ranges.
  */
 static uint64_t rng_mix_stream(uint64_t seed, uint64_t hist_index, uint64_t purpose) {
+    /* Golden-ratio constant on the index axis; a second odd constant on the
+     * purpose axis (see the constant rationale above). */
     uint64_t x = seed ^ (hist_index * 0x9E3779B97F4A7C15ULL) ^ (purpose * 0xD1B54A32D192ED03ULL);
 
+    /* Stafford Mix13 finaliser: xorshift / multiply / xorshift / multiply /
+     * xorshift, giving full 64-bit avalanche. */
     x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
     x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
     return x ^ (x >> 31);
