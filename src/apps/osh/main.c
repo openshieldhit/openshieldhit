@@ -61,7 +61,6 @@ int main(int argc, char *argv[]) {
         }
         printf("  Total RAM         : %s\n", info.ram_total_bytes > 0u ? total : "unknown");
         printf("  Available RAM     : %s\n", info.ram_available_bytes > 0u ? avail : "unknown");
-        printf("  GPU detection     : not yet implemented\n");
         return EX_OK;
     }
 
