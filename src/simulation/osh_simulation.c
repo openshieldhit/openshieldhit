@@ -294,6 +294,14 @@ enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int ena
     return OSH_OK;
 }
 
+enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, size_t capacity) {
+    if (!sim) {
+        return OSH_EINVAL;
+    }
+    sim->transport_ctx.params.pool_capacity = capacity;
+    return OSH_OK;
+}
+
 enum osh_status osh_simulation_get_profile(struct osh_simulation const *sim, struct osh_simulation_profile *out) {
     if (!sim || !out) {
         return OSH_EINVAL;

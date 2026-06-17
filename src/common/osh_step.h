@@ -103,7 +103,7 @@ struct step {
     int medium;        /* material index; -1 if unknown */
     int zone;          /* geometry zone index; -1 if unknown */
     int system;        /* coordinate system (OSH_COORD_*) */
-    uint32_t prim_idx; /* 0-based index of the beam-primary ancestor in the batch */
+    uint64_t prim_idx; /* 0-based index of the beam-primary ancestor in the batch */
     uint8_t gen;       /* generation: 0 = beam primary, 1 = first secondary, … */
     uint8_t has_voxel; /* non-zero when voxel_idx is valid */
 };

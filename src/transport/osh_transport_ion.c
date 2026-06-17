@@ -1,5 +1,7 @@
 #include "transport/osh_transport_ion.h"
 
+#include <stdlib.h>
+
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
@@ -76,12 +78,11 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                                               struct osh_gemca_runtime const *geom_rt,
                                               struct osh_material_runtime const *material_rt,
                                               struct osh_scoring_runtime *score_rt) {
-    struct osh_rng beam_rng;
-    struct osh_rng physics_rng;
+    struct osh_rng_seeding seeding;
     struct osh_transport_params const *params;
     struct osh_particle_pool *pool = NULL;
-    struct osh_zone_ref zone_refs[OSH_TRANSPORT_POOL_CAPACITY];
-    double dist_batch[OSH_TRANSPORT_POOL_CAPACITY];
+    struct osh_zone_ref *zone_refs = NULL;
+    double *dist_batch = NULL;
     size_t capacity;
     size_t primaries_done;
     size_t primaries_completed;
@@ -116,17 +117,42 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         return rc;
     }
 
-    capacity =
-        (params->nstat < (size_t) OSH_TRANSPORT_POOL_CAPACITY) ? params->nstat : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
+    /* Pool capacity: runtime override (params->pool_capacity) when set, else the
+     * compiled default.  Never exceeds nstat (no point allocating more slots
+     * than primaries).  Capacity is a pure performance knob: per-history RNG
+     * streams make each history consume the same random draws at any capacity,
+     * so scored results match up to floating-point summation order in the
+     * shared scoring accumulators. */
+    capacity = (params->pool_capacity != 0u) ? params->pool_capacity : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
+    if (capacity > params->nstat) {
+        capacity = params->nstat;
+    }
     rc = osh_particle_pool_alloc(capacity, &pool);
     if (rc != OSH_OK) {
         return rc;
     }
 
-    /* Keep source sampling independent of stochastic transport physics.  This
-     * makes NUCRE/MSCAT/STRAGG comparisons launch the same primary histories. */
-    osh_rng_init(&beam_rng, OSH_RNG_TYPE_PCG32, (uint64_t) params->rndseed, (uint64_t) params->rndoffset);
-    osh_rng_init(&physics_rng, OSH_RNG_TYPE_PCG32, (uint64_t) params->rndseed, (uint64_t) params->rndoffset + 1u);
+    /* Per-run batch scratch for the geometry queries, sized to the pool.
+     * Allocated once here (never on the per-step hot path) and freed at
+     * cleanup; replaces fixed-size stack arrays so capacity can be chosen at
+     * runtime without a recompile. */
+    zone_refs = (struct osh_zone_ref *) malloc(capacity * sizeof(*zone_refs));
+    dist_batch = (double *) malloc(capacity * sizeof(*dist_batch));
+    if (!zone_refs || !dist_batch) {
+        rc = OSH_ENOMEM;
+        goto cleanup;
+    }
+
+    /* Per-history seeding context.  Every primary derives independent BEAM and
+     * PHYSICS streams from its global history index (rndoffset + prim_idx), so
+     * results are reproducible and bit-identical across pool capacities,
+     * threads, and ranks.  rndoffset is the global history-index base: disjoint
+     * ranges (e.g. one per MPI rank) yield disjoint, non-overlapping streams.
+     * Keeping BEAM and PHYSICS on separate purposes makes NUCRE/MSCAT/STRAGG
+     * comparisons launch the same primary histories. */
+    seeding.type = OSH_RNG_TYPE_PCG32;
+    seeding.seed = (uint64_t) params->rndseed;
+    seeding.hist_base = (uint64_t) params->rndoffset;
 
     /* Total step budget: nstat × max_steps, capped at SIZE_MAX to avoid overflow. */
     if (params->nstat > (size_t) -1 / OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY) {
@@ -158,7 +184,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             if (prof) {
                 t_phase = osh_monotonic_seconds();
             }
-            rc = osh_beam_runtime_fill_pool(beam_rt, &beam_rng, pool, n_fill);
+            rc = osh_beam_runtime_fill_pool(beam_rt, &seeding, pool, n_fill);
             if (prof) {
                 prof->fill_s += osh_monotonic_seconds() - t_phase;
             }
@@ -216,8 +242,11 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
 
             step_seg.ds = dist_batch[i];
 
+            /* Each slot draws from its own carried stream, so the random
+             * sequence a history sees does not depend on its position in the
+             * wavefront or on how many secondaries its siblings spawned. */
             rc = osh_transport_ion_step(
-                pool, i, &zone_refs[i], &step_seg, 1u, geom_rt, transport_ctx, material_rt, score_rt, &physics_rng);
+                pool, i, &zone_refs[i], &step_seg, 1u, geom_rt, transport_ctx, material_rt, score_rt, &pool->rng[i]);
             if (rc != OSH_OK) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
                                 "transport: slot %zu failed with rc=%d zone=%zu boundary_ds=%.17g e=%.17g pos=(%.17g, "
@@ -311,6 +340,8 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     }
 
 cleanup:
+    free(zone_refs);
+    free(dist_batch);
     osh_particle_pool_free(pool);
     return rc;
 }

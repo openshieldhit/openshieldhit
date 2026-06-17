@@ -114,7 +114,7 @@ static int filter_rule_passes(struct osh_scoring_filter_runtime_rule const *rule
     case OSH_SCORING_FILTER_FIELD_GEN:
         return filter_compare_int((unsigned int) st->gen, rule->op, (unsigned int) rule->value);
     case OSH_SCORING_FILTER_FIELD_NPRIM:
-        return filter_compare_int(st->prim_idx, rule->op, (unsigned int) rule->value);
+        return filter_compare_int((unsigned int) st->prim_idx, rule->op, (unsigned int) rule->value);
     default:
         return 0;
     }

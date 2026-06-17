@@ -30,6 +30,8 @@ struct osh_run_options {
     unsigned long long seed_offset;   /**< RNG seed offset override; used only when has_seed_offset != 0. */
     int has_seed_offset;              /**< 1 if seed_offset should override the beam file value. */
     int validate_only;                /**< 1 = validate inputs then exit without running transport. */
+    unsigned long long pool_capacity; /**< Transport pool capacity override; used only when has_pool_capacity != 0. */
+    int has_pool_capacity;            /**< 1 if pool_capacity should override the compiled default. */
     char const *profile_path;         /**< Profile JSON output path; NULL disables profiling. */
     struct osh_diag_sink const *diag; /**< Borrowed diagnostics sink for simulation/transport messages. */
 };

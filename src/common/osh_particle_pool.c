@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "random/osh_rng.h"
+
 /*
  * Single-slab allocation layout.
  *
@@ -11,27 +13,30 @@
  *
  *   [ x | y | z | ux | uy | uz | e ]  — 7 * capacity doubles
  *   [ wt ]                             — 1 * capacity doubles
- *   [ prim_idx ]                       — capacity uint32_t
- *   [ gen ]                            — capacity uint8_t
+ *   [ prim_idx ]                       — capacity uint64_t
+ *   [ rng ]                            — capacity struct osh_rng
  *   [ species ]                        — capacity pointers
+ *   [ gen ]                            — capacity uint8_t
  *
  * Each segment is aligned to the natural alignment of its element type by
- * padding the preceding segment to a multiple of that alignment.  For
- * simplicity the slab is sized conservatively: all segments are treated as
- * double-sized (8 bytes), which satisfies every element's alignment.
+ * padding the preceding segment to a multiple of that alignment.  The 8-byte
+ * fields (prim_idx, rng, species) are placed first so each starts on an
+ * 8-aligned offset (capacity * 8k bytes); the 1-byte gen field comes last.
  */
 
 /*
- * Number of double-sized slots occupied by the non-double tail fields per
- * entry, rounded up for alignment:
- *   prim_idx : sizeof(uint32_t)            = 4 bytes → 1 double covers 2 entries
- *   gen      : sizeof(uint8_t)             = 1 byte  → 1 double covers 8 entries
- *   species  : sizeof(struct particle **)  = 8 bytes → 1 double per entry
+ * Bytes occupied by the non-double tail fields per entry, then rounded up to
+ * whole doubles so the slab is conservatively sized:
+ *   prim_idx : sizeof(uint64_t)            = 8 bytes
+ *   rng      : sizeof(struct osh_rng)      — per-slot RNG state
+ *   species  : sizeof(struct particle **)  = 8 bytes
+ *   gen      : sizeof(uint8_t)             = 1 byte
  *
- * Conservatively: per entry, tail needs sizeof(uint32_t) + sizeof(uint8_t)
- * + sizeof(void*) bytes.  We round the whole tail up to doubles.
+ * The round-up to whole doubles also absorbs any per-segment alignment
+ * padding, so the partition below never runs past the allocated slab.
  */
-#define TAIL_BYTES_PER_ENTRY (sizeof(uint32_t) + sizeof(uint8_t) + sizeof(struct particle const *))
+#define TAIL_BYTES_PER_ENTRY                                                                                           \
+    (sizeof(uint64_t) + sizeof(struct osh_rng) + sizeof(struct particle const *) + sizeof(uint8_t))
 #define TAIL_DOUBLES_PER_ENTRY ((TAIL_BYTES_PER_ENTRY + sizeof(double) - 1u) / sizeof(double))
 
 /* Total double-sized slots needed per entry: 8 phase-space+weight + tail. */
@@ -79,26 +84,30 @@ enum osh_status osh_particle_pool_alloc(size_t capacity, struct osh_particle_poo
     off += capacity;
 
     /*
-     * Tail fields (prim_idx, gen, species) are placed in the remaining slab
-     * space after the 8 double arrays.  Each pointer is derived from the
-     * slab base plus a byte offset, cast to the appropriate type.  The slab
-     * allocation above ensures sufficient space and natural alignment for
-     * double*, so uint32_t* and uint8_t* are always within bounds.
+     * Tail fields are placed in the remaining slab space after the 8 double
+     * arrays.  Each pointer is derived from the slab base plus a byte offset,
+     * cast to the appropriate type.  The 8-byte-aligned fields come first so
+     * their offsets (multiples of capacity * 8) need no extra padding; gen
+     * (1-byte) is placed last.  The slab base is double-aligned, which
+     * satisfies the 8-byte alignment of uint64_t, struct osh_rng, and void*.
      */
     {
         unsigned char *tail = (unsigned char *) (slab + off);
         size_t tail_off = 0u;
 
-        pool->prim_idx = (uint32_t *) (tail + tail_off);
-        tail_off += capacity * sizeof(uint32_t);
+        pool->prim_idx = (uint64_t *) (tail + tail_off);
+        tail_off += capacity * sizeof(uint64_t);
 
-        /* Align gen to its natural alignment (1 byte — no padding needed). */
-        pool->gen = (uint8_t *) (tail + tail_off);
-        tail_off += capacity * sizeof(uint8_t);
+        tail_off = (tail_off + _Alignof(struct osh_rng) - 1u) & ~(_Alignof(struct osh_rng) - 1u);
+        pool->rng = (struct osh_rng *) (tail + tail_off);
+        tail_off += capacity * sizeof(struct osh_rng);
 
-        /* Align species pointer array to pointer alignment. */
         tail_off = (tail_off + sizeof(void *) - 1u) & ~(sizeof(void *) - 1u);
         pool->species = (struct particle const **) (tail + tail_off);
+        tail_off += capacity * sizeof(struct particle const *);
+
+        /* gen has 1-byte alignment — no padding needed. */
+        pool->gen = (uint8_t *) (tail + tail_off);
     }
 
     pool->n = 0u;
@@ -141,6 +150,7 @@ void osh_particle_pool_compact(struct osh_particle_pool *pool) {
             pool->wt[dst] = pool->wt[src];
             pool->prim_idx[dst] = pool->prim_idx[src];
             pool->gen[dst] = pool->gen[src];
+            pool->rng[dst] = pool->rng[src]; /* carry the slot's RNG stream */
             pool->species[dst] = pool->species[src];
         }
         ++dst;

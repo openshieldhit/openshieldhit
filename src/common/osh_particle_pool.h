@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+struct osh_rng; /* per-slot RNG state; full definition in random/osh_rng.h */
+
 /*
  * Particle pool — the shared interface between beam generation and transport.
  *
@@ -80,8 +82,16 @@ struct osh_particle_pool {
 
     /* ---- Per-history metadata (SoA) ---- */
     double *wt;         /* statistical weight; 1.0 = unweighted          — capacity doubles   */
-    uint32_t *prim_idx; /* 0-based index of beam-primary ancestor        — capacity uint32_t  */
+    uint64_t *prim_idx; /* 0-based index of beam-primary ancestor        — capacity uint64_t  */
     uint8_t *gen;       /* generation: 0 = beam primary, 1 = secondary … — capacity uint8_t   */
+
+    /* ---- Per-slot RNG state (SoA) ---- */
+    /* One independent physics stream per live history, carried with the slot
+     * so that random draws follow the particle rather than the wavefront
+     * schedule.  This makes transport reproducible and bit-identical across
+     * pool capacities, threads, and ranks.  Primaries are seeded by global
+     * history index at fill time; secondaries are split from their parent. */
+    struct osh_rng *rng; /* one RNG state per entry — capacity osh_rng */
 
     /* ---- Species (pointer array, NOT owned) ---- */
     struct particle const **species; /* one pointer per entry into the particle registry */

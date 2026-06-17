@@ -270,6 +270,13 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         osh_simulation_set_profiling(sim, 1);
     }
 
+    if (opt->has_pool_capacity) {
+        osh_simulation_set_pool_capacity(sim, (size_t) opt->pool_capacity);
+        if (out) {
+            fprintf(out, "Applied pool capacity override: %llu\n", opt->pool_capacity);
+        }
+    }
+
     t_mark = osh_monotonic_seconds();
     rc = osh_simulation_run(sim);
     run_s = osh_monotonic_seconds() - t_mark;

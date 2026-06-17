@@ -55,6 +55,11 @@ enum osh_transport_straggling_mode {
  */
 struct osh_transport_params {
     size_t nstat;           /**< Total number of primary histories to transport. */
+    size_t pool_capacity;   /**< Live-history pool size; 0 selects the compiled default.
+                                 Tunes the cache/parallelism trade-off only: per-history
+                                 RNG streams make the physics each history sees identical
+                                 across capacities (scored output matches up to
+                                 floating-point reduction order in scoring). */
     float deltae;           /**< Max fractional energy loss per CSDA substep [dimensionless]. */
     float demin;            /**< Min energy loss per material substep [MeV/nucleon]. */
     float tcut;             /**< Lower ion energy cutoff [MeV/nucleon]. */

@@ -22,6 +22,39 @@ void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, ui
     }
 }
 
+/*
+ * SplitMix64 finaliser — mixes three 64-bit inputs into a well-distributed
+ * stream id.  The golden-ratio and prime odd multipliers de-correlate adjacent
+ * history indices and purposes before the avalanche, so consecutive histories
+ * map to far-apart, statistically independent streams.  This is the same
+ * mixing used to seed xoshiro from (seed, stream); reusing it here keeps the
+ * lane-separation properties identical across both engines.
+ */
+static uint64_t rng_mix_stream(uint64_t seed, uint64_t hist_index, uint64_t purpose) {
+    uint64_t x = seed ^ (hist_index * 0x9E3779B97F4A7C15ULL) ^ (purpose * 0xD1B54A32D192ED03ULL);
+
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+    return x ^ (x >> 31);
+}
+
+void osh_rng_seed_history(
+    struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t hist_index, enum osh_rng_purpose purpose) {
+    uint64_t const stream = rng_mix_stream(seed, hist_index, (uint64_t) purpose);
+
+    osh_rng_init(rng, type, seed, stream);
+}
+
+void osh_rng_split(struct osh_rng *child, struct osh_rng *parent) {
+    /* Two draws from the parent supply independent seed and stream entropy.
+     * Deterministic along the parent's lineage, hence reproducible regardless
+     * of how the wavefront schedules sibling histories. */
+    uint64_t const child_seed = osh_rng_u64(parent);
+    uint64_t const child_stream = osh_rng_u64(parent);
+
+    osh_rng_init(child, parent->type, child_seed, child_stream);
+}
+
 uint32_t osh_rng_u32(struct osh_rng *rng) {
     switch (rng->type) {
     case OSH_RNG_TYPE_PCG32:
