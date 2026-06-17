@@ -36,7 +36,7 @@ enum osh_status osh_beam_compile(struct beam_workspace const *workspace, struct 
     }
 
     rt->workspace = workspace;
-    rt->primary = (struct particle){0};
+    rt->primary = (struct particle) {0};
     rt->primaries_generated = 0u;
 
     switch (workspace->beam_mode) {

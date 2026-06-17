@@ -44,9 +44,15 @@ void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, ui
  *       the classic Weyl-sequence spacing.  Refs: Knuth, TAOCP Vol. 3 sec. 6.4
  *       (multiplicative hashing); Steele, Lea & Flood, "Fast Splittable
  *       Pseudorandom Number Generators", OOPSLA 2014 (SplitMix's GOLDEN_GAMMA).
- *     - 0xD1B54A32D192ED03 is a second large odd constant applied to the
- *       (tiny) purpose enum so BEAM and PHYSICS get well-separated, full-width
- *       offsets; its only required property is oddness (invertible multiply).
+ *     - 0xD1B54A32D192ED03 spreads the (tiny) purpose enum so BEAM and PHYSICS
+ *       land on well-separated, full-width offsets.  It is a recognised 64-bit
+ *       mixing multiplier — the same constant used in widely-copied hash-table
+ *       de-randomisation templates (the SplitMix64-based custom hashes from the
+ *       competitive-programming "blowing up unordered_map" idiom).  Note it is
+ *       odd but NOT prime: primality is irrelevant here; what matters is that an
+ *       odd multiplier is a unit in Z/2^64 (so the multiply is invertible) and
+ *       that its bit pattern diffuses well.  Any distinct large odd constant
+ *       would satisfy the seeding contract; this one is a known-good choice.
  *
  *   Step 2 — the SplitMix64 finaliser (David Stafford's "Mix13" variant), an
  *   improvement on MurmurHash3's fmix64 with stronger avalanche: flipping one
