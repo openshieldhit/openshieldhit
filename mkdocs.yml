@@ -52,4 +52,5 @@ nav:
     - Contributing: dev/contributing.md
     - Testing: dev/testing.md
     - Coordinate systems: dev/coordinates.md
+    - Random numbers: dev/random_numbers.md
   - API Reference: api/index.html

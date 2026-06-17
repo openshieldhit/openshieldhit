@@ -52,6 +52,14 @@ enum osh_status osh_particle_pool_alloc(size_t capacity, struct osh_particle_poo
         return OSH_EINVAL;
     }
 
+    /* Capacity is caller-controlled (runtime --pool-capacity), so guard the
+     * slab size product (DOUBLES_PER_ENTRY * capacity * sizeof(double)) against
+     * size_t overflow before any allocation — an overflow would under-allocate
+     * the slab and the tail-pointer carving below would write out of bounds. */
+    if (capacity > ((size_t) -1) / (DOUBLES_PER_ENTRY * sizeof(double))) {
+        return OSH_ENOMEM;
+    }
+
     pool = (struct osh_particle_pool *) malloc(sizeof(*pool));
     if (!pool) {
         return OSH_ENOMEM;

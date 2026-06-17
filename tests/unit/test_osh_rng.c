@@ -139,10 +139,14 @@ static void test_seed_history_purpose_independence(void) {
     ASSERT_TRUE(differ);
 }
 
-/* Disjoint history-index ranges (e.g. one per MPI rank via hist_base) yield
- * disjoint streams: no first-draw collisions across a large index span. */
+/* Disjoint history-index ranges (e.g. one per MPI rank via hist_base) must not
+ * alias.  Two streams alias only if they are seeded to the *same generator
+ * state*, so we compare the seeded PCG32 state (state, inc) pairs rather than a
+ * single output: distinct streams can legitimately share a first draw, but they
+ * must never share full state. */
 static void test_seed_history_disjoint_ranges(void) {
-    uint64_t first[HIST_N];
+    uint64_t state[HIST_N];
+    uint64_t inc[HIST_N];
     uint64_t h;
     uint64_t i;
     uint64_t j;
@@ -150,11 +154,12 @@ static void test_seed_history_disjoint_ranges(void) {
     for (h = 0u; h < HIST_N; ++h) {
         struct osh_rng r;
         osh_rng_seed_history(&r, OSH_RNG_TYPE_PCG32, 9u, 1000000u + h, OSH_RNG_PURPOSE_PHYSICS);
-        first[h] = osh_rng_u64(&r);
+        state[h] = r.u.pcg32.state;
+        inc[h] = r.u.pcg32.inc;
     }
     for (i = 0u; i < HIST_N; ++i) {
         for (j = i + 1u; j < HIST_N; ++j) {
-            ASSERT_TRUE(first[i] != first[j]);
+            ASSERT_TRUE(state[i] != state[j] || inc[i] != inc[j]);
         }
     }
 }

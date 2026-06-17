@@ -63,8 +63,11 @@ struct osh_transport_params {
     float deltae;           /**< Max fractional energy loss per CSDA substep [dimensionless]. */
     float demin;            /**< Min energy loss per material substep [MeV/nucleon]. */
     float tcut;             /**< Lower ion energy cutoff [MeV/nucleon]. */
-    int rndseed;            /**< Base RNG seed. */
-    int rndoffset;          /**< RNG seed offset (added on top of rndseed). */
+    int rndseed;            /**< Base RNG seed (RNDSEED); fixes the whole run's streams. */
+    int rndoffset;          /**< Global history-index base (RNDOFFSET): added to every
+                                 history index before seeding, so disjoint ranges (e.g.
+                                 one per process/MPI rank) give disjoint, non-overlapping
+                                 streams.  Not a value added to rndseed. */
     char mcs_mode;          /**< enum osh_transport_mcs_mode value. */
     char straggling_mode;   /**< enum osh_transport_straggling_mode value. */
     char nuclear_inelastic; /**< Non-zero to enable inelastic nuclear reactions (Tripathi). */

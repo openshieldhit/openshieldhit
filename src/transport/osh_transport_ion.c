@@ -135,7 +135,12 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     /* Per-run batch scratch for the geometry queries, sized to the pool.
      * Allocated once here (never on the per-step hot path) and freed at
      * cleanup; replaces fixed-size stack arrays so capacity can be chosen at
-     * runtime without a recompile. */
+     * runtime without a recompile.  Guard the size product against size_t
+     * overflow now that capacity is caller-controlled. */
+    if (capacity > ((size_t) -1) / sizeof(*zone_refs)) {
+        rc = OSH_ENOMEM;
+        goto cleanup;
+    }
     zone_refs = (struct osh_zone_ref *) malloc(capacity * sizeof(*zone_refs));
     dist_batch = (double *) malloc(capacity * sizeof(*dist_batch));
     if (!zone_refs || !dist_batch) {
@@ -144,12 +149,14 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     }
 
     /* Per-history seeding context.  Every primary derives independent BEAM and
-     * PHYSICS streams from its global history index (rndoffset + prim_idx), so
-     * results are reproducible and bit-identical across pool capacities,
-     * threads, and ranks.  rndoffset is the global history-index base: disjoint
-     * ranges (e.g. one per MPI rank) yield disjoint, non-overlapping streams.
-     * Keeping BEAM and PHYSICS on separate purposes makes NUCRE/MSCAT/STRAGG
-     * comparisons launch the same primary histories. */
+     * PHYSICS streams from its global history index (rndoffset + prim_idx), so a
+     * history sees the same random draws on any pool capacity, thread, or rank.
+     * (Scored output is therefore invariant up to floating-point summation order
+     * in the shared scoring accumulators, not byte-for-byte.)  rndoffset is the
+     * global history-index base: disjoint ranges (e.g. one per MPI rank) yield
+     * disjoint, non-overlapping streams.  Keeping BEAM and PHYSICS on separate
+     * purposes makes NUCRE/MSCAT/STRAGG comparisons launch the same primary
+     * histories. */
     seeding.type = OSH_RNG_TYPE_PCG32;
     seeding.seed = (uint64_t) params->rndseed;
     seeding.hist_base = (uint64_t) params->rndoffset;

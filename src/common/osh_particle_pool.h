@@ -88,9 +88,11 @@ struct osh_particle_pool {
     /* ---- Per-slot RNG state (SoA) ---- */
     /* One independent physics stream per live history, carried with the slot
      * so that random draws follow the particle rather than the wavefront
-     * schedule.  This makes transport reproducible and bit-identical across
-     * pool capacities, threads, and ranks.  Primaries are seeded by global
-     * history index at fill time; secondaries are split from their parent. */
+     * schedule.  A history thus sees the same draws on any pool capacity,
+     * thread, or rank (scored output is invariant up to floating-point
+     * summation order in the scorer, not byte-for-byte).  Primaries are seeded
+     * by global history index at fill time; secondaries are split from their
+     * parent. */
     struct osh_rng *rng; /* one RNG state per entry — capacity osh_rng */
 
     /* ---- Species (pointer array, NOT owned) ---- */
