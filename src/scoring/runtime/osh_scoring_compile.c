@@ -1,12 +1,14 @@
 #include "scoring/runtime/osh_scoring_compile.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "common/osh_diag.h"
 #include "common/raytrace/osh_raytrace.h"
 #include "openshieldhit/const.h"
+#include "openshieldhit/scoring.h"
 
 /* Scratch record built during the first compile pass; sorted by geometry+kind
  * so pages that share a geometry and scorer type end up in the same hot group. */
@@ -181,6 +183,73 @@ static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
     default:
         return 0;
     }
+}
+
+enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *ws,
+                                            struct osh_scoring_mem_estimate *out) {
+    size_t i;
+    size_t j;
+
+    if (!ws || !out) {
+        return OSH_EINVAL;
+    }
+
+    out->accum_bytes = 0u;
+    out->npages = 0u;
+    out->largest_page_bytes = 0u;
+    out->largest_geometry[0] = '\0';
+
+    /* Mirror exactly what osh_scoring_compile() allocates: one page per
+     * (output, quantity); each page owns `bins` doubles for its primary
+     * accumulator, plus a second `bins`-double weight accumulator for the
+     * "average" quantities (LET/Qeff).  bins is the geometry's bin product,
+     * computed by the same geometry_nbins() the compiler uses, so the estimate
+     * cannot drift from the real allocation. */
+    for (i = 0u; i < ws->noutputs; ++i) {
+        struct osh_scoring_output_def const *output = &ws->outputs[i];
+        struct osh_scoring_geometry_def const *geo = osh_scoring_geometry_by_name(ws, output->geometry_name);
+        size_t const bins = geo ? geometry_nbins(geo) : 0u;
+
+        for (j = 0u; j < output->npages; ++j) {
+            struct osh_scoring_page_def const *page = &output->pages[j];
+            enum osh_scoring_score_kind const kind = quantity_to_score_kind(page->quantity);
+            unsigned const arrays = score_kind_uses_data2(kind) ? 2u : 1u;
+            uint64_t len = (uint64_t) bins;
+            uint64_t page_bytes;
+
+            if (len > 0u && page->diff_nbins > 0u) {
+                uint64_t const d1 = (uint64_t) page->diff_nbins;
+                uint64_t const d2 = (uint64_t) ((page->diff2_nbins > 0u) ? page->diff2_nbins : 1u);
+                if (d1 > 0u) {
+                    len = (len <= UINT64_MAX / d1) ? (len * d1) : UINT64_MAX;
+                }
+                if (d2 > 0u) {
+                    len = (len <= UINT64_MAX / d2) ? (len * d2) : UINT64_MAX;
+                }
+            }
+
+            if (len == 0u) {
+                page_bytes = 0u;
+            } else {
+                uint64_t const bytes_per_bin = (uint64_t) sizeof(double) * (uint64_t) arrays;
+                page_bytes = (len <= UINT64_MAX / bytes_per_bin) ? (len * bytes_per_bin) : UINT64_MAX;
+            }
+
+            out->accum_bytes =
+                (out->accum_bytes <= UINT64_MAX - page_bytes) ? (out->accum_bytes + page_bytes) : UINT64_MAX;
+            out->npages += 1u;
+
+            if (page_bytes > out->largest_page_bytes) {
+                char const *name = (geo && geo->name)      ? geo->name
+                                   : output->geometry_name ? output->geometry_name
+                                                           : "(unnamed)";
+                out->largest_page_bytes = page_bytes;
+                (void) snprintf(out->largest_geometry, sizeof(out->largest_geometry), "%s", name);
+            }
+        }
+    }
+
+    return OSH_OK;
 }
 
 /* divide=1 means postproc divides data by data2 (LET average) → AVER mode.

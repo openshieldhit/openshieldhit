@@ -1,0 +1,20 @@
+# Fixture for the osh_scoring_estimate_memory() unit test.
+#
+# Geometry "G" is a 1 x 1 x 100 mesh => 100 bins.
+# Two scored quantities on one output:
+#   Dose  -> 1 accumulator  => 100 * 8 * 1 =  800 bytes
+#   DLET  -> 2 accumulators => 100 * 8 * 2 = 1600 bytes   (LET keeps a weight sum)
+# Expected: accum_bytes = 2400, npages = 2, largest_page_bytes = 1600, geometry "G".
+
+Geometry Mesh
+    Name G
+    X -1.0   1.0     1
+    Y -1.0   1.0     1
+    Z  0.0  10.0   100
+
+Output
+    Filename est.dat
+    Fileformat TEXT
+    Geo G
+    Quantity Dose
+    Quantity DLET

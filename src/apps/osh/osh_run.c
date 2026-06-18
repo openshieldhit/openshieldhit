@@ -12,9 +12,11 @@
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"
+#include "apps/osh/osh_membudget.h"
 #include "common/osh_diag.h"
 #include "common/osh_file.h"
 #include "common/osh_patient_position.h"
+#include "common/osh_sysinfo.h"
 #include "common/osh_time.h"
 #include "common/osh_vect.h"
 #include "openshieldhit/const.h"
@@ -43,6 +45,8 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
                                                char const *detect_path,
                                                struct osh_diag_sink const *diag);
 static int run_file_exists(char const *path);
+static enum osh_status
+run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_budget_override, FILE *out, FILE *err);
 static enum osh_status run_write_profile_json(char const *path,
                                               struct osh_simulation_profile const *prof,
                                               size_t nstat,
@@ -263,6 +267,14 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
+    /* Detect host resources, report the scoring memory footprint, and refuse
+     * the run up front if it would exceed the memory budget — before
+     * osh_simulation_create() allocates any scoring buffers. */
+    rc = run_check_memory(scoring, opt->mem_budget, out, err);
+    if (rc != OSH_OK) {
+        goto cleanup;
+    }
+
     t_mark = osh_monotonic_seconds();
     rc = osh_simulation_create(beam, geom, mat, scoring, opt->diag, &sim);
     compile_s = osh_monotonic_seconds() - t_mark;
@@ -356,6 +368,118 @@ cleanup:
 }
 
 /* ---- Internal helpers ---------------------------------------------------- */
+
+/**
+ * @brief Report host resources and the scoring memory footprint, and gate the
+ *        run against a memory budget.
+ *
+ * @details
+ * Detects CPU/RAM via osh_sysinfo, resolves a budget (the @p mem_budget_override
+ * string when given, otherwise the default 80%-of-available policy), estimates
+ * the scoring accumulator memory from the parsed configuration, and prints a
+ * short report to @p out.  If a budget is known and the estimate exceeds it,
+ * prints an actionable message to @p err and returns OSH_ENOMEM so the caller
+ * aborts *before* any scoring buffers are allocated — turning a would-be
+ * out-of-memory crash into a clear, recoverable refusal.
+ *
+ * When no memory figure can be detected and no override is given, the budget is
+ * 0 and the run proceeds unguarded (best effort, never a false refusal).
+ *
+ * @param[in] scoring             Parsed scoring workspace (fully populated).
+ * @param[in] mem_budget_override Budget string (e.g. "8GB", "80%") or NULL.
+ * @param[in] out                 Human-readable report stream, or NULL.
+ * @param[in] err                 Error stream for the refusal message, or NULL.
+ *
+ * @returns OSH_OK to proceed, OSH_ENOMEM if over budget, OSH_EINVAL on a
+ *          malformed override string.
+ */
+static enum osh_status
+run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_budget_override, FILE *out, FILE *err) {
+    struct osh_sysinfo info;
+    struct osh_scoring_mem_estimate est;
+    uint64_t base;
+    uint64_t budget = 0u;
+    char b_total[32];
+    char b_avail[32];
+    char b_scoring[32];
+    char b_budget[32];
+    char b_largest[32];
+
+    osh_sysinfo_query(&info);
+
+    /* Use available RAM as the reference for "%" budget strings so that
+     * "80%" means 80 % of what is actually free, not of what is installed. */
+    if (info.ram_available_bytes > 0u) {
+        base = info.ram_available_bytes;
+    } else {
+        base = info.ram_total_bytes; /* fall back when available is unknown */
+    }
+
+    if (mem_budget_override && mem_budget_override[0]) {
+        if (!osh_membudget_parse(mem_budget_override, base, &budget)) {
+            if (err) {
+                fprintf(err,
+                        "Error: invalid --mem-budget value '%s' (use e.g. 8GB, 512MiB, or 80%%)\n",
+                        mem_budget_override);
+            }
+            return OSH_EINVAL;
+        }
+    } else {
+        budget = osh_membudget_default(&info); /* 0 ⇒ unknown ⇒ no enforcement */
+    }
+
+    if (osh_scoring_estimate_memory(scoring, &est) != OSH_OK) {
+        return OSH_OK; /* estimate unavailable: do not block the run */
+    }
+
+    osh_sysinfo_format_bytes(info.ram_total_bytes, b_total, sizeof(b_total));
+    osh_sysinfo_format_bytes(info.ram_available_bytes, b_avail, sizeof(b_avail));
+    osh_sysinfo_format_bytes(est.accum_bytes, b_scoring, sizeof(b_scoring));
+
+    if (out) {
+        if (info.logical_cores > 0u) {
+            fprintf(out,
+                    "Resources: %u core(s), RAM %s total / %s available\n",
+                    info.logical_cores,
+                    info.ram_total_bytes > 0u ? b_total : "unknown",
+                    info.ram_available_bytes > 0u ? b_avail : "unknown");
+        } else {
+            fprintf(out,
+                    "Resources: cores unknown, RAM %s total / %s available\n",
+                    info.ram_total_bytes > 0u ? b_total : "unknown",
+                    info.ram_available_bytes > 0u ? b_avail : "unknown");
+        }
+        fprintf(out, "Scoring memory: %s across %zu page(s)\n", b_scoring, est.npages);
+        if (budget > 0u) {
+            osh_sysinfo_format_bytes(budget, b_budget, sizeof(b_budget));
+            fprintf(
+                out, "Memory budget: %s%s\n", b_budget, mem_budget_override ? " (--mem-budget)" : " (default policy)");
+        }
+    }
+
+    if (budget > 0u && est.accum_bytes > budget) {
+        if (err) {
+            osh_sysinfo_format_bytes(budget, b_budget, sizeof(b_budget));
+            osh_sysinfo_format_bytes(est.largest_page_bytes, b_largest, sizeof(b_largest));
+            fprintf(err,
+                    "Error: scoring would allocate %s, exceeding the memory budget of %s.\n"
+                    "  Largest scorer: geometry '%s' (%s).\n"
+                    "  Detected RAM: %s total, %s available.\n"
+                    "  To proceed, reduce the scoring mesh/bin counts, or raise the limit with\n"
+                    "  --mem-budget (e.g. --mem-budget %s). Aborting before allocating memory.\n",
+                    b_scoring,
+                    b_budget,
+                    est.largest_geometry,
+                    b_largest,
+                    info.ram_total_bytes > 0u ? b_total : "unknown",
+                    info.ram_available_bytes > 0u ? b_avail : "unknown",
+                    b_scoring);
+        }
+        return OSH_ENOMEM;
+    }
+
+    return OSH_OK;
+}
 
 /**
  * @brief Resolve one optional input override against the working directory.

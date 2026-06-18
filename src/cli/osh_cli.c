@@ -42,6 +42,7 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
     opt->has_seed_offset = 0;
     opt->pool_capacity = 0;
     opt->has_pool_capacity = 0;
+    opt->mem_budget = NULL;
     opt->profile_path = NULL;
 
     if (argc <= 1) {
@@ -92,6 +93,7 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "Options:\n");
     fprintf(out, "  -h, --help            Show this help message\n");
     fprintf(out, "  -V, --version         Print version information\n");
+    fprintf(out, "      --print-resources Detect and print host CPU/RAM, then exit\n");
     fprintf(out, "  -v, --verbose         Increase verbosity\n");
     fprintf(out, "  -n, --nstat <n>       Number of requested primary histories\n");
     fprintf(out, "  -N, --seedoffset <n>  Random seed offset override (max 9999)\n");
@@ -105,6 +107,10 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out,
             "      --pool-capacity <n>  Live-history pool size (perf knob; 0 = default; physics unchanged,\n"
             "                           scored output matches up to FP rounding)\n");
+    fprintf(out,
+            "      --mem-budget <size>  Max memory OSH may use for scoring (e.g. 8GB, 512MiB, 80%%);\n"
+            "                           a run whose scoring exceeds this is refused. Default: 80%% of\n"
+            "                           available RAM\n");
     fprintf(out, "      --profile <file>  Write a one-line JSON timing/counter profile to <file>\n");
     fprintf(out, "\n");
     fprintf(out, "Notes:\n");
@@ -209,6 +215,10 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
         opt->action = OSH_CLI_ACTION_VERSION;
         return 0;
     }
+    if ((name_len == 15) && (strncmp(name, "print-resources", name_len) == 0) && !value) {
+        opt->action = OSH_CLI_ACTION_PRINT_RESOURCES;
+        return 0;
+    }
     if ((name_len == 7) && (strncmp(name, "verbose", name_len) == 0) && !value) {
         opt->verbose += 1;
         return 0;
@@ -249,6 +259,13 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
             return set_err(err, err_cap, "invalid integer value for option '%s'", "--pool-capacity");
         }
         opt->has_pool_capacity = 1;
+        return 0;
+    }
+    if ((name_len == 10) && (strncmp(name, "mem-budget", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+        }
+        opt->mem_budget = value;
         return 0;
     }
     if ((name_len == 7) && (strncmp(name, "workdir", name_len) == 0)) {

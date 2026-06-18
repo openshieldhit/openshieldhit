@@ -9,7 +9,12 @@
  * Used by src/apps/osh/main.c and the test_osh_cli test suite. */
 
 /** Actions the CLI parser may request the caller to perform. */
-enum osh_cli_action { OSH_CLI_ACTION_RUN = 0, OSH_CLI_ACTION_HELP = 1, OSH_CLI_ACTION_VERSION = 2 };
+enum osh_cli_action {
+    OSH_CLI_ACTION_RUN = 0,
+    OSH_CLI_ACTION_HELP = 1,
+    OSH_CLI_ACTION_VERSION = 2,
+    OSH_CLI_ACTION_PRINT_RESOURCES = 3 /**< Print detected host resources and exit. */
+};
 
 /**
  * @brief Parsed and validated command-line options.
@@ -34,6 +39,7 @@ struct osh_cli_options {
     int has_seed_offset;              /**< Non-zero if --seedoffset/-N was explicitly given. */
     unsigned long long pool_capacity; /**< Transport pool capacity override (0 = compiled default). */
     int has_pool_capacity;            /**< Non-zero if --pool-capacity was explicitly given. */
+    char const *mem_budget;           /**< Memory-budget override string (e.g. "8GB", "80%"); NULL = default policy. */
     char const *profile_path;         /**< Profile JSON output path; NULL disables profiling. */
 };
 

@@ -8,6 +8,19 @@
 
 find_program(BENCH_PYTHON NAMES python3 python)
 
+# ---- Out-of-memory gate: an oversized scoring config must be refused up front,
+#      with a meaningful message, on every OS (no Python needed). ----
+add_test(
+    NAME "bench::oom_gate"
+    COMMAND ${CMAKE_COMMAND}
+        -DOSH_EXECUTABLE=$<TARGET_FILE:openshieldhit>
+        -DCASE_DIR=${PROJECT_SOURCE_DIR}/tests/cases/00_minimal
+        -DDETECT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/huge_detect.dat
+        -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/oom_gate
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/run_oom_gate.cmake
+)
+set_tests_properties("bench::oom_gate" PROPERTIES LABELS "bench")
+
 # ---- Bench case inputs: one validation test per case directory ----
 file(GLOB BENCH_CASE_DIRS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/benchmarks/performance/cases/*/")
 foreach(case_dir ${BENCH_CASE_DIRS})

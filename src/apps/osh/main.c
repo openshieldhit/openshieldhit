@@ -5,6 +5,7 @@
 #include "cli/osh_cli.h"
 #include "common/osh_exit.h"
 #include "common/osh_file.h"
+#include "common/osh_sysinfo.h"
 #include "openshieldhit/diag.h"
 #include "openshieldhit/status.h"
 #include "openshieldhit/version.h"
@@ -43,6 +44,26 @@ int main(int argc, char *argv[]) {
         return EX_OK;
     }
 
+    if (opt.action == OSH_CLI_ACTION_PRINT_RESOURCES) {
+        struct osh_sysinfo info;
+        char total[32];
+        char avail[32];
+
+        osh_sysinfo_query(&info);
+        osh_sysinfo_format_bytes(info.ram_total_bytes, total, sizeof(total));
+        osh_sysinfo_format_bytes(info.ram_available_bytes, avail, sizeof(avail));
+
+        printf("Host resources:\n");
+        if (info.logical_cores > 0u) {
+            printf("  Logical CPU cores : %u\n", info.logical_cores);
+        } else {
+            printf("  Logical CPU cores : unknown\n");
+        }
+        printf("  Total RAM         : %s\n", info.ram_total_bytes > 0u ? total : "unknown");
+        printf("  Available RAM     : %s\n", info.ram_available_bytes > 0u ? avail : "unknown");
+        return EX_OK;
+    }
+
     diag.emit = cli_diag_emit;
     diag.min_level = (opt.verbose == 0)   ? OSH_DIAG_LEVEL_WARN
                      : (opt.verbose == 1) ? OSH_DIAG_LEVEL_INFO
@@ -71,6 +92,7 @@ int main(int argc, char *argv[]) {
     run_opt.validate_only = opt.dry_run ? 1 : 0;
     run_opt.pool_capacity = opt.pool_capacity;
     run_opt.has_pool_capacity = opt.has_pool_capacity;
+    run_opt.mem_budget = opt.mem_budget;
     run_opt.profile_path = opt.profile_path;
     run_opt.diag = &diag;
 
