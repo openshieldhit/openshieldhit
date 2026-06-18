@@ -13,13 +13,7 @@
 #include "common/osh_sysinfo.h"
 #include "openshieldhit/status.h"
 
-#define ASSERT_TRUE(cond)                                                                                              \
-    do {                                                                                                               \
-        if (!(cond)) {                                                                                                 \
-            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);                                 \
-            exit(1);                                                                                                   \
-        }                                                                                                              \
-    } while (0)
+#include "test_assert.h"
 
 #define ASSERT_STREQ(a, b)                                                                                             \
     do {                                                                                                               \

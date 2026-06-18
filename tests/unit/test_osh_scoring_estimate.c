@@ -17,13 +17,7 @@
 #define OSH_TEST_FIXTURES_DIR "."
 #endif
 
-#define ASSERT_TRUE(cond)                                                                                              \
-    do {                                                                                                               \
-        if (!(cond)) {                                                                                                 \
-            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);                                 \
-            exit(1);                                                                                                   \
-        }                                                                                                              \
-    } while (0)
+#include "test_assert.h"
 
 static void test_estimate_known_fixture(void) {
     char path[1024];
