@@ -16,7 +16,6 @@
 #include <stdlib.h>
 
 #include "apps/osh/osh_membudget.h"
-
 #include "test_assert.h"
 
 /* Byte-count helpers — spelled out as products so the intent is obvious. */

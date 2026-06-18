@@ -12,7 +12,6 @@
 
 #include "common/osh_sysinfo.h"
 #include "openshieldhit/status.h"
-
 #include "test_assert.h"
 
 #define ASSERT_STREQ(a, b)                                                                                             \
