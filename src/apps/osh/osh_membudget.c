@@ -91,22 +91,32 @@ int osh_membudget_parse(char const *text, uint64_t base, uint64_t *out_bytes) {
 
     if (*end == '%') {
         char const *after = end + 1;
+        double bytes_d;
         while (*after == ' ' || *after == '\t') {
             ++after;
         }
-        if (*after != '\0') {
-            return 0; /* trailing junk after % */
+        if (*after != '\0' || base == 0u) {
+            return 0; /* trailing junk after % or unknown base */
         }
-        *out_bytes = (uint64_t) ((value / 100.0) * (double) base);
+        bytes_d = (value / 100.0) * (double) base;
+        if (!(bytes_d >= 0.0) || bytes_d > (double) UINT64_MAX) {
+            return 0;
+        }
+        *out_bytes = (uint64_t) bytes_d;
         return 1;
     }
 
     {
         uint64_t const mult = unit_multiplier(end);
+        double bytes_d;
         if (mult == 0u) {
             return 0; /* unrecognised unit */
         }
-        *out_bytes = (uint64_t) (value * (double) mult);
+        bytes_d = value * (double) mult;
+        if (!(bytes_d >= 0.0) || bytes_d > (double) UINT64_MAX) {
+            return 0;
+        }
+        *out_bytes = (uint64_t) bytes_d;
         return 1;
     }
 }

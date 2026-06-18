@@ -430,19 +430,25 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
     osh_sysinfo_format_bytes(est.accum_bytes, b_scoring, sizeof(b_scoring));
 
     if (out) {
-        fprintf(out,
-                "Resources: %u core(s), RAM %s total / %s available\n",
-                info.logical_cores,
-                info.ram_total_bytes > 0u ? b_total : "unknown",
-                info.ram_available_bytes > 0u ? b_avail : "unknown");
+        if (info.logical_cores > 0u) {
+            fprintf(out,
+                    "Resources: %u core(s), RAM %s total / %s available\n",
+                    info.logical_cores,
+                    info.ram_total_bytes > 0u ? b_total : "unknown",
+                    info.ram_available_bytes > 0u ? b_avail : "unknown");
+        } else {
+            fprintf(out,
+                    "Resources: cores unknown, RAM %s total / %s available\n",
+                    info.ram_total_bytes > 0u ? b_total : "unknown",
+                    info.ram_available_bytes > 0u ? b_avail : "unknown");
+        }
         fprintf(out, "Scoring memory: %s across %zu page(s)\n", b_scoring, est.npages);
         if (budget > 0u) {
             osh_sysinfo_format_bytes(budget, b_budget, sizeof(b_budget));
             fprintf(out,
                     "Memory budget: %s%s\n",
                     b_budget,
-                    mem_budget_override ? " (--mem-budget)" : " (default: 80% of available)");
-        }
+                    mem_budget_override ? " (--mem-budget)" : " (default policy)" );
     }
 
     if (budget > 0u && est.accum_bytes > budget) {

@@ -106,9 +106,7 @@ struct osh_scoring_mem_estimate {
  * Pages whose geometry cannot be resolved or whose bin count is zero contribute
  * nothing (they are rejected or harmless at compile time).
  *
- * @param[in]  ws   Parsed scoring workspace.
- * @param[out] out  Receives the estimate; zero-initialised on entry.
- *
+ * @param[out] out  Receives the estimate (fields are reset by the function).
  * @returns OSH_OK on success, OSH_EINVAL if @p ws or @p out is NULL.
  */
 enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *ws,
