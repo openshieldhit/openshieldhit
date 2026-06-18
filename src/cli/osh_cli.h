@@ -39,6 +39,7 @@ struct osh_cli_options {
     int has_seed_offset;              /**< Non-zero if --seedoffset/-N was explicitly given. */
     unsigned long long pool_capacity; /**< Transport pool capacity override (0 = compiled default). */
     int has_pool_capacity;            /**< Non-zero if --pool-capacity was explicitly given. */
+    char const *mem_budget;           /**< Memory-budget override string (e.g. "8GB", "80%"); NULL = default policy. */
     char const *profile_path;         /**< Profile JSON output path; NULL disables profiling. */
 };
 

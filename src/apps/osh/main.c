@@ -92,6 +92,7 @@ int main(int argc, char *argv[]) {
     run_opt.validate_only = opt.dry_run ? 1 : 0;
     run_opt.pool_capacity = opt.pool_capacity;
     run_opt.has_pool_capacity = opt.has_pool_capacity;
+    run_opt.mem_budget = opt.mem_budget;
     run_opt.profile_path = opt.profile_path;
     run_opt.diag = &diag;
 

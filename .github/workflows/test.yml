@@ -60,6 +60,15 @@ jobs:
       shell: pwsh
       run: ./build/bin/Debug/openshieldhit.exe --version
 
+    - name: Print host resources (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: ./build/bin/openshieldhit --print-resources
+
+    - name: Print host resources (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: ./build/bin/Debug/openshieldhit.exe --print-resources
+
   # Windows Release build — catches MSVC warnings-as-errors that only fire in
   # Release mode (e.g. C4701 uninitialized variable).  No test run needed here;
   # correctness is verified by the Debug job above.

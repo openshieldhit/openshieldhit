@@ -2,6 +2,7 @@
 #define OPENSHIELDHIT_SCORING_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "openshieldhit/status.h"
 
@@ -63,6 +64,55 @@ struct osh_scoring_geometry_def const *osh_scoring_geometry_by_name(struct osh_s
  */
 struct osh_scoring_output_def const *osh_scoring_output_by_filename(struct osh_scoring_workspace const *ws,
                                                                     char const *filename);
+
+/* ---- Memory estimate ----------------------------------------------------- */
+
+/** Fixed capacity for the geometry-name hint in @ref osh_scoring_mem_estimate. */
+#define OSH_SCORING_MEM_NAME_CAP 64u
+
+/**
+ * @brief Predicted memory footprint of the scoring accumulators for a run.
+ *
+ * @details
+ * Computed from the parsed (cold) scoring configuration *before* any buffers
+ * are allocated, so callers can detect an out-of-memory situation up front
+ * rather than crashing mid-allocation.  It accounts only for the scoring
+ * accumulator arrays (the dominant, configuration-driven allocation); the much
+ * smaller geometry/material/particle-pool memory is not included.
+ *
+ * The figure mirrors exactly what @c osh_scoring_compile() will later allocate:
+ * for every scored page, `bins × sizeof(double)` for the primary accumulator,
+ * doubled for "average" quantities (LET/Qeff) that also keep a weight
+ * accumulator.  See @ref osh_scoring_estimate_memory.
+ */
+struct osh_scoring_mem_estimate {
+    uint64_t accum_bytes;                            /**< Total bytes across all scoring accumulator arrays. */
+    size_t npages;                                   /**< Number of scored pages (geometry × quantity). */
+    uint64_t largest_page_bytes;                     /**< Bytes of the single largest scored page. */
+    char largest_geometry[OSH_SCORING_MEM_NAME_CAP]; /**< Geometry name of that page (for messages). */
+};
+
+/**
+ * @brief Estimate the scoring accumulator memory for a parsed configuration.
+ *
+ * @details
+ * Pure, allocation-free sizing pass over the parsed workspace.  Intended to be
+ * called after the workspace is fully populated (including any app-side voxel
+ * grid setup) but before @c osh_simulation_create(), so the caller can apply a
+ * memory budget and refuse a run that would otherwise exhaust RAM.  The result
+ * matches the buffers @c osh_scoring_compile() allocates, because it reuses the
+ * same per-geometry bin count and the same "uses a weight accumulator" rule.
+ *
+ * Pages whose geometry cannot be resolved or whose bin count is zero contribute
+ * nothing (they are rejected or harmless at compile time).
+ *
+ * @param[in]  ws   Parsed scoring workspace.
+ * @param[out] out  Receives the estimate; zero-initialised on entry.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL if @p ws or @p out is NULL.
+ */
+enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *ws,
+                                            struct osh_scoring_mem_estimate *out);
 
 /* ---- Top-level workspace ------------------------------------------------- */
 
