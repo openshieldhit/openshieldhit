@@ -445,10 +445,9 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
         fprintf(out, "Scoring memory: %s across %zu page(s)\n", b_scoring, est.npages);
         if (budget > 0u) {
             osh_sysinfo_format_bytes(budget, b_budget, sizeof(b_budget));
-            fprintf(out,
-                    "Memory budget: %s%s\n",
-                    b_budget,
-                    mem_budget_override ? " (--mem-budget)" : " (default policy)" );
+            fprintf(
+                out, "Memory budget: %s%s\n", b_budget, mem_budget_override ? " (--mem-budget)" : " (default policy)");
+        }
     }
 
     if (budget > 0u && est.accum_bytes > budget) {

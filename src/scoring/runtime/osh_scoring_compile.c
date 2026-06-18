@@ -235,7 +235,8 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
                 page_bytes = (len <= UINT64_MAX / bytes_per_bin) ? (len * bytes_per_bin) : UINT64_MAX;
             }
 
-            out->accum_bytes = (out->accum_bytes <= UINT64_MAX - page_bytes) ? (out->accum_bytes + page_bytes) : UINT64_MAX;
+            out->accum_bytes =
+                (out->accum_bytes <= UINT64_MAX - page_bytes) ? (out->accum_bytes + page_bytes) : UINT64_MAX;
             out->npages += 1u;
 
             if (page_bytes > out->largest_page_bytes) {
