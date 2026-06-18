@@ -406,7 +406,14 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
     char b_largest[32];
 
     osh_sysinfo_query(&info);
-    base = (info.ram_available_bytes > 0u) ? info.ram_available_bytes : info.ram_total_bytes;
+
+    /* Use available RAM as the reference for "%" budget strings so that
+     * "80%" means 80 % of what is actually free, not of what is installed. */
+    if (info.ram_available_bytes > 0u) {
+        base = info.ram_available_bytes;
+    } else {
+        base = info.ram_total_bytes; /* fall back when available is unknown */
+    }
 
     if (mem_budget_override && mem_budget_override[0]) {
         if (!osh_membudget_parse(mem_budget_override, base, &budget)) {

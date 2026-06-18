@@ -67,8 +67,8 @@ struct osh_scoring_output_def const *osh_scoring_output_by_filename(struct osh_s
 
 /* ---- Memory estimate ----------------------------------------------------- */
 
-/** Fixed capacity for the geometry-name hint in @ref osh_scoring_mem_estimate. */
-#define OSH_SCORING_MEM_NAME_CAP 64u
+/** Maximum length (including NUL) for a geometry name stored in @ref osh_scoring_mem_estimate. */
+#define OSH_SCORING_GEO_NAME_MAXLEN 64u
 
 /**
  * @brief Predicted memory footprint of the scoring accumulators for a run.
@@ -80,16 +80,23 @@ struct osh_scoring_output_def const *osh_scoring_output_by_filename(struct osh_s
  * accumulator arrays (the dominant, configuration-driven allocation); the much
  * smaller geometry/material/particle-pool memory is not included.
  *
- * The figure mirrors exactly what @c osh_scoring_compile() will later allocate:
- * for every scored page, `bins × sizeof(double)` for the primary accumulator,
- * doubled for "average" quantities (LET/Qeff) that also keep a weight
- * accumulator.  See @ref osh_scoring_estimate_memory.
+ * The figure mirrors exactly what @c osh_scoring_compile() will later allocate.
+ * For every scored page:
+ *   - `spatial_bins × diff1_bins × diff2_bins × sizeof(double)` bytes for the
+ *     primary accumulator (diff1/diff2 = 1 when differential scoring is off);
+ *   - an equal-sized second weight accumulator for "average" quantities such as
+ *     LET or Qeff that require a separate fluence weight array.
+ *
+ * See @ref osh_scoring_estimate_memory.
  */
 struct osh_scoring_mem_estimate {
-    uint64_t accum_bytes;                            /**< Total bytes across all scoring accumulator arrays. */
-    size_t npages;                                   /**< Number of scored pages (geometry × quantity). */
-    uint64_t largest_page_bytes;                     /**< Bytes of the single largest scored page. */
-    char largest_geometry[OSH_SCORING_MEM_NAME_CAP]; /**< Geometry name of that page (for messages). */
+    uint64_t accum_bytes;                               /**< Total bytes across all scoring accumulator arrays. */
+    size_t npages;                                      /**< Total (Output, Quantity) pairs across all Output blocks.
+                                                         *   Each Output block may declare any number of Quantity
+                                                         *   lines; this is their sum, not a geometry × quantity
+                                                         *   product. */
+    uint64_t largest_page_bytes;                        /**< Bytes of the single largest scored page. */
+    char largest_geometry[OSH_SCORING_GEO_NAME_MAXLEN]; /**< Geometry name of that page (for messages). */
 };
 
 /**
