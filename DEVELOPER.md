@@ -246,7 +246,7 @@ cmake --preset release
 cmake --build --preset release --parallel
 
 # Build one target
-cmake --build --preset release --target gemca_raycast_bench
+cmake --build --preset release --parallel --target gemca_raycast_bench
 
 # Run tests
 ctest --preset debug
