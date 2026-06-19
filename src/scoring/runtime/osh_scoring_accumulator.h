@@ -41,6 +41,24 @@ struct osh_scoring_accumulator {
 };
 
 /**
+ * @brief Single accumulation seam: add @p value into @p arr[@p idx].
+ *
+ * @details
+ * Every scoring deposit funnels through this one inline so that the write
+ * policy lives in exactly one place.  Today it is a plain `+=`, which the
+ * compiler inlines to the same machine code as a direct array store (zero
+ * overhead in the single-worker build).  A future parallel backend can change
+ * the body here — to a relaxed atomic fetch-add, a per-worker private store, or
+ * a lock-guarded update — without touching any of the call sites in the scoring
+ * hot path.  @p arr is the raw array (e.g. @c page->acc.data or
+ * @c page->acc.data2); callers compute @p idx including any differential-axis
+ * offsets.
+ */
+static inline void osh_score_deposit(double *arr, size_t idx, double value) {
+    arr[idx] += value;
+}
+
+/**
  * @brief Allocate zero-initialised accumulator arrays.
  *
  * @details
