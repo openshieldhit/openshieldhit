@@ -56,8 +56,7 @@ Optimised build (`-O3`):
 cmake --preset release && cmake --build --preset release
 ```
 
-Debug build (debug symbols, `-Og`):
-
+Debug build (unoptimised, `-O0 -g`):
 ```bash
 cmake --preset debug && cmake --build --preset debug
 ```
