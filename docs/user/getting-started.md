@@ -20,10 +20,22 @@ The `openshieldhit` binary is written to `build/bin/`.
 
 ## Install system-wide
 
+Install to the default prefix (`/usr/local/bin/openshieldhit`):
+
 ```bash
-sudo cmake --install build                   # → /usr/local/bin/openshieldhit (default)
-sudo cmake --install build --prefix /usr     # → /usr/bin/openshieldhit
-cmake --install build --prefix ~/.local      # user-local, no sudo needed
+sudo cmake --install build
+```
+
+Install to `/usr` (`/usr/bin/openshieldhit`):
+
+```bash
+sudo cmake --install build --prefix /usr
+```
+
+Install into your home directory — no sudo needed (`~/.local/bin/openshieldhit`):
+
+```bash
+cmake --install build --prefix ~/.local
 ```
 
 ## Run a case
@@ -35,17 +47,29 @@ build/bin/openshieldhit path/to/case/
 The case directory must contain `beam.dat`, `geo.dat`, `mat.dat`, and
 `detect.dat`.  Output files are written into the same directory.
 
+A few common variations:
+
+Parse and compile inputs only, without running transport:
+
 ```bash
-# parse and compile inputs only, no transport
 build/bin/openshieldhit --dry-run path/to/case/
+```
 
-# override history count
+Override the history count:
+
+```bash
 build/bin/openshieldhit -n 50000 path/to/case/
+```
 
-# verbose logging
+Enable verbose logging:
+
+```bash
 build/bin/openshieldhit -v path/to/case/
+```
 
-# write outputs somewhere else; the directory is created automatically
+Write outputs somewhere else (the directory is created automatically):
+
+```bash
 build/bin/openshieldhit --outdir /tmp/osh-run path/to/case/
 ```
 

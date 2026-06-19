@@ -12,18 +12,28 @@ Open-source Monte Carlo particle transport code for shielding calculations and p
 
 ## Quick start
 
+Build:
+
 ```bash
-# build
 cmake -B build -DCMAKE_BUILD_TYPE=Release .
 cmake --build build --parallel
+```
 
-# run a case (reads geo.dat, beam.dat, mat.dat, detect.dat from the directory)
+Run a case (reads `geo.dat`, `beam.dat`, `mat.dat`, and `detect.dat` from the directory):
+
+```bash
 build/bin/openshieldhit tests/cases/00_minimal/
+```
 
-# write outputs to a separate directory (created automatically if needed)
+Write outputs to a separate directory (created automatically if needed):
+
+```bash
 build/bin/openshieldhit --outdir /tmp/osh-run tests/cases/00_minimal/
+```
 
-# dry-run — parse and compile inputs, skip transport
+Dry-run — parse and compile inputs, skip transport:
+
+```bash
 build/bin/openshieldhit --dry-run tests/cases/00_minimal/
 ```
 

@@ -5,16 +5,23 @@ full developer build guide including coverage, sanitizers, and packaging.
 
 ## Common build configurations
 
+Release build (optimised, no debug symbols):
+
 ```bash
-# release build (optimised, no debug symbols)
 cmake --preset release
 cmake --build --preset release
+```
 
-# debug build
+Debug build:
+
+```bash
 cmake --preset debug
 cmake --build --preset debug
+```
 
-# coverage build
+Coverage build:
+
+```bash
 cmake -B build_cov -DCMAKE_BUILD_TYPE=Debug -DCOVERAGE=ON .
 cmake --build build_cov --parallel
 ```
