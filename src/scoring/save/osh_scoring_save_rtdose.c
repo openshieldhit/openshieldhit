@@ -63,7 +63,7 @@ enum osh_status osh_scoring_save_rtdose_output(struct osh_scoring_workspace cons
     inv_scaling = (rd.dose_grid_scaling > 0.0) ? (1.0 / rd.dose_grid_scaling) : 1.0;
 
     for (i = 0; i < page->len; ++i) {
-        double val = page->data[i] * inv_nstat * inv_scaling;
+        double val = page->acc.data[i] * inv_nstat * inv_scaling;
         if (val < 0.0) {
             val = 0.0;
         }

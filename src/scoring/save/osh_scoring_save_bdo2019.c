@@ -219,7 +219,7 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
             /* TODO: current runtime does not yet carry full normalization
              * metadata into save. Data are written exactly as stored in the
              * runtime page buffer, in canonical flat order. */
-            rc = osh_scoring_bdo2019_write_token_double(fp, OSHBDO_PAG_DATA, page->data, page->len);
+            rc = osh_scoring_bdo2019_write_token_double(fp, OSHBDO_PAG_DATA, page->acc.data, page->len);
         }
     }
 
@@ -340,7 +340,7 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
     }
     for (ip = 0; ip < out->npages; ++ip) {
         struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
-        if (!page->data || page->variance || page->has_data2 || page->divide) {
+        if (!page->acc.data || page->variance || page->has_data2 || page->divide) {
             return OSH_ENOTSUP;
         }
         if (legacy_score_kind(page) < 0) {

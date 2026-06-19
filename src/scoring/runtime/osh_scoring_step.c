@@ -712,7 +712,7 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
             frac = crossings[j].path_len / score_len;
-            page->data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] += st->de * frac;
+            page->acc.data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] += st->de * frac;
         }
     }
     return OSH_OK;
@@ -777,7 +777,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
             }
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
-            page->data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] +=
+            page->acc.data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] +=
                 crossings[j].path_len * crossings[j].vol_inv;
         }
     }
@@ -889,7 +889,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             }
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
-            page->data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] +=
+            page->acc.data[crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride)] +=
                 crossings[j].path_len * crossings[j].vol_inv * dose_scale;
         }
     }
@@ -972,8 +972,8 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
              *   data2 = sum(dose_weight)          [MeV]
              * osh_scoring_postprocess() divides data by data2 to yield LETd. */
             w = st->de * crossings[j].path_len / score_len;
-            page->data[crossings[j].idx] += let_step * w;
-            page->data2[crossings[j].idx] += w;
+            page->acc.data[crossings[j].idx] += let_step * w;
+            page->acc.data2[crossings[j].idx] += w;
         }
     }
     return OSH_OK;
@@ -1053,8 +1053,8 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
              *   data2 = sum(ds_vox)         [cm]
              * osh_scoring_postprocess() divides data by data2 to yield LETt. */
             ds_vox = st->ds * crossings[j].path_len / score_len;
-            page->data[crossings[j].idx] += let_step * ds_vox;
-            page->data2[crossings[j].idx] += ds_vox;
+            page->acc.data[crossings[j].idx] += let_step * ds_vox;
+            page->acc.data2[crossings[j].idx] += ds_vox;
         }
     }
     return OSH_OK;
@@ -1118,8 +1118,8 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
              *   data2 = sum(dose_weight)           [MeV]
              * osh_scoring_postprocess() divides to yield the dose-averaged value. */
             w = st->de * crossings[j].path_len / score_len;
-            page->data[crossings[j].idx] += qeff * w;
-            page->data2[crossings[j].idx] += w;
+            page->acc.data[crossings[j].idx] += qeff * w;
+            page->acc.data2[crossings[j].idx] += w;
         }
     }
     return OSH_OK;
@@ -1182,8 +1182,8 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
              *   data2 = sum(ds_vox)           [cm]
              * osh_scoring_postprocess() divides to yield the track-averaged value. */
             ds_vox = st->ds * crossings[j].path_len / score_len;
-            page->data[crossings[j].idx] += qeff * ds_vox;
-            page->data2[crossings[j].idx] += ds_vox;
+            page->acc.data[crossings[j].idx] += qeff * ds_vox;
+            page->acc.data2[crossings[j].idx] += ds_vox;
         }
     }
     return OSH_OK;

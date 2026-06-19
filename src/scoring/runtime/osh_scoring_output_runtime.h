@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "scoring/runtime/osh_scoring_accumulator.h"
 #include "scoring/runtime/osh_scoring_defs.h"
 #include "scoring/runtime/osh_scoring_filter_runtime.h"
 
@@ -32,9 +33,13 @@ struct osh_scoring_page_override {
  * @brief One compiled scoring page (a single quantity accumulator).
  *
  * @details
- * Each page owns a flat @p data array of length @p len = product of geometry
- * bin counts.  @p data2 / @p data2_var hold the secondary accumulator used by
- * two-pass LET averages; both are NULL for simple scorers.
+ * This struct is the page *descriptor*: geometry indices, strides and the
+ * differential-axis configuration.  The mutable accumulator storage lives in the
+ * embedded @ref osh_scoring_accumulator @p acc (its @c data array has length
+ * @p len = product of geometry bin counts; @c data2 / @c data2_var hold the
+ * secondary accumulator used by two-pass LET averages and are NULL for simple
+ * scorers).  Separating storage from descriptor lets a future parallel worker
+ * own a private accumulator set and merge it back; see osh_scoring_accumulator.h.
  *
  * Index layout follows the geometry axis order, innermost-axis fastest
  * (row-major):  idx = ix + nx * (iy + ny * iz)
@@ -43,22 +48,19 @@ struct osh_scoring_page_runtime {
     char *quantity;                                     /* Quantity keyword, lowercase (owned). */
     struct osh_scoring_filter_runtime_rule *flat_rules; /* Flattened filter rules, all ANDed (owned). */
     struct osh_scoring_page_settings_ref *settings;     /* Settings index references (owned). */
-    double *data;                                       /* Primary accumulator array (owned). */
-    double *data_var;                                   /* Variance accumulator for data (owned, may be NULL). */
-    double *data2;                          /* Secondary accumulator for LET averages (owned, may be NULL). */
-    double *data2_var;                      /* Variance for data2 (owned, may be NULL). */
-    size_t output_idx;                      /* Index of the owning output in the runtime. */
-    size_t geometry_idx;                    /* Index of the owning geometry in the runtime. */
-    size_t nflat_rules;                     /* Number of flat filter rules. */
-    size_t nsettings;                       /* Number of settings references. */
-    size_t len;                             /* Total number of bins (= product of axis nbins). */
-    enum osh_scoring_score_kind score_kind; /* What physical quantity is accumulated. */
-    enum osh_scoring_postproc postproc;     /* How to combine across simulation runs. */
-    struct osh_scoring_page_override sset;  /* Hot-path override fields, merged from all settings references. */
-    char has_sset;                          /* Non-zero when at least one settings block is referenced. */
-    char has_data2;                         /* Non-zero when data2/data2_var are allocated. */
-    char variance;                          /* Non-zero when variance tracking is active. */
-    char divide;                            /* Non-zero when bin values should be divided by bin volume. */
+    struct osh_scoring_accumulator acc;                 /* Owning accumulator storage (data/data2/variance). */
+    size_t output_idx;                                  /* Index of the owning output in the runtime. */
+    size_t geometry_idx;                                /* Index of the owning geometry in the runtime. */
+    size_t nflat_rules;                                 /* Number of flat filter rules. */
+    size_t nsettings;                                   /* Number of settings references. */
+    size_t len;                                         /* Total number of bins (= product of axis nbins). */
+    enum osh_scoring_score_kind score_kind;             /* What physical quantity is accumulated. */
+    enum osh_scoring_postproc postproc;                 /* How to combine across simulation runs. */
+    struct osh_scoring_page_override sset; /* Hot-path override fields, merged from all settings references. */
+    char has_sset;                         /* Non-zero when at least one settings block is referenced. */
+    char has_data2;                        /* Non-zero when data2/data2_var are allocated. */
+    char variance;                         /* Non-zero when variance tracking is active. */
+    char divide;                           /* Non-zero when bin values should be divided by bin volume. */
     /* Differential axis — all zero when no differential scoring (diff_nbins == 0). */
     size_t diff_nbins;                    /* Number of differential bins; 0 = plain scorer. */
     size_t diff_stride;                   /* Spatial bin count (= geo_nbins); stride per diff bin in data[]. */

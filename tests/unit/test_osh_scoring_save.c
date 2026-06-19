@@ -59,11 +59,11 @@ static void test_save_bdo2019_with_dose_and_dlet(void) {
 
     /* Seed non-zero values and wire data2 (two-pass pages) with matching weights */
     for (i = 0; i < rt.npages; ++i) {
-        rt.pages[i].data[0] = 2.0;
-        rt.pages[i].data[1] = 4.0;
+        rt.pages[i].acc.data[0] = 2.0;
+        rt.pages[i].acc.data[1] = 4.0;
         if (rt.pages[i].has_data2) {
-            rt.pages[i].data2[0] = 1.0;
-            rt.pages[i].data2[1] = 1.0;
+            rt.pages[i].acc.data2[0] = 1.0;
+            rt.pages[i].acc.data2[1] = 1.0;
         }
     }
 
@@ -121,14 +121,14 @@ static void test_save_cyl_ascii_and_bdo(void) {
     ASSERT_TRUE(rt.noutputs == 2u);
     ASSERT_TRUE(rt.npages == 2u);
 
-    rt.pages[0].data[0] = 1.0;
-    rt.pages[0].data[1] = 2.0;
-    rt.pages[0].data[2] = 3.0;
-    rt.pages[0].data[3] = 4.0;
-    rt.pages[1].data[0] = 10.0;
-    rt.pages[1].data[1] = 20.0;
-    rt.pages[1].data[2] = 30.0;
-    rt.pages[1].data[3] = 40.0;
+    rt.pages[0].acc.data[0] = 1.0;
+    rt.pages[0].acc.data[1] = 2.0;
+    rt.pages[0].acc.data[2] = 3.0;
+    rt.pages[0].acc.data[3] = 4.0;
+    rt.pages[1].acc.data[0] = 10.0;
+    rt.pages[1].acc.data[1] = 20.0;
+    rt.pages[1].acc.data[2] = 30.0;
+    rt.pages[1].acc.data[3] = 40.0;
 
     rc = osh_scoring_save(ws, &rt, 5u);
     ASSERT_TRUE(rc == OSH_OK);
@@ -201,14 +201,14 @@ int main(void) {
     ASSERT_TRUE(rt.noutputs == 2u);
     ASSERT_TRUE(rt.npages == 2u);
 
-    rt.pages[0].data[0] = 1.0;
-    rt.pages[0].data[1] = 2.0;
-    rt.pages[0].data[2] = 3.0;
-    rt.pages[0].data[3] = 4.0;
-    rt.pages[1].data[0] = 10.0;
-    rt.pages[1].data[1] = 20.0;
-    rt.pages[1].data[2] = 30.0;
-    rt.pages[1].data[3] = 40.0;
+    rt.pages[0].acc.data[0] = 1.0;
+    rt.pages[0].acc.data[1] = 2.0;
+    rt.pages[0].acc.data[2] = 3.0;
+    rt.pages[0].acc.data[3] = 4.0;
+    rt.pages[1].acc.data[0] = 10.0;
+    rt.pages[1].acc.data[1] = 20.0;
+    rt.pages[1].acc.data[2] = 30.0;
+    rt.pages[1].acc.data[3] = 40.0;
 
     rc = osh_scoring_save(ws, &rt, 5u);
     ASSERT_TRUE(rc == OSH_OK);

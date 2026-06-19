@@ -37,7 +37,7 @@ static enum osh_status page_postprocess(struct osh_scoring_page_runtime *page) {
     case OSH_SCORING_SCORE_DOSEGY:
         /* Convert accumulated MeV/g to Gy once per bin, not per transport step. */
         for (i = 0; i < page->len; ++i) {
-            page->data[i] *= OSH_MEVG2GY;
+            page->acc.data[i] *= OSH_MEVG2GY;
         }
         return OSH_OK;
 
@@ -47,10 +47,10 @@ static enum osh_status page_postprocess(struct osh_scoring_page_runtime *page) {
     case OSH_SCORING_SCORE_TQEFF:
         /* Finalise two-pass average: data = weighted_sum, data2 = weight_sum. */
         for (i = 0; i < page->len; ++i) {
-            if (page->data2[i] > OSH_LET_DENOM_EPS) {
-                page->data[i] /= page->data2[i];
+            if (page->acc.data2[i] > OSH_LET_DENOM_EPS) {
+                page->acc.data[i] /= page->acc.data2[i];
             } else {
-                page->data[i] = 0.0;
+                page->acc.data[i] = 0.0;
             }
         }
         /* Clear flags so save-layer validation passes. */
