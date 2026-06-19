@@ -13,7 +13,7 @@
 git clone https://github.com/nbassler/openshieldhit.git
 cd openshieldhit
 cmake --preset release
-cmake --build --preset release
+cmake --build --preset release --parallel
 ```
 
 The `openshieldhit` binary is written to `build/bin/`.

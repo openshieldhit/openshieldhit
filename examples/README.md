@@ -17,7 +17,7 @@ Examples 03 and 04 have no additional dependencies.
 ## Building
 
 ```bash
-cmake --preset release && cmake --build --preset release
+cmake --preset release && cmake --build --preset release --parallel
 ```
 
 Binaries land in `build_rel/bin/`.

@@ -51,8 +51,8 @@ for the interactive geometry viewers in `examples/` (not shipped in releases):
 ## How to build
 
 ```bash
-cmake --preset release && cmake --build --preset release   # optimised (-O3)
-cmake --preset debug   && cmake --build --preset debug     # debug symbols, -Og
+cmake --preset release && cmake --build --preset release --parallel   # optimised (-O3)
+cmake --preset debug   && cmake --build --preset debug --parallel     # debug symbols, -Og
 ```
 
 Available presets: `debug`, `release`, `relwithdebinfo`, `prof`.
