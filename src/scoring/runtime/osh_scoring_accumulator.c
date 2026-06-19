@@ -50,6 +50,32 @@ void osh_scoring_accumulator_zero(struct osh_scoring_accumulator *acc) {
     }
 }
 
+/* Add src_arr into dst_arr element-wise when both are non-NULL. */
+static void merge_array(double *dst_arr, double const *src_arr, size_t len) {
+    size_t i;
+    if (!dst_arr || !src_arr) {
+        return;
+    }
+    for (i = 0; i < len; ++i) {
+        dst_arr[i] += src_arr[i];
+    }
+}
+
+enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *dst,
+                                              struct osh_scoring_accumulator const *src) {
+    if (!dst || !src) {
+        return OSH_EINVAL;
+    }
+    if (dst->len != src->len) {
+        return OSH_EINVAL;
+    }
+    merge_array(dst->data, src->data, dst->len);
+    merge_array(dst->data2, src->data2, dst->len);
+    merge_array(dst->data_var, src->data_var, dst->len);
+    merge_array(dst->data2_var, src->data2_var, dst->len);
+    return OSH_OK;
+}
+
 void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc) {
     if (!acc) {
         return;

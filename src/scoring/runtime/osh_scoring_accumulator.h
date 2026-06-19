@@ -91,6 +91,30 @@ void osh_scoring_accumulator_zero(struct osh_scoring_accumulator *acc);
  */
 void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc);
 
+/**
+ * @brief Element-wise reduce: @p dst += @p src over every array.
+ *
+ * @details
+ * The reduction at the heart of any parallel scoring scheme: each worker scores
+ * its histories into a private accumulator, then the master set is formed by
+ * merging every worker's set into one.  Because Monte Carlo histories are
+ * independent and the deposits commute, merging in any order yields the same
+ * totals (up to floating-point summation order).
+ *
+ * Adds @p src into @p dst for @c data, @c data2, @c data_var and @c data2_var.
+ * An array is summed only when *both* sides have it allocated; an array present
+ * on one side but NULL on the other is skipped (mismatched two-pass/variance
+ * configuration is the caller's responsibility — accumulators compiled from the
+ * same page descriptor always agree).
+ *
+ * @param[in,out] dst  Destination accumulator (must be non-NULL).
+ * @param[in]     src  Source accumulator to add (must be non-NULL).
+ * @returns OSH_OK on success, OSH_EINVAL if either pointer is NULL or the two
+ *          accumulators have different @c len.
+ */
+enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *dst,
+                                              struct osh_scoring_accumulator const *src);
+
 #ifdef __cplusplus
 }
 #endif
