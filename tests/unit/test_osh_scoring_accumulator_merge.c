@@ -9,6 +9,7 @@
  *   test_merge_commutative     — merge order does not change the result
  *   test_merge_len_mismatch    — differing lengths are rejected (OSH_EINVAL)
  *   test_merge_null            — NULL operands are rejected without crashing
+ *   test_zero                  — zero() clears every allocated array, keeps len
  */
 
 #include <stddef.h>
@@ -153,12 +154,42 @@ static void test_merge_null(void) {
     osh_scoring_accumulator_free(&a);
 }
 
+/* ---- Reuse: zero() clears every allocated array but keeps len ------------ */
+
+static void test_zero(void) {
+    struct osh_scoring_accumulator acc;
+    size_t i;
+
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(&acc, 4u, 1) == OSH_OK);
+    for (i = 0; i < 4u; ++i) {
+        acc.data[i] = (double) (i + 1);
+        acc.data2[i] = (double) (i + 5);
+    }
+
+    osh_scoring_accumulator_zero(&acc);
+    ASSERT_TRUE(acc.len == 4u); /* zeroing clears values, not the allocation */
+    for (i = 0; i < 4u; ++i) {
+        ASSERT_TRUE(acc.data[i] == 0.0);
+        ASSERT_TRUE(acc.data2[i] == 0.0);
+    }
+
+    /* No-op guards: NULL and a zeroed/empty struct must not crash. */
+    osh_scoring_accumulator_zero(NULL);
+    {
+        struct osh_scoring_accumulator empty = {0};
+        osh_scoring_accumulator_zero(&empty);
+    }
+
+    osh_scoring_accumulator_free(&acc);
+}
+
 int main(void) {
     test_merge_identity();
     test_merge_correctness();
     test_merge_commutative();
     test_merge_len_mismatch();
     test_merge_null();
-    printf("All osh_scoring_accumulator_merge tests passed.\n");
+    test_zero();
+    printf("All osh_scoring_accumulator tests passed.\n");
     return 0;
 }

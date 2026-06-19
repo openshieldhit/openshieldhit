@@ -17,11 +17,15 @@ struct osh_scoring_accumulator;
  * @brief Everything one transport worker needs to run an assigned slice of histories.
  *
  * @details
- * Bundles the per-worker *mutable* state so that a run can be partitioned across
- * workers (threads, or MPI ranks, or sequential profiling replicas) simply by
- * constructing several of these over disjoint history ranges and giving each its
- * own pool and scratch.  Nothing here is shared between workers, which is the
- * precondition for lock-free parallel transport.
+ * Bundles the *transport-local* mutable state — the particle pool and per-step
+ * batch scratch — for one slice of the run, so this state stops being a barrier
+ * to partitioning work across workers (threads, MPI ranks, or sequential
+ * profiling replicas) over disjoint history ranges.  It is one building block,
+ * not the whole story: the beam runtime (its primaries_generated cursor), the
+ * scoring accumulators in score_rt and transport_ctx->profile are owned
+ * elsewhere and remain shared, so concurrent execution will additionally need
+ * per-worker or coordinated beam/scoring/profile state (the @ref accumulators
+ * field below is where per-worker scoring memory will attach).
  *
  * The assigned work is the half-open history range [@ref hist_lo, @ref hist_hi).
  * Per-history RNG seeding is derived from the global history index

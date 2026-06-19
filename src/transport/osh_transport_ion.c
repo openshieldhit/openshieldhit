@@ -60,9 +60,14 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  * @details
  * The wavefront (BFS) CSDA loop, factored out of osh_transport_ion_run_minimal()
  * so it can be driven over an explicit history range instead of always the whole
- * run.  This is the unit a parallel scheme replicates: give each worker its own
- * @ref osh_worker_context (private pool + scratch) over a disjoint slice of
- * [0, nstat) and the slices can run independently.
+ * run.  The worker context isolates the *transport-local* mutable state — the
+ * particle pool and per-step batch scratch — for one slice [hist_lo, hist_hi).
+ * That is a necessary building block for parallel execution but not sufficient on
+ * its own: @p beam_rt (its primaries_generated cursor), @p score_rt's shared
+ * accumulators and @p transport_ctx->profile are still shared, so running slices
+ * concurrently would additionally need per-worker or otherwise coordinated beam,
+ * scoring and profile state.  Today a single worker covers [0, nstat), so none of
+ * that sharing is yet exercised.
  *
  *   1. When the pool is empty and primaries remain, fill it from beam_runtime
  *      (up to the worker's pool capacity).
