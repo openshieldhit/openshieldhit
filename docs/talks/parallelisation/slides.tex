@@ -10,8 +10,16 @@
 %    - osh_rng_seed_history / split   src/random/osh_rng.h
 %    - struct osh_particle_pool (SoA) src/common/osh_particle_pool.h
 %    - cold -> hot workspaces         docs/dev/architecture.md
+%    - CSG geometry (bodies/zones)    src/gemca/README.md
+%    - CT / voxel + HU calibration    src/voxel/README.md
 %    - BDO merge / per-thread pages   src/scoring/README.md
-%    - host detection + mem budget    src/apps/osh/osh_membudget.*  (#152/#153)
+%    - accumulator / deposit / merge  PR #162 (#157-#160)
+%    - variance / batch statistics    issue #169
+%    - run-control / partial dumps    issue #170
+%    - WASM web workers               issue #171
+%    - reproducibility contract       issue #168
+%    - host detection + mem budget    src/common/osh_sysinfo.*, src/apps/osh/osh_membudget.* (#152/#153)
+%    - neutron transport / xsec data  issue #154 (+#111)
 %==============================================================================
 \documentclass[aspectratio=169,10pt]{beamer}
 
@@ -96,18 +104,21 @@
       \medskip
 
       \textbf{Compute} is embarrassingly parallel: each history is a private
-      random walk through the geometry.
+      random walk through the geometry. Profiling confirms 80--86\,\% of wall
+      time is the transport step, throughput flat in $N$ — \emph{compute-bound}
+      (PR \#162).
 
       \medskip
-      The hard parts are \textbf{not} the physics — they are:
+      So the hard parts are \textbf{not} the physics — they are:
       \begin{itemize}
-        \item \textbf{Reproducibility} — same answer regardless of thread / rank / batch?
         \item \textbf{Scoring} — many histories write the \emph{same} voxels.
         \item \textbf{Memory} — what is \textcolor{oshGreen}{shared \& read-only}
-              vs.\ \textcolor{oshAmber}{private \& written}.
+              vs.\ \textcolor{oshAmber}{private \& written}; for a CT it explodes.
+        \item \textbf{Load balance} — histories cost differently; we may want
+              \emph{run-by-time} or unequal work per worker.
       \end{itemize}
-      \medskip
-      This deck walks four strategies and the memory-access pattern of each.
+      \footnotesize\color{oshGrey}(A reproducibility \emph{contract} also has to
+      be stated — but it is a definition, not a blocker. See later.)
     \end{column}
     \begin{column}{0.46\textwidth}
       \centering
@@ -130,6 +141,159 @@
       \end{tikzpicture}
     \end{column}
   \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\begin{frame}{Vocabulary — five words this deck leans on}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{cold $\to$ hot.}\\
+      \textcolor{oshGreen}{\emph{Cold}} = parsed-and-compiled input
+      (geometry, materials, tables). Built once, then \textbf{read-only}.
+      \textcolor{oshRed}{\emph{Hot}} = per-history state that changes every
+      step (particle pool, RNG, tallies). Only the hot state needs a parallel
+      story.
+      \medskip
+
+      \textbf{stream.}\\
+      Each history has its own random-number \emph{stream}, derived from its
+      global index — a private, repeatable sequence of draws. Independent
+      streams $\Rightarrow$ histories can run in any order, on any worker.
+      \medskip
+
+      \textbf{64\,B cache line.}\\
+      Memory moves between cores in 64-byte \emph{lines}, not single values.
+      Two cores touching \emph{different} numbers in the \emph{same} line still
+      fight over it — ``false sharing''. Layout decides performance.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{AoS vs SoA.}\\
+      \emph{Array of Structs}: \code{[\{x,y,z,E\},\{x,y,z,E\},\dots]} —
+      one particle's fields together.\\
+      \emph{Struct of Arrays}: \code{x[\,],y[\,],z[\,],E[\,]} —
+      one field for \emph{all} particles, contiguous. The pool is SoA so a
+      kernel over one field is a single vector load (no gather/scatter).
+      \medskip
+
+      \begin{tikzpicture}[scale=0.9]
+        \node[ann] at (0,1.7){AoS};
+        \foreach \x in {0,1.35,2.7}{
+          \node[cell,minimum width=1.15cm,fill=oshGrey!12] at (\x,1.3){x y z E};}
+        \node[lbl] at (1.35,0.85){a lane strides over a struct};
+        \node[ann] at (0,0.35){SoA};
+        \foreach \x in {0,0.5,1.0,1.5,2.0,2.5,3.0}{
+          \node[cell,minimum width=0.45cm,fill=oshSky!18] at (\x,-0.05){};}
+        \node[lbl,text=oshSky] at (1.5,-0.5){\code{x[\,]} contiguous — one SIMD load};
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\begin{frame}{How much parallelism? The target machines}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \small
+      The right strategy depends on \emph{how many} workers and \emph{how much
+      RAM each} we are scaling to:
+      \begin{itemize}\itemsep2pt
+        \item \textbf{Laptop} — easily $\sim$10 cores today.
+        \item \textbf{Ares} (Cyfronet) — \textbf{48} cores/node.
+        \item \textbf{Athena} (Cyfronet) — \textbf{128} cores/node, but a
+              \emph{GPU-first} machine (8$\times$A100/node).
+        \item \textbf{Helios} (Cyfronet) — \textbf{192} cores/node; large
+              GPU partition (Grace+Hopper).
+      \end{itemize}
+      \medskip
+      \textbf{Memory per core is the tight one:} $\sim$2--4\,GB/core across the
+      board (Athena a little more; a laptop is similar). That budget — not the
+      core count — is what decides \textbf{B vs.\ C} for a big CT.
+      \medskip
+
+      \footnotesize\color{oshGrey}
+      Two regimes: $\sim$10 cores (shared memory, threads) and $\sim$50--200
+      cores (one fat node, still shared memory) before MPI across nodes even
+      enters. Athena/Helios also push us toward the GPU path (Strategy D).
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \begin{tikzpicture}
+        \begin{axis}[
+            xbar, width=6.6cm, height=4.4cm,
+            xmin=0, xmax=225,
+            xlabel={\scriptsize cores per node},
+            symbolic y coords={laptop,Ares,Athena,Helios},
+            ytick=data,
+            nodes near coords, nodes near coords align={horizontal},
+            every node near coord/.append style={font=\tiny},
+            tick label style={font=\scriptsize},
+            label style={font=\scriptsize},
+            enlarge y limits=0.18,
+            axis lines=left,
+          ]
+          \addplot[fill=oshSky!55,draw=oshBlue] coordinates
+            {(10,laptop) (48,Ares) (128,Athena) (192,Helios)};
+        \end{axis}
+      \end{tikzpicture}\\[1mm]
+      \footnotesize\color{oshGrey}
+      $\sim$2--4\,GB RAM per core $\Rightarrow$ a $T$-thread run must fit
+      $M_\text{shared}+T\,M_\text{private}$ in node RAM.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\begin{frame}{Two workloads that parallelise differently}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering\small
+      \textcolor{oshGreen}{\textbf{(1) CSG geometry + mesh scoring}}
+      \smallskip
+
+      \begin{tikzpicture}[scale=0.8]
+        \node[shared,minimum width=2.4cm,minimum height=1.5cm] at (0,0)
+          {analytic bodies\\(box, cyl, sphere)\\zones = CSG tree};
+        \node[hot,minimum width=2.2cm,font=\tiny] at (0,-1.3)
+          {mesh / cyl / diff\\scoring — KB\,–\,tens of KB};
+      \end{tikzpicture}
+      \begin{itemize}\scriptsize\itemsep1pt
+        \item Geometry: a handful of \code{osh\_gemca} bodies + surfaces.
+        \item Scoring fits in \textbf{L1/L2} $\Rightarrow$ \emph{compute-bound}.
+        \item Replicating per-thread pages (Strategy B) is essentially
+              \textbf{free}: scale to all cores.
+        \item Diff scoring (E$\times$LET$\times$Q$_\text{eff}$; d$^2\sigma/$d$\Omega$dE,
+              \#147) adds axes $\to$ more bins, still modest.
+      \end{itemize}
+      \footnotesize\color{oshGrey}\code{src/gemca/README.md}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering\small
+      \textcolor{oshRed}{\textbf{(2) CT / patient plan + CT scoring}}
+      \smallskip
+
+      \begin{tikzpicture}[scale=0.8]
+        \node[shared,minimum width=2.6cm,minimum height=1.5cm] at (0,0)
+          {voxel CT (HU grid)\\$512^2\times N$ — \textbf{100s\,MB}\\read-only};
+        \node[hot,minimum width=2.6cm,font=\tiny] at (0,-1.35)
+          {per-voxel dose grid\\\textbf{100s\,MB} — written};
+      \end{tikzpicture}
+      \begin{itemize}\scriptsize\itemsep1pt
+        \item Geometry: large voxel grid + HU$\to$material/density LUTs
+              (Schneider / Permatassari).
+        \item Scoring grid is huge $\Rightarrow$ \emph{memory-bound}.
+        \item Per-thread replication $\times T$ \textbf{blows the RAM budget}
+              $\Rightarrow$ favours atomics (C) / fewer workers.
+        \item The CT grid itself is \textcolor{oshGreen}{shared read-only} —
+              load \emph{once} per node (good for threads, bad for MPI/WASM copies).
+      \end{itemize}
+      \footnotesize\color{oshGrey}\code{src/voxel/README.md}
+    \end{column}
+  \end{columns}
+  \vspace{0.5mm}
+  \centering\footnotesize\color{oshBlue}
+  Same engine, opposite pressure: \#1 wants \emph{more workers}; \#2 wants
+  \emph{less memory per worker}.
 \end{frame}
 
 %------------------------------------------------------------------------------
@@ -186,16 +350,17 @@
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \small
-      Reproducibility is decided \emph{before} any thread exists.
+      Independence is decided \emph{before} any thread exists.
 
       \smallskip
       \code{osh\_rng\_seed\_history(rng, type, seed,\\ hist\_index, purpose)}
       mixes the key through SplitMix64 — the stream depends \textbf{only on
       its key}, never on execution order.
       \begin{itemize}\itemsep1pt
-        \item Same history $\Rightarrow$ same draws on any thread, rank, or pool size.
-        \item Rank $r$ owns \code{[hist\_base + r$\cdot$N, \dots)} — disjoint,
-              non-overlapping streams $\Rightarrow$ MPI splitting is trivial.
+        \item Same history $\Rightarrow$ same draws on any thread, rank, pool
+              size \emph{or batch} $\Rightarrow$ partition is valid by construction.
+        \item Rank $r$ owns \code{[hist\_base + r$\cdot$N, \dots)} — disjoint
+              streams $\Rightarrow$ MPI / Web-Worker splitting is trivial.
         \item Secondaries get \code{osh\_rng\_split()} from the parent —
               independent of scheduling.
         \item \code{struct osh\_rng} is 56\,B, pointer-free $\Rightarrow$
@@ -218,7 +383,6 @@
           \node[private,minimum width=1.0cm] at (\x,0.9) {\code{osh\_rng}};
           \draw[flow] (\x,1.4) -- (\x,1.2);}
         \node[lbl] at (0,0.2) {independent stream per history};
-        % purposes
         \node[shared,minimum width=2.0cm,font=\tiny] (bm) at (-1.3,-0.8){PURPOSE\_BEAM};
         \node[hot,minimum width=2.0cm,font=\tiny] (ph) at (1.3,-0.8){PURPOSE\_PHYSICS};
         \node[lbl,text width=5cm,align=center] at (0,-1.5)
@@ -253,6 +417,9 @@
   \begin{itemize}\small
     \item Moving right: \textbf{less memory}, \textbf{more contention}, \textbf{harder reproducibility}.
     \item They compose: e.g.\ \textbf{MPI across nodes} $\times$ \textbf{threads within a node} $\times$ \textbf{SIMD within a thread}.
+    \item PR \#162 already cut the seams: \code{osh\_worker\_context} (the unit of
+          distribution), private \code{osh\_scoring\_accumulator}, the
+          \code{osh\_score\_deposit()} write-seam, and \code{\dots\_merge()} (the reduce).
   \end{itemize}
 \end{frame}
 
@@ -276,7 +443,7 @@
         \item SUM (COUNT): $\;X=\sum_j x_j$ \quad APPEND (MCPL): concat
       \end{itemize}
       \textcolor{oshGreen}{$+$} trivial, near-linear, robust.\quad
-      \textcolor{oshRed}{$-$} grid replicated per rank.
+      \textcolor{oshRed}{$-$} grid replicated per rank (a problem for big CTs).
     \end{column}
     \begin{column}{0.54\textwidth}
       \centering
@@ -304,17 +471,18 @@
       \small
       One process, $T$ threads. Geometry \& material are
       \textcolor{oshGreen}{shared read-only}; each thread owns a
-      \textcolor{oshAmber}{private particle pool and private scoring pages}.
+      \textcolor{oshAmber}{private particle pool and private accumulators}.
       \begin{itemize}\itemsep2pt
         \item No write contention during transport.
-        \item One \textbf{reduction} (sum the per-thread pages) at the end,
-              then write a single \code{.bdo}.
-        \item This is the ``native multi-threaded'' path the scoring layer is
-              already designed for.
+        \item One \textbf{reduction} (\code{merge()} the per-thread
+              accumulators) at the end, then write a single \code{.bdo}.
+        \item Exactly the $\sim$40-line driver PR \#162 unlocks: one
+              \code{worker\_context} per thread, \code{run\_history\_range()},
+              \code{merge}.
       \end{itemize}
       \textcolor{oshGreen}{$+$} no atomics, cache-friendly, deterministic
       reduction.\\
-      \textcolor{oshRed}{$-$} scoring memory $\times\,T$ (matters for large grids).
+      \textcolor{oshRed}{$-$} scoring memory $\times\,T$ (the binding limit for CT).
     \end{column}
     \begin{column}{0.54\textwidth}
       \centering
@@ -325,11 +493,11 @@
           \node[worker,minimum width=1.7cm,minimum height=1.9cm] (t\t) at (\x,1.4){};
           \node[ann] at (\x,2.25){thread \t};
           \node[private,minimum width=1.4cm] at (\x,1.55){pool +\\RNG};
-          \node[private,minimum width=1.4cm,fill=oshAmber!22] at (\x,0.85){page\\buffer};
+          \node[private,minimum width=1.4cm,fill=oshAmber!22] at (\x,0.85){private\\accum.};
           \draw[cflow] (geo.south-|\x,0) -- (t\t.north);
         }
         \node[box,fill=oshGreen!12,minimum width=2.4cm] (red) at (2.0,-0.4)
-              {reduction:\\$\sum_t$ pages};
+              {reduction:\\$\sum_t$ merge};
         \foreach \t in {0,1,2}{\draw[reduce](t\t.south)--(red.north);}
         \node[box,minimum width=2.4cm,below=2mm of red](bdo){single \code{.bdo}};
         \draw[flow](red)--(bdo);
@@ -338,47 +506,66 @@
   \end{columns}
   \vspace{0.5mm}
   \footnotesize\color{oshGrey}
-  Source: \code{src/scoring/README.md} (per-thread pages, summed by simulation layer);
-  \code{osh\_particle\_pool.h} (one pool per thread).
+  Source: \code{src/scoring/README.md}; \code{osh\_particle\_pool.h} (one pool per thread); PR \#162 (\#157--\#160).
 \end{frame}
 
 %------------------------------------------------------------------------------
-\begin{frame}{Strategy C — Threads + atomic scoring (the contrast)}
+\begin{frame}{Strategy C — atomic scoring: does ``each thread touches only a fragment'' save us?}
   \begin{columns}[T]
-    \begin{column}{0.46\textwidth}
+    \begin{column}{0.5\textwidth}
       \small
-      Threads share \emph{one} scoring grid and update it with atomics.
-      Saves the $\times T$ memory of Strategy B — but pays at the hardware level.
-      \begin{itemize}\itemsep2pt
-        \item \textbf{Contention} on hot voxels (Bragg peak!) — many threads,
-              one cache line.
-        \item \textbf{False sharing}: neighbouring voxels in the same 64\,B
-              line ping-pong between cores even when logically disjoint.
-        \item Atomic add on \code{double} $\Rightarrow$ summation order varies
-              $\Rightarrow$ not bit-identical (physics still correct).
+      Threads share \emph{one} grid and add into it with atomics — $O(1)$
+      memory instead of $\times T$. A fair question:
+
+      \smallskip
+      \textit{each thread only \textbf{adds} into the bins its histories
+      actually hit — a fragment, not the whole grid. If those fragments were
+      \textbf{disjoint}, atomics would almost never collide and this would be
+      nearly free.}
+      \medskip
+
+      They are \textbf{not} disjoint, because histories are partitioned by
+      \emph{index}, not by \emph{space}:
+      \begin{itemize}\scriptsize\itemsep1pt
+        \item Every history's track runs down the same axis and piles into the
+              \textbf{same Bragg-peak voxels} $\Rightarrow$ real collisions
+              concentrate on the hot bins.
+        \item Even non-colliding neighbours share a 64\,B line $\Rightarrow$
+              \textbf{false sharing}.
+        \item \textcolor{oshGreen}{Saving grace:} on a \emph{large} CT the cold
+              majority of voxels is barely contended — so C scales \emph{better
+              the bigger and sparser} the geometry.
       \end{itemize}
-      \textcolor{oshGreen}{$+$} O(1) scoring memory.\quad
-      \textcolor{oshRed}{$-$} cache-line warfare on the peak.
+      \footnotesize\color{oshGrey}
+      Spatial (domain) decomposition \emph{would} make writes disjoint — but
+      then boundary-crossing histories need hand-off messaging. Only worth it
+      if the grid doesn't fit in memory.
     \end{column}
-    \begin{column}{0.54\textwidth}
+    \begin{column}{0.5\textwidth}
       \centering
-      \begin{tikzpicture}[scale=0.95]
+      \begin{tikzpicture}[scale=0.92]
         \foreach \t/\x in {0/0,1/1.6,2/3.2,3/4.8}{
-          \node[worker,minimum width=1.2cm,minimum height=0.9cm,font=\tiny] (c\t) at (\x,3.0){core \t};
+          \node[worker,minimum width=1.2cm,minimum height=0.9cm,font=\tiny] (c\t) at (\x,3.2){core \t};
         }
-        % cache line of voxels
-        \node[lbl] at (2.4,2.1){one 64\,B cache line};
-        \foreach \i/\x in {0/0.4,1/1.2,2/2.0,3/2.8,4/3.6,5/4.4}{
-          \node[cell,fill=oshRed!15] (v\i) at (\x,1.5){v\i};
-        }
-        \draw[decorate,decoration={brace,amplitude=4pt},oshRed](0.0,1.85)--(4.8,1.85);
-        % collisions
+        \node[lbl] at (2.4,2.35){the dose grid along the beam axis};
+        % cold entrance bins
+        \foreach \i/\x in {0/0.4,1/1.2}{
+          \node[cell,fill=oshGreen!10] (v\i) at (\x,1.7){};}
+        % hot peak bins
+        \node[cell,fill=oshRed!30] (v2) at (2.0,1.7){};
+        \node[cell,fill=oshRed!30] (v3) at (2.8,1.7){};
+        % cold tail bins
+        \foreach \i/\x in {4/3.6,5/4.4}{
+          \node[cell,fill=oshGreen!10] (v\i) at (\x,1.7){};}
+        \node[lbl,text=oshGreen,font=\tiny] at (0.8,1.2){cold: ~no contention};
+        \node[lbl,text=oshRed,font=\tiny] at (2.4,1.2){Bragg peak: all cores collide};
+        % collisions onto the peak
         \draw[->,oshRed,line width=1pt] (c0) -- (v2.north);
         \draw[->,oshRed,line width=1pt] (c1) -- (v2.north);
-        \draw[->,oshAmber,line width=1pt] (c2) -- (v3.north);
-        \draw[->,oshAmber,line width=1pt] (c3) -- (v3.north);
-        \node[hot,minimum width=2.0cm] at (2.4,0.55){atomic add\\+ invalidate};
-        \node[lbl,text=oshRed] at (2.4,-0.15){line bounces between L1 caches};
+        \draw[->,oshRed,line width=1pt] (c2) -- (v3.north);
+        \draw[->,oshRed,line width=1pt] (c3) -- (v3.north);
+        \node[hot,minimum width=2.2cm] at (2.4,0.5){atomic add\\+ line invalidate};
+        \node[lbl,text=oshRed] at (2.4,-0.15){hot line bounces between L1 caches};
       \end{tikzpicture}
     \end{column}
   \end{columns}
@@ -410,7 +597,6 @@
     \begin{column}{0.53\textwidth}
       \centering
       \begin{tikzpicture}[scale=0.92]
-        % AoS vs SoA
         \node[ann] at (-0.2,3.25) {AoS (bad for SIMD)};
         \foreach \i/\x in {0/0,1/1.5,2/3.0}{
           \node[cell,minimum width=1.3cm,fill=oshGrey!12] at (\x,2.7){x y z e \dots};}
@@ -423,7 +609,6 @@
         \foreach \x in {0,0.55,1.1,1.65,2.2,2.75,3.3,3.85}{
           \node[cell,minimum width=5mm,fill=oshGreen!16] at (\x,0.05){};}
         \node[lbl,text=oshGreen] at (1.9,-0.4){\code{e[\,]} contiguous};
-        % vector lanes
         \draw[decorate,decoration={brace,amplitude=4pt},oshSky](-0.25,1.3)--(4.1,1.3);
         \node[private,minimum width=1.4cm,font=\tiny] at (5.1,1.0){\code{rng[\,]}\\per slot};
         \node[lbl,text width=2cm,align=center] at (5.1,0.1){RNG follows\\the particle};
@@ -436,22 +621,71 @@
 \end{frame}
 
 %------------------------------------------------------------------------------
+\begin{frame}{Strategy D in practice — AVX widths and the GPU extreme}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \small
+      SIMD = one instruction, several \code{double} lanes. SoA is what lets the
+      compiler use the \emph{wide} ones:
+      \begin{itemize}\scriptsize\itemsep1pt
+        \item \textbf{SSE2} 128-bit = 2 doubles (baseline everywhere).
+        \item \textbf{AVX2} 256-bit = \textbf{4 doubles} + FMA — universal on
+              every target node.
+        \item \textbf{AVX-512} 512-bit = \textbf{8 doubles} + per-lane
+              \emph{masking} — on Ares (Cascade-Lake Xeon) and Helios
+              (Genoa EPYC); \emph{not} on Athena (Rome EPYC, AVX2 only).
+              \footnotesize\textcolor{oshGrey}{(confirm per partition)}
+      \end{itemize}
+      \textbf{Why masking matters here:} histories diverge (step/die at
+      different rates). AVX-512 masks let dead lanes sit idle without
+      branching; on AVX2 we pad/compact instead (the pool already compacts).
+      \medskip
+
+      \textbf{GPU} is the same idea taken wide: a warp = 32 lanes in lockstep.
+      Great throughput, but divergence and the cross-section working set bite
+      harder $\Rightarrow$ a research spike, not a quick win.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \centering
+      \begin{tikzpicture}[scale=0.9]
+        % SSE2
+        \node[ann,anchor=west] at (-0.2,3.0){SSE2 · 2$\times$d};
+        \foreach \x in {0,0.6}{\node[cell,minimum width=0.5cm,fill=oshGrey!18] at (\x+1.7,3.0){};}
+        % AVX2
+        \node[ann,anchor=west] at (-0.2,2.3){AVX2 · 4$\times$d};
+        \foreach \x in {0,0.6,1.2,1.8}{\node[cell,minimum width=0.5cm,fill=oshSky!22] at (\x+1.7,2.3){};}
+        % AVX-512
+        \node[ann,anchor=west] at (-0.2,1.6){AVX512 · 8$\times$d};
+        \foreach \x in {0,0.6,1.2,1.8,2.4,3.0,3.6,4.2}{
+          \node[cell,minimum width=0.5cm,fill=oshGreen!20] at (\x+1.7,1.6){};}
+        % a masked-off lane (dead history) highlighted within the AVX-512 row
+        \node[cell,minimum width=0.5cm,fill=oshRed!18] at (5.3,1.6){};
+        \node[lbl,text=oshRed,font=\tiny] at (3.2,1.05){masked-off lane (dead history)};
+        % GPU warp
+        \node[ann,anchor=west] at (-0.2,0.3){GPU warp · 32$\times$};
+        \foreach \x in {0,0.28,...,4.5}{
+          \node[cell,minimum width=0.2cm,minimum height=0.4cm,fill=oshRed!22] at (\x+1.7,0.3){};}
+        \node[lbl] at (3.6,-0.3){lockstep lanes — divergence wastes them};
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
 \section{Memory}
 \begin{frame}{Memory access — what is shared vs.\ private}
   \centering
   \begin{tikzpicture}[scale=0.95]
-    % shared region
     \node[shared,minimum width=10.5cm,minimum height=1.0cm] (sh) at (5,3.3)
           {\textbf{SHARED, read-only} \;(prepared once, never written in the hot loop)};
     \foreach \t/\x in {geometry/1.4, material+LUTs/3.7, cross-sections/6.2, beam model/8.6}{
       \node[shared,fill=oshGreen!18,font=\tiny,minimum width=1.9cm] at (\x,2.55){\t};}
-    % per worker private
     \foreach \w/\x in {0/0.7,1/4.1,2/7.5}{
       \node[worker,minimum width=3.0cm,minimum height=1.6cm] (pw\w) at (\x+1.0,0.9){};
       \node[ann] at (\x+1.0,1.55){worker \w \;(thread/rank/lane)};
       \node[private,font=\tiny,minimum width=1.3cm] at (\x+0.35,0.7){pool (SoA)};
       \node[private,font=\tiny,minimum width=1.0cm] at (\x+1.65,0.7){\code{rng[\,]}};
-      \node[private,fill=oshAmber!22,font=\tiny,minimum width=2.6cm] at (\x+1.0,0.15){scoring page (private)};
+      \node[private,fill=oshAmber!22,font=\tiny,minimum width=2.6cm] at (\x+1.0,0.15){private accumulator};
     }
     \draw[cflow](sh.south)--+(0,-0.3) -| (pw0);
     \draw[cflow](sh.south)--+(0,-0.3) -| (pw1);
@@ -509,21 +743,23 @@
   \begin{columns}[T]
     \begin{column}{0.52\textwidth}
       \small
-      Recent work (\#152/\#153) adds \textbf{host detection + memory
-      budgeting}: the runtime knows core count and available RAM.
+      \#152/\#153 add \textbf{host detection + memory budgeting}:
+      \code{osh\_sysinfo} reports cores and RAM (it is the \emph{only} place that
+      probes the OS, and it already has a WASM/cgroup path).
       \medskip
 
       That is exactly the knob this discussion needs:
       \[
         \underbrace{M_\text{shared}}_{\text{geometry, once}}
-        + T\cdot\underbrace{(M_\text{pool}+M_\text{page})}_{\text{per worker}}
+        + T\cdot\underbrace{(M_\text{pool}+M_\text{accum})}_{\text{per worker}}
         \;\le\; M_\text{host}
       \]
       \begin{itemize}\itemsep2pt
-        \item Picks $T$ (threads) and batch capacity to fit the budget.
-        \item Decides \textbf{B vs.\ C}: replicate pages while
-              $T\cdot M_\text{page}$ fits; switch to atomics when it doesn't.
-        \item Bridges naturally to MPI: per-rank budget $\times$ ranks/node.
+        \item Picks $T$ and batch capacity to fit the $\sim$2--4\,GB/core budget.
+        \item Decides \textbf{B vs.\ C}: replicate accumulators while
+              $T\cdot M_\text{accum}$ fits; switch to atomics when it doesn't —
+              i.e.\ tiny mesh $\to$ B, big CT $\to$ C.
+        \item Bridges to MPI: per-rank budget $\times$ ranks/node.
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}
@@ -542,7 +778,7 @@
           \addplot[oshGreen,line width=1pt,domain=1:8,samples=8]{2};
           \addlegendentry{shared (flat)}
           \addplot[oshAmber,line width=1pt,domain=1:8,samples=8]{2+0.9*x};
-          \addlegendentry{B: shared + $T\cdot$page}
+          \addlegendentry{B: shared + $T\cdot$accum}
           \addplot[oshRed,dashed,line width=1pt,domain=1:8,samples=8]{2.6};
           \addlegendentry{C: shared + 1 atomic grid}
           \draw[oshBlue,dotted,line width=1pt] (axis cs:0,8)--(axis cs:8,8);
@@ -553,27 +789,275 @@
   \end{columns}
   \vspace{0.5mm}
   \footnotesize\color{oshGrey}
-  Source: \code{src/apps/osh/osh\_membudget.*}, \code{src/common/osh\_sysinfo.*} (\#152/\#153).
+  Source: \code{src/common/osh\_sysinfo.*}, \code{src/apps/osh/osh\_membudget.*} (\#152/\#153).
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{What the merge has to mean}
+\begin{frame}{Statistics: the merge is also the variance contract (\#169)}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \small
+      Every strategy ends in the \textbf{same} step: fold per-worker partials
+      into one result. That \code{merge()} also defines how \emph{uncertainty}
+      combines.
+      \medskip
+
+      \textbf{Granularity:} true per-history variance needs
+      \code{nbins$\times$live-histories} scratch — prohibitive for a CT. The
+      wavefront design instead gives us \textbf{batches}, and a batch is
+      \emph{already} what we produce:
+      \begin{itemize}\scriptsize\itemsep1pt
+        \item each worker / rank / lane-block = one batch,
+        \item each periodic dump = a batch boundary,
+        \item each independent run = a batch.
+      \end{itemize}
+      Crucially these batches are \textbf{unequal in size} (run-by-time, early
+      finishers) — the normal case here, not an edge case.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{Two representations $\Rightarrow$ two merges:}
+      \begin{itemize}\scriptsize\itemsep2pt
+        \item \textcolor{oshAmber}{Additive} $\Sigma x,\Sigma x^2$:
+              merge \code{=} \code{+=}, MPI is free \code{MPI\_SUM} — but
+              cancellation on high-mean bins.
+        \item \textcolor{oshGreen}{Welford/West $(n,\bar{x},M_2)$}:
+              stable; merge is \textbf{Schubert--Gertz}
+              \[ M_2 \mathrel{+}= M_{2,B} + \delta^2\tfrac{n_A n_B}{n} \]
+              the cross-term a plain \code{+=} \emph{cannot} express.
+      \end{itemize}
+      \footnotesize\color{oshRed}
+      Latent trap (\#169): today's \code{merge()} does a blanket \code{+=} over
+      the variance arrays — correct only while they're NULL. The moment $M_2$
+      lands there, it silently drops the cross-term. Decide the contract now —
+      it's two functions, not a rewrite.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\begin{frame}{Run-control makes batches first-class (\#170)}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \small
+      A requested feature set that is really \emph{one} primitive — and it is
+      the same snapshot/merge the parallel path uses:
+      \begin{itemize}\itemsep2pt
+        \item \textbf{Periodic dump} every $N$ primaries or $T$ seconds —
+              a live partial result.
+        \item \textbf{On-demand dump} (\code{SIGUSR1} / a browser message),
+              keep running.
+        \item \textbf{Run by wall-time budget} (\code{--max-time 30m}) instead
+              of a fixed \code{nstat}.
+        \item \textbf{Graceful stop} (Ctrl-C): drain the pool, save what
+              finished.
+      \end{itemize}
+      Per-history streams make early stop \textbf{unbiased} — the completed
+      histories are a valid random subset, not ``the easy ones''.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \centering
+      \begin{tikzpicture}[scale=0.9]
+        \draw[->,oshGrey,line width=1pt](-0.2,0)--(5.2,0);
+        \node[lbl] at (2.5,-0.45){wall-clock $\longrightarrow$};
+        \foreach \x in {1,2,3,4}{
+          \draw[oshSky,line width=1pt](\x,-0.12)--(\x,0.12);
+          \node[lbl,font=\tiny] at (\x,0.32){dump};}
+        \node[private,minimum width=0.9cm,minimum height=0.5cm,font=\tiny] at (0.5,1.0){b1};
+        \node[private,minimum width=0.8cm,minimum height=0.5cm,font=\tiny] at (1.5,1.0){b2};
+        \node[private,minimum width=1.0cm,minimum height=0.5cm,font=\tiny] at (2.6,1.0){b3};
+        \node[private,minimum width=0.7cm,minimum height=0.5cm,font=\tiny] at (3.6,1.0){b4};
+        \node[lbl,font=\tiny] at (2.2,1.55){unequal batches};
+        \node[box,fill=oshGreen!12,minimum width=2.0cm] (snap) at (2.5,2.4){snapshot $\to$\\postprocess copy $\to$ save};
+        \node[lbl,text width=4.8cm,align=center,font=\tiny] at (2.5,3.2)
+          {non-destructive: live accumulators untouched\\(clone = the PR-A/PR-C primitive)};
+      \end{tikzpicture}\\[1mm]
+      \footnotesize\color{oshGrey}
+      Each dump is a \textbf{batch boundary} for \#169. ``A periodic dump and a
+      parallel checkpoint are the same operation.''
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\begin{frame}{The browser is just MPI with \code{postMessage} (\#171)}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \small
+      A WASM web target reuses the \emph{same} four seams — no browser-specific
+      engine code:
+      \begin{itemize}\scriptsize\itemsep1pt
+        \item Each \textbf{Web Worker} = its own WASM instance over a disjoint
+              history range = one \code{worker\_context}. This is the
+              \textbf{MPI rank model}, separate memories.
+        \item Workers post their private accumulators back; the main thread
+              \code{merge()}s them — \code{postMessage} is the transport.
+        \item \textbf{Streaming preview:} run-control P2 dumps only the
+              \emph{visible} output (the page$\to$output selector) every
+              $\sim$250\,ms $\Rightarrow$ the dose map refines live.
+      \end{itemize}
+      \textcolor{oshGreen}{$+$} no \code{SharedArrayBuffer}/COOP-COEP needed.\\
+      \textcolor{oshRed}{$-$} wasm32 caps linear memory at $\sim$2--4\,GB
+      \emph{per worker}, each replicating scoring $\Rightarrow$ worker count is
+      memory-bound for CT (consult \code{osh\_sysinfo}).
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \begin{tikzpicture}[scale=0.92]
+        \node[box,fill=oshBlue!10,minimum width=3.2cm] (ui) at (0,3.0){main thread (UI)\\partition $[0,N)$};
+        \foreach \w/\x in {0/-2.0,1/0,2/2.0}{
+          \node[worker,minimum width=1.5cm,minimum height=1.3cm] (w\w) at (\x,1.4){};
+          \node[ann,font=\tiny] at (\x,1.85){Worker \w};
+          \node[private,font=\tiny,minimum width=1.2cm] at (\x,1.15){WASM\\instance};
+          \draw[flow](ui.south)--(w\w.north);
+        }
+        \node[box,fill=oshGreen!12,minimum width=3.0cm] (mg) at (0,-0.4){main thread\\\code{merge()} partials};
+        \foreach \w in {0,1,2}{\draw[reduce](w\w.south)--(mg.north);}
+        \node[lbl,font=\tiny] at (0,-1.1){\code{postMessage(buf,[buf])} = zero-copy transfer};
+      \end{tikzpicture}\\[1mm]
+      \footnotesize\color{oshGrey}
+      The four seams that unlock threads/MPI unlock the browser for free;
+      only partition/serialize/merge move to JS.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\begin{frame}{Reproducibility — a contract to state, not a blocker (\#168)}
+  \centering
+  \small
+  Parallel MC is not bit-identical to serial — \code{double} addition isn't
+  associative, so a different accumulation grouping differs at the ULP level.
+  That is universal (Geant4, FLUKA, TOPAS). The physics is identical; only the
+  \emph{sum order} changes.
+  \vspace{2mm}
+
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{l c l}
+    \textbf{Property} & & \textbf{Why}\\
+    \hline
+    Bit-reproducible at a \emph{fixed} worker count & \textcolor{oshGreen}{\checkmark} & same ranges $\to$ same partials $\to$ same merge order\\
+    Statistically identical to serial & \textcolor{oshGreen}{\checkmark} & same per-history physics; ULP-level only\\
+    Bit-identical \emph{to} serial & \textcolor{oshRed}{$\times$} & FP non-associativity\\
+    Bit-identical across \emph{different} worker counts & \textcolor{oshRed}{$\times$} & different grouping\\
+  \end{tabular}
+  \vspace{2mm}
+
+  \begin{itemize}\scriptsize
+    \item Nice-to-have, not the crux of this discussion — but worth a cheap CI
+          guard: a fixed-worker run twice must be byte-identical (catches a
+          stray shared-mutable global / race), plus a serial-vs-parallel
+          agreement test reusing \code{compare\_dat.py}, and optionally a
+          ThreadSanitizer job.
+  \end{itemize}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\section{Forward look}
+\begin{frame}{Future physics: growing cross-section data (\#154, \#111)}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \small
+      Neutron transport (\#154), fragmentation (\#111) and later photons add
+      \textbf{static cross-section tables} — condensed JEFF-3.3
+      ($\sim$30 log-spaced points/nuclide for H,C,N,O,Ca + detector
+      Li/B/He), optical-model fallback. The data grows; what does it do to the
+      plan?
+      \medskip
+
+      \textbf{Good news: cross-sections are \textcolor{oshGreen}{shared,
+      read-only} cold state.} Growth changes the shared box on the memory
+      slide, not the writable one:
+      \begin{itemize}\scriptsize\itemsep1pt
+        \item \textbf{Threads (B/C):} tables load \emph{once} per node, read by
+              all $T$ — no coherence traffic. Growth is nearly cost-free. This
+              \emph{strengthens} the shared-memory path.
+        \item \textbf{Process replication (A/MPI, WASM workers):} every rank
+              copies the now-bigger tables $\Rightarrow$ favour
+              \textbf{few ranks/node $\times$ many threads} (hybrid).
+        \item \textbf{GPU (D):} tables become device working set; bigger +
+              random (energy/nuclide) lookups $\Rightarrow$ more divergence.
+              Keep them \emph{compact} — exactly why \#154 designs $\sim$30-point
+              tables.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \centering
+      \begin{tikzpicture}[scale=0.9]
+        \node[shared,minimum width=3.4cm,minimum height=1.4cm] (t) at (0,2.2)
+          {cross-sections (ion + n + $\gamma$)\\\textbf{grows} — but read-only};
+        \foreach \i/\x in {0/-1.2,1/0,2/1.2}{
+          \node[worker,minimum width=0.9cm,minimum height=0.7cm,font=\tiny] (c\i) at (\x,0.4){thr};
+          \draw[cflow](t.south)--(c\i.north);}
+        \node[lbl,text width=4cm,align=center,font=\tiny] at (0,-0.4)
+          {one copy feeds every thread\\$\Rightarrow$ threads scale through data growth};
+      \end{tikzpicture}\\[1mm]
+      \footnotesize\color{oshGreen}
+      Net: bigger static data tilts the optimum \emph{toward} shared-memory
+      threading and compact, GPU-friendly tables — it doesn't change the axis.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%------------------------------------------------------------------------------
+\begin{frame}{Licensing \& library choices}
+  \small
+  Project is \textbf{MIT} (permissive). Guiding rule: keep \code{osh\_core}
+  dependency-free; every backend is \emph{optional} and must not impose
+  copyleft on users.
+  \vspace{1mm}
+
+  \renewcommand{\arraystretch}{1.2}
+  \footnotesize
+  \begin{tabular}{l l l p{5.0cm}}
+    \textbf{Layer} & \textbf{Options} & \textbf{License} & \textbf{Notes}\\
+    \hline
+    \textcolor{oshSky}{Threads} & \textbf{OpenMP} & rt.\ exc.\,/\,Apache & ubiquitous on HPC; matches \#162's driver sketch\\
+     & POSIX \code{pthreads} & libc & full control, more boilerplate, no native Windows\\
+     & C11 \code{<threads.h>} & std & portability gaps (older glibc, MSVC)\\
+     & Intel TBB & Apache-2.0 & task-based, heavier, C++\\
+    \hline
+    \textcolor{oshGreen}{Multi-node} & Open MPI / MPICH & BSD-like & standard ABI; Intel/Cray MPI on the clusters\\
+    \hline
+    \textcolor{oshRed}{GPU} & CUDA & proprietary & NVIDIA-only (Athena A100, Helios Hopper)\\
+     & HIP/ROCm, SYCL & MIT / Apache & cross-vendor; portability hedge\\
+     & WebGPU & open & browser+native; \emph{no f64}, integer atomics only\\
+    \hline
+    \textcolor{oshAmber}{Browser} & Web Workers & --- & no library; the \#171 model (a)\\
+  \end{tabular}
+  \vspace{1.5mm}
+
+  \begin{itemize}\scriptsize\itemsep1pt
+    \item \textbf{Recommendation:} start with \textbf{OpenMP} (license-clean,
+          one pragma layer, matches the existing \S4 driver); keep \textbf{MPI}
+          optional/gated for cluster scale; defer the GPU API (CUDA vs.\
+          SYCL/HIP) to a research spike. All behind CMake feature flags so the
+          MIT core stays buildable with zero extra dependencies.
+  \end{itemize}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Summary}
 \begin{frame}{Comparison at a glance}
   \centering
-  \renewcommand{\arraystretch}{1.35}
+  \renewcommand{\arraystretch}{1.3}
   \footnotesize
   \begin{tabular}{l l l l l l}
-    \textbf{Strategy} & \textbf{Shares} & \textbf{Scoring mem} & \textbf{Contention} & \textbf{Repro.} & \textbf{Effort}\\
+    \textbf{Strategy} & \textbf{Shares} & \textbf{Scoring mem} & \textbf{Best for} & \textbf{Repro.} & \textbf{Effort}\\
     \hline
-    \textcolor{oshGreen}{A. Multi-node / MPI} & nothing & $\times$ ranks & none & bit-identical$^\ast$ & \textbf{low}\\
-    \textcolor{oshSky}{B. Threads + pages} & geo (RO) & $\times T$ & none & deterministic reduce & medium\\
-    \textcolor{oshAmber}{C. Threads + atomics} & geo + grid & $\times 1$ & high (peak) & order-dependent & medium\\
-    \textcolor{oshRed}{D. SIMD / GPU} & geo (RO) & per lane/block & divergence & per-history stream & high\\
+    \textcolor{oshGreen}{A. Multi-node / MPI} & nothing & $\times$ ranks & cluster scale & bit-identical$^\ast$ & \textbf{low}\\
+    \textcolor{oshSky}{B. Threads + accum} & geo (RO) & $\times T$ & CSG / small mesh & determ.\ reduce & medium\\
+    \textcolor{oshAmber}{C. Threads + atomics} & geo + grid & $\times 1$ & large CT & order-dependent & medium\\
+    \textcolor{oshRed}{D. SIMD / GPU} & geo (RO) & per lane/block & throughput ceiling & per-history stream & high\\
   \end{tabular}
   \vspace{3mm}
   \begin{itemize}\scriptsize
     \item[$\ast$] Per-history streams make A reproducible \emph{by construction}: rank $r$ owns a disjoint history range.
-    \item All four sit on the \textbf{same} foundation: read-only cold state + per-history RNG + SoA pool.
+    \item \textbf{Workload picks the row:} CSG + mesh (compute-bound) $\to$ B;
+          CT + CT scoring (memory-bound) $\to$ C; both compose under A across nodes.
+    \item All four sit on the \textbf{same} foundation: read-only cold state +
+          per-history RNG + SoA pool + one \code{merge()}.
   \end{itemize}
 \end{frame}
 
@@ -584,32 +1068,38 @@
     \node[worker,draw=oshGreen,minimum width=2.4cm,minimum height=1.4cm] (a)
          {\textbf{1. A}\\multi-node\\merge \code{.bdo}};
     \node[worker,draw=oshSky,minimum width=2.4cm,minimum height=1.4cm,right=of a] (b)
-         {\textbf{2. B}\\threads +\\per-thread pages};
+         {\textbf{2. B}\\OpenMP +\\per-thread accum};
     \node[worker,draw=oshAmber,minimum width=2.4cm,minimum height=1.4cm,right=of b] (c)
-         {\textbf{3. C}\\atomics when\\pages don't fit};
+         {\textbf{3. C}\\atomics when\\CT won't fit};
     \node[worker,draw=oshRed,minimum width=2.4cm,minimum height=1.4cm,right=of c] (d)
          {\textbf{4. D}\\SIMD now,\\GPU later};
     \draw[flow](a)--(b);\draw[flow](b)--(c);\draw[flow](c)--(d);
-    \node[lbl,below=2mm of a]{already mergeable today};
+    \node[lbl,below=2mm of a]{mergeable today};
     \node[lbl,below=2mm of b]{biggest win/effort};
     \node[lbl,below=2mm of c]{memory fallback};
     \node[lbl,below=2mm of d]{SoA pool is ready};
   \end{tikzpicture}
-  \vspace{4mm}
+  \vspace{3mm}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \small\textbf{Open questions for the meeting}
       \begin{itemize}\scriptsize\itemsep1pt
-        \item Target first: single fat node (B) or cluster (A$\times$B)?
-        \item Threading layer: OpenMP vs.\ raw pthreads vs.\ a task pool?
-        \item Page reduction: tree-reduce for bit-identity, or atomics?
+        \item Target first: one fat node (B, up to 192 cores) or cluster (A$\times$B)?
+        \item Threading layer: \textbf{OpenMP} vs.\ pthreads vs.\ task pool?
+        \item Variance: additive now, or Welford/West from the start (\#169)?
+        \item Run-by-time \& periodic dumps (\#170) before or after \code{--threads N}?
+        \item Is the WASM/web preview (\#171) a near-term goal or later?
       \end{itemize}
     \end{column}
     \begin{column}{0.5\textwidth}
-      \small\textbf{What is ready vs.\ to build}
+      \small\textbf{Ready vs.\ to build}
       \begin{itemize}\scriptsize\itemsep1pt
-        \item \textcolor{oshGreen}{Ready:} per-history RNG, SoA pool, cold/hot split, \code{.bdo} merge rules, mem budget.
-        \item \textcolor{oshAmber}{To build:} thread orchestration, per-thread page reduction, MPI history partitioning.
+        \item \textcolor{oshGreen}{Ready:} per-history RNG, SoA pool, cold/hot
+              split, \code{.bdo} merge rules, host budget, the \#162 seams
+              (worker context, accumulator, deposit, merge).
+        \item \textcolor{oshAmber}{To build:} thread orchestration, cursor-free
+              beam (\#165), deposit-target redirection (\#166), per-worker
+              profile (\#167), variance contract (\#169).
       \end{itemize}
     \end{column}
   \end{columns}
@@ -620,8 +1110,11 @@
   \vfill
   {\Large\color{oshBlue}\textbf{Discussion}}\\[2mm]
   \small\color{oshGrey}
-  Four strategies, one foundation: read-only cold state $\cdot$ per-history RNG $\cdot$ SoA pool.\\
-  Diagrams sourced from the OpenShieldHIT code base.
+  Four strategies, one foundation: read-only cold state $\cdot$ per-history RNG
+  $\cdot$ SoA pool $\cdot$ one \code{merge()}.\\
+  Two workloads — CSG+mesh (compute-bound) and CT+CT scoring (memory-bound) —
+  decide which strategy wins.\\
+  Diagrams sourced from the OpenShieldHIT code base and issues \#154/\#162/\#168--\#171.
   \vfill
 \end{frame}
 
