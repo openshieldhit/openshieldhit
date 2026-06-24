@@ -266,9 +266,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
         /* Batch size is bounded by the shared geometry scratch (zone_refs,
          * dist_batch).  Secondaries pushed this pass go to slots
          * [n_wavefront..pool->n) and are picked up in the next iteration. */
-        n_wavefront = (pool->n <= transport_ctx->scratch_capacity)
-                          ? pool->n
-                          : transport_ctx->scratch_capacity;
+        n_wavefront = (pool->n <= transport_ctx->scratch_capacity) ? pool->n : transport_ctx->scratch_capacity;
 
         osh_gemca_runtime_get_zone_ref_batch(
             geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, n_wavefront, zone_refs);

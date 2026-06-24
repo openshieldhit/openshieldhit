@@ -111,6 +111,10 @@ static enum osh_status simulation_alloc_pools(struct osh_simulation *sim) {
     sim->transport_ctx.zone_refs = (struct osh_zone_ref *) malloc(ion_cap * sizeof(struct osh_zone_ref));
     sim->transport_ctx.dist_batch = (double *) malloc(ion_cap * sizeof(double));
     if (!sim->transport_ctx.zone_refs || !sim->transport_ctx.dist_batch) {
+        free(sim->transport_ctx.zone_refs);
+        free(sim->transport_ctx.dist_batch);
+        sim->transport_ctx.zone_refs = NULL;
+        sim->transport_ctx.dist_batch = NULL;
         return OSH_ENOMEM;
     }
     sim->transport_ctx.scratch_capacity = ion_cap;
