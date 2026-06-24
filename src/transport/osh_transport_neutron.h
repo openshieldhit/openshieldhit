@@ -37,11 +37,11 @@ struct osh_scoring_runtime;
  * @param beam_rt        Unused (no primary beam refill for neutrons).
  * @param score_rt       Unused until point scoring is wired.
  */
-enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *transport_ctx,
-                                                  struct osh_beam_runtime *beam_rt,
-                                                  struct osh_gemca_runtime const *geom_rt,
-                                                  struct osh_material_runtime const *material_rt,
-                                                  struct osh_scoring_runtime *score_rt);
+enum osh_status osh_transport_neutron_run(struct osh_transport_context *transport_ctx,
+                                          struct osh_beam_runtime *beam_rt,
+                                          struct osh_gemca_runtime const *geom_rt,
+                                          struct osh_material_runtime const *material_rt,
+                                          struct osh_scoring_runtime *score_rt);
 
 #ifdef __cplusplus
 }

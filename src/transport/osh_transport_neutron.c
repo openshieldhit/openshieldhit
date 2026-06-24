@@ -39,24 +39,23 @@
  */
 static double neutron_sigma_tot_cm(struct osh_neutron_xsec *xsec,
                                    struct osh_nuclear_handler const *handler,
-                                   size_t mat_idx, double rho_g_cm3,
+                                   size_t mat_idx,
+                                   double rho_g_cm3,
                                    double e_mev) {
     struct osh_nuclear_elem const *elems; /* element list for this material */
     size_t n_elems;
     size_t i;
-    double sum;                           /* accumulator in mb·cm⁻³ */
+    double sum; /* accumulator in mb·cm⁻³ */
     struct osh_neutron_xsec_result sig;
 
-    elems   = handler->elem_pool + handler->elem_offset[mat_idx];
+    elems = handler->elem_pool + handler->elem_offset[mat_idx];
     n_elems = handler->elem_count[mat_idx];
-    sum     = 0.0;
+    sum = 0.0;
 
     for (i = 0u; i < n_elems; ++i) {
         double nd_i; /* number density of element i [cm⁻³] */
-        nd_i = (double)elems[i].mass_fraction * rho_g_cm3
-               * OSH_NAVOGADRO / (double)elems[i].a;
-        osh_neutron_xsec_lookup(xsec, (int)elems[i].z, (int)elems[i].a,
-                                e_mev, &sig);
+        nd_i = (double) elems[i].mass_fraction * rho_g_cm3 * OSH_NAVOGADRO / (double) elems[i].a;
+        osh_neutron_xsec_lookup(xsec, (int) elems[i].z, (int) elems[i].a, e_mev, &sig);
         sum += nd_i * sig.tot;
     }
     return sum * OSH_MB_TO_CM2; /* convert mb·cm⁻³ → cm⁻¹ */
@@ -66,8 +65,7 @@ static double neutron_sigma_tot_cm(struct osh_neutron_xsec *xsec,
  * Advance neutron slot k to the zone boundary plus a small eps nudge so the
  * next zone-ref query resolves the new zone correctly.
  */
-static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k,
-                                double dist) {
+static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k, double dist) {
     double d; /* total advance: boundary distance + eps */
     d = dist + OSH_NEUTRON_BOUNDARY_EPS;
     pool->x[k] += pool->ux[k] * d;
@@ -81,8 +79,7 @@ static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k,
  * the secondary descriptor.  RNG stream is split from the parent so the child
  * history is independent from all sibling histories.
  */
-static void push_neutron_secondary(struct osh_neutron_pool *pool, size_t k,
-                                   struct osh_nuclear_secondary const *sec) {
+static void push_neutron_secondary(struct osh_neutron_pool *pool, size_t k, struct osh_nuclear_secondary const *sec) {
     size_t slot; /* index of the new entry */
 
     if (pool->n >= pool->capacity) {
@@ -91,17 +88,16 @@ static void push_neutron_secondary(struct osh_neutron_pool *pool, size_t k,
     }
     slot = pool->n++;
     pool->n_created++;
-    pool->x[slot]       = pool->x[k];
-    pool->y[slot]       = pool->y[k];
-    pool->z[slot]       = pool->z[k];
-    pool->ux[slot]      = sec->dir[0];
-    pool->uy[slot]      = sec->dir[1];
-    pool->uz[slot]      = sec->dir[2];
-    pool->e[slot]       = sec->energy;
-    pool->wt[slot]      = pool->wt[k];
+    pool->x[slot] = pool->x[k];
+    pool->y[slot] = pool->y[k];
+    pool->z[slot] = pool->z[k];
+    pool->ux[slot] = sec->dir[0];
+    pool->uy[slot] = sec->dir[1];
+    pool->uz[slot] = sec->dir[2];
+    pool->e[slot] = sec->energy;
+    pool->wt[slot] = pool->wt[k];
     pool->prim_idx[slot] = pool->prim_idx[k];
-    pool->gen[slot] = (pool->gen[k] < 255u)
-                      ? (uint8_t)(pool->gen[k] + 1u) : 255u;
+    pool->gen[slot] = (pool->gen[k] < 255u) ? (uint8_t) (pool->gen[k] + 1u) : 255u;
     osh_rng_split(&pool->rng[slot], &pool->rng[k]);
 }
 
@@ -119,8 +115,7 @@ static void push_neutron_secondary(struct osh_neutron_pool *pool, size_t k,
  * All other channels: kill the neutron (e = 0); energy goes to
  *   local_deposit_mev which is currently discarded (same scoring TODO).
  */
-static void apply_event(struct osh_neutron_pool *pool, size_t k,
-                        struct osh_neutron_reaction_event const *ev) {
+static void apply_event(struct osh_neutron_pool *pool, size_t k, struct osh_neutron_reaction_event const *ev) {
     size_t i;
     struct osh_nuclear_secondary const *sec;
 
@@ -129,7 +124,7 @@ static void apply_event(struct osh_neutron_pool *pool, size_t k,
         pool->ux[k] = ev->neutron_dir[0];
         pool->uy[k] = ev->neutron_dir[1];
         pool->uz[k] = ev->neutron_dir[2];
-        pool->e[k]  = ev->neutron_e_mev;
+        pool->e[k] = ev->neutron_e_mev;
         /* ev->local_deposit_mev: heavy recoil energy — deposit when scoring wired.
          * secondaries[0]: H-1 recoil proton — ion-feedback path not yet wired. */
         break;
@@ -139,8 +134,7 @@ static void apply_event(struct osh_neutron_pool *pool, size_t k,
          * Ion secondaries deposit locally until ion-feedback flag is wired. */
         for (i = 0u; i < ev->n_secondaries; ++i) {
             sec = &ev->secondaries[i];
-            if (sec->species != NULL
-                && sec->species->pdg == OSH_PART_PDG_NEUTRON) {
+            if (sec->species != NULL && sec->species->pdg == OSH_PART_PDG_NEUTRON) {
                 push_neutron_secondary(pool, k, sec);
             }
         }
@@ -163,43 +157,42 @@ static void apply_event(struct osh_neutron_pool *pool, size_t k,
  * Transport loop
  * -------------------------------------------------------------------------- */
 
-enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *transport_ctx,
-                                                  struct osh_beam_runtime *beam_rt,
-                                                  struct osh_gemca_runtime const *geom_rt,
-                                                  struct osh_material_runtime const *material_rt,
-                                                  struct osh_scoring_runtime *score_rt) {
-    struct osh_neutron_pool *pool;            /* borrowed from transport_ctx */
+enum osh_status osh_transport_neutron_run(struct osh_transport_context *transport_ctx,
+                                          struct osh_beam_runtime *beam_rt,
+                                          struct osh_gemca_runtime const *geom_rt,
+                                          struct osh_material_runtime const *material_rt,
+                                          struct osh_scoring_runtime *score_rt) {
+    struct osh_neutron_pool *pool;             /* borrowed from transport_ctx */
     struct osh_nuclear_handler const *handler; /* element composition + FBU */
-    struct osh_neutron_xsec xsec;             /* cross-section model (stack-alloc) */
-    struct osh_zone_ref *zone_refs;           /* per-wavefront geometry scratch */
-    double *dist_batch;                       /* per-wavefront boundary distance */
-    size_t n_wavefront;                       /* snapshot of pool->n at pass start */
-    size_t k;                                 /* slot index within wavefront */
-    size_t mat_idx;                           /* material runtime index for slot k */
-    double rho;                               /* material density [g/cm³] */
-    double e_mev;                             /* neutron kinetic energy [MeV] */
-    double dir[3];                            /* neutron direction unit vector */
-    double sigma_tot;                         /* macroscopic total XS [cm⁻¹] */
-    double l;                                 /* sampled free path length [cm] */
-    struct osh_neutron_reaction_event ev;     /* reaction outcome */
+    struct osh_neutron_xsec xsec;              /* cross-section model (stack-alloc) */
+    struct osh_zone_ref *zone_refs;            /* per-wavefront geometry scratch */
+    double *dist_batch;                        /* per-wavefront boundary distance */
+    size_t n_wavefront;                        /* snapshot of pool->n at pass start */
+    size_t k;                                  /* slot index within wavefront */
+    size_t mat_idx;                            /* material runtime index for slot k */
+    double rho;                                /* material density [g/cm³] */
+    double e_mev;                              /* neutron kinetic energy [MeV] */
+    double dir[3];                             /* neutron direction unit vector */
+    double sigma_tot;                          /* macroscopic total XS [cm⁻¹] */
+    double l;                                  /* sampled free path length [cm] */
+    struct osh_neutron_reaction_event ev;      /* reaction outcome */
     enum osh_status rc;
 
-    (void)beam_rt;   /* no primary beam refill: neutrons come from the pool */
-    (void)score_rt;  /* energy deposits not yet scored (see apply_event) */
+    (void) beam_rt;  /* no primary beam refill: neutrons come from the pool */
+    (void) score_rt; /* energy deposits not yet scored (see apply_event) */
 
     if (!transport_ctx || !geom_rt || !material_rt) {
         return OSH_EINVAL;
     }
 
-    pool    = transport_ctx->neutron_pool;
+    pool = transport_ctx->neutron_pool;
     handler = transport_ctx->nuclear_handler;
 
     if (!pool || pool->n == 0u) {
         return OSH_OK; /* neutron pool absent or empty: nothing to do */
     }
     if (!handler) {
-        OSH_DIAG_ERRORF(transport_ctx->diag, "%s",
-            "neutron transport: nuclear_handler is required but not set");
+        OSH_DIAG_ERRORF(transport_ctx->diag, "%s", "neutron transport: nuclear_handler is required but not set");
         return OSH_EINVAL;
     }
 
@@ -209,8 +202,8 @@ enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *
     }
 
     /* Scratch arrays sized to the pool capacity (allocated once per call). */
-    zone_refs  = (struct osh_zone_ref *)malloc(pool->capacity * sizeof(*zone_refs));
-    dist_batch = (double *)malloc(pool->capacity * sizeof(*dist_batch));
+    zone_refs = (struct osh_zone_ref *) malloc(pool->capacity * sizeof(*zone_refs));
+    dist_batch = (double *) malloc(pool->capacity * sizeof(*dist_batch));
     if (!zone_refs || !dist_batch) {
         free(zone_refs);
         free(dist_batch);
@@ -218,8 +211,7 @@ enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *
         return OSH_ENOMEM;
     }
 
-    OSH_DIAG_INFOF(transport_ctx->diag,
-                   "Neutron transport: starting with %zu neutrons", pool->n);
+    OSH_DIAG_INFOF(transport_ctx->diag, "Neutron transport: starting with %zu neutrons", pool->n);
 
     /* ---- Wavefront loop -------------------------------------------------- */
     while (pool->n > 0u) {
@@ -227,14 +219,10 @@ enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *
          * [n_wavefront..pool->n) and are processed in the next iteration. */
         n_wavefront = pool->n;
 
-        osh_gemca_runtime_get_zone_ref_batch(geom_rt,
-            pool->x, pool->y, pool->z,
-            pool->ux, pool->uy, pool->uz,
-            n_wavefront, zone_refs);
-        osh_gemca_runtime_get_distance_batch(geom_rt,
-            pool->x, pool->y, pool->z,
-            pool->ux, pool->uy, pool->uz,
-            zone_refs, n_wavefront, dist_batch);
+        osh_gemca_runtime_get_zone_ref_batch(
+            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, n_wavefront, zone_refs);
+        osh_gemca_runtime_get_distance_batch(
+            geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, zone_refs, n_wavefront, dist_batch);
 
         for (k = 0u; k < n_wavefront; ++k) {
             /* -- energy cutoff --------------------------------------------- */
@@ -252,12 +240,12 @@ enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *
             mat_idx = zone_refs[k].material_idx;
 
             /* -- blackhole -------------------------------------------------- */
-            if (mat_idx == (size_t)OSH_MATERIAL_INDEX_BLACKHOLE) {
+            if (mat_idx == (size_t) OSH_MATERIAL_INDEX_BLACKHOLE) {
                 pool->e[k] = 0.0;
                 continue;
             }
 
-            rho = (double)material_rt->rho[mat_idx];
+            rho = (double) material_rt->rho[mat_idx];
 
             /* -- vacuum or zero-density material --------------------------- */
             if (rho <= 0.0) {
@@ -265,7 +253,7 @@ enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *
                 continue;
             }
 
-            e_mev     = pool->e[k];
+            e_mev = pool->e[k];
             sigma_tot = neutron_sigma_tot_cm(&xsec, handler, mat_idx, rho, e_mev);
 
             /* -- transparent material (no xsec for any element) ------------ */
@@ -293,17 +281,15 @@ enum osh_status osh_transport_neutron_run_minimal(struct osh_transport_context *
             dir[2] = pool->uz[k];
 
             /* -- sample and apply reaction ---------------------------------- */
-            osh_neutron_reaction_sample(&xsec, handler, mat_idx, rho,
-                                        e_mev, dir, &pool->rng[k], &ev);
+            osh_neutron_reaction_sample(&xsec, handler, mat_idx, rho, e_mev, dir, &pool->rng[k], &ev);
             apply_event(pool, k, &ev);
         }
 
         osh_neutron_pool_compact(pool);
     }
 
-    OSH_DIAG_INFOF(transport_ctx->diag,
-                   "Neutron transport: %zu created, %zu dropped",
-                   pool->n_created, pool->n_dropped);
+    OSH_DIAG_INFOF(
+        transport_ctx->diag, "Neutron transport: %zu created, %zu dropped", pool->n_created, pool->n_dropped);
 
     free(zone_refs);
     free(dist_batch);
