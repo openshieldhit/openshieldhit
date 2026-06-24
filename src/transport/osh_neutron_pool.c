@@ -129,17 +129,17 @@ void osh_neutron_pool_compact(struct osh_neutron_pool *pool) {
             continue; /* dead — skip */
         }
         if (dst != src) {
-            pool->x[dst]       = pool->x[src];
-            pool->y[dst]       = pool->y[src];
-            pool->z[dst]       = pool->z[src];
-            pool->ux[dst]      = pool->ux[src];
-            pool->uy[dst]      = pool->uy[src];
-            pool->uz[dst]      = pool->uz[src];
-            pool->e[dst]       = pool->e[src];
-            pool->wt[dst]      = pool->wt[src];
+            pool->x[dst] = pool->x[src];
+            pool->y[dst] = pool->y[src];
+            pool->z[dst] = pool->z[src];
+            pool->ux[dst] = pool->ux[src];
+            pool->uy[dst] = pool->uy[src];
+            pool->uz[dst] = pool->uz[src];
+            pool->e[dst] = pool->e[src];
+            pool->wt[dst] = pool->wt[src];
             pool->prim_idx[dst] = pool->prim_idx[src];
-            pool->gen[dst]     = pool->gen[src];
-            pool->rng[dst]     = pool->rng[src];
+            pool->gen[dst] = pool->gen[src];
+            pool->rng[dst] = pool->rng[src];
         }
         ++dst;
     }

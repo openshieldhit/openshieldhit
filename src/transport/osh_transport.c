@@ -85,7 +85,7 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
     case OSH_TRANSPORT_FAMILY_ION:
         return osh_transport_ion_run_minimal(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
     case OSH_TRANSPORT_FAMILY_NEUTRON:
-        return osh_transport_neutron_run_minimal(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
+        return osh_transport_neutron_run(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
     case OSH_TRANSPORT_FAMILY_PHOTON:
         return osh_transport_photon_run_minimal(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
     case OSH_TRANSPORT_FAMILY_ELECTRON:

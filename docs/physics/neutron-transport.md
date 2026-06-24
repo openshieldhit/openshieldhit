@@ -9,7 +9,7 @@ and scoring paths remain explicit TODOs.
 
 The current neutron transport path handles neutrons produced by nuclear
 interactions in ion transport.  Those neutrons are banked in `struct
-osh_neutron_pool` and later drained by `osh_transport_neutron_run_minimal()`.
+osh_neutron_pool` and later drained by `osh_transport_neutron_run()`.
 
 The model currently targets above-thermal neutron transport.  Thermal-neutron
 physics is not modeled as a separate regime yet; cross-section lookup uses the
@@ -21,7 +21,7 @@ to also host thermal treatment later.
 ```text
 ion nuclear event
   -> neutron secondary pushed to osh_neutron_pool
-  -> osh_transport_neutron_run_minimal()
+  -> osh_transport_neutron_run()
       -> geometry zone and boundary-distance batches
       -> macroscopic total cross section
       -> sampled free path

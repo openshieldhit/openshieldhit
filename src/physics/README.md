@@ -159,7 +159,7 @@ Thermal-neutron physics is not yet modeled separately; current lookups simply
 use the available cross-section tables at the requested energy.  A later
 thermal layer can live under the same `neutron/` ownership boundary.
 
-`osh_transport_neutron_run_minimal()` currently drains the neutron pool with a
+`osh_transport_neutron_run()` currently drains the neutron pool with a
 wavefront loop that mirrors the ion driver at a high level: batch zone lookup,
 batch boundary-distance lookup, per-slot cutoff/escape/material handling,
 exponential free-path sampling from the macroscopic total cross section, and
