@@ -4,6 +4,7 @@ add_library(osh_nuclear
     osh_nuclear_abrasion.c
     osh_nuclear_fermi_breakup.c
     osh_nuclear_handler.c
+    osh_nuclear_compound.c
 )
 
 target_include_directories(osh_nuclear
