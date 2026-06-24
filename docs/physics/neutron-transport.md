@@ -11,10 +11,12 @@ The current neutron transport path handles neutrons produced by nuclear
 interactions in ion transport.  Those neutrons are banked in `struct
 osh_neutron_pool` and later drained by `osh_transport_neutron_run()`.
 
-The model currently targets above-thermal neutron transport.  Thermal-neutron
-physics is not modeled as a separate regime yet; cross-section lookup uses the
-available neutron tables at the requested energy.  The module boundary is meant
-to also host thermal treatment later.
+The model currently transports neutrons down to the configured `NEUTRLCUT`
+cutoff, using `1e-3 MeV` (`1 keV`) when the input leaves `NEUTRLCUT` at `0.0`.
+The embedded cross-section tables already extend below that to `1e-9 MeV`
+(`1 meV`) for future thermal-neutron transport, but
+thermal-neutron physics is not modeled as a separate regime yet.
+Cross-section lookup uses the available neutron tables at the requested energy.
 
 ## Data Flow
 
@@ -63,7 +65,7 @@ interaction point and handed to the neutron reaction layer.
 
 Per neutron slot, the current loop handles:
 
-- energy below `1e-3 MeV`: kill the neutron
+- energy at or below the effective neutron cutoff: kill the neutron
 - outside geometry: kill the neutron
 - blackhole material: kill the neutron
 - vacuum or zero-density material: advance to the next boundary
@@ -100,6 +102,17 @@ These are intentional boundaries of the current implementation:
   isotropic center-of-mass approximation
 - the transport scheduler still needs full cross-family orchestration around
   the ion and neutron families
+
+## Cross-Section Data
+
+The Tier-1 neutron cross sections are condensed from JEFF-4.0 PENDF0K at 0 K.
+They use a 31-point irregular energy grid, giving 30 interpolation intervals,
+from `1e-9 MeV` (`1 meV`) to `20 MeV`.  The lower part of the grid keeps
+thermal and epithermal absorber behavior available even though the current
+transport loop cuts off at `1 keV`.
+
+See [Neutron cross-section tables](neutron-cross-sections.md) for the stored
+channels, the full nuclide list, and the Tier-2 fallback rule.
 
 ## Code Map
 

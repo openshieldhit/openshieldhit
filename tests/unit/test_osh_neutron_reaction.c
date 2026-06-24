@@ -9,12 +9,12 @@
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "random/osh_rng.h"
 
-#define ASSERT_TRUE(cond)                                                                          \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);            \
-            exit(1);                                                                               \
-        }                                                                                          \
+#define ASSERT_TRUE(cond)                                                                                              \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);                                 \
+            exit(1);                                                                                                   \
+        }                                                                                                              \
     } while (0)
 
 #define ASSERT_NEAR(a, b, tol) ASSERT_TRUE(fabs((a) - (b)) <= (tol))
@@ -33,14 +33,14 @@ static void make_handler(struct osh_nuclear_handler *h,
                          unsigned int z,
                          unsigned int a) {
     memset(h, 0, sizeof(*h));
-    elem->z            = z;
-    elem->a            = a;
+    elem->z = z;
+    elem->a = a;
     elem->mass_fraction = 1.0f;
-    *offset            = 0u;
-    *count             = 1u;
-    h->elem_pool       = elem;
-    h->elem_offset     = offset;
-    h->elem_count      = count;
+    *offset = 0u;
+    *count = 1u;
+    h->elem_pool = elem;
+    h->elem_offset = offset;
+    h->elem_count = count;
 }
 
 /*
@@ -56,7 +56,7 @@ static void test_elastic_h1_secondary_energy(void) {
     struct osh_rng rng;
     struct osh_neutron_reaction_event ev;
     double dir[3] = {0.0, 0.0, 1.0};
-    double e_mev  = 5.0;
+    double e_mev = 5.0;
     int i, n_elastic = 0;
 
     ASSERT_TRUE(osh_neutron_xsec_compile(NULL, &xsec) == OSH_OK);
@@ -92,8 +92,8 @@ static void test_elastic_o16_energy_bounds(void) {
     struct osh_rng rng;
     struct osh_neutron_reaction_event ev;
     double dir[3] = {0.0, 0.0, 1.0};
-    double e_mev  = 1.0;
-    double e_min  = e_mev * (15.0 / 17.0) * (15.0 / 17.0); /* ≈ 0.780 MeV */
+    double e_mev = 1.0;
+    double e_min = e_mev * (15.0 / 17.0) * (15.0 / 17.0); /* ≈ 0.780 MeV */
     int i, n_elastic = 0;
 
     ASSERT_TRUE(osh_neutron_xsec_compile(NULL, &xsec) == OSH_OK);
@@ -137,9 +137,8 @@ static void test_elastic_dir_normalized(void) {
         if (ev.kind != OSH_NEUTRON_REACTION_ELASTIC) {
             continue;
         }
-        norm2 = ev.neutron_dir[0] * ev.neutron_dir[0]
-              + ev.neutron_dir[1] * ev.neutron_dir[1]
-              + ev.neutron_dir[2] * ev.neutron_dir[2];
+        norm2 = ev.neutron_dir[0] * ev.neutron_dir[0] + ev.neutron_dir[1] * ev.neutron_dir[1]
+                + ev.neutron_dir[2] * ev.neutron_dir[2];
         ASSERT_NEAR(norm2, 1.0, 1e-10);
     }
     osh_neutron_xsec_free(&xsec);

@@ -6,9 +6,10 @@
  * @brief Neutron cross-section lookup with JEFF-4.0 Tier-1 and optical Tier-2 fallback.
  *
  * @details
- * Tier-1: log-log interpolation on 30-point condensed tables derived from
- * JEFF-4.0 PENDF0K (tools/condense_neutron_xsec.py).  Channels: σ_tot, σ_el,
- * σ(n,n'), σ(n,2n), σ(n,γ), σ(n,p), σ(n,α).
+ * Tier-1: log-log interpolation on condensed JEFF-4.0 PENDF0K tables
+ * (tools/condense_neutron_xsec.py).  The current grid has 31 energy points,
+ * i.e. 30 interpolation intervals.  Channels: σ_tot, σ_el, σ(n,n'),
+ * σ(n,2n), σ(n,γ), σ(n,p), σ(n,α).
  *
  * Tier-2 (any (Z,A) not in the JEFF tables): σ_R from Tripathi (1999),
  * σ_el from the geometric approximation π r₀² A^(2/3) (r₀ = 1.2 fm).

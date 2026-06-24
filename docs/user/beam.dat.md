@@ -277,9 +277,9 @@ with analytic models.
 NEUTRLCUT  <e>   [MeV]
 ```
 
-Lower energy cutoff for neutron transport [MeV].  Neutrons below this
-threshold are killed and their energy deposited locally.  `0.0` disables the
-cutoff (all neutrons transported).
+Lower energy cutoff for neutron transport [MeV].  Neutrons at or below this
+threshold are killed and their energy deposited locally.  `0.0` keeps the
+transport default, currently `1e-3 MeV` (`1 keV`).
 
 ### DELTAE
 

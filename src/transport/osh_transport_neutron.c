@@ -19,9 +19,6 @@
 #include "transport/osh_transport.h"
 #include "transport/osh_transport_boundary.h"
 
-/* Neutron kinetic energy cutoff [MeV] (1 keV). */
-#define OSH_NEUTRON_E_CUTOFF_MEV 1.0e-3
-
 /* --------------------------------------------------------------------------
  * Static helpers
  * -------------------------------------------------------------------------- */
@@ -167,6 +164,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
     size_t mat_idx;                            /* material runtime index for slot k */
     double rho;                                /* material density [g/cm³] */
     double e_mev;                              /* neutron kinetic energy [MeV] */
+    double e_cutoff_mev;                       /* effective neutron cutoff [MeV] */
     double dir[3];                             /* neutron direction unit vector */
     double sigma_tot;                          /* macroscopic total XS [cm⁻¹] */
     double l;                                  /* sampled free path length [cm] */
@@ -195,6 +193,8 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
     if (rc != OSH_OK) {
         return rc;
     }
+    e_cutoff_mev = (transport_ctx->params.ncut > 0.0f) ? (double) transport_ctx->params.ncut
+                                                       : (double) OSH_TRANSPORT_NEUTRON_CUTOFF_DEFAULT_MEV;
 
     /* Scratch arrays sized to the pool capacity (allocated once per call). */
     zone_refs = (struct osh_zone_ref *) malloc(pool->capacity * sizeof(*zone_refs));
@@ -221,7 +221,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
 
         for (k = 0u; k < n_wavefront; ++k) {
             /* -- energy cutoff --------------------------------------------- */
-            if (pool->e[k] <= OSH_NEUTRON_E_CUTOFF_MEV) {
+            if (pool->e[k] <= e_cutoff_mev) {
                 pool->e[k] = 0.0;
                 continue;
             }
