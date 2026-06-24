@@ -268,9 +268,9 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             if (transport_ctx->neutron_pool != NULL && ev->secondaries[si].species != NULL
                 && ev->secondaries[si].species->pdg == OSH_PART_PDG_NEUTRON) {
                 np = transport_ctx->neutron_pool;
+                np->n_created++;
                 if (np->n < np->capacity) {
                     k = np->n++;
-                    np->n_created++;
                     np->x[k] = pool->x[slot];
                     np->y[k] = pool->y[slot];
                     np->z[k] = pool->z[slot];
