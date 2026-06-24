@@ -57,43 +57,43 @@ Tier-1 table fall back to Tier-2 individually while the dominant isotopes
 
 ## Tier-1 nuclides
 
-| Nuclide | Z | A | Main reason for inclusion |
-|---|---:|---:|---|
-| H-1 | 1 | 1 | water, tissue, dominant elastic target |
-| H-2 | 1 | 2 | light water, 2.2 MeV capture line |
-| He-3 | 2 | 3 | He-3 proportional counter |
-| Li-6 | 3 | 6 | LiF TLD, CLYC detector |
-| Li-7 | 3 | 7 | LiF TLD, Li-glass |
-| Be-9 | 4 | 9 | beam line window |
-| B-10 | 5 | 10 | BF3 detector, borated polyethylene |
-| B-11 | 5 | 11 | boron shielding |
-| C-12 | 6 | 12 | tissue, carbon target, graphite |
-| N-14 | 7 | 14 | tissue, air |
-| O-16 | 8 | 16 | water, tissue, air |
-| F-19 | 9 | 19 | fluoride compounds |
-| Na-23 | 11 | 23 | soft tissue |
-| Mg-24 | 12 | 24 | bone mineral |
-| Al-27 | 13 | 27 | structural aluminium |
-| Si-28 | 14 | 28 | silicon detector |
-| P-31 | 15 | 31 | bone mineral |
-| S-32 | 16 | 32 | soft tissue |
-| Cl-35 | 17 | 35 | soft tissue |
-| Ar-40 | 18 | 40 | air |
-| K-39 | 19 | 39 | soft tissue |
-| Ca-40 | 20 | 40 | bone mineral |
-| Fe-56 | 26 | 56 | iron and steel shielding |
-| Cu-63 | 29 | 63 | copper nozzle, coils, brass |
-| Zn-64 | 30 | 64 | brass, natural zinc isotope |
-| Zn-66 | 30 | 66 | brass, natural zinc isotope |
-| Zn-68 | 30 | 68 | brass, natural zinc isotope |
-| Cd-113 | 48 | 113 | cadmium cover, thermal absorber |
-| Cd-114 | 48 | 114 | cadmium foil, abundant Cd isotope |
-| W-182 | 74 | 182 | tungsten collimator |
-| W-183 | 74 | 183 | tungsten collimator |
-| W-184 | 74 | 184 | tungsten collimator |
-| W-186 | 74 | 186 | tungsten collimator |
-| Au-197 | 79 | 197 | activation foil |
-| Pb-208 | 82 | 208 | lead shielding |
+| Nuclide | Z | A | Main reason for inclusion | Data source |
+|---|---:|---:|---|---|
+| H-1 | 1 | 1 | water, tissue, dominant elastic target | JEFF-4.0 |
+| H-2 | 1 | 2 | light water, 2.2 MeV capture line | JEFF-4.0 |
+| He-3 | 2 | 3 | He-3 proportional counter | JEFF-4.0 |
+| Li-6 | 3 | 6 | LiF TLD, CLYC detector | JEFF-4.0 |
+| Li-7 | 3 | 7 | LiF TLD, Li-glass | JEFF-4.0 |
+| Be-9 | 4 | 9 | beam line window | JEFF-4.0 |
+| B-10 | 5 | 10 | BF3 detector, borated polyethylene | JEFF-4.0 |
+| B-11 | 5 | 11 | boron shielding | JEFF-4.0 |
+| C-12 | 6 | 12 | tissue, carbon target, graphite | JEFF-4.0 |
+| N-14 | 7 | 14 | tissue, air | JEFF-4.0 |
+| O-16 | 8 | 16 | water, tissue, air | JEFF-4.0 |
+| F-19 | 9 | 19 | fluoride compounds | JEFF-4.0 |
+| Na-23 | 11 | 23 | soft tissue | JEFF-4.0 |
+| Mg-24 | 12 | 24 | bone mineral | JEFF-4.0 |
+| Al-27 | 13 | 27 | structural aluminium | JEFF-4.0 |
+| Si-28 | 14 | 28 | silicon detector | JEFF-4.0 |
+| P-31 | 15 | 31 | bone mineral | JEFF-4.0 |
+| S-32 | 16 | 32 | soft tissue | JEFF-4.0 |
+| Cl-35 | 17 | 35 | soft tissue | JEFF-4.0 |
+| Ar-40 | 18 | 40 | air | JEFF-4.0 |
+| K-39 | 19 | 39 | soft tissue | JEFF-4.0 |
+| Ca-40 | 20 | 40 | bone mineral | JEFF-4.0 |
+| Fe-56 | 26 | 56 | iron and steel shielding | JEFF-4.0 |
+| Cu-63 | 29 | 63 | copper nozzle, coils, brass | JEFF-4.0 |
+| Zn-64 | 30 | 64 | brass, natural zinc isotope | JEFF-4.0 |
+| Zn-66 | 30 | 66 | brass, natural zinc isotope | JEFF-4.0 |
+| Zn-68 | 30 | 68 | brass, natural zinc isotope | JEFF-4.0 |
+| Cd-113 | 48 | 113 | cadmium cover, thermal absorber | JEFF-4.0 |
+| Cd-114 | 48 | 114 | cadmium foil, abundant Cd isotope | JEFF-4.0 |
+| W-182 | 74 | 182 | tungsten collimator | JEFF-4.0 |
+| W-183 | 74 | 183 | tungsten collimator | JEFF-4.0 |
+| W-184 | 74 | 184 | tungsten collimator | JEFF-4.0 |
+| W-186 | 74 | 186 | tungsten collimator | JEFF-4.0 |
+| Au-197 | 79 | 197 | activation foil | JEFF-4.0 |
+| Pb-208 | 82 | 208 | lead shielding | JEFF-4.0 |
 
 ## Tier-2 fallback
 
