@@ -9,6 +9,7 @@ in and return numbers out.
 physics/
     atomic/    electromagnetic (EM) interactions with target electrons
     nuclear/   hadronic interactions with target nuclei
+    neutron/   neutron cross sections and reaction final states
 ```
 
 ---
@@ -120,6 +121,46 @@ Key references:
 
 ---
 
+## neutron/ — Neutron physics
+
+The neutron module is the physics layer for neutron transport.  The current
+implementation starts with the minimal above-thermal transport path, but the
+module boundary is intended to also cover thermal-neutron treatment once those
+models are added.  It deliberately sits between the transport loop and the
+nuclear back-ends:
+
+- `osh_neutron_xsec` owns neutron cross-section lookup.  It interpolates the
+  condensed JEFF-derived tables for the supported Tier-1 nuclides and falls
+  back to a Tripathi/geometric approximation for missing nuclides.
+- `osh_neutron_reaction` owns target selection, channel sampling, and final
+  state construction for one neutron interaction.  The transport loop samples
+  the flight distance and manages pools; this layer decides whether an event is
+  elastic, capture, charge exchange, compound decay, or a local-deposit sink.
+
+Compound neutron reactions are routed through `osh_nuclear_compound_step()`,
+which is the adapter from neutron-induced compound nuclei to the existing
+Fermi break-up back-end or to the heavy-residue sink.  This keeps
+`osh_transport_neutron.c` free of Fermi break-up details.
+
+The current reaction model is intentionally minimal:
+
+- elastic scattering uses an isotropic CM approximation; H-1 recoils are
+  returned as proton secondaries, while heavier recoils deposit their recoil
+  energy locally.
+- `(n,gamma)` capture kills the neutron and deposits the neutron kinetic energy
+  locally.
+- `(n,p)` and `(n,alpha)` use two-body relativistic kinematics when the mass
+  lookup and threshold allow the channel; otherwise they fall back to local
+  deposit.
+- `(n,n')`, `(n,2n)`, and generic non-elastic remainder build a compound
+  nucleus `(Z,A+1,E*)` and delegate de-excitation to the compound adapter.
+
+Thermal-neutron physics is not yet modeled separately; current lookups simply
+use the available cross-section tables at the requested energy.  A later
+thermal layer can live under the same `neutron/` ownership boundary.
+
+---
+
 ## How the modules connect to transport
 
 ```
@@ -133,3 +174,9 @@ osh_transport_ion_step()
 
 The EM processes (phases 2–4) act on every material step.  The nuclear
 process (phase 5) is only active when `beam->nuclear` is set in `beam.dat`.
+
+For neutron transport, `osh_transport_neutron.c` should call the neutron module
+only after it has sampled an interaction point in the current material.  It then
+applies the returned `osh_neutron_reaction_event`: update the neutron for
+elastic scatter, push charged/neutron secondaries into the relevant pools, and
+score any local energy deposit.
