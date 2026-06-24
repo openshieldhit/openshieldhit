@@ -61,6 +61,11 @@ geometry boundary, the neutron is advanced to the boundary plus a small nudge
 and survives to the next wavefront pass.  Otherwise it is advanced to the
 interaction point and handed to the neutron reaction layer.
 
+Finite neutron transport steps are passed to the existing step-scoring path with
+zero local energy deposition, enabling neutron fluence maps.  Point-like local
+deposits from reactions remain separate from this and require point-deposit
+scoring.
+
 ## Boundary And Material Cases
 
 Per neutron slot, the current loop handles:

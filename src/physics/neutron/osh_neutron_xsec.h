@@ -85,6 +85,17 @@ enum osh_status osh_neutron_xsec_compile(struct osh_diag_sink const *diag, struc
 void osh_neutron_xsec_free(struct osh_neutron_xsec *xsec);
 
 /**
+ * @brief Resolve an unspecified natural-element mass number for neutron data.
+ *
+ * Material compositions may store natural elements as A=0.  Neutron transport
+ * needs a finite molar mass for number density and a concrete nuclide for the
+ * condensed JEFF table.  If @p a is non-zero it is returned unchanged; if it is
+ * zero, the representative isotope used by the neutron table is returned when
+ * available, otherwise a conservative A≈2Z fallback is used.
+ */
+unsigned int osh_neutron_xsec_resolve_a(unsigned int z, unsigned int a);
+
+/**
  * @brief Look up all cross-section channels for nuclide (Z, A) at energy E.
  *
  * Searches the JEFF-4.0 Tier-1 table first.  If the nuclide is absent, falls
@@ -96,7 +107,7 @@ void osh_neutron_xsec_free(struct osh_neutron_xsec *xsec);
  *
  * @param[in,out] xsec   Model state (warning tracker is mutated on first fallback).
  * @param[in]     z      Target atomic number.
- * @param[in]     a      Target mass number.
+ * @param[in]     a      Target mass number; A=0 is resolved as natural element.
  * @param[in]     e_mev  Neutron kinetic energy [MeV] (lab frame, target at rest).
  * @param[out]    out    Filled with σ values [mb] and σ_nonel.
  */

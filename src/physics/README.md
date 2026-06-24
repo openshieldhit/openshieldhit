@@ -124,10 +124,10 @@ Key references:
 ## neutron/ — Neutron physics
 
 The neutron module is the physics layer for neutron transport.  The current
-implementation starts with the minimal above-thermal transport path, but the
-module boundary is intended to also cover thermal-neutron treatment once those
-models are added.  It deliberately sits between the transport loop and the
-nuclear back-ends:
+implementation starts with a minimal transport path and JEFF-derived tables
+that already extend into the thermal range, but it does not yet implement a
+separate thermal-neutron physics regime.  It deliberately sits between the
+transport loop and the nuclear back-ends:
 
 - `osh_neutron_xsec` owns neutron cross-section lookup.  It interpolates the
   condensed JEFF-derived tables for the supported Tier-1 nuclides and falls
@@ -156,7 +156,9 @@ The current reaction model is intentionally minimal:
   nucleus `(Z,A+1,E*)` and delegate de-excitation to the compound adapter.
 
 Thermal-neutron physics is not yet modeled separately; current lookups simply
-use the available cross-section tables at the requested energy.  A later
+use the available cross-section tables at the requested energy.  The generated
+tables extend down to `1e-9 MeV` (`1 meV`), while the transport default cutoff
+is `1e-3 MeV` (`1 keV`) unless `NEUTRLCUT` is set to a positive value.  A later
 thermal layer can live under the same `neutron/` ownership boundary.
 
 `osh_transport_neutron_run()` currently drains the neutron pool with a

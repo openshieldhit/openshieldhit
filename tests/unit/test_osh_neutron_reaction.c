@@ -80,8 +80,9 @@ static void test_elastic_h1_secondary_energy(void) {
 }
 
 /*
- * O-16 elastic at 1 MeV: scattered neutron energy must fall in the kinematic
- * window [E_min, E_n] where E_min = E_n × ((A−1)/(A+1))².
+ * Natural O (A=0 resolved to O-16) elastic at 1 MeV: scattered neutron energy
+ * must fall in the kinematic window [E_min, E_n] where
+ * E_min = E_n × ((A−1)/(A+1))².
  * For A = 16: E_min/E_n = (15/17)² ≈ 0.780.
  */
 static void test_elastic_o16_energy_bounds(void) {
@@ -97,7 +98,7 @@ static void test_elastic_o16_energy_bounds(void) {
     int i, n_elastic = 0;
 
     ASSERT_TRUE(osh_neutron_xsec_compile(NULL, &xsec) == OSH_OK);
-    make_handler(&handler, &elem, &offset, &count, 8u, 16u);
+    make_handler(&handler, &elem, &offset, &count, 8u, 0u);
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 2u, 0u);
 
     for (i = 0; i < N_SAMPLES; ++i) {

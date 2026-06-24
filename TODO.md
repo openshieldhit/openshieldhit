@@ -49,13 +49,12 @@ produced (abrasion, Fermi break-up) but only counted, never transported.
 
 ### Cross-section architecture — two-tier lookup
 
-- **Tier 1**: condensed JEFF-3.3 tables (~30 log-spaced energy points, thermal
-  to ~250 MeV) embedded in a generated header (pattern: `osh_nuclear_pp_data.h`).
-  Per nuclide: `σ_el(E)` and `σ_R(E)`. Developer condenses JEFF manually.
-  Priority nuclides:
-  - Transport materials: H-1, C-12, N-14, O-16, Ca-40
-  - Detector materials: Li-6, Li-7, B-10, B-11, He-3
-    (U-235/238 fission: separate sub-issue — extra complexity)
+- **Tier 1**: condensed JEFF-4.0 PENDF0K tables (31-point irregular grid,
+  1 meV–20 MeV) embedded in a generated header (`osh_neutron_xsec_data.h`).
+  Per nuclide: `σ_tot`, `σ_el`, `σ(n,n')`, `σ(n,2n)`, `σ(n,γ)`, `σ(n,p)`, `σ(n,α)`.
+  Condensing automated by `tools/condense_neutron_xsec.py`.
+  Current nuclides: H-1, C-12, N-14, O-16, F-19, Ca-40, Li-6, Li-7, B-10, B-11, He-3
+  (U-235/238 fission: separate sub-issue — extra complexity)
 - **Tier 2**: optical model parametrization as fallback for any (Z,A) not in
   tables; Tripathi `σ_R` reused as the reaction cross-section fallback.
 

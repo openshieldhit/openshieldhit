@@ -47,6 +47,7 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
     struct osh_transport_scheduler scheduler;
     enum osh_transport_family family;
     enum osh_status rc;
+    size_t neutron_capacity;
     int neutron_enabled; /* cache: neutron pool is present for this run */
 
     if (!transport_ctx) {
@@ -64,6 +65,16 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
     /* Neutron family: enable when a pool is available; pool starts empty. */
     neutron_enabled = (transport_ctx->neutron_pool != NULL);
     if (neutron_enabled) {
+        neutron_capacity = (transport_ctx->params.pool_capacity != 0u) ? transport_ctx->params.pool_capacity
+                                                                       : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
+        if (transport_ctx->neutron_pool->capacity == 0u) {
+            rc = osh_neutron_pool_init(transport_ctx->neutron_pool, neutron_capacity);
+            if (rc != OSH_OK) {
+                return rc;
+            }
+        } else {
+            osh_neutron_pool_reset(transport_ctx->neutron_pool);
+        }
         rc = osh_transport_scheduler_enable(&scheduler, OSH_TRANSPORT_FAMILY_NEUTRON);
         if (rc != OSH_OK) {
             return rc;

@@ -61,24 +61,20 @@ enum osh_status osh_beam_compile(struct beam_workspace const *workspace, struct 
     return OSH_OK;
 }
 
-void osh_beam_runtime_free(struct osh_beam_runtime *rt) {
-    if (!rt) {
+void osh_beam_runtime_free(struct osh_beam_runtime **rt) {
+    if (!rt || !*rt) {
         return;
     }
 
-    /*
-     * For PHSP mode: close the MCPL file handle when implemented.
-     * Currently a no-op since setup_phsp returns OSH_ENOTSUP and no handle
-     * is ever opened.
-     */
-    if (rt->workspace && rt->workspace->beam_mode == OSH_BEAM_MODE_PHSP) {
-        if (rt->source.phsp.mcpl_handle) {
-            /* TODO: mcpl_close(rt->source.phsp.mcpl_handle); */
-            rt->source.phsp.mcpl_handle = NULL;
+    if ((*rt)->workspace && (*rt)->workspace->beam_mode == OSH_BEAM_MODE_PHSP) {
+        if ((*rt)->source.phsp.mcpl_handle) {
+            /* TODO: mcpl_close((*rt)->source.phsp.mcpl_handle); */
+            (*rt)->source.phsp.mcpl_handle = NULL;
         }
     }
 
-    free(rt);
+    free(*rt);
+    *rt = NULL;
 }
 
 /* ---- Primary generation -------------------------------------------------- */

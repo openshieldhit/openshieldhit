@@ -1,7 +1,5 @@
 #include "transport/osh_transport_ion.h"
 
-#include <stdlib.h>
-
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
@@ -32,11 +30,6 @@
  * through realistic geometry; a proton Bragg peak typically takes O(1 000)
  * steps with DELTAE = 0.02.
  */
-/* Overridable from the build line (e.g. -DOSH_TRANSPORT_POOL_CAPACITY=256)
- * so the benchmark harness can sweep capacities without editing sources. */
-#ifndef OSH_TRANSPORT_POOL_CAPACITY
-#define OSH_TRANSPORT_POOL_CAPACITY 4096u
-#endif
 #define OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY 1000000u
 
 #define OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S 1.0
@@ -80,10 +73,9 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                                               struct osh_scoring_runtime *score_rt) {
     struct osh_rng_seeding seeding;
     struct osh_transport_params const *params;
-    struct osh_particle_pool *pool = NULL;
-    struct osh_zone_ref *zone_refs = NULL;
-    double *dist_batch = NULL;
-    size_t capacity;
+    struct osh_particle_pool *pool;
+    struct osh_zone_ref *zone_refs;
+    double *dist_batch;
     size_t primaries_done;
     size_t primaries_completed;
     size_t n_fill;
@@ -104,6 +96,9 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     if (!transport_ctx || !beam_rt || !geom_rt || !material_rt || !score_rt) {
         return OSH_EINVAL;
     }
+    if (!transport_ctx->ion_pool || !transport_ctx->zone_refs || !transport_ctx->dist_batch) {
+        return OSH_EINVAL;
+    }
     prof = transport_ctx->profile;
     params = &transport_ctx->params;
     if (params->nstat == 0u) {
@@ -117,36 +112,15 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         return rc;
     }
 
-    /* Pool capacity: runtime override (params->pool_capacity) when set, else the
-     * compiled default.  Never exceeds nstat (no point allocating more slots
-     * than primaries).  Capacity is a pure performance knob: per-history RNG
-     * streams make each history consume the same random draws at any capacity,
-     * so scored results match up to floating-point summation order in the
-     * shared scoring accumulators. */
-    capacity = (params->pool_capacity != 0u) ? params->pool_capacity : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
-    if (capacity > params->nstat) {
-        capacity = params->nstat;
-    }
-    rc = osh_particle_pool_alloc(capacity, &pool);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-
-    /* Per-run batch scratch for the geometry queries, sized to the pool.
-     * Allocated once here (never on the per-step hot path) and freed at
-     * cleanup; replaces fixed-size stack arrays so capacity can be chosen at
-     * runtime without a recompile.  Guard the size product against size_t
-     * overflow now that capacity is caller-controlled. */
-    if (capacity > ((size_t) -1) / sizeof(*zone_refs)) {
-        rc = OSH_ENOMEM;
-        goto cleanup;
-    }
-    zone_refs = (struct osh_zone_ref *) malloc(capacity * sizeof(*zone_refs));
-    dist_batch = (double *) malloc(capacity * sizeof(*dist_batch));
-    if (!zone_refs || !dist_batch) {
-        rc = OSH_ENOMEM;
-        goto cleanup;
-    }
+    /* Use the pre-allocated pool and geometry scratch from the transport context.
+     * Both were allocated at simulation create time (see simulation_alloc_pools).
+     * Capacity is a pure performance knob: per-history RNG streams make physics
+     * identical across capacities; scored results match up to floating-point
+     * summation order in the shared scoring accumulators. */
+    pool = transport_ctx->ion_pool;
+    pool->n = 0u;
+    zone_refs = transport_ctx->zone_refs;
+    dist_batch = transport_ctx->dist_batch;
 
     /* Per-history seeding context.  Every primary derives independent BEAM and
      * PHYSICS streams from its global history index (rndoffset + prim_idx), so a
@@ -196,7 +170,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                 prof->fill_s += osh_monotonic_seconds() - t_phase;
             }
             if (rc != OSH_OK) {
-                goto cleanup;
+                return rc;
             }
             primaries_done += n_fill;
         }
@@ -244,7 +218,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                                 pool->uy[i],
                                 pool->uz[i]);
                 rc = OSH_ESTATE;
-                goto cleanup;
+                return rc;
             }
 
             step_seg.ds = dist_batch[i];
@@ -269,7 +243,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                                 pool->ux[i],
                                 pool->uy[i],
                                 pool->uz[i]);
-                goto cleanup;
+                return rc;
             }
             ++steps_taken;
         }
@@ -346,10 +320,6 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         }
     }
 
-cleanup:
-    free(zone_refs);
-    free(dist_batch);
-    osh_particle_pool_free(pool);
     return rc;
 }
 

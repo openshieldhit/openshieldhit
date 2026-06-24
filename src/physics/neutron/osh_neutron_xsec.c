@@ -189,10 +189,77 @@ void osh_neutron_xsec_free(struct osh_neutron_xsec *xsec) {
     (void) xsec;
 }
 
+unsigned int osh_neutron_xsec_resolve_a(unsigned int z, unsigned int a) {
+    if (a > 0u) {
+        return a;
+    }
+
+    switch (z) {
+    case 1u:
+        return 1u;
+    case 2u:
+        return 4u;
+    case 3u:
+        return 7u;
+    case 4u:
+        return 9u;
+    case 5u:
+        return 11u;
+    case 6u:
+        return 12u;
+    case 7u:
+        return 14u;
+    case 8u:
+        return 16u;
+    case 9u:
+        return 19u;
+    case 11u:
+        return 23u;
+    case 12u:
+        return 24u;
+    case 13u:
+        return 27u;
+    case 14u:
+        return 28u;
+    case 15u:
+        return 31u;
+    case 16u:
+        return 32u;
+    case 17u:
+        return 35u;
+    case 18u:
+        return 40u;
+    case 19u:
+        return 39u;
+    case 20u:
+        return 40u;
+    case 26u:
+        return 56u;
+    case 29u:
+        return 63u;
+    case 30u:
+        return 64u;
+    case 48u:
+        return 114u;
+    case 74u:
+        return 184u;
+    case 79u:
+        return 197u;
+    case 82u:
+        return 208u;
+    default:
+        return (z > 0u) ? (2u * z) : 1u;
+    }
+}
+
 void osh_neutron_xsec_lookup(
     struct osh_neutron_xsec *xsec, int z, int a, double e_mev, struct osh_neutron_xsec_result *out) {
     struct xsec_entry const *entry;
     int i;
+
+    if (a <= 0) {
+        a = (int) osh_neutron_xsec_resolve_a((z > 0) ? (unsigned int) z : 0u, 0u);
+    }
 
     entry = NULL;
     for (i = 0; i < K_JEFF_N; ++i) {

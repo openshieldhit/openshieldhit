@@ -70,9 +70,26 @@ static void test_optical_fallback_gives_nonzero_tot(void) {
     osh_neutron_xsec_free(&xsec);
 }
 
+static void test_natural_element_resolves_to_representative_isotope(void) {
+    struct osh_neutron_xsec xsec;
+    struct osh_neutron_xsec_result natural_o;
+    struct osh_neutron_xsec_result o16;
+
+    ASSERT_TRUE(osh_neutron_xsec_compile(NULL, &xsec) == OSH_OK);
+    ASSERT_TRUE(osh_neutron_xsec_resolve_a(8u, 0u) == 16u);
+
+    osh_neutron_xsec_lookup(&xsec, 8, 0, 1.0, &natural_o);
+    osh_neutron_xsec_lookup(&xsec, 8, 16, 1.0, &o16);
+    ASSERT_NEAR(natural_o.tot, o16.tot, 1e-12 * o16.tot);
+    ASSERT_NEAR(natural_o.el, o16.el, 1e-12 * o16.el);
+
+    osh_neutron_xsec_free(&xsec);
+}
+
 int main(void) {
     test_h1_channels_consistent();
     test_b10_na_one_over_v();
     test_optical_fallback_gives_nonzero_tot();
+    test_natural_element_resolves_to_representative_isotope();
     return 0;
 }

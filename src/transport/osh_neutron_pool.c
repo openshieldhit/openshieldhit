@@ -23,13 +23,12 @@
 /* 8 phase-space+weight doubles + conservative tail */
 #define DOUBLES_PER_ENTRY (8u + TAIL_DOUBLES_PER_ENTRY)
 
-enum osh_status osh_neutron_pool_alloc(size_t capacity, struct osh_neutron_pool **out) {
-    struct osh_neutron_pool *pool;
+enum osh_status osh_neutron_pool_init(struct osh_neutron_pool *pool, size_t capacity) {
     double *slab;
     size_t slab_doubles;
     size_t off;
 
-    if (!out || capacity == 0u) {
+    if (!pool || capacity == 0u) {
         return OSH_EINVAL;
     }
 
@@ -38,15 +37,11 @@ enum osh_status osh_neutron_pool_alloc(size_t capacity, struct osh_neutron_pool 
         return OSH_ENOMEM;
     }
 
-    pool = (struct osh_neutron_pool *) malloc(sizeof(*pool));
-    if (!pool) {
-        return OSH_ENOMEM;
-    }
+    memset(pool, 0, sizeof(*pool));
 
     slab_doubles = DOUBLES_PER_ENTRY * capacity;
     slab = (double *) malloc(slab_doubles * sizeof(double));
     if (!slab) {
-        free(pool);
         return OSH_ENOMEM;
     }
 
@@ -93,7 +88,6 @@ enum osh_status osh_neutron_pool_alloc(size_t capacity, struct osh_neutron_pool 
     pool->n_created = 0u;
     pool->n_dropped = 0u;
 
-    *out = pool;
     return OSH_OK;
 }
 
@@ -101,9 +95,8 @@ void osh_neutron_pool_free(struct osh_neutron_pool *pool) {
     if (!pool) {
         return;
     }
-    /* x points to the slab base; all other arrays are offsets within it. */
     free(pool->x);
-    free(pool);
+    memset(pool, 0, sizeof(*pool));
 }
 
 void osh_neutron_pool_reset(struct osh_neutron_pool *pool) {

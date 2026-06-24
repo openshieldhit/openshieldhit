@@ -281,7 +281,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                     np->wt[k] = pool->wt[slot];
                     np->prim_idx[k] = pool->prim_idx[slot];
                     np->gen[k] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
-                    osh_rng_split(&np->rng[k], rng); /* child first, parent second */
+                    osh_rng_split(&np->rng[k], rng); /* seed child stream from parent */
                 } else {
                     np->n_dropped++;
                 }

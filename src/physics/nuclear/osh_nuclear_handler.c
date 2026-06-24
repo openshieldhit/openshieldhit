@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "openshieldhit/material.h"
+#include "particle/osh_isotope_db_generated.h"
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
@@ -55,12 +56,32 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         return OSH_ENOMEM;
     }
 
-    /* Build prefix offsets and count the total number of element records. */
+    /* Build prefix offsets, expanding natural (A=0) elements into per-isotope
+     * entries so each slot in elem_pool carries a concrete (Z, A) nuclide and a
+     * correctly weighted mass fraction. */
     total_elems = 0u;
     for (i = 0u; i < ws->nmaterials; ++i) {
+        size_t expanded = 0u;
+        for (j = 0u; j < ws->materials[i].nelements; ++j) {
+            struct osh_material_element const *src = &ws->materials[i].elements[j];
+            if (src->a == 0u) {
+                unsigned int idx = osh_isotopes_idx[src->z];
+                unsigned int len = osh_isotopes_len[src->z];
+                unsigned int k;
+                size_t n_nat = 0u;
+                for (k = 0u; k < len; ++k) {
+                    if (osh_isotope_db[idx + k].abund > 0.0) {
+                        ++n_nat;
+                    }
+                }
+                expanded += (n_nat > 0u) ? n_nat : 1u; /* 1u fallback: element has no natural isotope data */
+            } else {
+                ++expanded;
+            }
+        }
         out->elem_offset[i] = total_elems;
-        out->elem_count[i] = ws->materials[i].nelements;
-        total_elems += ws->materials[i].nelements;
+        out->elem_count[i] = expanded;
+        total_elems += expanded;
     }
 
     if (total_elems > 0u) {
@@ -71,15 +92,45 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         }
     }
 
-    /* Copy only the nuclear fields needed in the hot path. */
+    /* Fill the pool: A=0 → expand into isotopes; A>0 → copy directly. */
     ep = out->elem_pool;
     for (i = 0u; i < ws->nmaterials; ++i) {
         for (j = 0u; j < ws->materials[i].nelements; ++j) {
             struct osh_material_element const *src = &ws->materials[i].elements[j];
-            ep->z = src->z;
-            ep->a = src->a;
-            ep->mass_fraction = (float) src->mass_fraction;
-            ++ep;
+            if (src->a == 0u) {
+                unsigned int z = src->z;
+                unsigned int idx = osh_isotopes_idx[z];
+                unsigned int len = osh_isotopes_len[z];
+                unsigned int k;
+                double m_nat = 0.0;
+                for (k = 0u; k < len; ++k) {
+                    m_nat += osh_isotope_db[idx + k].abund * (double) osh_isotope_db[idx + k].a;
+                }
+                if (m_nat <= 0.0) {
+                    /* No natural abundance data: keep one entry as-is. */
+                    ep->z = z;
+                    ep->a = 0u;
+                    ep->mass_fraction = (float) src->mass_fraction;
+                    ++ep;
+                } else {
+                    /* One entry per naturally occurring isotope; mf_i = f × abund_i × a_i / M_nat */
+                    for (k = 0u; k < len; ++k) {
+                        const struct isotope *iso = &osh_isotope_db[idx + k];
+                        if (iso->abund <= 0.0) {
+                            continue;
+                        }
+                        ep->z = z;
+                        ep->a = iso->a;
+                        ep->mass_fraction = (float) (src->mass_fraction * iso->abund * (double) iso->a / m_nat);
+                        ++ep;
+                    }
+                }
+            } else {
+                ep->z = src->z;
+                ep->a = src->a;
+                ep->mass_fraction = (float) src->mass_fraction;
+                ++ep;
+            }
         }
     }
 

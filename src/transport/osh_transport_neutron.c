@@ -1,20 +1,22 @@
 #include "transport/osh_transport_neutron.h"
 
 #include <math.h>
-#include <stdlib.h>
 
 #include "common/osh_diag.h"
+#include "common/osh_step.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/runtime/osh_material_runtime.h"
 #include "openshieldhit/const.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/material.h"
 #include "particle/osh_particle.h"
+#include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
 #include "physics/neutron/osh_neutron_reaction.h"
 #include "physics/neutron/osh_neutron_xsec.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "random/osh_rng.h"
+#include "scoring/runtime/osh_scoring_step.h"
 #include "transport/osh_neutron_pool.h"
 #include "transport/osh_transport.h"
 #include "transport/osh_transport_boundary.h"
@@ -22,6 +24,8 @@
 /* --------------------------------------------------------------------------
  * Static helpers
  * -------------------------------------------------------------------------- */
+
+static struct particle const k_neutron_species = {OSH_PART_MASS_NEUTRON, OSH_PART_PDG_NEUTRON, 0, 0u, 1u, 0u};
 
 /*
  * Total macroscopic cross section Σ_tot [cm⁻¹] for one material cell.
@@ -49,8 +53,10 @@ static double neutron_sigma_tot_cm(struct osh_neutron_xsec *xsec,
 
     for (i = 0u; i < n_elems; ++i) {
         double nd_i; /* number density of element i [cm⁻³] */
-        nd_i = (double) elems[i].mass_fraction * rho_g_cm3 * OSH_NAVOGADRO / (double) elems[i].a;
-        osh_neutron_xsec_lookup(xsec, (int) elems[i].z, (int) elems[i].a, e_mev, &sig);
+        unsigned int a;
+        a = osh_neutron_xsec_resolve_a(elems[i].z, elems[i].a);
+        nd_i = (double) elems[i].mass_fraction * rho_g_cm3 * OSH_NAVOGADRO / (double) a;
+        osh_neutron_xsec_lookup(xsec, (int) elems[i].z, (int) a, e_mev, &sig);
         sum += nd_i * sig.tot;
     }
     return sum * OSH_MB_TO_CM2; /* convert mb·cm⁻³ → cm⁻¹ */
@@ -63,6 +69,47 @@ static double neutron_sigma_tot_cm(struct osh_neutron_xsec *xsec,
 static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k, double dist) {
     osh_transport_advance_to_boundary(
         &pool->x[k], &pool->y[k], &pool->z[k], pool->ux[k], pool->uy[k], pool->uz[k], dist);
+}
+
+static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
+                                          struct osh_neutron_pool const *pool,
+                                          size_t k,
+                                          struct osh_zone_ref const *zone_ref,
+                                          double rho,
+                                          double step_len) {
+    struct step st;
+
+    if (!score_rt || !(step_len > 0.0)) {
+        return OSH_OK;
+    }
+
+    st.p[0] = pool->x[k];
+    st.p[1] = pool->y[k];
+    st.p[2] = pool->z[k];
+    st.p[3] = pool->e[k];
+    st.q[0] = pool->x[k] + pool->ux[k] * step_len;
+    st.q[1] = pool->y[k] + pool->uy[k] * step_len;
+    st.q[2] = pool->z[k] + pool->uz[k] * step_len;
+    st.q[3] = pool->e[k];
+    st.v[0] = pool->ux[k];
+    st.v[1] = pool->uy[k];
+    st.v[2] = pool->uz[k];
+    st.w[0] = pool->ux[k];
+    st.w[1] = pool->uy[k];
+    st.w[2] = pool->uz[k];
+    st.ds = step_len;
+    st.de = 0.0;
+    st.rho = rho;
+    st.wt = pool->wt[k];
+    st.voxel_idx = (zone_ref && zone_ref->has_hu) ? zone_ref->voxel_idx : 0u;
+    st.medium = zone_ref ? (int) zone_ref->material_idx : -1;
+    st.zone = zone_ref ? (int) zone_ref->zone_idx : -1;
+    st.system = OSH_COORD_UNIVERSE;
+    st.prim_idx = pool->prim_idx[k];
+    st.gen = pool->gen[k];
+    st.has_voxel = (zone_ref && zone_ref->has_hu) ? 1u : 0u;
+
+    return osh_scoring_score_step(score_rt, &k_neutron_species, &st);
 }
 
 /*
@@ -170,10 +217,12 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
     double l;                                  /* sampled free path length [cm] */
     struct osh_neutron_reaction_event ev;      /* reaction outcome */
     enum osh_status rc;
+    size_t n_cutoff;
+    size_t n_escape;
+    size_t n_steps;
+    size_t n_interactions;
 
-    (void) beam_rt;  /* no primary beam refill: neutrons come from the pool */
-    (void) score_rt; /* energy deposits not yet scored (see apply_event) */
-
+    (void) beam_rt; /* no primary beam refill: neutrons come from the pool */
     if (!transport_ctx || !geom_rt || !material_rt) {
         return OSH_EINVAL;
     }
@@ -195,15 +244,19 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
     }
     e_cutoff_mev = (transport_ctx->params.ncut > 0.0f) ? (double) transport_ctx->params.ncut
                                                        : (double) OSH_TRANSPORT_NEUTRON_CUTOFF_DEFAULT_MEV;
+    n_cutoff = 0u;
+    n_escape = 0u;
+    n_steps = 0u;
+    n_interactions = 0u;
 
-    /* Scratch arrays sized to the pool capacity (allocated once per call). */
-    zone_refs = (struct osh_zone_ref *) malloc(pool->capacity * sizeof(*zone_refs));
-    dist_batch = (double *) malloc(pool->capacity * sizeof(*dist_batch));
+    /* Borrow pre-allocated geometry scratch from the transport context.
+     * Capacity was fixed at simulation create time; both pools share this scratch
+     * since ion and neutron passes run sequentially. */
+    zone_refs = transport_ctx->zone_refs;
+    dist_batch = transport_ctx->dist_batch;
     if (!zone_refs || !dist_batch) {
-        free(zone_refs);
-        free(dist_batch);
         osh_neutron_xsec_free(&xsec);
-        return OSH_ENOMEM;
+        return OSH_EINVAL;
     }
 
     OSH_DIAG_INFOF(transport_ctx->diag, "Neutron transport: starting with %zu neutrons", pool->n);
@@ -223,12 +276,14 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
             /* -- energy cutoff --------------------------------------------- */
             if (pool->e[k] <= e_cutoff_mev) {
                 pool->e[k] = 0.0;
+                n_cutoff++;
                 continue;
             }
 
             /* -- escaped geometry ------------------------------------------ */
             if (zone_refs[k].zone_idx == OSH_ZONE_INDEX_INVALID) {
                 pool->e[k] = 0.0;
+                n_escape++;
                 continue;
             }
 
@@ -244,6 +299,12 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
 
             /* -- vacuum or zero-density material --------------------------- */
             if (rho <= 0.0) {
+                rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, dist_batch[k]);
+                if (rc != OSH_OK) {
+                    osh_neutron_xsec_free(&xsec);
+                    return rc;
+                }
+                n_steps++;
                 advance_to_boundary(pool, k, dist_batch[k]);
                 continue;
             }
@@ -253,20 +314,45 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
 
             /* -- transparent material (no xsec for any element) ------------ */
             if (sigma_tot <= 0.0) {
+                rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, dist_batch[k]);
+                if (rc != OSH_OK) {
+                    osh_neutron_xsec_free(&xsec);
+                    return rc;
+                }
+                n_steps++;
                 advance_to_boundary(pool, k, dist_batch[k]);
                 continue;
             }
 
             /* -- sample free path length ------------------------------------ */
-            l = -log(osh_rng_double(&pool->rng[k])) / sigma_tot;
+            /* u=0 is possible (1-in-2^32 for PCG32) and log(0)=-inf raises
+             * FE_DIVBYZERO on trapping platforms; HUGE_VAL gives inf/sigma_tot
+             * = inf which correctly falls through to the boundary-crossing path. */
+            {
+                double u = osh_rng_double(&pool->rng[k]);
+                l = (u > 0.0) ? (-log(u) / sigma_tot) : HUGE_VAL;
+            }
 
             if (l >= dist_batch[k]) {
                 /* no interaction this step: neutron crosses zone boundary */
+                rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, dist_batch[k]);
+                if (rc != OSH_OK) {
+                    osh_neutron_xsec_free(&xsec);
+                    return rc;
+                }
+                n_steps++;
                 advance_to_boundary(pool, k, dist_batch[k]);
                 continue;
             }
 
             /* -- advance to interaction point ------------------------------- */
+            rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, l);
+            if (rc != OSH_OK) {
+                osh_neutron_xsec_free(&xsec);
+                return rc;
+            }
+            n_steps++;
+            n_interactions++;
             pool->x[k] += pool->ux[k] * l;
             pool->y[k] += pool->uy[k] * l;
             pool->z[k] += pool->uz[k] * l;
@@ -283,11 +369,15 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
         osh_neutron_pool_compact(pool);
     }
 
-    OSH_DIAG_INFOF(
-        transport_ctx->diag, "Neutron transport: %zu created, %zu dropped", pool->n_created, pool->n_dropped);
+    OSH_DIAG_INFOF(transport_ctx->diag,
+                   "Neutron transport: %zu created, %zu dropped, %zu steps, %zu interactions, %zu cutoff, %zu escaped",
+                   pool->n_created,
+                   pool->n_dropped,
+                   n_steps,
+                   n_interactions,
+                   n_cutoff,
+                   n_escape);
 
-    free(zone_refs);
-    free(dist_batch);
     osh_neutron_xsec_free(&xsec);
     return OSH_OK;
 }

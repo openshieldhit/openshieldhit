@@ -42,37 +42,23 @@
 /* Total double-sized slots needed per entry: 8 phase-space+weight + tail. */
 #define DOUBLES_PER_ENTRY (8u + TAIL_DOUBLES_PER_ENTRY)
 
-enum osh_status osh_particle_pool_alloc(size_t capacity, struct osh_particle_pool **pool_out) {
-    struct osh_particle_pool *pool;
+/* Shared slab-partition logic used by both _init and _alloc. */
+static enum osh_status particle_pool_alloc_slab(struct osh_particle_pool *pool, size_t capacity) {
     double *slab;
     size_t slab_doubles;
     size_t off;
 
-    if (!pool_out || capacity == 0u) {
-        return OSH_EINVAL;
-    }
-
-    /* Capacity is caller-controlled (runtime --pool-capacity), so guard the
-     * slab size product (DOUBLES_PER_ENTRY * capacity * sizeof(double)) against
-     * size_t overflow before any allocation — an overflow would under-allocate
-     * the slab and the tail-pointer carving below would write out of bounds. */
+    /* Guard the slab size product against size_t overflow. */
     if (capacity > ((size_t) -1) / (DOUBLES_PER_ENTRY * sizeof(double))) {
-        return OSH_ENOMEM;
-    }
-
-    pool = (struct osh_particle_pool *) malloc(sizeof(*pool));
-    if (!pool) {
         return OSH_ENOMEM;
     }
 
     slab_doubles = DOUBLES_PER_ENTRY * capacity;
     slab = (double *) malloc(slab_doubles * sizeof(double));
     if (!slab) {
-        free(pool);
         return OSH_ENOMEM;
     }
 
-    /* Partition the slab. */
     off = 0u;
     pool->x = slab + off;
     off += capacity;
@@ -92,12 +78,10 @@ enum osh_status osh_particle_pool_alloc(size_t capacity, struct osh_particle_poo
     off += capacity;
 
     /*
-     * Tail fields are placed in the remaining slab space after the 8 double
-     * arrays.  Each pointer is derived from the slab base plus a byte offset,
-     * cast to the appropriate type.  The 8-byte-aligned fields come first so
-     * their offsets (multiples of capacity * 8) need no extra padding; gen
-     * (1-byte) is placed last.  The slab base is double-aligned, which
-     * satisfies the 8-byte alignment of uint64_t, struct osh_rng, and void*.
+     * Tail fields after the 8 double arrays.  8-byte-aligned fields first so
+     * offsets (multiples of capacity * 8) need no extra padding; gen (1-byte)
+     * is placed last.  The slab base is double-aligned, satisfying uint64_t,
+     * struct osh_rng, and void* alignment.
      */
     {
         unsigned char *tail = (unsigned char *) (slab + off);
@@ -114,12 +98,40 @@ enum osh_status osh_particle_pool_alloc(size_t capacity, struct osh_particle_poo
         pool->species = (struct particle const **) (tail + tail_off);
         tail_off += capacity * sizeof(struct particle const *);
 
-        /* gen has 1-byte alignment — no padding needed. */
         pool->gen = (uint8_t *) (tail + tail_off);
     }
 
     pool->n = 0u;
     pool->capacity = capacity;
+    return OSH_OK;
+}
+
+enum osh_status osh_particle_pool_init(struct osh_particle_pool *pool, size_t capacity) {
+    if (!pool || capacity == 0u) {
+        return OSH_EINVAL;
+    }
+    memset(pool, 0, sizeof(*pool));
+    return particle_pool_alloc_slab(pool, capacity);
+}
+
+enum osh_status osh_particle_pool_alloc(size_t capacity, struct osh_particle_pool **pool_out) {
+    struct osh_particle_pool *pool;
+    enum osh_status rc;
+
+    if (!pool_out || capacity == 0u) {
+        return OSH_EINVAL;
+    }
+
+    pool = (struct osh_particle_pool *) malloc(sizeof(*pool));
+    if (!pool) {
+        return OSH_ENOMEM;
+    }
+
+    rc = particle_pool_alloc_slab(pool, capacity);
+    if (rc != OSH_OK) {
+        free(pool);
+        return rc;
+    }
 
     *pool_out = pool;
     return OSH_OK;
@@ -129,9 +141,10 @@ void osh_particle_pool_free(struct osh_particle_pool *pool) {
     if (!pool) {
         return;
     }
-    /* x points to the start of the slab; all other arrays are offsets within it. */
+    /* x points to the slab base; free it.  The pool struct itself is not freed
+     * here — it is owned by the caller (typically embedded in osh_simulation). */
     free(pool->x);
-    free(pool);
+    memset(pool, 0, sizeof(*pool));
 }
 
 void osh_particle_pool_compact(struct osh_particle_pool *pool) {

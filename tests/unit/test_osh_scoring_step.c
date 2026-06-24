@@ -10,6 +10,8 @@
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
+#include "particle/osh_particle_const.h"
+#include "particle/osh_particle_pdg.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_defs.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
@@ -232,6 +234,86 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     osh_scoring_workspace_free(ws);
 }
 
+static void test_score_mesh_neutron_id_filter(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle neutron;
+    struct step st;
+    enum osh_status rc;
+    size_t fluence_idx;
+    size_t neutron_idx;
+
+    snprintf(path, sizeof(path), "%s/tests/fixtures/test_neutron_filter/detect.dat", OSH_PROJECT_SOURCE_DIR);
+
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&neutron, 0, sizeof(neutron));
+    neutron.mass = OSH_PART_MASS_NEUTRON;
+    neutron.pdg = OSH_PART_PDG_NEUTRON;
+    neutron.charge = 0;
+    neutron.z = 0u;
+    neutron.a = 1u;
+    neutron.is_nucleus = 0u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[0] = 0.0;
+    st.p[1] = 0.0;
+    st.p[2] = 0.5;
+    st.p[3] = 10.0;
+    st.q[0] = 0.0;
+    st.q[1] = 0.0;
+    st.q[2] = 2.5;
+    st.q[3] = 10.0;
+    st.v[0] = 0.0;
+    st.v[1] = 0.0;
+    st.v[2] = 1.0;
+    st.w[0] = 0.0;
+    st.w[1] = 0.0;
+    st.w[2] = 1.0;
+    st.ds = 2.0;
+    st.de = 0.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+    st.zone = 0;
+    st.prim_idx = 1u;
+    st.gen = 1u;
+
+    rc = osh_scoring_score_step(&rt, &neutron, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    fluence_idx = rt.outputs[0].page_indices[0];
+    neutron_idx = rt.outputs[0].page_indices[1];
+
+    assert_close(rt.pages[fluence_idx].data[0], 0.5);
+    assert_close(rt.pages[fluence_idx].data[1], 1.0);
+    assert_close(rt.pages[fluence_idx].data[2], 0.5);
+    assert_close(rt.pages[neutron_idx].data[0], 0.5);
+    assert_close(rt.pages[neutron_idx].data[1], 1.0);
+    assert_close(rt.pages[neutron_idx].data[2], 0.5);
+
+    neutron.pdg = OSH_PART_PDG_PROTON;
+    rc = osh_scoring_score_step(&rt, &neutron, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    assert_close(rt.pages[fluence_idx].data[0], 1.0);
+    assert_close(rt.pages[fluence_idx].data[1], 2.0);
+    assert_close(rt.pages[fluence_idx].data[2], 1.0);
+    assert_close(rt.pages[neutron_idx].data[0], 0.5);
+    assert_close(rt.pages[neutron_idx].data[1], 1.0);
+    assert_close(rt.pages[neutron_idx].data[2], 0.5);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
 static struct osh_scoring_page_runtime *find_page_by_kind(struct osh_scoring_runtime *rt,
                                                           enum osh_scoring_score_kind kind) {
     size_t i;
@@ -444,6 +526,7 @@ static void test_score_mesh_dqeff_tqeff(void) {
 int main(void) {
     test_score_mesh_energy_and_fluence_with_filters();
     test_score_mesh_uses_step_chord_after_bending();
+    test_score_mesh_neutron_id_filter();
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
     return 0;
