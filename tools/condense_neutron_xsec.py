@@ -228,13 +228,19 @@ def loglog_interp(e_target_mev: list[float],
                 lo = mid
             else:
                 hi = mid
-        # Linear interpolation in log-log space
-        t = (le - log_e[lo]) / (log_e[hi] - log_e[lo])
-        log_s_interp = log_s[lo] + t * (log_s[hi] - log_s[lo])
-        s_mb = math.exp(log_s_interp)
-        # If original sigma was zero at endpoints, zero out
-        if pairs[lo][1] == 0.0 and pairs[hi][1] == 0.0:
+        lo_mb = pairs[lo][1] * 1e3  # original sigma in mb
+        hi_mb = pairs[hi][1] * 1e3
+        if lo_mb == 0.0 and hi_mb == 0.0:
             s_mb = 0.0
+        elif lo_mb == 0.0 or hi_mb == 0.0:
+            # One endpoint is at threshold (zero); linear interpolation so the
+            # result stays exactly zero below threshold and rises smoothly above.
+            t_lin = (e_mev - ev_list[lo]) / (ev_list[hi] - ev_list[lo])
+            s_mb = lo_mb + t_lin * (hi_mb - lo_mb)
+        else:
+            # Both endpoints positive: log-log interpolation.
+            t = (le - log_e[lo]) / (log_e[hi] - log_e[lo])
+            s_mb = math.exp(log_s[lo] + t * (log_s[hi] - log_s[lo]))
         result.append(s_mb)
     return result
 
