@@ -1,0 +1,61 @@
+[jeff]
+dir = "_temp/JEFF40-Processed-PENDF0K"
+
+[grid]
+emin_mev = 1e-3
+emax_mev = 250.0
+npoints  = 30
+# --- OR override with an explicit irregular grid (takes priority if uncommented) ---
+# Useful for denser sampling around cross-section features, e.g. O-16 elastic
+# resonances (1-10 MeV), Cd-113 thermal edge, B-10 1/v capture region.
+# egrid_mev = [
+#     1e-3, 2e-3, 5e-3,
+#     1e-2, 2e-2, 5e-2,
+#     0.1,  0.2,  0.5,
+#     1.0,  2.0,  3.0,  4.0,  5.0,
+#     7.0,  8.0,  9.0,  10.0,
+#     15.0, 20.0, 30.0, 50.0, 80.0,
+#     100.0, 150.0, 200.0, 250.0,
+# ]
+
+[output]
+file = "src/physics/neutron/osh_neutron_xsec_data.h"
+
+[nuclides]
+list = [
+    "H-1",    # water, tissue, dominant elastic target
+    "H-2",    # light water, 2.2 MeV capture line
+    "He-3",   # He-3 proportional counter
+    "Li-6",   # LiF TLD (6Li-enriched), CLYC detector
+    "Li-7",   # LiF TLD (nat/7Li), Li-glass
+    "Be-9",   # beam line window
+    "B-10",   # BF3 detector, borated polyethylene
+    "B-11",   # boron shielding
+    "C-12",   # tissue, carbon target, graphite
+    "N-14",   # tissue, air
+    "O-16",   # water, tissue, air
+    "F-19",   # fluoride compounds
+    "Na-23",  # soft tissue (ICRP)
+    "Mg-24",  # bone mineral
+    "Al-27",  # structural aluminium
+    "Si-28",  # silicon detector
+    "P-31",   # bone mineral
+    "S-32",   # soft tissue (ICRP)
+    "Cl-35",  # soft tissue (ICRP)
+    "Ar-40",  # air
+    "K-39",   # soft tissue (ICRP)
+    "Ca-40",  # bone mineral
+    "Fe-56",  # iron / steel shielding
+    "Cu-63",  # copper nozzle, coils; brass
+    "Zn-64",  # brass (48.6% of nat Zn)
+    "Zn-66",  # brass (27.9% of nat Zn)
+    "Zn-68",  # brass (18.8% of nat Zn)
+    "Cd-113", # neutron foil cadmium cover; thermal absorber
+    "Cd-114", # neutron foil; most abundant Cd isotope (28.7%)
+    "W-182",  # collimator (26.5% of nat W)
+    "W-183",  # collimator (14.3% of nat W)
+    "W-184",  # collimator (30.6% of nat W)
+    "W-186",  # collimator (28.4% of nat W)
+    "Au-197", # activation foil; monoisotopic
+    "Pb-208", # lead shielding
+]
