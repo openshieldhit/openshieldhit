@@ -121,12 +121,12 @@ static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
 static void push_neutron_secondary(struct osh_neutron_pool *pool, size_t k, struct osh_nuclear_secondary const *sec) {
     size_t slot; /* index of the new entry */
 
+    pool->n_created++;
     if (pool->n >= pool->capacity) {
         pool->n_dropped++;
         return;
     }
     slot = pool->n++;
-    pool->n_created++;
     pool->x[slot] = pool->x[k];
     pool->y[slot] = pool->y[k];
     pool->z[slot] = pool->z[k];
@@ -263,9 +263,12 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
 
     /* ---- Wavefront loop -------------------------------------------------- */
     while (pool->n > 0u) {
-        /* Snapshot live count: secondaries pushed this pass go to slots
-         * [n_wavefront..pool->n) and are processed in the next iteration. */
-        n_wavefront = pool->n;
+        /* Batch size is bounded by the shared geometry scratch (zone_refs,
+         * dist_batch).  Secondaries pushed this pass go to slots
+         * [n_wavefront..pool->n) and are picked up in the next iteration. */
+        n_wavefront = (pool->n <= transport_ctx->scratch_capacity)
+                          ? pool->n
+                          : transport_ctx->scratch_capacity;
 
         osh_gemca_runtime_get_zone_ref_batch(
             geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, n_wavefront, zone_refs);
