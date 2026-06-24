@@ -17,9 +17,10 @@ to `20 MeV`.
 
 The lower edge, `1e-9 MeV`, is `1 meV`.  This preserves the low-energy `1/v`
 behavior of important absorber channels such as `B-10(n,alpha)` and
-`Li-6(n,alpha)`.  The current minimal neutron transport loop kills neutrons at
-`1e-3 MeV` (`1 keV`), so the sub-keV table entries are present for future
-thermal-neutron transport work.
+`Li-6(n,alpha)`.  The current neutron transport loop uses `1e-3 MeV`
+(`1 keV`) as the default cutoff when `NEUTRLCUT <= 0`, so the sub-keV table
+entries are present for future thermal-neutron transport work and for runs that
+lower the cutoff explicitly.
 
 The upper edge, `20 MeV`, follows the JEFF-4.0 evaluation range used here.  For
 nuclides outside the table, `osh_neutron_xsec_lookup()` falls back to the
@@ -43,6 +44,14 @@ Missing MT channels in JEFF are stored as zero arrays and marked in the
 generated header.  Lookup uses log-log interpolation on the irregular grid,
 with linear interpolation at threshold crossings where one endpoint is zero.
 Energies outside the stored range are clamped to the nearest grid edge.
+
+Material compositions may describe natural elements with `A=0`.  Neutron
+lookup resolves those entries to a representative mass number before computing
+number density or selecting a Tier-1 table row, for example H-1, C-12, N-14,
+O-16, Cl-35, and Ca-40 for the elements used in the water-equivalent phantom
+cases.  This keeps natural material definitions finite and prevents them from
+falling through to the Tier-2 path solely because the material card omitted an
+isotope number.
 
 ## Tier-1 nuclides
 

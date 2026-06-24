@@ -286,6 +286,7 @@ void osh_neutron_reaction_sample(struct osh_neutron_xsec *xsec,
     size_t n_elems;
     struct osh_neutron_xsec_result sig[MAX_ELEMS]; /* per-element cross-section cache */
     double nd_times_tot[MAX_ELEMS];                /* nᵢ · σ_tot,i [mb·cm⁻³]: weight for target sampling */
+    unsigned int target_a[MAX_ELEMS];              /* resolved target mass numbers */
     double cum_tot;                                /* sum of nd_times_tot; normalises the target roulette */
     double xi;                                     /* uniform deviate in [0, cum_tot) for target element selection */
     double running;                                /* partial sum during target element scan */
@@ -302,8 +303,12 @@ void osh_neutron_reaction_sample(struct osh_neutron_xsec *xsec,
     /* -- 1. element list for this material --------------------------------- */
     elems = handler->elem_pool + handler->elem_offset[material_idx];
     n_elems = handler->elem_count[material_idx];
-    if (n_elems == 0u || n_elems > MAX_ELEMS) {
+    if (n_elems == 0u) {
         event_out->kind = OSH_NEUTRON_REACTION_NONE;
+        return;
+    }
+    if (n_elems > MAX_ELEMS) {
+        set_local_deposit(event_out, e_mev);
         return;
     }
 
@@ -311,9 +316,12 @@ void osh_neutron_reaction_sample(struct osh_neutron_xsec *xsec,
     cum_tot = 0.0;
     for (i = 0u; i < n_elems; ++i) {
         double nd_i;
+        unsigned int ai;
         /* n_i [cm⁻³] = w_i * ρ [g/cm³] * N_A [mol⁻¹] / A_i [g/mol] */
-        nd_i = (double) elems[i].mass_fraction * rho_g_cm3 * OSH_NAVOGADRO / (double) elems[i].a;
-        osh_neutron_xsec_lookup(xsec, (int) elems[i].z, (int) elems[i].a, e_mev, &sig[i]);
+        ai = osh_neutron_xsec_resolve_a(elems[i].z, elems[i].a);
+        target_a[i] = ai;
+        nd_i = (double) elems[i].mass_fraction * rho_g_cm3 * OSH_NAVOGADRO / (double) ai;
+        osh_neutron_xsec_lookup(xsec, (int) elems[i].z, (int) ai, e_mev, &sig[i]);
         nd_times_tot[i] = nd_i * sig[i].tot; /* mb·cm⁻³ */
         cum_tot += nd_times_tot[i];
     }
@@ -336,7 +344,7 @@ void osh_neutron_reaction_sample(struct osh_neutron_xsec *xsec,
     }
 
     z = elems[chosen].z;
-    a = elems[chosen].a;
+    a = target_a[chosen];
 
     /* -- 4. sample reaction channel ---------------------------------------- */
     xi2 = osh_rng_double(rng) * sig[chosen].tot;

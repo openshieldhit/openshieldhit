@@ -4,6 +4,7 @@
 #include "beam/osh_beam.h"
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
+#include "common/osh_particle_pool.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
@@ -40,6 +41,7 @@ struct osh_simulation {
     struct osh_transport_context transport_ctx;
     struct osh_nuclear_handler nuclear_handler;
     struct osh_fragment_pool fragment_pool;
+    struct osh_particle_pool ion_pool;
     struct osh_neutron_pool neutron_pool;
     struct osh_transport_profile profile;
 
@@ -62,6 +64,53 @@ static int prepared_has_voxel_body(struct osh_gemca_prepared const *gemca) {
     }
 
     return 0;
+}
+
+/* ---- Transport pool + scratch helpers ------------------------------------ */
+
+/* Effective pool capacity: user override or compiled default, clamped to nstat. */
+static size_t simulation_pool_capacity(struct osh_transport_params const *p) {
+    size_t cap = (p->pool_capacity != 0u) ? p->pool_capacity : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
+    if (p->nstat > 0u && cap > p->nstat) {
+        cap = p->nstat;
+    }
+    return cap;
+}
+
+/* Allocate (or re-allocate) both pools and the shared geometry scratch.
+ * On failure the caller is expected to call osh_simulation_free(). */
+static enum osh_status simulation_alloc_pools(struct osh_simulation *sim) {
+    size_t cap = simulation_pool_capacity(&sim->transport_ctx.params);
+    enum osh_status rc;
+
+    /* Free existing slabs before reallocating (safe on first call: pointers are NULL). */
+    osh_particle_pool_free(&sim->ion_pool);
+    osh_neutron_pool_free(&sim->neutron_pool);
+    free(sim->transport_ctx.zone_refs);
+    free(sim->transport_ctx.dist_batch);
+    sim->transport_ctx.zone_refs = NULL;
+    sim->transport_ctx.dist_batch = NULL;
+    sim->transport_ctx.scratch_capacity = 0u;
+
+    rc = osh_particle_pool_init(&sim->ion_pool, cap);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+    rc = osh_neutron_pool_init(&sim->neutron_pool, cap);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    sim->transport_ctx.zone_refs = (struct osh_zone_ref *) malloc(cap * sizeof(struct osh_zone_ref));
+    sim->transport_ctx.dist_batch = (double *) malloc(cap * sizeof(double));
+    if (!sim->transport_ctx.zone_refs || !sim->transport_ctx.dist_batch) {
+        return OSH_ENOMEM;
+    }
+    sim->transport_ctx.scratch_capacity = cap;
+
+    sim->transport_ctx.ion_pool = &sim->ion_pool;
+    sim->transport_ctx.neutron_pool = &sim->neutron_pool;
+    return OSH_OK;
 }
 
 /* ---- Lifecycle ----------------------------------------------------------- */
@@ -254,9 +303,13 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     sim->fragment_pool.n_created = 0u;
     sim->fragment_pool.n_sent_breakup = 0u;
     sim->fragment_pool.n_breakup = 0u;
-    sim->neutron_pool.n_created = 0u;
     sim->transport_ctx.fragment_pool = &sim->fragment_pool;
-    sim->transport_ctx.neutron_pool = &sim->neutron_pool;
+
+    rc = simulation_alloc_pools(sim);
+    if (rc != OSH_OK) {
+        OSH_DIAG_ERRORF(diag, "%s", "simulation: failed to allocate transport pools");
+        goto fail;
+    }
 
     /* ---- 5b. Nuclear handler --------------------------------------------- */
 
@@ -300,7 +353,7 @@ enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, siz
         return OSH_EINVAL;
     }
     sim->transport_ctx.params.pool_capacity = capacity;
-    return OSH_OK;
+    return simulation_alloc_pools(sim);
 }
 
 enum osh_status osh_simulation_get_profile(struct osh_simulation const *sim, struct osh_simulation_profile *out) {
@@ -341,11 +394,6 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
 
     sim->completed_nstat = (unsigned long long) sim->transport_ctx.params.nstat;
 
-    if (sim->neutron_pool.n_created > 0u) {
-        OSH_DIAG_INFOF(sim->diag,
-                       "simulation: %zu neutron(s) created but not transported (neutron transport not yet implemented)",
-                       sim->neutron_pool.n_created);
-    }
     if (sim->fragment_pool.n_sent_breakup > 0u) {
         OSH_DIAG_INFOF(sim->diag,
                        "simulation: %zu prefragment(s) sent to Fermi break-up, %zu de-excited",
@@ -429,7 +477,11 @@ enum osh_status osh_simulation_free(struct osh_simulation *sim) {
     osh_scoring_runtime_free(&sim->scoring_runtime);
     osh_gemca_runtime_free(&sim->geom_rt);
     osh_material_runtime_free(&sim->transport_tables);
-    osh_beam_runtime_free(sim->beam_rt);
+    osh_particle_pool_free(&sim->ion_pool);
+    osh_neutron_pool_free(&sim->neutron_pool);
+    free(sim->transport_ctx.zone_refs);
+    free(sim->transport_ctx.dist_batch);
+    osh_beam_runtime_free(&sim->beam_rt);
     free(sim);
     return OSH_OK;
 }

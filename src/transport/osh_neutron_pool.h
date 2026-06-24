@@ -22,12 +22,12 @@ struct osh_rng; /* full definition in random/osh_rng.h */
  * collected here and drained by the neutron transport kernel.
  *
  * Memory layout follows osh_particle_pool: a single contiguous slab holds all
- * arrays, so osh_neutron_pool_free() is a single free().  No species array is
- * needed — all entries are neutrons.
+ * arrays.  No species array is needed — all entries are neutrons.
  *
- * The pool is used as a stack: transport pops from slot n-1, new secondaries
- * are appended.  Call osh_neutron_pool_reset() between beam primaries to clear
- * the pool for the next history.
+ * The pool is an append-only bag drained by the neutron transport kernel: new
+ * secondaries are appended and dead entries (e == 0) are removed by
+ * osh_neutron_pool_compact().  Call osh_neutron_pool_reset() before starting a
+ * new transport run to clear any residual entries.
  */
 struct osh_neutron_pool {
     /* SoA phase space */
@@ -53,19 +53,18 @@ struct osh_neutron_pool {
 };
 
 /**
- * @brief Allocate a neutron pool with the given capacity.
+ * @brief Initialise an embedded neutron pool with the given capacity.
  *
- * All SoA arrays are carved from one malloc() call.  The pool is initialised
- * with n = n_created = n_dropped = 0.
- *
- * @param[in]  capacity  Number of neutron slots to allocate (must be > 0).
- * @param[out] out       Receives the allocated pool pointer on success.
- * @returns OSH_OK, OSH_ENOMEM, or OSH_EINVAL.
+ * Allocates the internal SoA slab but not the struct itself.  Destroy
+ * with osh_neutron_pool_free().
  */
-enum osh_status osh_neutron_pool_alloc(size_t capacity, struct osh_neutron_pool **out);
+enum osh_status osh_neutron_pool_init(struct osh_neutron_pool *pool, size_t capacity);
 
 /**
- * @brief Free a neutron pool and all its arrays.  Safe to call with NULL.
+ * @brief Free the slab owned by an embedded neutron pool (in-place destructor).
+ *
+ * Frees the SoA slab but does NOT free the pool struct itself.  Safe to call
+ * with NULL.  Zeroes all pointer fields after freeing.
  */
 void osh_neutron_pool_free(struct osh_neutron_pool *pool);
 

@@ -14,6 +14,12 @@ Geometry Mesh
     Y -2.5  2.5  1
     Z -0.1  0.1  1
 
+Geometry Mesh
+    Name XZ_map
+    X -50.0 50.0 200
+    Y -50.0 50.0 1
+    Z -50.0 50.0 200
+
 Filter
     Name Primary
     GEN = 0
@@ -24,6 +30,10 @@ Filter
     Name Protons
     Z = 1
     A = 1
+
+Filter
+    Name Neutrons
+    ID = 2112
 
 Settings
     Name in_Water
@@ -50,6 +60,12 @@ Output
     Quantity Fluence
     Quantity Dose in_Water
     Quantity Dose Protons in_Water
+
+Output
+    Filename NB_XZ_neutron_fluence.bdo
+    Fileformat BDO2019
+    Geo XZ_map
+    Quantity Fluence Neutrons
 
 Output
     Filename NB_Z_narrow_LET.bdo

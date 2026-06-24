@@ -36,6 +36,12 @@ enum osh_transport_straggling_mode {
     OSH_TRANSPORT_STRAGGLING_VAVILOV = 2
 };
 
+/* Overridable from the build line (e.g. -DOSH_TRANSPORT_POOL_CAPACITY=256)
+ * so the benchmark harness can sweep capacities without editing sources. */
+#ifndef OSH_TRANSPORT_POOL_CAPACITY
+#define OSH_TRANSPORT_POOL_CAPACITY 4096u
+#endif
+
 /** Default lower neutron transport cutoff [MeV] used when NEUTRLCUT <= 0. */
 #define OSH_TRANSPORT_NEUTRON_CUTOFF_DEFAULT_MEV 1.0e-3f
 
@@ -130,6 +136,7 @@ struct osh_transport_profile {
 struct osh_nuclear_handler;
 struct osh_fragment_pool;
 struct osh_neutron_pool;
+struct osh_particle_pool;
 
 struct osh_transport_context {
     struct osh_transport_params params;
@@ -137,6 +144,10 @@ struct osh_transport_context {
     struct osh_nuclear_handler const *nuclear_handler; /**< Borrowed; NULL disables handler. */
     struct osh_fragment_pool *fragment_pool;           /**< Borrowed; residual fragments for future breakup. */
     struct osh_neutron_pool *neutron_pool;             /**< Borrowed; neutrons routed here instead of CSDA pool. */
+    struct osh_particle_pool *ion_pool;                /**< Borrowed; pre-allocated ion wavefront pool. */
+    struct osh_zone_ref *zone_refs;                    /**< Transport scratch: zone/material per slot. */
+    double *dist_batch;                                /**< Transport scratch: boundary distance per slot. */
+    size_t scratch_capacity;                           /**< Number of entries in zone_refs and dist_batch. */
     struct osh_transport_profile *profile;             /**< Borrowed; NULL disables phase timers/counters. */
     char warned_boundary_demin_override;
 };
