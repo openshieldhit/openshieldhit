@@ -159,6 +159,17 @@ Thermal-neutron physics is not yet modeled separately; current lookups simply
 use the available cross-section tables at the requested energy.  A later
 thermal layer can live under the same `neutron/` ownership boundary.
 
+`osh_transport_neutron_run_minimal()` currently drains the neutron pool with a
+wavefront loop that mirrors the ion driver at a high level: batch zone lookup,
+batch boundary-distance lookup, per-slot cutoff/escape/material handling,
+exponential free-path sampling from the macroscopic total cross section, and
+reaction sampling through `osh_neutron_reaction_sample()`.  Elastic events keep
+the neutron alive with updated direction and energy; compound events may push
+neutron secondaries back into the neutron pool for the next wavefront pass; all
+other current channels kill the neutron.  Local energy deposits and charged
+ion feedback are marked at the event boundary but are not fully scored or
+fed back into ion transport yet.
+
 ---
 
 ## How the modules connect to transport
@@ -175,8 +186,9 @@ osh_transport_ion_step()
 The EM processes (phases 2–4) act on every material step.  The nuclear
 process (phase 5) is only active when `beam->nuclear` is set in `beam.dat`.
 
-For neutron transport, `osh_transport_neutron.c` should call the neutron module
-only after it has sampled an interaction point in the current material.  It then
+For neutron transport, `osh_transport_neutron.c` calls the neutron module only
+after it has sampled an interaction point in the current material.  It then
 applies the returned `osh_neutron_reaction_event`: update the neutron for
-elastic scatter, push charged/neutron secondaries into the relevant pools, and
-score any local energy deposit.
+elastic scatter, push neutron secondaries back into the neutron pool, and mark
+charged secondaries/local deposits for the ion-feedback and point-scoring paths
+that will be wired later.

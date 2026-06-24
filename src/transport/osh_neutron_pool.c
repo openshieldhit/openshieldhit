@@ -114,3 +114,34 @@ void osh_neutron_pool_reset(struct osh_neutron_pool *pool) {
     pool->n_created = 0u;
     pool->n_dropped = 0u;
 }
+
+void osh_neutron_pool_compact(struct osh_neutron_pool *pool) {
+    size_t dst;
+    size_t src;
+
+    if (!pool || pool->n == 0u) {
+        return;
+    }
+
+    dst = 0u;
+    for (src = 0u; src < pool->n; ++src) {
+        if (pool->e[src] <= 0.0) {
+            continue; /* dead — skip */
+        }
+        if (dst != src) {
+            pool->x[dst]       = pool->x[src];
+            pool->y[dst]       = pool->y[src];
+            pool->z[dst]       = pool->z[src];
+            pool->ux[dst]      = pool->ux[src];
+            pool->uy[dst]      = pool->uy[src];
+            pool->uz[dst]      = pool->uz[src];
+            pool->e[dst]       = pool->e[src];
+            pool->wt[dst]      = pool->wt[src];
+            pool->prim_idx[dst] = pool->prim_idx[src];
+            pool->gen[dst]     = pool->gen[src];
+            pool->rng[dst]     = pool->rng[src];
+        }
+        ++dst;
+    }
+    pool->n = dst;
+}
