@@ -46,6 +46,8 @@ nav:
     - geo.dat reference: user/geo.dat.md
     - mat.dat reference: user/mat.dat.md
     - detect.dat reference: user/detect.dat.md
+  - Physics Reference:
+    - Neutron transport: physics/neutron-transport.md
   - Developer Guide:
     - Architecture: dev/architecture.md
     - Build system: dev/build.md

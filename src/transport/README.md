@@ -28,10 +28,18 @@ family kernel:
 
 Current status:
 
-- Only ion transport is implemented.
-- Neutron and photon transport remain stubs.
+- Ion transport is implemented as the main charged-particle CSDA wavefront.
+- Neutron transport has a minimal pool-drain loop: it transports banked
+  neutrons through geometry/material boundaries, samples free paths from the
+  neutron macroscopic total cross section, and delegates reaction final states
+  to `physics/neutron/`.
+- Photon transport remains a stub.
 - The scheduler seam exists now only to define family IDs, fixed-priority
   selection, and the dispatch ownership point in `osh_transport.c`.
+- Cross-family feedback is still incomplete: neutron secondaries can be pushed
+  back to the neutron pool, but charged secondaries from neutron reactions are
+  not yet fed into the ion family and local neutron energy deposits are not yet
+  scored.
 
 Ownership notes:
 

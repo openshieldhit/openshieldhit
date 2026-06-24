@@ -76,6 +76,14 @@ void osh_neutron_pool_free(struct osh_neutron_pool *pool);
  */
 void osh_neutron_pool_reset(struct osh_neutron_pool *pool);
 
+/**
+ * @brief Remove dead entries (e == 0) by in-place squeezing.
+ *
+ * Mirrors osh_particle_pool_compact().  Called at the end of each neutron
+ * wavefront pass to remove killed neutrons before the next pass begins.
+ */
+void osh_neutron_pool_compact(struct osh_neutron_pool *pool);
+
 #ifdef __cplusplus
 }
 #endif
