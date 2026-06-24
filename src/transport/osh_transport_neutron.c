@@ -17,12 +17,10 @@
 #include "random/osh_rng.h"
 #include "transport/osh_neutron_pool.h"
 #include "transport/osh_transport.h"
+#include "transport/osh_transport_boundary.h"
 
 /* Neutron kinetic energy cutoff [MeV] (1 keV). */
 #define OSH_NEUTRON_E_CUTOFF_MEV 1.0e-3
-
-/* Spatial nudge past zone boundary [cm] — mirrors ion transport. */
-#define OSH_NEUTRON_BOUNDARY_EPS 1.0e-8
 
 /* --------------------------------------------------------------------------
  * Static helpers
@@ -66,11 +64,8 @@ static double neutron_sigma_tot_cm(struct osh_neutron_xsec *xsec,
  * next zone-ref query resolves the new zone correctly.
  */
 static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k, double dist) {
-    double d; /* total advance: boundary distance + eps */
-    d = dist + OSH_NEUTRON_BOUNDARY_EPS;
-    pool->x[k] += pool->ux[k] * d;
-    pool->y[k] += pool->uy[k] * d;
-    pool->z[k] += pool->uz[k] * d;
+    osh_transport_advance_to_boundary(
+        &pool->x[k], &pool->y[k], &pool->z[k], pool->ux[k], pool->uy[k], pool->uz[k], dist);
 }
 
 /*
