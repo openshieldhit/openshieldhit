@@ -45,8 +45,10 @@ struct osh_rng;
  * @param[in]  rng        RNG state (mutated in place).
  * @param[out] event_out  Filled with secondaries or ABSORB for heavy-A sink.
  */
-void osh_nuclear_compound_step(unsigned int z, unsigned int a,
-                               double e_star_mev, double const p_lab_mev[3],
+void osh_nuclear_compound_step(unsigned int z,
+                               unsigned int a,
+                               double e_star_mev,
+                               double const p_lab_mev[3],
                                struct osh_nuclear_fermi_breakup const *fbu,
                                struct osh_diag_sink const *diag,
                                struct osh_rng *rng,

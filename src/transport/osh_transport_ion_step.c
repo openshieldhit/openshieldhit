@@ -276,17 +276,16 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                 if (np->n < np->capacity) {
                     k = np->n++;
                     np->n_created++;
-                    np->x[k]  = pool->x[slot];
-                    np->y[k]  = pool->y[slot];
-                    np->z[k]  = pool->z[slot];
+                    np->x[k] = pool->x[slot];
+                    np->y[k] = pool->y[slot];
+                    np->z[k] = pool->z[slot];
                     np->ux[k] = ev->secondaries[si].dir[0];
                     np->uy[k] = ev->secondaries[si].dir[1];
                     np->uz[k] = ev->secondaries[si].dir[2];
-                    np->e[k]  = ev->secondaries[si].energy;
+                    np->e[k] = ev->secondaries[si].energy;
                     np->wt[k] = pool->wt[slot];
                     np->prim_idx[k] = pool->prim_idx[slot];
-                    np->gen[k] = (pool->gen[slot] < 255u)
-                                 ? (uint8_t)(pool->gen[slot] + 1u) : 255u;
+                    np->gen[k] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
                     osh_rng_split(&np->rng[k], rng); /* child first, parent second */
                 } else {
                     np->n_dropped++;
