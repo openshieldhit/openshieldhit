@@ -21,6 +21,7 @@ target_link_libraries(osh_transport
         osh_common
         osh_physics
         osh_nuclear
+        osh_neutron_physics
         osh_random
         osh_beam
         osh_beam_runtime
