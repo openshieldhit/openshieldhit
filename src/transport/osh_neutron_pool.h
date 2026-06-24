@@ -41,9 +41,9 @@ struct osh_neutron_pool {
     double *wt; /**< statistical weight        */
 
     /* Per-history metadata */
-    uint64_t       *prim_idx; /**< beam-primary ancestor index              */
-    uint8_t        *gen;      /**< generation; saturates at 255             */
-    struct osh_rng *rng;      /**< per-slot RNG state (one stream/neutron)  */
+    uint64_t *prim_idx;  /**< beam-primary ancestor index              */
+    uint8_t *gen;        /**< generation; saturates at 255             */
+    struct osh_rng *rng; /**< per-slot RNG state (one stream/neutron)  */
 
     /* Bookkeeping */
     size_t n;         /**< live entries in [0, n)              */

@@ -17,10 +17,8 @@
  * so no per-segment padding is needed beyond the conservative round-up below.
  */
 
-#define TAIL_BYTES_PER_ENTRY \
-    (sizeof(uint64_t) + sizeof(struct osh_rng) + sizeof(uint8_t))
-#define TAIL_DOUBLES_PER_ENTRY \
-    ((TAIL_BYTES_PER_ENTRY + sizeof(double) - 1u) / sizeof(double))
+#define TAIL_BYTES_PER_ENTRY (sizeof(uint64_t) + sizeof(struct osh_rng) + sizeof(uint8_t))
+#define TAIL_DOUBLES_PER_ENTRY ((TAIL_BYTES_PER_ENTRY + sizeof(double) - 1u) / sizeof(double))
 
 /* 8 phase-space+weight doubles + conservative tail */
 #define DOUBLES_PER_ENTRY (8u + TAIL_DOUBLES_PER_ENTRY)
@@ -54,14 +52,22 @@ enum osh_status osh_neutron_pool_alloc(size_t capacity, struct osh_neutron_pool 
 
     /* Partition the double region. */
     off = 0u;
-    pool->x  = slab + off; off += capacity;
-    pool->y  = slab + off; off += capacity;
-    pool->z  = slab + off; off += capacity;
-    pool->ux = slab + off; off += capacity;
-    pool->uy = slab + off; off += capacity;
-    pool->uz = slab + off; off += capacity;
-    pool->e  = slab + off; off += capacity;
-    pool->wt = slab + off; off += capacity;
+    pool->x = slab + off;
+    off += capacity;
+    pool->y = slab + off;
+    off += capacity;
+    pool->z = slab + off;
+    off += capacity;
+    pool->ux = slab + off;
+    off += capacity;
+    pool->uy = slab + off;
+    off += capacity;
+    pool->uz = slab + off;
+    off += capacity;
+    pool->e = slab + off;
+    off += capacity;
+    pool->wt = slab + off;
+    off += capacity;
 
     /* Tail fields carved from the remaining slab bytes. */
     {
@@ -74,8 +80,7 @@ enum osh_status osh_neutron_pool_alloc(size_t capacity, struct osh_neutron_pool 
         pool->prim_idx = (uint64_t *) (tail + tail_off);
         tail_off += capacity * sizeof(uint64_t);
 
-        tail_off = (tail_off + _Alignof(struct osh_rng) - 1u)
-                   & ~(_Alignof(struct osh_rng) - 1u);
+        tail_off = (tail_off + _Alignof(struct osh_rng) - 1u) & ~(_Alignof(struct osh_rng) - 1u);
         pool->rng = (struct osh_rng *) (tail + tail_off);
         tail_off += capacity * sizeof(struct osh_rng);
 
@@ -83,8 +88,8 @@ enum osh_status osh_neutron_pool_alloc(size_t capacity, struct osh_neutron_pool 
         pool->gen = (uint8_t *) (tail + tail_off);
     }
 
-    pool->n         = 0u;
-    pool->capacity  = capacity;
+    pool->n = 0u;
+    pool->capacity = capacity;
     pool->n_created = 0u;
     pool->n_dropped = 0u;
 
@@ -105,7 +110,7 @@ void osh_neutron_pool_reset(struct osh_neutron_pool *pool) {
     if (!pool) {
         return;
     }
-    pool->n         = 0u;
+    pool->n = 0u;
     pool->n_created = 0u;
     pool->n_dropped = 0u;
 }

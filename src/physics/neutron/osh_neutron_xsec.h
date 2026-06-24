@@ -73,8 +73,7 @@ struct osh_neutron_xsec_result {
  * @param[out] xsec  Caller-allocated struct to initialise.
  * @returns OSH_OK, or OSH_EINVAL if xsec is NULL.
  */
-enum osh_status osh_neutron_xsec_compile(struct osh_diag_sink const *diag,
-                                         struct osh_neutron_xsec *xsec);
+enum osh_status osh_neutron_xsec_compile(struct osh_diag_sink const *diag, struct osh_neutron_xsec *xsec);
 
 /**
  * @brief Release any resources held by the model.
@@ -100,9 +99,8 @@ void osh_neutron_xsec_free(struct osh_neutron_xsec *xsec);
  * @param[in]     e_mev  Neutron kinetic energy [MeV] (lab frame, target at rest).
  * @param[out]    out    Filled with σ values [mb] and σ_nonel.
  */
-void osh_neutron_xsec_lookup(struct osh_neutron_xsec *xsec,
-                             int z, int a, double e_mev,
-                             struct osh_neutron_xsec_result *out);
+void osh_neutron_xsec_lookup(
+    struct osh_neutron_xsec *xsec, int z, int a, double e_mev, struct osh_neutron_xsec_result *out);
 
 #ifdef __cplusplus
 }

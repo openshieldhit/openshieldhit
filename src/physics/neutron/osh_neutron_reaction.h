@@ -38,11 +38,11 @@ struct osh_rng;
 /** Outcome kind of a neutron reaction event. */
 enum osh_neutron_reaction_kind {
     OSH_NEUTRON_REACTION_NONE = 0,
-    OSH_NEUTRON_REACTION_ELASTIC,        /**< Elastic scatter; neutron continues with new dir/e */
-    OSH_NEUTRON_REACTION_CAPTURE,        /**< (n,γ): kill neutron, deposit T_n locally          */
-    OSH_NEUTRON_REACTION_CHARGE_EXCHANGE,/**< (n,p) or (n,α): ion secondary, neutron killed     */
-    OSH_NEUTRON_REACTION_COMPOUND,       /**< (n,n')/(n,2n)/generic: FBU or heavy-A sink        */
-    OSH_NEUTRON_REACTION_LOCAL_DEPOSIT   /**< Generic non-elastic with no tracked secondaries    */
+    OSH_NEUTRON_REACTION_ELASTIC,         /**< Elastic scatter; neutron continues with new dir/e */
+    OSH_NEUTRON_REACTION_CAPTURE,         /**< (n,γ): kill neutron, deposit T_n locally          */
+    OSH_NEUTRON_REACTION_CHARGE_EXCHANGE, /**< (n,p) or (n,α): ion secondary, neutron killed     */
+    OSH_NEUTRON_REACTION_COMPOUND,        /**< (n,n')/(n,2n)/generic: FBU or heavy-A sink        */
+    OSH_NEUTRON_REACTION_LOCAL_DEPOSIT    /**< Generic non-elastic with no tracked secondaries    */
 };
 
 /**
@@ -54,9 +54,9 @@ enum osh_neutron_reaction_kind {
  */
 struct osh_neutron_reaction_event {
     enum osh_neutron_reaction_kind kind;
-    double local_deposit_mev;                                      /**< Energy to deposit locally    */
-    double neutron_dir[3];                                         /**< Scattered neutron direction   */
-    double neutron_e_mev;                                          /**< Scattered neutron energy [MeV]*/
+    double local_deposit_mev; /**< Energy to deposit locally    */
+    double neutron_dir[3];    /**< Scattered neutron direction   */
+    double neutron_e_mev;     /**< Scattered neutron energy [MeV]*/
     size_t n_secondaries;
     struct osh_nuclear_secondary secondaries[OSH_NUCLEAR_MAX_SECONDARIES];
 };
