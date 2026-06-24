@@ -17,3 +17,4 @@ target_link_libraries(osh_kinematics
 
 add_subdirectory(atomic)
 add_subdirectory(nuclear)
+add_subdirectory(neutron)
