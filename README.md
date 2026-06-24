@@ -191,14 +191,14 @@ Nuclear physics:
   The break-up is a sequential-binary semiphysical placeholder for the full
   simultaneous n-body Fermi model
 
-Minimal fast-neutron transport (in progress, branch `154-neutron-transport-minimal-model`):
+Minimal fast-neutron transport (in progress):
 
 - JEFF-4.0 PENDF0K cross-section tables condensed into a C header for 35
-  nuclides (H–Pb + actinides); channels: σ_tot, σ_el, σ(n,n'), σ(n,2n),
-  σ(n,γ), σ(n,p), σ(n,α)
-- neutron pool expanded to full SoA (position, direction, energy, weight,
-  generation, per-neutron RNG stream); produced neutrons are queued for
-  transport rather than only counted
+  nuclides; log-log interpolation; optical/geometric fallback for unlisted nuclides
+- neutron pool in full SoA layout; produced neutrons queued and transported
+- reaction sampling: elastic, radiative capture, (n,p)/(n,α), compound nucleus
+  routed to Fermi break-up or heavy-A sink
+- straight-line wavefront transport loop; family-scheduler integration
 
 CT voxel transport is working end-to-end:
 
@@ -217,8 +217,7 @@ Not yet implemented:
 - full simultaneous n-body Fermi break-up and SMM — current break-up is a
   sequential-binary approximation; heavy residues (A > 16) are counted but not
   de-excited
-- neutron transport loop, cross-section lookup module, reaction sampling, and
-  scheduler integration (in progress)
+- neutron energy scoring and ion feedback from neutron reactions
 - phase-space (PHSP) source and output support
 - ridge filter / range modulator support
 - RTSTRUCT import for structure-based scoring
