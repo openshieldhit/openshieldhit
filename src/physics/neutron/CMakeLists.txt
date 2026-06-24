@@ -1,5 +1,6 @@
 add_library(osh_neutron_physics
     osh_neutron_xsec.c
+    osh_neutron_reaction.c
 )
 
 target_include_directories(osh_neutron_physics
