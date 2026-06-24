@@ -266,13 +266,34 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         struct osh_nuclear_event const *ev = &ctx.nuclear_event;
         for (si = 0u; si < ev->n_secondaries; ++si) {
             size_t s;
-            /* Neutrons are not transported through the CSDA charged-particle
-             * loop — route them to the neutron pool instead. */
+            size_t k;
+            struct osh_neutron_pool *np;
+            /* -- neutron push ------------------------------------------------ */
+            /* Neutrons bypass the CSDA loop; push into the neutron pool. */
             if (transport_ctx->neutron_pool != NULL && ev->secondaries[si].species != NULL
                 && ev->secondaries[si].species->pdg == OSH_PART_PDG_NEUTRON) {
-                transport_ctx->neutron_pool->n_created++;
+                np = transport_ctx->neutron_pool;
+                if (np->n < np->capacity) {
+                    k = np->n++;
+                    np->n_created++;
+                    np->x[k]  = pool->x[slot];
+                    np->y[k]  = pool->y[slot];
+                    np->z[k]  = pool->z[slot];
+                    np->ux[k] = ev->secondaries[si].dir[0];
+                    np->uy[k] = ev->secondaries[si].dir[1];
+                    np->uz[k] = ev->secondaries[si].dir[2];
+                    np->e[k]  = ev->secondaries[si].energy;
+                    np->wt[k] = pool->wt[slot];
+                    np->prim_idx[k] = pool->prim_idx[slot];
+                    np->gen[k] = (pool->gen[slot] < 255u)
+                                 ? (uint8_t)(pool->gen[slot] + 1u) : 255u;
+                    osh_rng_split(&np->rng[k], rng); /* child first, parent second */
+                } else {
+                    np->n_dropped++;
+                }
                 continue;
             }
+            /* -- ion push ---------------------------------------------------- */
             if (pool->n >= pool->capacity) {
                 continue;
             }

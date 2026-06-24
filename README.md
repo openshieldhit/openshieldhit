@@ -186,9 +186,19 @@ Nuclear physics:
   scored at generation ≥ 1
 - abrasion + Fermi break-up — fast nucleon knock-out followed by statistical
   de-excitation of the light residual (A ≤ 16) into n, p, d, t, ³He, α;
-  charged products are transported, neutrons collected in the neutron pool.
+  charged products are transported, neutrons pushed into the neutron pool with
+  full phase-space (position, direction, energy, RNG stream, generation).
   The break-up is a sequential-binary semiphysical placeholder for the full
   simultaneous n-body Fermi model
+
+Minimal fast-neutron transport (in progress, branch `154-neutron-transport-minimal-model`):
+
+- JEFF-4.0 PENDF0K cross-section tables condensed into a C header for 35
+  nuclides (H–Pb + actinides); channels: σ_tot, σ_el, σ(n,n'), σ(n,2n),
+  σ(n,γ), σ(n,p), σ(n,α)
+- neutron pool expanded to full SoA (position, direction, energy, weight,
+  generation, per-neutron RNG stream); produced neutrons are queued for
+  transport rather than only counted
 
 CT voxel transport is working end-to-end:
 
@@ -207,7 +217,8 @@ Not yet implemented:
 - full simultaneous n-body Fermi break-up and SMM — current break-up is a
   sequential-binary approximation; heavy residues (A > 16) are counted but not
   de-excited
-- neutron transport
+- neutron transport loop, cross-section lookup module, reaction sampling, and
+  scheduler integration (in progress)
 - phase-space (PHSP) source and output support
 - ridge filter / range modulator support
 - RTSTRUCT import for structure-based scoring
