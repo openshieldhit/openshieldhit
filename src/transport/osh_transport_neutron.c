@@ -295,6 +295,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
             /* -- blackhole -------------------------------------------------- */
             if (mat_idx == (size_t) OSH_MATERIAL_INDEX_BLACKHOLE) {
                 pool->e[k] = 0.0;
+                n_escape++;
                 continue;
             }
 
