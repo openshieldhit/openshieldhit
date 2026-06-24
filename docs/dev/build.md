@@ -8,11 +8,11 @@ full developer build guide including coverage, sanitizers, and packaging.
 ```bash
 # release build (optimised, no debug symbols)
 cmake --preset release
-cmake --build --preset release
+cmake --build --preset release --parallel
 
 # debug build
 cmake --preset debug
-cmake --build --preset debug
+cmake --build --preset debug --parallel
 
 # coverage build
 cmake -B build_cov -DCMAKE_BUILD_TYPE=Debug -DCOVERAGE=ON .

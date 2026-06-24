@@ -243,10 +243,10 @@ Do not use `/tmp`, `mkdtemp`, or `getpid`-based naming.
 cmake --preset release
 
 # Build everything
-cmake --build --preset release
+cmake --build --preset release --parallel
 
 # Build one target
-cmake --build --preset release --target gemca_raycast_bench
+cmake --build --preset release --parallel --target gemca_raycast_bench
 
 # Run tests
 ctest --preset debug

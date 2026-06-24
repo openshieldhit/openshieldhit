@@ -18,7 +18,7 @@ For architecture decisions and internal design rationale see [DEVELOPER.md](DEVE
 
 ```sh
 cmake -B build
-cmake --build build
+cmake --build build --parallel
 ctest --test-dir build
 ```
 
