@@ -2,21 +2,28 @@
 dir = "_temp/JEFF40-Processed-PENDF0K"
 
 [grid]
-emin_mev = 1e-3
-emax_mev = 250.0
-npoints  = 30
-# --- OR override with an explicit irregular grid (takes priority if uncommented) ---
-# Useful for denser sampling around cross-section features, e.g. O-16 elastic
-# resonances (1-10 MeV), Cd-113 thermal edge, B-10 1/v capture region.
-# egrid_mev = [
-#     1e-3, 2e-3, 5e-3,
-#     1e-2, 2e-2, 5e-2,
-#     0.1,  0.2,  0.5,
-#     1.0,  2.0,  3.0,  4.0,  5.0,
-#     7.0,  8.0,  9.0,  10.0,
-#     15.0, 20.0, 30.0, 50.0, 80.0,
-#     100.0, 150.0, 200.0, 250.0,
-# ]
+# Irregular grid: 3 points/decade from 1 meV to 1 MeV (thermal + resonance region),
+# then 2 points/decade from 1 to 20 MeV (fast neutrons; cross sections smooth above ~1 MeV).
+# Upper limit 20 MeV matches the JEFF-4.0 evaluation range for light nuclei; above 20 MeV
+# the Tripathi optical fallback is used in the transport code.
+# Lower limit 1 meV covers the full 1/v slope of B-10(n,α) and Li-6(n,α) needed for
+# BNCT dose and 6LiF/7LiF detector response.  The transport cutoff is currently 1 keV;
+# the sub-keV portion of this table is reserved for future thermal neutron transport.
+egrid_mev = [
+    # thermal + resonance: 3 points/decade (10^(1/3) ≈ 2.154 spacing)
+    1.000e-9, 2.154e-9, 4.642e-9,   # 1–10 meV
+    1.000e-8, 2.154e-8, 4.642e-8,   # 10–100 meV
+    1.000e-7, 2.154e-7, 4.642e-7,   # 0.1–1 eV
+    1.000e-6, 2.154e-6, 4.642e-6,   # 1–10 eV
+    1.000e-5, 2.154e-5, 4.642e-5,   # 10–100 eV
+    1.000e-4, 2.154e-4, 4.642e-4,   # 100 eV – 1 keV
+    1.000e-3, 2.154e-3, 4.642e-3,   # 1–10 keV      (transport cutoff is at 1 keV)
+    1.000e-2, 2.154e-2, 4.642e-2,   # 10–100 keV
+    1.000e-1, 2.154e-1, 4.642e-1,   # 0.1–1 MeV
+    1.000e+0,                        # 1 MeV
+    # fast: 2 points/decade (10^(1/2) ≈ 3.162 spacing)
+    3.162e+0, 1.000e+1, 2.000e+1,   # 1–20 MeV
+]
 
 [output]
 file = "src/physics/neutron/osh_neutron_xsec_data.h"

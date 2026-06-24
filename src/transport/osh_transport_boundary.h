@@ -11,24 +11,14 @@
  */
 #define OSH_TRANSPORT_BOUNDARY_EPS 1.0e-8
 
-static inline void osh_transport_nudge_boundary(double *x,
-                                                double *y,
-                                                double *z,
-                                                double ux,
-                                                double uy,
-                                                double uz) {
+static inline void osh_transport_nudge_boundary(double *x, double *y, double *z, double ux, double uy, double uz) {
     *x += ux * OSH_TRANSPORT_BOUNDARY_EPS;
     *y += uy * OSH_TRANSPORT_BOUNDARY_EPS;
     *z += uz * OSH_TRANSPORT_BOUNDARY_EPS;
 }
 
-static inline void osh_transport_advance_to_boundary(double *x,
-                                                     double *y,
-                                                     double *z,
-                                                     double ux,
-                                                     double uy,
-                                                     double uz,
-                                                     double dist) {
+static inline void
+osh_transport_advance_to_boundary(double *x, double *y, double *z, double ux, double uy, double uz, double dist) {
     double const d = dist + OSH_TRANSPORT_BOUNDARY_EPS;
     *x += ux * d;
     *y += uy * d;
