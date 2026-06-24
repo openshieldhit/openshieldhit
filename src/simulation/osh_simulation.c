@@ -86,9 +86,14 @@ static size_t simulation_neutron_pool_capacity(struct osh_transport_params const
 /* Allocate (or re-allocate) both pools and the shared geometry scratch.
  * On failure the caller is expected to call osh_simulation_free(). */
 static enum osh_status simulation_alloc_pools(struct osh_simulation *sim) {
-    size_t ion_cap = simulation_ion_pool_capacity(&sim->transport_ctx.params);
-    size_t npool_cap = simulation_neutron_pool_capacity(&sim->transport_ctx.params);
+    size_t ion_cap;
+    size_t npool_cap;
     enum osh_status rc;
+    struct osh_zone_ref *zr; /* locals avoid CodeQL double-free false positive */
+    double *db;              /* (sim->transport_ctx fields freed above then reused) */
+
+    ion_cap = simulation_ion_pool_capacity(&sim->transport_ctx.params);
+    npool_cap = simulation_neutron_pool_capacity(&sim->transport_ctx.params);
 
     /* Free existing slabs before reallocating (safe on first call: pointers are NULL). */
     osh_particle_pool_free(&sim->ion_pool);
@@ -108,15 +113,15 @@ static enum osh_status simulation_alloc_pools(struct osh_simulation *sim) {
         return rc;
     }
 
-    sim->transport_ctx.zone_refs = (struct osh_zone_ref *) malloc(ion_cap * sizeof(struct osh_zone_ref));
-    sim->transport_ctx.dist_batch = (double *) malloc(ion_cap * sizeof(double));
-    if (!sim->transport_ctx.zone_refs || !sim->transport_ctx.dist_batch) {
-        free(sim->transport_ctx.zone_refs);
-        free(sim->transport_ctx.dist_batch);
-        sim->transport_ctx.zone_refs = NULL;
-        sim->transport_ctx.dist_batch = NULL;
+    zr = (struct osh_zone_ref *) malloc(ion_cap * sizeof(struct osh_zone_ref));
+    db = (double *) malloc(ion_cap * sizeof(double));
+    if (!zr || !db) {
+        free(zr);
+        free(db);
         return OSH_ENOMEM;
     }
+    sim->transport_ctx.zone_refs = zr;
+    sim->transport_ctx.dist_batch = db;
     sim->transport_ctx.scratch_capacity = ion_cap;
 
     sim->transport_ctx.ion_pool = &sim->ion_pool;
