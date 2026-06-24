@@ -36,6 +36,9 @@ enum osh_transport_straggling_mode {
     OSH_TRANSPORT_STRAGGLING_VAVILOV = 2
 };
 
+/** Default lower neutron transport cutoff [MeV] used when NEUTRLCUT <= 0. */
+#define OSH_TRANSPORT_NEUTRON_CUTOFF_DEFAULT_MEV 1.0e-3f
+
 /**
  * @brief Immutable transport control parameters extracted from the beam configuration.
  *
@@ -63,6 +66,7 @@ struct osh_transport_params {
     float deltae;                      /**< Max fractional energy loss per CSDA substep [dimensionless]. */
     float demin;                       /**< Min energy loss per material substep [MeV/nucleon]. */
     float tcut;                        /**< Lower ion energy cutoff [MeV/nucleon]. */
+    float ncut;                        /**< Lower neutron energy cutoff [MeV]; <=0 uses transport default. */
     int rndseed;                       /**< Base RNG seed (RNDSEED); fixes the whole run's streams. */
     int rndoffset;                     /**< Global history-index base (RNDOFFSET): added to every
                                             history index before seeding, so disjoint ranges (e.g.

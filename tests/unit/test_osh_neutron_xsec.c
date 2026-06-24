@@ -5,12 +5,12 @@
 #include "openshieldhit/status.h"
 #include "physics/neutron/osh_neutron_xsec.h"
 
-#define ASSERT_TRUE(cond)                                                                          \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);            \
-            exit(1);                                                                               \
-        }                                                                                          \
+#define ASSERT_TRUE(cond)                                                                                              \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            fprintf(stderr, "ASSERT FAILED: %s (%s:%d)\n", #cond, __FILE__, __LINE__);                                 \
+            exit(1);                                                                                                   \
+        }                                                                                                              \
     } while (0)
 
 #define ASSERT_NEAR(a, b, tol) ASSERT_TRUE(fabs((a) - (b)) <= (tol))
@@ -49,8 +49,8 @@ static void test_b10_na_one_over_v(void) {
     osh_neutron_xsec_lookup(&xsec, 5, 10, e2, &r2);
 
     ASSERT_TRUE(r1.na > 0.0 && r2.na > 0.0);
-    ratio_got      = r1.na / r2.na;
-    ratio_expected = sqrt(e2 / e1); /* = sqrt(10) ≈ 3.162 */
+    ratio_got = r1.na / r2.na;
+    ratio_expected = sqrt(e2 / e1);                                /* = sqrt(10) ≈ 3.162 */
     ASSERT_NEAR(ratio_got, ratio_expected, 0.03 * ratio_expected); /* 3% */
 
     osh_neutron_xsec_free(&xsec);

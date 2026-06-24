@@ -222,6 +222,7 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     sim->transport_ctx.params.deltae = beam->deltae;
     sim->transport_ctx.params.demin = beam->demin;
     sim->transport_ctx.params.tcut = beam->tcut;
+    sim->transport_ctx.params.ncut = beam->ncut;
     sim->transport_ctx.params.rndseed = beam->rndseed;
     sim->transport_ctx.params.rndoffset = beam->rndoffset;
 
