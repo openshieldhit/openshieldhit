@@ -42,58 +42,39 @@
 - [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
 - [ ] Batch ion-step phases around runtime lookup hot spots
 
-## Neutron Transport (issue #154, branch 154-neutron-transport-minimal-model)
+## Neutron Transport (issue #154, merged via branch 154-neutron-transport-minimal-model)
 
-Goal: minimal but physically meaningful neutron transport. Neutrons are currently
-produced (abrasion, Fermi break-up) but only counted, never transported.
+Fast-neutron transport is implemented as a condensed model.  Neutrons produced
+by abrasion and Fermi break-up are banked in the neutron pool and drained by
+`osh_transport_neutron_run()` after each ion pass.
 
-### Cross-section architecture — two-tier lookup
+### What is implemented
 
-- **Tier 1**: condensed JEFF-4.0 PENDF0K tables (31-point irregular grid,
-  1 meV–20 MeV) embedded in a generated header (`osh_neutron_xsec_data.h`).
-  Per nuclide: `σ_tot`, `σ_el`, `σ(n,n')`, `σ(n,2n)`, `σ(n,γ)`, `σ(n,p)`, `σ(n,α)`.
+- **Tier-1 cross sections**: condensed JEFF-4.0 PENDF0K tables (31-point irregular
+  grid, 1 meV–20 MeV) in `osh_neutron_xsec_data.h` for 35 nuclides covering
+  tissue, air, bone, detectors, and shielding materials.
   Condensing automated by `tools/condense_neutron_xsec.py`.
-  Current nuclides: H-1, C-12, N-14, O-16, F-19, Ca-40, Li-6, Li-7, B-10, B-11, He-3
-  (U-235/238 fission: separate sub-issue — extra complexity)
-- **Tier 2**: optical model parametrization as fallback for any (Z,A) not in
-  tables; Tripathi `σ_R` reused as the reaction cross-section fallback.
+- **Tier-2 fallback**: Tripathi `σ_R` + geometric `σ_el` for any (Z,A) not in Tier-1.
+- **Neutron pool**: full SoA (pos, dir, energy, weight, prim_idx, gen, RNG stream).
+  Capacity = nstat; drained in wavefront batches sized to the geometry-scratch buffer.
+- **Transport loop**: GEMCA boundary distances, free-path sampling, reaction dispatch.
+- **Reaction channels**: elastic (isotropic CM; n-p recoil proton returned),
+  `(n,γ)` capture, `(n,p)`/`(n,α)` two-body, compound nucleus → Fermi break-up
+  or heavy-A sink.
+- **Natural element isotope expansion**: A=0 material entries expanded to all
+  naturally occurring isotopes with abundance-weighted number densities at
+  nuclear-handler compile time.
+- **Family scheduler integration**: ion pass fills the neutron pool; scheduler
+  drains it; pool is sized to accumulate across all ion wavefront batches.
 
-Channel decomposition within `σ_R`: distinguish at minimum (n,p) and (n,α)
-(produce charged secondaries → ion pool) from pure inelastic / absorption.
-"Charge-changing" reactions = those changing target Z; these are the ion-pool
-coupling point.
+### Open items
 
-Number densities: derivable inline from existing `mass_fraction`, `rho`, `a`
-fields — `n_i = (wt_i × rho × N_A) / A_i`. No new infrastructure needed.
-
-### Transport loop
-
-Mean free path: `λ = 1/Σ_total`, `Σ_total = Σ_i nᵢ (σ_el,i + σ_R,i)`
-Path length: `l = −log(ξ) × λ`; advance via GEMCA, whichever boundary is
-shorter.
-
-At interaction point:
-- **Elastic** (prob `Σ_el/Σ_total`): 2-body CM kinematics (reuse `osh_kinematics`);
-  n-p recoil proton → ion pool; heavy recoils deposit energy locally (minimal).
-- **Reaction** (prob `Σ_R/Σ_total`): sample channel; (n,p)/(n,α) secondaries →
-  ion pool; inelastic → adapt existing abrasion+Fermi break-up.
-
-Energy cutoff: ~1 keV for fast-neutron transport. Thermal treatment (< 1 eV)
-only for detector materials listed above.
-
-### Implementation steps
-
-- [ ] Expand `osh_neutron_pool` to full SoA (x,y,z, ux,uy,uz, e, wt, prim_idx,
-      gen, rng) — copy `osh_particle_pool` pattern, drop species pointer
-- [ ] Wire abrasion + Fermi break-up to push (pos, dir, e, wt) into pool
-      instead of only incrementing `n_created`
-- [ ] Implement cross-section data module: JEFF condensed tables + optical
-      fallback + lookup API `(z, a, E_MeV) → (σ_el, σ_R)`
-- [ ] Implement `osh_transport_neutron_run_minimal()`: stepping loop, interaction
-      sampling, elastic kinematics, charged-secondary handoff to ion pool
-- [ ] Enable `FAMILY_NEUTRON` in scheduler
-- [ ] Validation: simple water phantom + 130 MeV protons, compare neutron
-      fluence/dose to FLUKA or TOPAS reference
+- [ ] Charged secondaries from neutron reactions (n,p)/(n,α) fed back into the
+      ion transport family (currently deposited locally)
+- [ ] Local neutron energy deposits scored (point-deposit scoring path)
+- [ ] Thermal-neutron physics below 1 eV (separate issue #178)
+- [ ] Validation: compare neutron fluence to FLUKA or TOPAS reference for
+      130 MeV protons on water
 
 ### Separate issues (not in this branch)
 

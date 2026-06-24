@@ -100,13 +100,10 @@ are pushed back into the neutron pool and processed in a later wavefront pass.
 These are intentional boundaries of the current implementation:
 
 - local neutron energy deposits are marked but not yet scored
-- charged secondaries from neutron reactions are not yet fed back into the ion
-  transport family
-- thermal-neutron models are not implemented separately
-- angular distributions are simplified; elastic scattering currently uses an
-  isotropic center-of-mass approximation
-- the transport scheduler still needs full cross-family orchestration around
-  the ion and neutron families
+- charged secondaries from neutron reactions ((n,p), (n,α)) are not yet fed
+  back into the ion transport family; their energy is deposited locally instead
+- thermal-neutron models are not implemented separately (separate issue #178)
+- elastic scattering uses an isotropic center-of-mass approximation
 
 ## Cross-Section Data
 

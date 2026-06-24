@@ -156,8 +156,8 @@ struct osh_scoring_workspace  *scoring = /* ... */;
 struct osh_simulation *sim;
 osh_simulation_create(beam, geo, mat, scoring, &sim);
 
-// 3. Run transport and save outputs
-osh_simulation_run(sim, "/path/to/output/");
+// 3. Run transport
+osh_simulation_run(sim);
 
 // 4. Release — cold workspaces are NOT freed here, caller owns them
 osh_simulation_free(sim);
@@ -191,14 +191,15 @@ Nuclear physics:
   The break-up is a sequential-binary semiphysical placeholder for the full
   simultaneous n-body Fermi model
 
-Minimal fast-neutron transport (in progress):
+Fast-neutron transport (condensed model):
 
 - JEFF-4.0 PENDF0K cross-section tables condensed into a C header for 35
   nuclides; log-log interpolation; optical/geometric fallback for unlisted nuclides
 - neutron pool in full SoA layout; produced neutrons queued and transported
 - reaction sampling: elastic, radiative capture, (n,p)/(n,α), compound nucleus
   routed to Fermi break-up or heavy-A sink
-- straight-line wavefront transport loop; family-scheduler integration
+- straight-line wavefront transport loop with family-scheduler integration
+- natural elements expanded to per-isotope entries with abundance-weighted number densities
 
 CT voxel transport is working end-to-end:
 

@@ -45,13 +45,15 @@ generated header.  Lookup uses log-log interpolation on the irregular grid,
 with linear interpolation at threshold crossings where one endpoint is zero.
 Energies outside the stored range are clamped to the nearest grid edge.
 
-Material compositions may describe natural elements with `A=0`.  Neutron
-lookup resolves those entries to a representative mass number before computing
-number density or selecting a Tier-1 table row, for example H-1, C-12, N-14,
-O-16, Cl-35, and Ca-40 for the elements used in the water-equivalent phantom
-cases.  This keeps natural material definitions finite and prevents them from
-falling through to the Tier-2 path solely because the material card omitted an
-isotope number.
+Material compositions may describe natural elements with `A=0`.  At nuclear
+handler compile time (`osh_nuclear_handler_compile()`), each A=0 entry is
+expanded into one entry per naturally occurring isotope with abundance > 0,
+weighted by `mf_i = f_nat × abund_i × A_i / M_nat` where `M_nat = Σ(abund_j × A_j)`.
+The expansion is driven by `osh_isotope_db[]`.  Tier-1 cross-section lookups
+then always see concrete (Z, A) pairs and their correctly weighted number
+densities, so minor isotopes (C-13, O-17/18, …) that are absent from the
+Tier-1 table fall back to Tier-2 individually while the dominant isotopes
+(C-12, O-16, …) keep their full tabulated cross sections.
 
 ## Tier-1 nuclides
 
