@@ -9,7 +9,10 @@
  *   test_merge_commutative     — merge order does not change the result
  *   test_merge_len_mismatch    — differing lengths are rejected (OSH_EINVAL)
  *   test_merge_null            — NULL operands are rejected without crashing
+ *   test_merge_shape_mismatch  — mismatched optional-array presence is rejected
  *   test_zero                  — zero() clears every allocated array, keeps len
+ *   test_rescale               — rescale() scales data in place, NULL-safe
+ *   test_finalize_average      — finalize_average() divides data/data2, guards eps
  */
 
 #include <stddef.h>
@@ -183,13 +186,81 @@ static void test_zero(void) {
     osh_scoring_accumulator_free(&acc);
 }
 
+/* ---- Rejection: mismatched optional-array presence ----------------------- */
+
+static void test_merge_shape_mismatch(void) {
+    struct osh_scoring_accumulator with2;
+    struct osh_scoring_accumulator without2;
+
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(&with2, 3u, 1) == OSH_OK);    /* has data2 */
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(&without2, 3u, 0) == OSH_OK); /* no data2 */
+
+    /* data2 present on exactly one side must be rejected in either direction. */
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&with2, &without2) == OSH_EINVAL);
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&without2, &with2) == OSH_EINVAL);
+
+    osh_scoring_accumulator_free(&with2);
+    osh_scoring_accumulator_free(&without2);
+}
+
+/* ---- rescale(): scale the primary array in place ------------------------- */
+
+static void test_rescale(void) {
+    struct osh_scoring_accumulator acc;
+    size_t i;
+
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(&acc, 3u, 0) == OSH_OK);
+    for (i = 0; i < 3u; ++i) {
+        acc.data[i] = (double) (i + 1); /* 1,2,3 */
+    }
+
+    osh_scoring_accumulator_rescale(&acc, 10.0);
+    ASSERT_TRUE(acc.data[0] == 10.0);
+    ASSERT_TRUE(acc.data[1] == 20.0);
+    ASSERT_TRUE(acc.data[2] == 30.0);
+
+    osh_scoring_accumulator_rescale(NULL, 2.0); /* NULL is a no-op, must not crash */
+
+    osh_scoring_accumulator_free(&acc);
+}
+
+/* ---- finalize_average(): data/data2 with an eps guard -------------------- */
+
+static void test_finalize_average(void) {
+    struct osh_scoring_accumulator acc;
+    struct osh_scoring_accumulator nodata2;
+
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(&acc, 3u, 1) == OSH_OK);
+    acc.data[0] = 10.0;
+    acc.data2[0] = 2.0; /* -> 5 */
+    acc.data[1] = 9.0;
+    acc.data2[1] = 3.0; /* -> 3 */
+    acc.data[2] = 7.0;
+    acc.data2[2] = 0.0; /* weight ~0 -> 0 */
+
+    ASSERT_TRUE(osh_scoring_accumulator_finalize_average(&acc, 1.0e-300) == OSH_OK);
+    ASSERT_TRUE(acc.data[0] == 5.0);
+    ASSERT_TRUE(acc.data[1] == 3.0);
+    ASSERT_TRUE(acc.data[2] == 0.0);
+
+    /* Missing denominator array must be rejected, not dereferenced. */
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(&nodata2, 3u, 0) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_accumulator_finalize_average(&nodata2, 1.0e-300) == OSH_EINVAL);
+
+    osh_scoring_accumulator_free(&acc);
+    osh_scoring_accumulator_free(&nodata2);
+}
+
 int main(void) {
     test_merge_identity();
     test_merge_correctness();
     test_merge_commutative();
     test_merge_len_mismatch();
     test_merge_null();
+    test_merge_shape_mismatch();
     test_zero();
+    test_rescale();
+    test_finalize_average();
     printf("All osh_scoring_accumulator tests passed.\n");
     return 0;
 }

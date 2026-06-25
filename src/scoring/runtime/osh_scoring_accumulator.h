@@ -85,6 +85,34 @@ enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *ac
 void osh_scoring_accumulator_zero(struct osh_scoring_accumulator *acc);
 
 /**
+ * @brief Multiply every element of the primary @p data array by @p factor in place.
+ *
+ * @details
+ * The post-process scaling step (e.g. MeV/g -> Gy for absorbed dose) expressed as
+ * an accumulator operation, so callers do not index the arrays themselves.  Only
+ * @p data is touched; @p data2 and the variance arrays are left unchanged.  No-op
+ * when @p acc or @p acc->data is NULL.
+ */
+void osh_scoring_accumulator_rescale(struct osh_scoring_accumulator *acc, double factor);
+
+/**
+ * @brief Finalise a two-pass weighted average in place: @c data[i] /= @c data2[i].
+ *
+ * @details
+ * For track-/dose-averaged quantities (LET, Qeff), @p data holds the running
+ * weighted sum and @p data2 the running weight.  Each bin becomes
+ * @c data2[i] > @p eps ? data[i]/data2[i] : 0, so empty bins read as zero instead
+ * of dividing by ~0.  @p data2 is left untouched (the caller decides whether to
+ * keep or drop it).  Both @p data and @p data2 must be allocated.
+ *
+ * @param[in,out] acc  Accumulator to finalise (must be non-NULL with data + data2).
+ * @param[in]     eps  Lower threshold below which a weight counts as zero.
+ * @returns OSH_OK on success, OSH_EINVAL if @p acc, @p acc->data or @p acc->data2
+ *          is NULL.
+ */
+enum osh_status osh_scoring_accumulator_finalize_average(struct osh_scoring_accumulator *acc, double eps);
+
+/**
  * @brief Free all arrays and zero the struct.
  *
  * Safe to call with @p acc NULL and on a partially-allocated struct.
@@ -102,15 +130,16 @@ void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc);
  * totals (up to floating-point summation order).
  *
  * Adds @p src into @p dst for @c data, @c data2, @c data_var and @c data2_var.
- * An array is summed only when *both* sides have it allocated; an array present
- * on one side but NULL on the other is skipped (mismatched two-pass/variance
- * configuration is the caller's responsibility — accumulators compiled from the
- * same page descriptor always agree).
+ * All four arrays must have matching presence between @p dst and @p src: an array
+ * allocated on one side but NULL on the other is rejected (OSH_EINVAL) rather than
+ * silently dropped, since that would lose the source's tally.  Accumulators
+ * compiled from the same page descriptor always agree.
  *
  * @param[in,out] dst  Destination accumulator (must be non-NULL).
  * @param[in]     src  Source accumulator to add (must be non-NULL).
- * @returns OSH_OK on success, OSH_EINVAL if either pointer is NULL or the two
- *          accumulators have different @c len.
+ * @returns OSH_OK on success, OSH_EINVAL if either pointer is NULL, the two
+ *          accumulators have different @c len, or their optional arrays
+ *          (@c data2 / @c data_var / @c data2_var) disagree on presence.
  */
 enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *dst,
                                               struct osh_scoring_accumulator const *src);

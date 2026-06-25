@@ -50,6 +50,27 @@ void osh_scoring_accumulator_zero(struct osh_scoring_accumulator *acc) {
     }
 }
 
+void osh_scoring_accumulator_rescale(struct osh_scoring_accumulator *acc, double factor) {
+    size_t i;
+    if (!acc || !acc->data) {
+        return;
+    }
+    for (i = 0; i < acc->len; ++i) {
+        acc->data[i] *= factor;
+    }
+}
+
+enum osh_status osh_scoring_accumulator_finalize_average(struct osh_scoring_accumulator *acc, double eps) {
+    size_t i;
+    if (!acc || !acc->data || !acc->data2) {
+        return OSH_EINVAL;
+    }
+    for (i = 0; i < acc->len; ++i) {
+        acc->data[i] = (acc->data2[i] > eps) ? (acc->data[i] / acc->data2[i]) : 0.0;
+    }
+    return OSH_OK;
+}
+
 /* Add src_arr into dst_arr element-wise when both are non-NULL. */
 static void merge_array(double *dst_arr, double const *src_arr, size_t len) {
     size_t i;
@@ -67,6 +88,14 @@ enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *ds
         return OSH_EINVAL;
     }
     if (dst->len != src->len) {
+        return OSH_EINVAL;
+    }
+    /* Reject mismatched optional-array presence: an array allocated on one side
+     * but NULL on the other would silently drop tallies.  Accumulators cloned
+     * from the same page descriptor always agree, so disagreement is a bug. */
+    if (((dst->data == NULL) != (src->data == NULL)) || ((dst->data2 == NULL) != (src->data2 == NULL))
+        || ((dst->data_var == NULL) != (src->data_var == NULL))
+        || ((dst->data2_var == NULL) != (src->data2_var == NULL))) {
         return OSH_EINVAL;
     }
     merge_array(dst->data, src->data, dst->len);

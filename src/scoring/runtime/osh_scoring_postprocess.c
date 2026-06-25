@@ -1,6 +1,7 @@
 #include "scoring/runtime/osh_scoring_postprocess.h"
 
 #include "openshieldhit/const.h"
+#include "scoring/runtime/osh_scoring_accumulator.h"
 
 /* Guard for near-zero denominators in LET averaging. */
 #define OSH_LET_DENOM_EPS 1.0e-300
@@ -26,7 +27,7 @@ enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt) {
 }
 
 static enum osh_status page_postprocess(struct osh_scoring_page_runtime *page) {
-    size_t i;
+    enum osh_status rc;
 
     if (!page) {
         return OSH_EINVAL;
@@ -36,9 +37,7 @@ static enum osh_status page_postprocess(struct osh_scoring_page_runtime *page) {
 
     case OSH_SCORING_SCORE_DOSEGY:
         /* Convert accumulated MeV/g to Gy once per bin, not per transport step. */
-        for (i = 0; i < page->len; ++i) {
-            page->acc.data[i] *= OSH_MEVG2GY;
-        }
+        osh_scoring_accumulator_rescale(&page->acc, OSH_MEVG2GY);
         return OSH_OK;
 
     case OSH_SCORING_SCORE_DLET:
@@ -46,12 +45,9 @@ static enum osh_status page_postprocess(struct osh_scoring_page_runtime *page) {
     case OSH_SCORING_SCORE_DQEFF:
     case OSH_SCORING_SCORE_TQEFF:
         /* Finalise two-pass average: data = weighted_sum, data2 = weight_sum. */
-        for (i = 0; i < page->len; ++i) {
-            if (page->acc.data2[i] > OSH_LET_DENOM_EPS) {
-                page->acc.data[i] /= page->acc.data2[i];
-            } else {
-                page->acc.data[i] = 0.0;
-            }
+        rc = osh_scoring_accumulator_finalize_average(&page->acc, OSH_LET_DENOM_EPS);
+        if (rc != OSH_OK) {
+            return rc;
         }
         /* Clear flags so save-layer validation passes. */
         page->has_data2 = 0;
