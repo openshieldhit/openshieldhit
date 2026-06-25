@@ -1,109 +1,49 @@
-# Scoring Module
+# Scoring Module (`src/scoring/`)
 
-This module owns scoring-domain data and logic.
+This module owns scoring-domain data and logic: compiling cold detector and
+filter definitions into runtime **accumulators**, depositing per-step
+contributions during transport, post-run normalisation, and writing results
+out (ASCII, BDO 2019, DICOM RTDOSE). It never touches files itself — the app
+layer parses input and hands the save backends fully-resolved paths.
 
-## Structure
+## What is where
 
-- `osh_scoring.c/h` — cold scoring workspace API (`struct osh_scoring_workspace`),
-  public helpers for detector and filter definitions.
-- `runtime/osh_scoring_compile.*` — compilation from cold scoring definitions into
-  runtime accumulator buffers and geometry.  For geometries with
-  `rtdose_template_path` set (set by the app when the output format is RTDOSE),
-  the path is carried through to the geometry runtime so the save layer can
-  write back to the template file.
-- `runtime/osh_scoring_runtime.h` — runtime layout consumed by transport and simulation.
-- `runtime/osh_scoring_step.*` — per-step scoring accumulation called from transport.
-- `runtime/osh_scoring_postprocess.*` — post-run normalisation and derived quantity
-  computation.
-- `save/` — output writers; dispatched by `osh_scoring_save()` based on the
-  `fileformat` field of each output definition:
-  - `osh_scoring_save_ascii.*` — plain-text column format (`text`, `txt`, `ascii`, `dat`)
-  - `osh_scoring_save_bdo2019.*` / `osh_scoring_save_bdo2019_raw.*` — binary BDO format
-    (`bdo`, `bdo2019`, `binary`, `bin`); default when no format is specified
-  - `osh_scoring_save_rtdose.*` — DICOM RTDOSE round-trip writer (`rtdose`): reads
-    the RTDOSE template stored in `rtdose_template_path`, replaces the pixel data
-    with scored values normalised by `nstat` and `dose_grid_scaling`, and writes
-    the result as a new `.dcm` file.  All DICOM metadata is preserved unchanged.
-    Only single-page (single quantity) outputs are supported; multi-page returns
-    `OSH_ENOTSUP`.
+| Path | Contents |
+|---|---|
+| `osh_scoring.{c,h}` | Cold scoring workspace API (`struct osh_scoring_workspace`) and the public detector/filter definition helpers. |
+| `runtime/osh_scoring_compile.*` | Compile cold definitions into runtime accumulators and scoring geometry. |
+| `runtime/osh_scoring_accumulator.*` | Owning accumulator storage (`data`/`data2`/variance), the single `osh_score_deposit()` write seam, and the `osh_scoring_accumulator_merge()` reduce. |
+| `runtime/osh_scoring_step.*` | Per-step deposition called from transport (the scoring hot path). |
+| `runtime/osh_scoring_postprocess.*` | Post-run unit conversion and two-pass average finalisation. |
+| `runtime/osh_scoring_runtime.h` | Runtime layout consumed by transport and simulation. |
+| `save/` | Output writers dispatched by `osh_scoring_save()`: ASCII (`text`/`txt`/`ascii`/`dat`), BDO 2019 (`bdo`/`bdo2019`/`binary`/`bin`; default), and DICOM RTDOSE (`rtdose`). |
 
-## Output normalisation and multi-run merging
+## Why it is built this way (in brief)
 
-The two output formats take deliberately different positions on normalisation:
+- **Cold → hot split.** Parsed scoring definitions stay separate from the
+  runtime accumulator buffers; the save layer consumes the workspace plus
+  scoring runtime, never transport internals.
+- **Storage separated from descriptor.** Each page's mutable, per-history
+  arrays live in a `struct osh_scoring_accumulator` (`page->acc`), distinct
+  from the page *descriptor* (geometry indices, strides, differential-axis
+  config). That storage is the unit a future parallel worker owns privately and
+  folds back with `osh_scoring_accumulator_merge()`.
+- **One deposit seam.** Every tally funnels through `osh_score_deposit()` —
+  today a plain `+=`, tomorrow the single place an atomic / private / locked
+  write policy plugs in.
+- **Two output stances on normalisation.** ASCII normalises per primary at
+  write time (single-run inspection); BDO writes raw sums plus the `nstat` tag
+  so files merge correctly across runs.
 
-### ASCII (`text`, `txt`, `ascii`, `dat`)
+## Full documentation
 
-Intended for quick inspection and single-run use.  Values are normalised
-**per primary particle** (divided by `nstat`) at write time, except for
-averaged quantities (DLET, TLET) which are already physical means after
-`osh_scoring_postprocess()` and are written as-is.
+The detailed treatment — the accumulator / deposit / merge model and its role
+in parallel scoring, the **output-normalisation and multi-run merging** rules
+per format, unit handling and the post-process state table, and the module
+lifecycle and boundaries — lives in the developer guide:
 
-ASCII output is **not** suitable for merging partial results from multiple
-runs: once divided by `nstat` the absolute weight of each run is lost.
+➡️ **[`docs/dev/scoring.md`](../../docs/dev/scoring.md)**
 
-### BDO 2019 (`bdo`, `bdo2019`, `binary`, `bin`; default)
-
-Intended for production use and multi-run accumulation.  Values are written
-**exactly as accumulated** (raw sums), and the primary count is embedded as
-the `OSHBDO_RT_NSTAT` tag.  The reader is responsible for normalisation.
-
-This design supports two merging strategies:
-
-1. **Native multi-threaded** (future): each thread accumulates into its own
-   page buffers, then the simulation layer sums the per-thread pages and
-   writes one BDO file with the total `nstat`.
-
-2. **Embarrassingly-parallel / multi-node**: the user runs independent
-   simulations and merges the resulting `.bdo` files.  Because each file
-   carries its own `nstat`, the merge tool can apply the correct weighting
-   per scorer kind:
-   - `NORM` quantities (DOSE, FLUENCE, ENERGY, …): weighted average
-     `X = (sum_j x_j) / (sum_j nstat_j)`
-   - `AVER` quantities (DLET, TLET): weighted average
-     `X = (sum_j x_j * nstat_j) / (sum_j nstat_j)`
-   - `SUM` quantities (COUNT, …): plain sum `X = sum_j x_j`
-   - `APPEND` quantities (MCPL): concatenation
-
-   The `OSHBDO_PAG_NORMALIZE` tag in each page records the postproc mode so
-   a merge tool does not need to re-derive it from the scorer type.
-
-### Unit handling
-
-`osh_scoring_postprocess()` applies physics transforms before saving:
-
-- DOSE: converts MeV/g → Gy (`× OSH_MEVG2GY`) once per bin.
-- DLET, TLET, DQEFF, TQEFF: computes the final ratio `data / data2` per bin;
-  the intermediate `data2` denominator array is not written to any output file.
-
-After postprocessing, page buffers are in two states depending on scorer kind:
-
-| Kind | State after postprocess | Save-layer normalisation |
-|------|------------------------|--------------------------|
-| NORM (DOSE, ENERGY, FLUENCE, …) | raw accumulated sum | divide by nstat |
-| AVER (DLET, TLET, DQEFF, TQEFF) | physical mean (data÷data2 done) | none — written as-is |
-| SUM (COUNT, …) | raw count | none |
-
-**Multi-run merging caveat**: AVER pages cannot be naively summed across BDO
-files because data2 is discarded.  Merging requires re-weighting by nstat from
-each file.
-
-## Lifecycle
-
-```
-osh_scoring_workspace_create()      allocate cold workspace
-osh_scoring_compile()               allocate accumulators, compile scoring geometry
-osh_scoring_workspace_free()        release cold workspace
-```
-
-## Rules
-
-- This directory owns cold scoring definitions, runtime compilation, postprocess,
-  and output support.
-- File-format loading and path resolution happen outside this module (app layer).
-- Parsed scoring definitions stay separate from runtime scoring buffers.
-- Save/output code consumes the scoring workspace plus scoring runtime, not
-  transport internals.
-- `osh_scoring_compile`, `osh_scoring_postprocess`, and `osh_scoring_save` are
-  invoked by `src/simulation/` as part of `osh_simulation_create`,
-  `osh_simulation_run`, and `osh_simulation_save`. App code never calls them
-  directly.
+Parallelism groundwork and roadmap:
+[issue #161](https://github.com/openshieldhit/openshieldhit/issues/161) and the
+project [`TODO.md`](../../TODO.md).

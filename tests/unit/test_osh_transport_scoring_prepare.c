@@ -79,7 +79,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].postproc == OSH_SCORING_POSTPROC_NORM);
     ASSERT_TRUE(rt.pages[page_idx].has_data2 == 0);
     ASSERT_TRUE(rt.pages[page_idx].divide == 0);
-    ASSERT_TRUE(rt.pages[page_idx].data != NULL);
+    ASSERT_TRUE(rt.pages[page_idx].acc.data != NULL);
     ASSERT_TRUE(rt.pages[page_idx].nflat_rules == 0u);
 
     ASSERT_TRUE(strcmp(rt.outputs[1].filename, "NB_msh_fluence.bdo") == 0);
@@ -101,10 +101,10 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].postproc == OSH_SCORING_POSTPROC_NORM);
     ASSERT_TRUE(rt.pages[page_idx].has_data2 == 0);
     ASSERT_TRUE(rt.pages[page_idx].divide == 0);
-    ASSERT_TRUE(rt.pages[page_idx].data != NULL);
-    ASSERT_TRUE(rt.pages[page_idx].data_var == NULL);
-    ASSERT_TRUE(rt.pages[page_idx].data2 == NULL);
-    ASSERT_TRUE(rt.pages[page_idx].data2_var == NULL);
+    ASSERT_TRUE(rt.pages[page_idx].acc.data != NULL);
+    ASSERT_TRUE(rt.pages[page_idx].acc.data_var == NULL);
+    ASSERT_TRUE(rt.pages[page_idx].acc.data2 == NULL);
+    ASSERT_TRUE(rt.pages[page_idx].acc.data2_var == NULL);
 
     ASSERT_TRUE(rt.filters[0].nrules == 3u);
     ASSERT_TRUE(rt.filters[0].rules[0].field == OSH_SCORING_FILTER_FIELD_Z);

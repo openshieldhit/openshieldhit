@@ -4,6 +4,7 @@ add_library(osh_transport
     osh_neutron_pool.c
     osh_transport_ion.c
     osh_transport_ion_step.c
+    osh_worker_context.c
     osh_transport_neutron.c
     osh_transport_photon.c
 )

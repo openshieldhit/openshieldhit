@@ -189,7 +189,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                                  * Their scalar value is repeated across all diff-bin rows. */
                                 size_t data_idx = spatial_idx + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
                                                   + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
-                                fprintf(fp, " %.12e", page->data[data_idx] * scale);
+                                fprintf(fp, " %.12e", page->acc.data[data_idx] * scale);
                             }
                             fprintf(fp, "\n");
                         }
@@ -335,7 +335,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                                     size_t data_idx = spatial_idx
                                                       + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
                                                       + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
-                                    fprintf(fp, " %.12e", page->data[data_idx] * scale);
+                                    fprintf(fp, " %.12e", page->acc.data[data_idx] * scale);
                                 }
                                 fprintf(fp, "\n");
                             }
@@ -417,7 +417,7 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
     }
     for (ip = 0; ip < out->npages; ++ip) {
         struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
-        if (!page->data || page->variance || page->has_data2 || page->divide) {
+        if (!page->acc.data || page->variance || page->has_data2 || page->divide) {
             return OSH_ENOTSUP;
         }
     }

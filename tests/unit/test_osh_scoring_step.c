@@ -92,21 +92,21 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     fluence_idx = rt.outputs[1].page_indices[1];
     filtered_idx = rt.outputs[1].page_indices[2];
 
-    assert_close(rt.pages[energy0_idx].data[0], 0.875);
-    assert_close(rt.pages[energy0_idx].data[1], 1.0);
-    assert_close(rt.pages[energy0_idx].data[2], 0.125);
+    assert_close(rt.pages[energy0_idx].acc.data[0], 0.875);
+    assert_close(rt.pages[energy0_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[energy0_idx].acc.data[2], 0.125);
 
-    assert_close(rt.pages[energy1_idx].data[0], 0.875);
-    assert_close(rt.pages[energy1_idx].data[1], 1.0);
-    assert_close(rt.pages[energy1_idx].data[2], 0.125);
+    assert_close(rt.pages[energy1_idx].acc.data[0], 0.875);
+    assert_close(rt.pages[energy1_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[energy1_idx].acc.data[2], 0.125);
 
-    assert_close(rt.pages[fluence_idx].data[0], 0.875);
-    assert_close(rt.pages[fluence_idx].data[1], 1.0);
-    assert_close(rt.pages[fluence_idx].data[2], 0.125);
+    assert_close(rt.pages[fluence_idx].acc.data[0], 0.875);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.125);
 
-    assert_close(rt.pages[filtered_idx].data[0], 0.875);
-    assert_close(rt.pages[filtered_idx].data[1], 1.0);
-    assert_close(rt.pages[filtered_idx].data[2], 0.125);
+    assert_close(rt.pages[filtered_idx].acc.data[0], 0.875);
+    assert_close(rt.pages[filtered_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[filtered_idx].acc.data[2], 0.125);
 
     st.gen = 1u;
     rc = osh_scoring_score_step(&rt, &part, &st);
@@ -115,27 +115,27 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     rc = osh_scoring_postprocess(&rt);
     ASSERT_TRUE(rc == OSH_OK);
 
-    assert_close(rt.pages[energy0_idx].data[0], 1.75);
-    assert_close(rt.pages[energy0_idx].data[1], 2.0);
-    assert_close(rt.pages[energy0_idx].data[2], 0.25);
+    assert_close(rt.pages[energy0_idx].acc.data[0], 1.75);
+    assert_close(rt.pages[energy0_idx].acc.data[1], 2.0);
+    assert_close(rt.pages[energy0_idx].acc.data[2], 0.25);
 
-    assert_close(rt.pages[energy1_idx].data[0], 1.75);
-    assert_close(rt.pages[energy1_idx].data[1], 2.0);
-    assert_close(rt.pages[energy1_idx].data[2], 0.25);
+    assert_close(rt.pages[energy1_idx].acc.data[0], 1.75);
+    assert_close(rt.pages[energy1_idx].acc.data[1], 2.0);
+    assert_close(rt.pages[energy1_idx].acc.data[2], 0.25);
 
-    assert_close(rt.pages[fluence_idx].data[0], 1.75);
-    assert_close(rt.pages[fluence_idx].data[1], 2.0);
-    assert_close(rt.pages[fluence_idx].data[2], 0.25);
+    assert_close(rt.pages[fluence_idx].acc.data[0], 1.75);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 2.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.25);
 
-    assert_close(rt.pages[filtered_idx].data[0], 0.875);
-    assert_close(rt.pages[filtered_idx].data[1], 1.0);
-    assert_close(rt.pages[filtered_idx].data[2], 0.125);
+    assert_close(rt.pages[filtered_idx].acc.data[0], 0.875);
+    assert_close(rt.pages[filtered_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[filtered_idx].acc.data[2], 0.125);
 
     for (i = 3u; i < rt.pages[energy0_idx].len; ++i) {
-        assert_close(rt.pages[energy0_idx].data[i], 0.0);
-        assert_close(rt.pages[energy1_idx].data[i], 0.0);
-        assert_close(rt.pages[fluence_idx].data[i], 0.0);
-        assert_close(rt.pages[filtered_idx].data[i], 0.0);
+        assert_close(rt.pages[energy0_idx].acc.data[i], 0.0);
+        assert_close(rt.pages[energy1_idx].acc.data[i], 0.0);
+        assert_close(rt.pages[fluence_idx].acc.data[i], 0.0);
+        assert_close(rt.pages[filtered_idx].acc.data[i], 0.0);
     }
 
     osh_scoring_runtime_free(&rt);
@@ -207,27 +207,27 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     filtered_idx = rt.outputs[1].page_indices[2];
     chord_len = sqrt(65.0);
 
-    assert_close(rt.pages[energy0_idx].data[0], 0.0);
-    assert_close(rt.pages[energy0_idx].data[1], 0.875);
-    assert_close(rt.pages[energy0_idx].data[2], 0.125);
+    assert_close(rt.pages[energy0_idx].acc.data[0], 0.0);
+    assert_close(rt.pages[energy0_idx].acc.data[1], 0.875);
+    assert_close(rt.pages[energy0_idx].acc.data[2], 0.125);
 
-    assert_close(rt.pages[energy1_idx].data[0], 0.0);
-    assert_close(rt.pages[energy1_idx].data[1], 0.875);
-    assert_close(rt.pages[energy1_idx].data[2], 0.125);
+    assert_close(rt.pages[energy1_idx].acc.data[0], 0.0);
+    assert_close(rt.pages[energy1_idx].acc.data[1], 0.875);
+    assert_close(rt.pages[energy1_idx].acc.data[2], 0.125);
 
-    assert_close(rt.pages[fluence_idx].data[0], 0.0);
-    assert_close(rt.pages[fluence_idx].data[1], 3.5 * chord_len / 32.0);
-    assert_close(rt.pages[fluence_idx].data[2], 0.5 * chord_len / 32.0);
+    assert_close(rt.pages[fluence_idx].acc.data[0], 0.0);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 3.5 * chord_len / 32.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5 * chord_len / 32.0);
 
-    assert_close(rt.pages[filtered_idx].data[0], 0.0);
-    assert_close(rt.pages[filtered_idx].data[1], 3.5 * chord_len / 32.0);
-    assert_close(rt.pages[filtered_idx].data[2], 0.5 * chord_len / 32.0);
+    assert_close(rt.pages[filtered_idx].acc.data[0], 0.0);
+    assert_close(rt.pages[filtered_idx].acc.data[1], 3.5 * chord_len / 32.0);
+    assert_close(rt.pages[filtered_idx].acc.data[2], 0.5 * chord_len / 32.0);
 
     for (i = 3u; i < rt.pages[energy0_idx].len; ++i) {
-        assert_close(rt.pages[energy0_idx].data[i], 0.0);
-        assert_close(rt.pages[energy1_idx].data[i], 0.0);
-        assert_close(rt.pages[fluence_idx].data[i], 0.0);
-        assert_close(rt.pages[filtered_idx].data[i], 0.0);
+        assert_close(rt.pages[energy0_idx].acc.data[i], 0.0);
+        assert_close(rt.pages[energy1_idx].acc.data[i], 0.0);
+        assert_close(rt.pages[fluence_idx].acc.data[i], 0.0);
+        assert_close(rt.pages[filtered_idx].acc.data[i], 0.0);
     }
 
     osh_scoring_runtime_free(&rt);
@@ -292,23 +292,23 @@ static void test_score_mesh_neutron_id_filter(void) {
     fluence_idx = rt.outputs[0].page_indices[0];
     neutron_idx = rt.outputs[0].page_indices[1];
 
-    assert_close(rt.pages[fluence_idx].data[0], 0.5);
-    assert_close(rt.pages[fluence_idx].data[1], 1.0);
-    assert_close(rt.pages[fluence_idx].data[2], 0.5);
-    assert_close(rt.pages[neutron_idx].data[0], 0.5);
-    assert_close(rt.pages[neutron_idx].data[1], 1.0);
-    assert_close(rt.pages[neutron_idx].data[2], 0.5);
+    assert_close(rt.pages[fluence_idx].acc.data[0], 0.5);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5);
+    assert_close(rt.pages[neutron_idx].acc.data[0], 0.5);
+    assert_close(rt.pages[neutron_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[neutron_idx].acc.data[2], 0.5);
 
     neutron.pdg = OSH_PART_PDG_PROTON;
     rc = osh_scoring_score_step(&rt, &neutron, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
-    assert_close(rt.pages[fluence_idx].data[0], 1.0);
-    assert_close(rt.pages[fluence_idx].data[1], 2.0);
-    assert_close(rt.pages[fluence_idx].data[2], 1.0);
-    assert_close(rt.pages[neutron_idx].data[0], 0.5);
-    assert_close(rt.pages[neutron_idx].data[1], 1.0);
-    assert_close(rt.pages[neutron_idx].data[2], 0.5);
+    assert_close(rt.pages[fluence_idx].acc.data[0], 1.0);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 2.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 1.0);
+    assert_close(rt.pages[neutron_idx].acc.data[0], 0.5);
+    assert_close(rt.pages[neutron_idx].acc.data[1], 1.0);
+    assert_close(rt.pages[neutron_idx].acc.data[2], 0.5);
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
@@ -382,42 +382,42 @@ static void test_score_mesh_dose_and_let_geometric(void) {
      * No Gy conversion applied — DOSE is in MeV/g (SH12A-compatible). */
     dose_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSE);
     ASSERT_TRUE(dose_page != NULL);
-    assert_close(dose_page->data[0], 0.5);
-    assert_close(dose_page->data[1], 1.0);
-    assert_close(dose_page->data[2], 0.5);
+    assert_close(dose_page->acc.data[0], 0.5);
+    assert_close(dose_page->acc.data[1], 1.0);
+    assert_close(dose_page->acc.data[2], 0.5);
 
     /* DOSEGY: same accumulated values, converted to Gy via OSH_MEVG2GY. */
     {
         struct osh_scoring_page_runtime *dosegy_page;
         dosegy_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSEGY);
         ASSERT_TRUE(dosegy_page != NULL);
-        assert_close(dosegy_page->data[0], 0.5 * OSH_MEVG2GY);
-        assert_close(dosegy_page->data[1], 1.0 * OSH_MEVG2GY);
-        assert_close(dosegy_page->data[2], 0.5 * OSH_MEVG2GY);
+        assert_close(dosegy_page->acc.data[0], 0.5 * OSH_MEVG2GY);
+        assert_close(dosegy_page->acc.data[1], 1.0 * OSH_MEVG2GY);
+        assert_close(dosegy_page->acc.data[2], 0.5 * OSH_MEVG2GY);
     }
 
     /* DLET geometric: let_step = de/score_len = 1.0 MeV/cm in all traversed bins */
     dlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DLET);
     ASSERT_TRUE(dlet_page != NULL);
-    assert_close(dlet_page->data[0], 1.0);
-    assert_close(dlet_page->data[1], 1.0);
-    assert_close(dlet_page->data[2], 1.0);
+    assert_close(dlet_page->acc.data[0], 1.0);
+    assert_close(dlet_page->acc.data[1], 1.0);
+    assert_close(dlet_page->acc.data[2], 1.0);
 
     /* TLET geometric: same value as DLET for geometric fallback */
     tlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TLET);
     ASSERT_TRUE(tlet_page != NULL);
-    assert_close(tlet_page->data[0], 1.0);
-    assert_close(tlet_page->data[1], 1.0);
-    assert_close(tlet_page->data[2], 1.0);
+    assert_close(tlet_page->acc.data[0], 1.0);
+    assert_close(tlet_page->acc.data[1], 1.0);
+    assert_close(tlet_page->acc.data[2], 1.0);
 
     /* DQEFF/TQEFF: mat_tables NULL → no contribution, data stays zero */
     dqeff_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DQEFF);
     ASSERT_TRUE(dqeff_page != NULL);
-    assert_close(dqeff_page->data[0], 0.0);
+    assert_close(dqeff_page->acc.data[0], 0.0);
 
     tqeff_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TQEFF);
     ASSERT_TRUE(tqeff_page != NULL);
-    assert_close(tqeff_page->data[0], 0.0);
+    assert_close(tqeff_page->acc.data[0], 0.0);
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
@@ -509,15 +509,15 @@ static void test_score_mesh_dqeff_tqeff(void) {
     dqeff_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DQEFF);
     ASSERT_TRUE(dqeff_page != NULL);
     /* All traversed bins share the same qeff (monoenergetic) */
-    assert_close(dqeff_page->data[0], expected_qeff);
-    assert_close(dqeff_page->data[1], expected_qeff);
-    assert_close(dqeff_page->data[2], expected_qeff);
+    assert_close(dqeff_page->acc.data[0], expected_qeff);
+    assert_close(dqeff_page->acc.data[1], expected_qeff);
+    assert_close(dqeff_page->acc.data[2], expected_qeff);
 
     tqeff_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TQEFF);
     ASSERT_TRUE(tqeff_page != NULL);
-    assert_close(tqeff_page->data[0], expected_qeff);
-    assert_close(tqeff_page->data[1], expected_qeff);
-    assert_close(tqeff_page->data[2], expected_qeff);
+    assert_close(tqeff_page->acc.data[0], expected_qeff);
+    assert_close(tqeff_page->acc.data[1], expected_qeff);
+    assert_close(tqeff_page->acc.data[2], expected_qeff);
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);

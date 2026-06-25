@@ -10,6 +10,7 @@
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 #include "transport/osh_transport_ion_step.h"
+#include "transport/osh_worker_context.h"
 
 /*
  * Transport pool capacity — number of particle histories alive simultaneously.
@@ -47,35 +48,53 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
 /* ---- Wavefront loop ------------------------------------------------------ */
 
 /**
- * @brief Wavefront (BFS) CSDA transport loop for ion primaries.
+ * @brief Transport every history in a worker's assigned range to termination.
  *
  * @details
- * The outer loop runs until all params->nstat primaries have been generated and
- * transported to termination:
+ * The wavefront (BFS) CSDA loop, factored out of osh_transport_ion_run_minimal()
+ * so it can be driven over an explicit history range instead of always the whole
+ * run.  The worker context isolates the *transport-local* mutable state — the
+ * particle pool and per-step batch scratch — for one slice [hist_lo, hist_hi).
+ * That is a necessary building block for parallel execution but not sufficient on
+ * its own: @p beam_rt (its primaries_generated cursor), @p score_rt's shared
+ * accumulators and @p transport_ctx->profile are still shared, so running slices
+ * concurrently would additionally need per-worker or otherwise coordinated beam,
+ * scoring and profile state.  Today a single worker covers [0, nstat), so none of
+ * that sharing is yet exercised.
  *
  *   1. When the pool is empty and primaries remain, fill it from beam_runtime
- *      (up to OSH_TRANSPORT_POOL_CAPACITY primaries).
+ *      (up to the worker's pool capacity).
  *   2. Batch-query zone refs and current-medium boundary distances for all live slots.
  *   3. Build a one-segment current-medium step and call osh_transport_ion_step()
- *      for every live slot.  Particles that
- *      die (energy cutoff, geometry exit, blackhole) are marked by
- *      zeroing e[slot].
+ *      for every live slot.  Particles that die (energy cutoff, geometry exit,
+ *      blackhole) are marked by zeroing e[slot].
  *   4. Compact the pool, removing dead entries.
- *   5. Repeat until primaries_done == params->nstat and pool is empty.
+ *   5. Repeat until every history in the range is done and the pool is empty.
  *
- * The pool capacity controls the trade-off between cache pressure (small) and
- * parallelism (large).  Physics results are independent of capacity.
+ * Each primary is seeded from its global history index (rndoffset + hist_lo +
+ * the worker-local primary index).  For the single worker over [0, nstat) used
+ * today (hist_lo == 0) this reproduces the canonical per-history streams.
+ * Splitting the run into arbitrary sub-ranges and replaying them in any order
+ * reproduces those same streams only once each worker draws primaries from its
+ * own beam cursor (or an explicit global base is threaded through
+ * osh_beam_runtime_fill_pool()); with the single shared cursor today a non-zero
+ * hist_lo would be double-counted, so that per-worker beam-cursor change is
+ * deferred follow-up.  Deposits currently land in the shared master accumulators
+ * in @p score_rt; per-worker private accumulators (@c wctx->accumulators) will
+ * route here once parallel scoring lands.
  */
-enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *transport_ctx,
-                                              struct osh_beam_runtime *beam_rt,
-                                              struct osh_gemca_runtime const *geom_rt,
-                                              struct osh_material_runtime const *material_rt,
-                                              struct osh_scoring_runtime *score_rt) {
+static enum osh_status run_history_range(struct osh_worker_context *wctx,
+                                         struct osh_transport_context *transport_ctx,
+                                         struct osh_beam_runtime *beam_rt,
+                                         struct osh_gemca_runtime const *geom_rt,
+                                         struct osh_material_runtime const *material_rt,
+                                         struct osh_scoring_runtime *score_rt) {
     struct osh_rng_seeding seeding;
-    struct osh_transport_params const *params;
-    struct osh_particle_pool *pool;
-    struct osh_zone_ref *zone_refs;
-    double *dist_batch;
+    struct osh_transport_params const *params = &transport_ctx->params;
+    struct osh_particle_pool *pool = wctx->pool;
+    struct osh_zone_ref *zone_refs = wctx->zone_refs;
+    double *dist_batch = wctx->dist_batch;
+    size_t const nstat = wctx->hist_hi - wctx->hist_lo; /* histories in this range */
     size_t primaries_done;
     size_t primaries_completed;
     size_t n_fill;
@@ -87,78 +106,49 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     size_t progress_chunk;
     size_t next_report_completed;
     struct osh_step_segment step_seg;
-    struct osh_transport_profile *prof;
+    struct osh_transport_profile *prof = transport_ctx->profile;
     double t_start;
     double t_last_report;
     double t_phase = 0.0;
     enum osh_status rc = OSH_OK;
 
-    if (!transport_ctx || !beam_rt || !geom_rt || !material_rt || !score_rt) {
-        return OSH_EINVAL;
-    }
-    if (!transport_ctx->ion_pool || !transport_ctx->zone_refs || !transport_ctx->dist_batch) {
-        return OSH_EINVAL;
-    }
-    prof = transport_ctx->profile;
-    params = &transport_ctx->params;
-    if (params->nstat == 0u) {
-        return OSH_EINVAL;
-    }
-    if (params->deltae <= 0.0f || params->deltae >= 1.0f) {
-        return OSH_EINVAL;
-    }
-    rc = validate_transport_modes(transport_ctx);
-    if (rc != OSH_OK) {
-        return rc;
-    }
-
-    /* Use the pre-allocated pool and geometry scratch from the transport context.
-     * Both were allocated at simulation create time (see simulation_alloc_pools).
-     * Capacity is a pure performance knob: per-history RNG streams make physics
-     * identical across capacities; scored results match up to floating-point
-     * summation order in the shared scoring accumulators. */
-    pool = transport_ctx->ion_pool;
-    pool->n = 0u;
-    zone_refs = transport_ctx->zone_refs;
-    dist_batch = transport_ctx->dist_batch;
-
     /* Per-history seeding context.  Every primary derives independent BEAM and
-     * PHYSICS streams from its global history index (rndoffset + prim_idx), so a
-     * history sees the same random draws on any pool capacity, thread, or rank.
-     * (Scored output is therefore invariant up to floating-point summation order
-     * in the shared scoring accumulators, not byte-for-byte.)  rndoffset is the
-     * global history-index base: disjoint ranges (e.g. one per MPI rank) yield
-     * disjoint, non-overlapping streams.  Keeping BEAM and PHYSICS on separate
-     * purposes makes NUCRE/MSCAT/STRAGG comparisons launch the same primary
-     * histories. */
+     * PHYSICS streams from its global history index (rndoffset + hist_lo +
+     * prim_idx), so a history sees the same random draws on any pool capacity,
+     * thread, or rank.  (Scored output is therefore invariant up to
+     * floating-point summation order in the shared scoring accumulators, not
+     * byte-for-byte.)  Offsetting the base by hist_lo gives this worker a
+     * disjoint, non-overlapping stream range.  Keeping BEAM and PHYSICS on
+     * separate purposes makes NUCRE/MSCAT/STRAGG comparisons launch the same
+     * primary histories. */
     seeding.type = OSH_RNG_TYPE_PCG32;
     seeding.seed = (uint64_t) params->rndseed;
-    seeding.hist_base = (uint64_t) params->rndoffset;
+    seeding.hist_base = (uint64_t) params->rndoffset + (uint64_t) wctx->hist_lo;
 
     /* Total step budget: nstat × max_steps, capped at SIZE_MAX to avoid overflow. */
-    if (params->nstat > (size_t) -1 / OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY) {
+    if (nstat > (size_t) -1 / OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY) {
         step_budget = (size_t) -1;
     } else {
-        step_budget = params->nstat * (size_t) OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY;
+        step_budget = nstat * (size_t) OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY;
     }
     steps_taken = 0u;
     primaries_done = 0u;
     last_report_completed = 0u;
-    progress_chunk = transport_progress_chunk_size(params->nstat);
+    progress_chunk = transport_progress_chunk_size(nstat);
     next_report_completed = progress_chunk;
     t_start = osh_monotonic_seconds();
     t_last_report = t_start;
 
-    report_transport_progress(transport_ctx->diag, 0u, params->nstat, 0.0);
+    report_transport_progress(transport_ctx->diag, 0u, nstat, 0.0);
 
-    while (primaries_done < params->nstat || pool->n > 0u) {
+    while (primaries_done < nstat || pool->n > 0u) {
         if (prof) {
             prof->iterations++;
         }
 
         /* Fill the pool when it is empty and primaries remain */
-        if (pool->n == 0u && primaries_done < params->nstat) {
-            n_fill = params->nstat - primaries_done;
+        if (pool->n == 0u && primaries_done < nstat) {
+            n_fill = nstat - primaries_done;
             if (n_fill > pool->capacity) {
                 n_fill = pool->capacity;
             }
@@ -264,16 +254,15 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             int const chunk_reached = (primaries_completed >= next_report_completed);
             int const min_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S);
             int const max_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MAX_INTERVAL_S);
-            if (primaries_completed == params->nstat || (chunk_reached && min_interval_elapsed)
-                || max_interval_elapsed) {
-                report_transport_progress(transport_ctx->diag, primaries_completed, params->nstat, t_now - t_start);
+            if (primaries_completed == nstat || (chunk_reached && min_interval_elapsed) || max_interval_elapsed) {
+                report_transport_progress(transport_ctx->diag, primaries_completed, nstat, t_now - t_start);
                 last_report_completed = primaries_completed;
                 t_last_report = t_now;
-                while (next_report_completed <= primaries_completed && next_report_completed < params->nstat) {
+                while (next_report_completed <= primaries_completed && next_report_completed < nstat) {
                     next_report_completed += progress_chunk;
                 }
-                if (next_report_completed > params->nstat) {
-                    next_report_completed = params->nstat;
+                if (next_report_completed > nstat) {
+                    next_report_completed = nstat;
                 }
             }
         }
@@ -282,7 +271,7 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
     {
         double const t_end = osh_monotonic_seconds();
         double const total_s = t_end - t_start;
-        double const avg_pps = (total_s > 0.0) ? ((double) params->nstat / total_s) : 0.0;
+        double const avg_pps = (total_s > 0.0) ? ((double) nstat / total_s) : 0.0;
         unsigned int const th = (unsigned int) (total_s / 3600.0);
         unsigned int const tm = (unsigned int) ((total_s - th * 3600.0) / 60.0);
         unsigned int const ts = (unsigned int) (total_s - th * 3600.0 - tm * 60.0);
@@ -292,14 +281,14 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
             prof->steps = (unsigned long long) steps_taken;
         }
 
-        if (last_report_completed < params->nstat) {
-            report_transport_progress(transport_ctx->diag, params->nstat, params->nstat, total_s);
+        if (last_report_completed < nstat) {
+            report_transport_progress(transport_ctx->diag, nstat, nstat, total_s);
         }
 
         if (th > 0u) {
             OSH_DIAG_INFOF(transport_ctx->diag,
                            "Transport complete: %zu primaries in %u:%02u:%02u  (avg %.0f primaries/s)",
-                           params->nstat,
+                           nstat,
                            th,
                            tm,
                            ts,
@@ -307,18 +296,75 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         } else if (tm > 0u) {
             OSH_DIAG_INFOF(transport_ctx->diag,
                            "Transport complete: %zu primaries in %02u:%02u  (avg %.0f primaries/s)",
-                           params->nstat,
+                           nstat,
                            tm,
                            ts,
                            avg_pps);
         } else {
             OSH_DIAG_INFOF(transport_ctx->diag,
                            "Transport complete: %zu primaries in %u s  (avg %.0f primaries/s)",
-                           params->nstat,
+                           nstat,
                            ts,
                            avg_pps);
         }
     }
+
+    return rc;
+}
+
+/* ---- Public entry: single-worker run over the whole history range -------- */
+
+/**
+ * @brief Transport all primaries for a run (single worker over [0, nstat)).
+ *
+ * @details
+ * Validates the run parameters and transports the whole history range [0, nstat)
+ * in one worker.  That worker borrows the simulation's pre-allocated ion pool and
+ * geometry scratch (transport_ctx->ion_pool / zone_refs / dist_batch, sized at
+ * simulation-create time and reused across the ion and neutron passes) through
+ * osh_worker_context_attach() — it does not allocate its own.  Partitioning the
+ * run across several workers (threads/ranks/profiling replicas) is a matter of
+ * giving each a context over a disjoint sub-range with its own private pool and
+ * merging their scoring accumulators; run_history_range() itself does not change.
+ *
+ * The pool capacity is a pure performance knob: per-history RNG streams keep
+ * scored results invariant (up to summation order) at any capacity.
+ */
+enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *transport_ctx,
+                                              struct osh_beam_runtime *beam_rt,
+                                              struct osh_gemca_runtime const *geom_rt,
+                                              struct osh_material_runtime const *material_rt,
+                                              struct osh_scoring_runtime *score_rt) {
+    struct osh_worker_context wctx;
+    struct osh_transport_params const *params;
+    enum osh_status rc;
+
+    if (!transport_ctx || !beam_rt || !geom_rt || !material_rt || !score_rt) {
+        return OSH_EINVAL;
+    }
+    if (!transport_ctx->ion_pool || !transport_ctx->zone_refs || !transport_ctx->dist_batch) {
+        return OSH_EINVAL;
+    }
+    params = &transport_ctx->params;
+    if (params->nstat == 0u) {
+        return OSH_EINVAL;
+    }
+    if (params->deltae <= 0.0f || params->deltae >= 1.0f) {
+        return OSH_EINVAL;
+    }
+    rc = validate_transport_modes(transport_ctx);
+    if (rc != OSH_OK) {
+        return rc;
+    }
+
+    /* Single-worker baseline: borrow the simulation's pre-allocated ion pool and
+     * geometry scratch instead of allocating a private set, and reset the reused
+     * pool to empty before transporting this run's [0, nstat). */
+    transport_ctx->ion_pool->n = 0u;
+    osh_worker_context_attach(
+        &wctx, 0u, params->nstat, transport_ctx->ion_pool, transport_ctx->zone_refs, transport_ctx->dist_batch);
+
+    rc = run_history_range(&wctx, transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
 
     return rc;
 }

@@ -9,6 +9,7 @@
 #include "common/raytrace/osh_raytrace.h"
 #include "openshieldhit/const.h"
 #include "openshieldhit/scoring.h"
+#include "scoring/runtime/osh_scoring_accumulator.h"
 
 /* Scratch record built during the first compile pass; sorted by geometry+kind
  * so pages that share a geometry and scorer type end up in the same hot group. */
@@ -577,10 +578,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
             free(rt->pages[i].quantity);
             free(rt->pages[i].flat_rules);
             free(rt->pages[i].settings);
-            free(rt->pages[i].data);
-            free(rt->pages[i].data_var);
-            free(rt->pages[i].data2);
-            free(rt->pages[i].data2_var);
+            osh_scoring_accumulator_free(&rt->pages[i].acc);
         }
     }
     free(rt->pages);
@@ -904,17 +902,9 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             dst_page->len = dst_page->diff_stride;
         }
 
-        dst_page->data = (double *) calloc(dst_page->len ? dst_page->len : 1u, sizeof(*dst_page->data));
-        if (!dst_page->data) {
-            rc = OSH_ENOMEM;
+        rc = osh_scoring_accumulator_alloc(&dst_page->acc, dst_page->len, dst_page->has_data2);
+        if (rc != OSH_OK) {
             goto fail;
-        }
-        if (dst_page->has_data2) {
-            dst_page->data2 = (double *) calloc(dst_page->len ? dst_page->len : 1u, sizeof(*dst_page->data2));
-            if (!dst_page->data2) {
-                rc = OSH_ENOMEM;
-                goto fail;
-            }
         }
 
         if (src_page->nfilter_names > 0u) {

@@ -1,5 +1,6 @@
 add_library(osh_scoring
     osh_scoring.c
+    runtime/osh_scoring_accumulator.c
     runtime/osh_scoring_compile.c
     runtime/osh_scoring_filter_runtime.c
     runtime/osh_scoring_postprocess.c
