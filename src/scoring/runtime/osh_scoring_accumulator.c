@@ -18,6 +18,7 @@ enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *ac
 
     acc->data = (double *) calloc(n, sizeof(*acc->data));
     if (!acc->data) {
+        acc->len = 0u;
         return OSH_ENOMEM;
     }
     if (want_data2) {

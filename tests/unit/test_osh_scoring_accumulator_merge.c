@@ -16,6 +16,7 @@
  */
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "openshieldhit/status.h"
 #include "scoring/runtime/osh_scoring_accumulator.h"

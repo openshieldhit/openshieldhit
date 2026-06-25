@@ -8,6 +8,9 @@ void osh_worker_context_attach(struct osh_worker_context *wctx,
                                struct osh_particle_pool *pool,
                                struct osh_zone_ref *zone_refs,
                                double *dist_batch) {
+    if (!wctx) {
+        return;
+    }
     wctx->hist_lo = hist_lo;
     wctx->hist_hi = hist_hi;
     wctx->capacity = pool ? pool->capacity : 0u;
