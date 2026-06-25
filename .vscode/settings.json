@@ -18,6 +18,9 @@
     "C_Cpp.workspaceParsingPriority": "low",
     "C_Cpp.intelliSenseCacheSize": 512,
     "C_Cpp.codeAnalysis.runAutomatically": false,
+    "cmake.parallelJobs": 0,
+    "cmake.ctest.allowParallelJobs": true,
+    "cmake.ctest.parallelJobs": 0,
     "editor.defaultFormatter": null,
     "chat.tools.terminal.autoApprove": {
         "cmake": true,

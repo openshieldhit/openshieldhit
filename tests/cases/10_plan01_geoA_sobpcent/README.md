@@ -8,6 +8,8 @@ Purpose:
 
 - keep a runnable OpenSHIELDHIT version of the SH12A setup in-tree
 - preserve the differential scorers used on this branch
+- provide an XZ neutron-fluence map for manual inspection of transported
+  secondary neutrons
 - emit SH12A-style multi-page BDO outputs that can be postprocessed with
   `convertmc`
 
@@ -45,7 +47,8 @@ The `/tmp/plan01_geoA` directory does not need to exist beforehand.
 ```
 
 This should generate files such as `NB_Z_narrow_dose_p1.dat`,
-`NB_Z_narrow_LET_p1.dat`, and the corresponding `NB_target*.dat` files.
+`NB_Z_narrow_LET_p1.dat`, `NB_XZ_neutron_fluence_p1.dat`, and the
+corresponding `NB_target*.dat` files.
 
 3. Generate a multi-page PDF overlay report against the imported SH12A reference:
 
@@ -58,3 +61,7 @@ per reference scorer and descriptive titles.
 
 Differential plots in the report are shown on log-log axes by default for
 easier manual inspection.
+
+The neutron-fluence map scores transported neutron steps only.  Neutron
+kerma and point-like local deposits are intentionally not included yet; those
+need the shared point-deposit scoring API.

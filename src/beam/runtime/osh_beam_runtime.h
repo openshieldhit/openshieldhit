@@ -113,11 +113,11 @@ enum osh_status osh_beam_compile(struct beam_workspace const *workspace, struct 
  * @details
  * Releases the runtime struct.  For PHSP mode the MCPL file handle is
  * closed.  The workspace is not freed (it is not owned by the runtime).
- * Safe to call with NULL.
+ * Safe to call with NULL (or *rt NULL).  Sets *rt to NULL after freeing.
  *
- * @param[in] rt  Runtime to free; may be NULL.
+ * @param[in,out] rt  Pointer to the runtime pointer; *rt is set to NULL.
  */
-void osh_beam_runtime_free(struct osh_beam_runtime *rt);
+void osh_beam_runtime_free(struct osh_beam_runtime **rt);
 
 /* ---- Primary generation -------------------------------------------------- */
 

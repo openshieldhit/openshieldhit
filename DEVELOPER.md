@@ -247,13 +247,13 @@ cmake --preset release
 Build everything:
 
 ```bash
-cmake --build --preset release
+cmake --build --preset release --parallel
 ```
 
 Build one target:
 
 ```bash
-cmake --build --preset release --target gemca_raycast_bench
+cmake --build --preset release --parallel --target gemca_raycast_bench
 ```
 
 Run tests:

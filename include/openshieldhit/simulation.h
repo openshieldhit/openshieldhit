@@ -107,7 +107,9 @@ enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int ena
  * @param[in] capacity  Number of simultaneous histories; 0 selects the
  *                      compiled default.  Values above nstat are clamped.
  *
- * @returns OSH_OK on success, OSH_EINVAL when @p sim is NULL.
+ * @returns OSH_OK on success, OSH_EINVAL when @p sim is NULL, OSH_ENOMEM
+ *          when pool reallocation fails (simulation is then unusable and must
+ *          be freed with osh_simulation_free()).
  */
 enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, size_t capacity);
 

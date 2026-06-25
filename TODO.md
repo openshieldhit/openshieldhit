@@ -42,6 +42,46 @@
 - [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
 - [ ] Batch ion-step phases around runtime lookup hot spots
 
+## Neutron Transport (issue #154, merged via branch 154-neutron-transport-minimal-model)
+
+Fast-neutron transport is implemented as a condensed model.  Neutrons produced
+by abrasion and Fermi break-up are banked in the neutron pool and drained by
+`osh_transport_neutron_run()` after each ion pass.
+
+### What is implemented
+
+- **Tier-1 cross sections**: condensed JEFF-4.0 PENDF0K tables (31-point irregular
+  grid, 1 meV–20 MeV) in `osh_neutron_xsec_data.h` for 35 nuclides covering
+  tissue, air, bone, detectors, and shielding materials.
+  Condensing automated by `tools/condense_neutron_xsec.py`.
+- **Tier-2 fallback**: Tripathi `σ_R` + geometric `σ_el` for any (Z,A) not in Tier-1.
+- **Neutron pool**: full SoA (pos, dir, energy, weight, prim_idx, gen, RNG stream).
+  Capacity = nstat; drained in wavefront batches sized to the geometry-scratch buffer.
+- **Transport loop**: GEMCA boundary distances, free-path sampling, reaction dispatch.
+- **Reaction channels**: elastic (isotropic CM; n-p recoil proton returned),
+  `(n,γ)` capture, `(n,p)`/`(n,α)` two-body, compound nucleus → Fermi break-up
+  or heavy-A sink.
+- **Natural element isotope expansion**: A=0 material entries expanded to all
+  naturally occurring isotopes with abundance-weighted number densities at
+  nuclear-handler compile time.
+- **Family scheduler integration**: ion pass fills the neutron pool; scheduler
+  drains it; pool is sized to accumulate across all ion wavefront batches.
+
+### Open items
+
+- [ ] Charged secondaries from neutron reactions (n,p)/(n,α) fed back into the
+      ion transport family (currently deposited locally)
+- [ ] Local neutron energy deposits scored (point-deposit scoring path)
+- [ ] Thermal-neutron physics below 1 eV (separate issue #178)
+- [ ] Validation: compare neutron fluence to FLUKA or TOPAS reference for
+      130 MeV protons on water
+
+### Separate issues (not in this branch)
+
+- Neutron kerma scorer (fluence × kerma factor, like sh12A) — a scorer, not
+  transport; independent of the above
+- U-235/238 fission kinematics
+
 ## Scoring
 
 - [ ] Cylindrical `(R,Z)` mesh scoring

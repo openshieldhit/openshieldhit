@@ -58,7 +58,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 ```
 
 ```bash
-cmake --build build --target package
+cmake --build build --parallel --target package
 ```
 
 Install DEB package:
@@ -79,7 +79,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 ```
 
 ```bash
-cmake --build build --target package
+cmake --build build --parallel --target package
 ```
 
 ### Windows
@@ -91,7 +91,7 @@ cmake -S . -B build
 
 Build:
 ```bash
-cmake --build build --config Release --target package
+cmake --build build --config Release --parallel --target package
 ```
 
 ## Package Contents

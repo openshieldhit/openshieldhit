@@ -9,14 +9,14 @@ Release build (optimised, no debug symbols):
 
 ```bash
 cmake --preset release
-cmake --build --preset release
+cmake --build --preset release --parallel
 ```
 
 Debug build:
 
 ```bash
 cmake --preset debug
-cmake --build --preset debug
+cmake --build --preset debug --parallel
 ```
 
 Coverage build:

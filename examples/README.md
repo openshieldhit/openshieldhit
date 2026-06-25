@@ -17,10 +17,10 @@ Examples 03 and 04 have no additional dependencies.
 ## Building
 
 ```bash
-cmake --preset release && cmake --build --preset release
+cmake --preset release && cmake --build --preset release --parallel
 ```
 
-Binaries land in `build_rel/bin/`.
+Binaries land in `build/bin/`.
 
 ## 01 — SDL geometry viewer
 
@@ -28,8 +28,8 @@ Interactive GEMCA geometry inspection window.  Several geometry files are
 included; the default is a simple RPP arrangement:
 
 ```bash
-build_rel/bin/gemca_sdl_viewer examples/01_sdl_viewer/geo.dat
-build_rel/bin/gemca_sdl_viewer examples/01_sdl_viewer/geo_RCC03.dat
+build/bin/gemca_sdl_viewer examples/01_sdl_viewer/geo.dat
+build/bin/gemca_sdl_viewer examples/01_sdl_viewer/geo_RCC03.dat
 ```
 
 ## 02 — BNCT cell geometry
@@ -37,7 +37,7 @@ build_rel/bin/gemca_sdl_viewer examples/01_sdl_viewer/geo_RCC03.dat
 SDL visualisation of a BNCT cell geometry:
 
 ```bash
-build_rel/bin/bnct_sdl examples/02_bnct/geo_cell.dat
+build/bin/bnct_sdl examples/02_bnct/geo_cell.dat
 ```
 
 ## 03 — GEMCA benchmark
@@ -46,7 +46,7 @@ Geometry evaluation throughput benchmark.  Prints ray-body intersection rates
 to stdout; useful for comparing algorithm variants or hardware:
 
 ```bash
-build_rel/bin/gemca_bench
+build/bin/gemca_bench
 ```
 
 ## 04 — Raycast benchmark
@@ -54,5 +54,5 @@ build_rel/bin/gemca_bench
 Raycasting throughput benchmark over a voxel grid:
 
 ```bash
-build_rel/bin/gemca_raycast_bench
+build/bin/gemca_raycast_bench
 ```

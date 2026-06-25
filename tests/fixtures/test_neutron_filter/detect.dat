@@ -1,0 +1,17 @@
+# Minimal scoring fixture for a neutron-filtered fluence page.
+
+Filter
+    Name Neutrons
+    ID = 2112
+
+Geometry Mesh
+    Name MyMesh
+    X -0.5 0.5 1
+    Y -0.5 0.5 1
+    Z  0.0 3.0 3
+
+Output
+    Filename NB_msh_neutron_fluence.bdo
+    Geo MyMesh
+    Quantity Fluence
+    Quantity Fluence Neutrons
