@@ -7,14 +7,21 @@
 | `unit::*` | `tests/unit/` | Isolated unit tests — single functions or modules, fast |
 | `cases::*` | `tests/cases/` | End-to-end cases — full parse + transport + score, slower |
 
+Run the full suite:
+
 ```bash
-# all tests
 cd build && ctest --output-on-failure -j4
+```
 
-# only unit tests
+Run only the unit tests:
+
+```bash
 cd build && ctest -L unit --output-on-failure
+```
 
-# only end-to-end cases
+Run only the end-to-end cases:
+
+```bash
 cd build && ctest -L cases --output-on-failure
 ```
 
