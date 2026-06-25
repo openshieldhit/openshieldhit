@@ -50,9 +50,15 @@ for the interactive geometry viewers in `examples/` (not shipped in releases):
 
 ## How to build
 
+Optimised build (`-O3`):
+
 ```bash
-cmake --preset release && cmake --build --preset release   # optimised (-O3)
-cmake --preset debug   && cmake --build --preset debug     # debug symbols, -Og
+cmake --preset release && cmake --build --preset release --parallel
+```
+
+Debug build (unoptimised, `-O0 -g`):
+```bash
+cmake --preset debug && cmake --build --preset debug --parallel
 ```
 
 Available presets: `debug`, `release`, `relwithdebinfo`, `prof`.
@@ -67,10 +73,22 @@ Useful cache variables for development:
 
 ## Install
 
+Install to the default prefix (`/usr/local/bin/openshieldhit`):
+
 ```bash
-sudo cmake --install build                   # → /usr/local/bin/openshieldhit
-sudo cmake --install build --prefix /usr     # → /usr/bin/openshieldhit
-cmake --install build --prefix ~/.local      # no sudo, user-local install
+sudo cmake --install build
+```
+
+Install to `/usr` (`/usr/bin/openshieldhit`):
+
+```bash
+sudo cmake --install build --prefix /usr
+```
+
+Install into your home directory — no sudo needed (`~/.local/bin/openshieldhit`):
+
+```bash
+cmake --install build --prefix ~/.local
 ```
 
 Installs the main executable and documentation.
@@ -80,11 +98,23 @@ Public library/header installation is still incomplete.
 
 The main deliverable is the `openshieldhit` (or `openshieldhit.exe` on Windows)
 executable built from `src/apps/osh/`.  It reads four plain-text input files from
-a working directory and produces scored output:
+a working directory and produces scored output.
+
+Run a case (reads `geo.dat`, `beam.dat`, `mat.dat`, and `detect.dat`):
 
 ```bash
-openshieldhit path/to/case/          # reads geo.dat, beam.dat, mat.dat, detect.dat
-openshieldhit --dry-run path/to/case/    # parse and load inputs, skip transport
+openshieldhit path/to/case/
+```
+
+Parse and load inputs only, skip transport:
+
+```bash
+openshieldhit --dry-run path/to/case/
+```
+
+Show all command-line options:
+
+```bash
 openshieldhit --help
 ```
 
@@ -156,8 +186,8 @@ struct osh_scoring_workspace  *scoring = /* ... */;
 struct osh_simulation *sim;
 osh_simulation_create(beam, geo, mat, scoring, &sim);
 
-// 3. Run transport and save outputs
-osh_simulation_run(sim, "/path/to/output/");
+// 3. Run transport
+osh_simulation_run(sim);
 
 // 4. Release — cold workspaces are NOT freed here, caller owns them
 osh_simulation_free(sim);
@@ -186,9 +216,20 @@ Nuclear physics:
   scored at generation ≥ 1
 - abrasion + Fermi break-up — fast nucleon knock-out followed by statistical
   de-excitation of the light residual (A ≤ 16) into n, p, d, t, ³He, α;
-  charged products are transported, neutrons collected in the neutron pool.
+  charged products are transported, neutrons pushed into the neutron pool with
+  full phase-space (position, direction, energy, RNG stream, generation).
   The break-up is a sequential-binary semiphysical placeholder for the full
   simultaneous n-body Fermi model
+
+Fast-neutron transport (condensed model):
+
+- JEFF-4.0 PENDF0K cross-section tables condensed into a C header for 35
+  nuclides; log-log interpolation; optical/geometric fallback for unlisted nuclides
+- neutron pool in full SoA layout; produced neutrons queued and transported
+- reaction sampling: elastic, radiative capture, (n,p)/(n,α), compound nucleus
+  routed to Fermi break-up or heavy-A sink
+- straight-line wavefront transport loop with family-scheduler integration
+- natural elements expanded to per-isotope entries with abundance-weighted number densities
 
 CT voxel transport is working end-to-end:
 
@@ -207,7 +248,7 @@ Not yet implemented:
 - full simultaneous n-body Fermi break-up and SMM — current break-up is a
   sequential-binary approximation; heavy residues (A > 16) are counted but not
   de-excited
-- neutron transport
+- neutron energy scoring and ion feedback from neutron reactions
 - phase-space (PHSP) source and output support
 - ridge filter / range modulator support
 - RTSTRUCT import for structure-based scoring

@@ -238,17 +238,27 @@ Do not use `/tmp`, `mkdtemp`, or `getpid`-based naming.
 | `relwithdebinfo` | `build-rel/` | `-O3 -g` | Optimised benchmarking with symbols |
 | `prof` | `build_prof/` | `-O3 -g -fno-omit-frame-pointer` | `perf record` / flamegraphs |
 
+Configure (first time, or after `CMakeLists` changes):
+
 ```bash
-# Configure (first time, or after CMakeLists changes)
 cmake --preset release
+```
 
-# Build everything
-cmake --build --preset release
+Build everything:
 
-# Build one target
-cmake --build --preset release --target gemca_raycast_bench
+```bash
+cmake --build --preset release --parallel
+```
 
-# Run tests
+Build one target:
+
+```bash
+cmake --build --preset release --parallel --target gemca_raycast_bench
+```
+
+Run tests:
+
+```bash
 ctest --preset debug
 ```
 

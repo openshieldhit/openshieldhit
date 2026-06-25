@@ -40,12 +40,14 @@ struct osh_worker_context {
     size_t hist_lo; /* First global history index (inclusive). */
     size_t hist_hi; /* One past the last global history index (exclusive). */
 
-    /* Per-worker live-history pool and geometry-query scratch, all sized to
-     * @ref capacity and never resized on the hot path. */
+    /* Transport-local pool and geometry-query scratch for this worker.  In the
+     * single-worker baseline these are borrowed from the simulation's
+     * pre-allocated buffers (see osh_worker_context_attach); a future parallel
+     * worker would instead own a private set.  Never resized on the hot path. */
     size_t capacity;                /* Pool capacity (a pure performance knob). */
-    struct osh_particle_pool *pool; /* Live primaries/secondaries for this worker. */
-    struct osh_zone_ref *zone_refs; /* Batch zone-reference scratch, length @ref capacity. */
-    double *dist_batch;             /* Batch boundary-distance scratch, length @ref capacity. */
+    struct osh_particle_pool *pool; /* Live primaries/secondaries for this worker (borrowed). */
+    struct osh_zone_ref *zone_refs; /* Batch zone-reference scratch, length >= @ref capacity (borrowed). */
+    double *dist_batch;             /* Batch boundary-distance scratch, length >= @ref capacity (borrowed). */
 
     /* Future per-worker private scoring memory.  When non-NULL the worker will
      * deposit into this private set and the driver will fold it into the shared
@@ -58,29 +60,31 @@ struct osh_worker_context {
 };
 
 /**
- * @brief Allocate a worker context for the history range [@p hist_lo, @p hist_hi).
+ * @brief Populate a worker context for the history range [@p hist_lo, @p hist_hi),
+ *        borrowing the caller's pre-allocated pool and geometry scratch.
  *
  * @details
- * Allocates the pool and batch scratch.  The pool capacity is
- * min(@p requested_capacity, range size) — never more slots than histories —
- * with @p requested_capacity of 0 meaning "use the range size".  The private
- * scoring accumulators are left NULL (shared-master scoring, the current
- * baseline).
+ * The single-worker baseline does not allocate: it points the context at the
+ * simulation's pre-allocated ion pool and scratch (transport_ctx->ion_pool /
+ * zone_refs / dist_batch), so nothing here is owned and there is nothing to free.
+ * @ref capacity is taken from @p pool->capacity; the scratch arrays must be at
+ * least that long.  The private scoring accumulators are left NULL (shared-master
+ * scoring, the current baseline).  A future parallel worker that owns a private
+ * pool would use a separate owning constructor.
  *
- * @param[out] wctx               Context to populate (overwritten; must be non-NULL).
- * @param[in]  hist_lo            Inclusive lower bound of the assigned range.
- * @param[in]  hist_hi            Exclusive upper bound; must be > @p hist_lo.
- * @param[in]  requested_capacity Desired pool capacity, or 0 for the range size.
- * @returns OSH_OK on success, OSH_EINVAL on a bad range/NULL, OSH_ENOMEM on
- *          allocation failure (nothing leaks; @p wctx is left freed).
+ * @param[out] wctx       Context to populate (overwritten; must be non-NULL).
+ * @param[in]  hist_lo    Inclusive lower bound of the assigned range.
+ * @param[in]  hist_hi    Exclusive upper bound; must be > @p hist_lo.
+ * @param[in]  pool       Borrowed live-history pool (must be non-NULL).
+ * @param[in]  zone_refs  Borrowed zone-reference scratch (length >= pool->capacity).
+ * @param[in]  dist_batch Borrowed boundary-distance scratch (length >= pool->capacity).
  */
-enum osh_status
-osh_worker_context_init(struct osh_worker_context *wctx, size_t hist_lo, size_t hist_hi, size_t requested_capacity);
-
-/**
- * @brief Release everything owned by a worker context.  Safe on NULL/zeroed.
- */
-void osh_worker_context_free(struct osh_worker_context *wctx);
+void osh_worker_context_attach(struct osh_worker_context *wctx,
+                               size_t hist_lo,
+                               size_t hist_hi,
+                               struct osh_particle_pool *pool,
+                               struct osh_zone_ref *zone_refs,
+                               double *dist_batch);
 
 #ifdef __cplusplus
 }

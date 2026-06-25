@@ -1,7 +1,5 @@
 #include "transport/osh_transport_ion.h"
 
-#include <stdlib.h>
-
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
@@ -33,11 +31,6 @@
  * through realistic geometry; a proton Bragg peak typically takes O(1 000)
  * steps with DELTAE = 0.02.
  */
-/* Overridable from the build line (e.g. -DOSH_TRANSPORT_POOL_CAPACITY=256)
- * so the benchmark harness can sweep capacities without editing sources. */
-#ifndef OSH_TRANSPORT_POOL_CAPACITY
-#define OSH_TRANSPORT_POOL_CAPACITY 4096u
-#endif
 #define OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY 1000000u
 
 #define OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S 1.0
@@ -79,10 +72,16 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  *   5. Repeat until every history in the range is done and the pool is empty.
  *
  * Each primary is seeded from its global history index (rndoffset + hist_lo +
- * local index), so splitting [0, nstat) into ranges and running them in any
- * order yields the same per-history random streams.  Deposits currently land in
- * the shared master accumulators in @p score_rt; per-worker private accumulators
- * (@c wctx->accumulators) will route here once parallel scoring lands.
+ * the worker-local primary index).  For the single worker over [0, nstat) used
+ * today (hist_lo == 0) this reproduces the canonical per-history streams.
+ * Splitting the run into arbitrary sub-ranges and replaying them in any order
+ * reproduces those same streams only once each worker draws primaries from its
+ * own beam cursor (or an explicit global base is threaded through
+ * osh_beam_runtime_fill_pool()); with the single shared cursor today a non-zero
+ * hist_lo would be double-counted, so that per-worker beam-cursor change is
+ * deferred follow-up.  Deposits currently land in the shared master accumulators
+ * in @p score_rt; per-worker private accumulators (@c wctx->accumulators) will
+ * route here once parallel scoring lands.
  */
 static enum osh_status run_history_range(struct osh_worker_context *wctx,
                                          struct osh_transport_context *transport_ctx,
@@ -319,12 +318,14 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
  * @brief Transport all primaries for a run (single worker over [0, nstat)).
  *
  * @details
- * Validates the run parameters, constructs one @ref osh_worker_context that owns
- * the live-history pool and per-step scratch, and drives it over the full
- * history range via run_history_range().  Partitioning the run across several
- * workers (threads/ranks/profiling replicas) is a matter of constructing several
- * contexts over disjoint sub-ranges and merging their scoring accumulators — the
- * transport loop itself does not change.
+ * Validates the run parameters and transports the whole history range [0, nstat)
+ * in one worker.  That worker borrows the simulation's pre-allocated ion pool and
+ * geometry scratch (transport_ctx->ion_pool / zone_refs / dist_batch, sized at
+ * simulation-create time and reused across the ion and neutron passes) through
+ * osh_worker_context_attach() — it does not allocate its own.  Partitioning the
+ * run across several workers (threads/ranks/profiling replicas) is a matter of
+ * giving each a context over a disjoint sub-range with its own private pool and
+ * merging their scoring accumulators; run_history_range() itself does not change.
  *
  * The pool capacity is a pure performance knob: per-history RNG streams keep
  * scored results invariant (up to summation order) at any capacity.
@@ -336,10 +337,12 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
                                               struct osh_scoring_runtime *score_rt) {
     struct osh_worker_context wctx;
     struct osh_transport_params const *params;
-    size_t requested_capacity;
     enum osh_status rc;
 
     if (!transport_ctx || !beam_rt || !geom_rt || !material_rt || !score_rt) {
+        return OSH_EINVAL;
+    }
+    if (!transport_ctx->ion_pool || !transport_ctx->zone_refs || !transport_ctx->dist_batch) {
         return OSH_EINVAL;
     }
     params = &transport_ctx->params;
@@ -354,17 +357,15 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         return rc;
     }
 
-    /* Runtime override (params->pool_capacity) when set, else the compiled
-     * default; the worker caps it at the range size. */
-    requested_capacity = (params->pool_capacity != 0u) ? params->pool_capacity : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
-    rc = osh_worker_context_init(&wctx, 0u, params->nstat, requested_capacity);
-    if (rc != OSH_OK) {
-        return rc;
-    }
+    /* Single-worker baseline: borrow the simulation's pre-allocated ion pool and
+     * geometry scratch instead of allocating a private set, and reset the reused
+     * pool to empty before transporting this run's [0, nstat). */
+    transport_ctx->ion_pool->n = 0u;
+    osh_worker_context_attach(
+        &wctx, 0u, params->nstat, transport_ctx->ion_pool, transport_ctx->zone_refs, transport_ctx->dist_batch);
 
     rc = run_history_range(&wctx, transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
 
-    osh_worker_context_free(&wctx);
     return rc;
 }
 

@@ -45,8 +45,11 @@ struct osh_rng; /* per-slot RNG state; full definition in random/osh_rng.h */
  * auto-vectorized by the compiler without gather/scatter instructions.
  *
  * Ownership and lifetime:
- *   - All arrays are allocated in a single contiguous slab by
- *     osh_particle_pool_alloc() and freed by osh_particle_pool_free().
+ *   - For embedded use (pool struct owned by the caller): initialise with
+ *     osh_particle_pool_init() and destroy with osh_particle_pool_free().
+ *   - For heap-allocated use: osh_particle_pool_alloc() allocates both the
+ *     struct and the slab.  Release with osh_particle_pool_free(pool) then
+ *     free(pool) (or keep _alloc/_free paired in the same scope).
  *   - The species[] pointers point into the particle registry (beam_workspace
  *     or a future shared registry); the pool does not own the species structs.
  *   - The pool does not own any geometry or material state.
@@ -106,12 +109,28 @@ struct osh_particle_pool {
 /* ---- Lifecycle ----------------------------------------------------------- */
 
 /**
- * @brief Allocate a particle pool with the given capacity.
+ * @brief Initialise a caller-allocated particle pool.
  *
  * @details
- * All SoA arrays are allocated in a single contiguous slab and partitioned
- * internally, so a single free() releases all memory.  The pool is
- * initialised with n = 0.
+ * Allocates the SoA slab and wires all internal pointers.  Use this when the
+ * pool struct itself is embedded in another object (e.g. osh_simulation).
+ * Destroy with osh_particle_pool_free().
+ *
+ * @param[in,out] pool      Caller-allocated struct to initialise (must not be NULL).
+ * @param[in]     capacity  Number of particle slots to allocate.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM on allocation failure,
+ *          OSH_EINVAL if pool is NULL or capacity is zero.
+ */
+enum osh_status osh_particle_pool_init(struct osh_particle_pool *pool, size_t capacity);
+
+/**
+ * @brief Allocate a particle pool and its slab on the heap.
+ *
+ * @details
+ * Allocates both the pool struct and the SoA slab.  The pool is
+ * initialised with n = 0.  Release with osh_particle_pool_free(*pool_out)
+ * followed by free(*pool_out).
  *
  * @param[in]  capacity  Number of particle slots to allocate.
  * @param[out] pool_out  Receives the allocated pool pointer on success.
@@ -122,13 +141,14 @@ struct osh_particle_pool {
 enum osh_status osh_particle_pool_alloc(size_t capacity, struct osh_particle_pool **pool_out);
 
 /**
- * @brief Free a particle pool and all its arrays.
+ * @brief Free the slab owned by a particle pool (in-place destructor).
  *
  * @details
- * Safe to call with NULL.  The species pointers are not freed (they are not
- * owned by the pool).
+ * Frees the SoA slab but does NOT free the pool struct itself.  Use this
+ * for pools initialised with osh_particle_pool_init() (embedded lifetime).
+ * Safe to call with NULL.
  *
- * @param[in] pool  Pool to free; may be NULL.
+ * @param[in] pool  Pool whose slab should be freed; may be NULL.
  */
 void osh_particle_pool_free(struct osh_particle_pool *pool);
 

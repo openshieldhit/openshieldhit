@@ -36,6 +36,15 @@ enum osh_transport_straggling_mode {
     OSH_TRANSPORT_STRAGGLING_VAVILOV = 2
 };
 
+/* Overridable from the build line (e.g. -DOSH_TRANSPORT_POOL_CAPACITY=256)
+ * so the benchmark harness can sweep capacities without editing sources. */
+#ifndef OSH_TRANSPORT_POOL_CAPACITY
+#define OSH_TRANSPORT_POOL_CAPACITY 4096u
+#endif
+
+/** Default lower neutron transport cutoff [MeV] used when NEUTRLCUT <= 0. */
+#define OSH_TRANSPORT_NEUTRON_CUTOFF_DEFAULT_MEV 1.0e-3f
+
 /**
  * @brief Immutable transport control parameters extracted from the beam configuration.
  *
@@ -54,24 +63,35 @@ enum osh_transport_straggling_mode {
  *   - deltae and demin are per-step fractions / absolute floors
  */
 struct osh_transport_params {
-    size_t nstat;           /**< Total number of primary histories to transport. */
-    size_t pool_capacity;   /**< Live-history pool size; 0 selects the compiled default.
-                                 Tunes the cache/parallelism trade-off only: per-history
-                                 RNG streams make the physics each history sees identical
-                                 across capacities (scored output matches up to
-                                 floating-point reduction order in scoring). */
-    float deltae;           /**< Max fractional energy loss per CSDA substep [dimensionless]. */
-    float demin;            /**< Min energy loss per material substep [MeV/nucleon]. */
-    float tcut;             /**< Lower ion energy cutoff [MeV/nucleon]. */
-    int rndseed;            /**< Base RNG seed (RNDSEED); fixes the whole run's streams. */
-    int rndoffset;          /**< Global history-index base (RNDOFFSET): added to every
-                                 history index before seeding, so disjoint ranges (e.g.
-                                 one per process/MPI rank) give disjoint, non-overlapping
-                                 streams.  Not a value added to rndseed. */
-    char mcs_mode;          /**< enum osh_transport_mcs_mode value. */
-    char straggling_mode;   /**< enum osh_transport_straggling_mode value. */
-    char nuclear_inelastic; /**< Non-zero to enable inelastic nuclear reactions (Tripathi). */
-    char nuclear_elastic;   /**< Non-zero to enable pp elastic scattering. */
+    size_t nstat;                      /**< Total number of primary histories to transport. */
+    size_t pool_capacity;              /**< Live-history pool size; 0 selects the compiled default.
+                                            Tunes the cache/parallelism trade-off only: per-history
+                                            RNG streams make the physics each history sees identical
+                                            across capacities (scored output matches up to
+                                            floating-point reduction order in scoring). */
+    float deltae;                      /**< Max fractional energy loss per CSDA substep [dimensionless]. */
+    float demin;                       /**< Min energy loss per material substep [MeV/nucleon]. */
+    float tcut;                        /**< Lower ion energy cutoff [MeV/nucleon]. */
+    float ncut;                        /**< Lower neutron energy cutoff [MeV]; <=0 uses transport default. */
+    int rndseed;                       /**< Base RNG seed (RNDSEED); fixes the whole run's streams. */
+    int rndoffset;                     /**< Global history-index base (RNDOFFSET): added to every
+                                            history index before seeding, so disjoint ranges (e.g.
+                                            one per process/MPI rank) give disjoint, non-overlapping
+                                            streams.  Not a value added to rndseed. */
+    char mcs_mode;                     /**< enum osh_transport_mcs_mode value. */
+    char straggling_mode;              /**< enum osh_transport_straggling_mode value. */
+    char nuclear_inelastic;            /**< Non-zero to enable inelastic nuclear reactions (Tripathi). */
+    char nuclear_elastic;              /**< Non-zero to enable pp elastic scattering. */
+    char nuclear_neutron_ion_feedback; /**< Non-zero to reschedule the ion family after the
+                                            neutron pass, enabling a coupled ion ↔ neutron loop.
+                                            0 (default): one ion pass + one neutron pass (SH12A
+                                            mode); scheduler exits after the neutron pass.
+                                            1: scheduler marks the ion family as having work
+                                            again once the ion pool holds entries from (n,x)
+                                            reactions, repeating until both pools empty.
+                                            Not yet active: osh_transport_neutron.c does not
+                                            push to the ion pool yet, so even with flag=1 the
+                                            ion family is never rescheduled. */
 };
 
 /**
@@ -116,6 +136,7 @@ struct osh_transport_profile {
 struct osh_nuclear_handler;
 struct osh_fragment_pool;
 struct osh_neutron_pool;
+struct osh_particle_pool;
 
 struct osh_transport_context {
     struct osh_transport_params params;
@@ -123,6 +144,10 @@ struct osh_transport_context {
     struct osh_nuclear_handler const *nuclear_handler; /**< Borrowed; NULL disables handler. */
     struct osh_fragment_pool *fragment_pool;           /**< Borrowed; residual fragments for future breakup. */
     struct osh_neutron_pool *neutron_pool;             /**< Borrowed; neutrons routed here instead of CSDA pool. */
+    struct osh_particle_pool *ion_pool;                /**< Borrowed; pre-allocated ion wavefront pool. */
+    struct osh_zone_ref *zone_refs;                    /**< Transport scratch: zone/material per slot. */
+    double *dist_batch;                                /**< Transport scratch: boundary distance per slot. */
+    size_t scratch_capacity;                           /**< Number of entries in zone_refs and dist_batch. */
     struct osh_transport_profile *profile;             /**< Borrowed; NULL disables phase timers/counters. */
     char warned_boundary_demin_override;
 };
@@ -138,11 +163,11 @@ struct osh_transport_context {
  *   - energy loss is computed from material CSDA range tables
  *   - scoring is applied step-by-step through scoring/runtime
  *
- * Internally, transport is being prepared for a scheduler-owned outer loop
- * with one queue or pool per particle family (ions, neutrons, photons,
- * electrons, ...).  The current implementation still executes only the ion
- * family, but the dispatch seam now lives in transport/ rather than inside
- * the ion kernel.
+ * Internally, transport uses a scheduler-owned outer loop with one pool per
+ * particle family (ions, neutrons, photons, electrons, ...).  The dispatch
+ * seam lives in transport/ rather than inside each family kernel, so that
+ * per-family kernels are pure functions of their pool and can be offloaded or
+ * parallelised independently in future refactors.
  *
  * Physics included:
  *   - CSDA energy loss (residual-range tables)

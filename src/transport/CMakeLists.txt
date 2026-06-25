@@ -1,6 +1,7 @@
 add_library(osh_transport
     osh_transport.c
     osh_transport_scheduler.c
+    osh_neutron_pool.c
     osh_transport_ion.c
     osh_transport_ion_step.c
     osh_worker_context.c
@@ -21,6 +22,7 @@ target_link_libraries(osh_transport
         osh_common
         osh_physics
         osh_nuclear
+        osh_neutron_physics
         osh_random
         osh_beam
         osh_beam_runtime

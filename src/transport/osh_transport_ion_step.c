@@ -24,12 +24,7 @@
 #include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
 #include "transport/osh_transport.h"
-
-/*
- * Spatial boundary epsilon [cm]: particles closer than this to a zone boundary
- * are nudged forward rather than stepping into it.
- */
-#define OSH_TRANSPORT_BOUNDARY_EPS 1e-8
+#include "transport/osh_transport_boundary.h"
 
 /*
  * Relative tolerance for step-length equality comparisons [dimensionless].
@@ -266,13 +261,33 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         struct osh_nuclear_event const *ev = &ctx.nuclear_event;
         for (si = 0u; si < ev->n_secondaries; ++si) {
             size_t s;
-            /* Neutrons are not transported through the CSDA charged-particle
-             * loop — route them to the neutron pool instead. */
+            size_t k;
+            struct osh_neutron_pool *np;
+            /* -- neutron push ------------------------------------------------ */
+            /* Neutrons bypass the CSDA loop; push into the neutron pool. */
             if (transport_ctx->neutron_pool != NULL && ev->secondaries[si].species != NULL
                 && ev->secondaries[si].species->pdg == OSH_PART_PDG_NEUTRON) {
-                transport_ctx->neutron_pool->n_created++;
+                np = transport_ctx->neutron_pool;
+                np->n_created++;
+                if (np->n < np->capacity) {
+                    k = np->n++;
+                    np->x[k] = pool->x[slot];
+                    np->y[k] = pool->y[slot];
+                    np->z[k] = pool->z[slot];
+                    np->ux[k] = ev->secondaries[si].dir[0];
+                    np->uy[k] = ev->secondaries[si].dir[1];
+                    np->uz[k] = ev->secondaries[si].dir[2];
+                    np->e[k] = ev->secondaries[si].energy;
+                    np->wt[k] = pool->wt[slot];
+                    np->prim_idx[k] = pool->prim_idx[slot];
+                    np->gen[k] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+                    osh_rng_split(&np->rng[k], rng); /* seed child stream from parent */
+                } else {
+                    np->n_dropped++;
+                }
                 continue;
             }
+            /* -- ion push ---------------------------------------------------- */
             if (pool->n >= pool->capacity) {
                 continue;
             }
@@ -398,9 +413,8 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     if (ctx->boundary_ds <= OSH_TRANSPORT_BOUNDARY_EPS) {
         /* Particle is sitting on a boundary: nudge it forward and re-step
          * in the next wavefront round without scoring a zero-length step. */
-        pool->x[slot] += pool->ux[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
-        pool->y[slot] += pool->uy[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
-        pool->z[slot] += pool->uz[slot] * OSH_TRANSPORT_BOUNDARY_EPS;
+        osh_transport_nudge_boundary(
+            &pool->x[slot], &pool->y[slot], &pool->z[slot], pool->ux[slot], pool->uy[slot], pool->uz[slot]);
         ctx->done = 1;
         return;
     }
@@ -834,9 +848,12 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
         pool->uy[slot] = ctx->w_scat[1];
         pool->uz[slot] = ctx->w_scat[2];
         if (ctx->hit_boundary) {
-            pool->x[slot] += ctx->nudge_dir[0] * OSH_TRANSPORT_BOUNDARY_EPS;
-            pool->y[slot] += ctx->nudge_dir[1] * OSH_TRANSPORT_BOUNDARY_EPS;
-            pool->z[slot] += ctx->nudge_dir[2] * OSH_TRANSPORT_BOUNDARY_EPS;
+            osh_transport_nudge_boundary(&pool->x[slot],
+                                         &pool->y[slot],
+                                         &pool->z[slot],
+                                         ctx->nudge_dir[0],
+                                         ctx->nudge_dir[1],
+                                         ctx->nudge_dir[2]);
         }
         return OSH_OK;
     }
@@ -912,9 +929,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
         /* Nudge past the boundary in the leg direction that reached it:
          *   straight/boundary steps:   u0 (nudge_dir == initial direction)
          *   hinge-clipped scatter:     w_scat (nudge_dir set in phase 3) */
-        pool->x[slot] += ctx->nudge_dir[0] * OSH_TRANSPORT_BOUNDARY_EPS;
-        pool->y[slot] += ctx->nudge_dir[1] * OSH_TRANSPORT_BOUNDARY_EPS;
-        pool->z[slot] += ctx->nudge_dir[2] * OSH_TRANSPORT_BOUNDARY_EPS;
+        osh_transport_nudge_boundary(
+            &pool->x[slot], &pool->y[slot], &pool->z[slot], ctx->nudge_dir[0], ctx->nudge_dir[1], ctx->nudge_dir[2]);
     }
 
     return OSH_OK;

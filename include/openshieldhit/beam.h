@@ -169,8 +169,8 @@ struct osh_beam_workspace {
     float tcut;                         /**< Primary kinetic energy cutoff [MeV/nucleon]; primaries
                                              below this are killed (TCUT0). */
     float pcut;                         /**< Secondary proton kinetic energy cutoff [MeV]. */
-    float ncut;                         /**< Neutron energy cutoff [MeV]; neutrons below this are
-                                             absorbed locally (NEUTRLCUT). */
+    float ncut;                         /**< Neutron energy cutoff [MeV]; <=0 uses the transport
+                                             default (NEUTRLCUT). */
     float deltae;                       /**< Maximum relative energy loss per step, e.g. 0.005 = 0.5%
                                              (DELTAE). */
     float demin;                        /**< Minimum kinetic energy step size [MeV/nucleon]; prevents

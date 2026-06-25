@@ -18,7 +18,7 @@ decayed **at rest** with E\* swept over 0–10 MeV/nucleon:
 ## Running the comparison
 
 ```sh
-cmake --build --preset debug --target fbu_scan
+cmake --build --preset debug --parallel --target fbu_scan
 .venv/bin/python examples/05_fermi_breakup_validation/plot_comparison.py
 ```
 
