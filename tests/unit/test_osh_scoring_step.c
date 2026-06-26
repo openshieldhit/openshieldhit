@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -553,11 +554,17 @@ static void assert_arrays_bit_equal(double const *a, double const *b, size_t n) 
         ASSERT_TRUE(a == b);
         return;
     }
-    /* Compare the IEEE-754 representations bytewise: this is a true bit-for-bit
+    /* Compare the IEEE-754 representations as integers: this is a true bit-for-bit
      * check (distinguishes +0.0 from -0.0, matches identical NaN payloads) rather
-     * than the value comparison == would do. */
+     * than the value comparison == would do.  memcpy into uint64_t avoids both the
+     * value comparison and the bugprone-suspicious-memory-comparison clang-tidy
+     * diagnostic that memcmp on a double (no unique object representation) trips. */
     for (i = 0; i < n; ++i) {
-        ASSERT_TRUE(memcmp(&a[i], &b[i], sizeof(double)) == 0);
+        uint64_t ua;
+        uint64_t ub;
+        memcpy(&ua, &a[i], sizeof(ua));
+        memcpy(&ub, &b[i], sizeof(ub));
+        ASSERT_TRUE(ua == ub);
     }
 }
 
