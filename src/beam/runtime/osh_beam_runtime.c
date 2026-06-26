@@ -1,5 +1,6 @@
 #include "beam/runtime/osh_beam_runtime.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "beam/osh_beam_model.h"
@@ -95,6 +96,14 @@ enum osh_status osh_beam_runtime_fill_pool_at(struct osh_beam_runtime *rt,
     if (pool->n + n > pool->capacity) {
         return OSH_EINVAL;
     }
+    /* The global history index of the last primary in this fill is
+     * global_prim_base + (n - 1).  Reject a base that would wrap uint64_t rather
+     * than silently reuse indices/RNG streams.  (Unreachable in practice — it
+     * needs ~2^64 histories — but the seam is the contract for parallel fills,
+     * so fail loudly instead of corrupting tallies.) */
+    if (global_prim_base > UINT64_MAX - (uint64_t) n) {
+        return OSH_EINVAL;
+    }
 
     switch (rt->workspace->beam_mode) {
     case OSH_BEAM_MODE_SPOTS:
@@ -121,10 +130,12 @@ enum osh_status osh_beam_runtime_fill_pool(struct osh_beam_runtime *rt,
      * of primaries this runtime has already emitted.  All the work — and all
      * validation — lives in _at(); only this wrapper reads or advances the
      * shared cursor, so the cursor-free _at() path stays safe to call from many
-     * workers over disjoint, explicitly-based ranges. */
-    rc = osh_beam_runtime_fill_pool_at(rt, seeding, pool, n, (uint64_t) rt->primaries_generated);
+     * workers over disjoint, explicitly-based ranges.  The cursor is advanced
+     * only on success, and _at() rejects a base that would wrap, so the cursor
+     * can never silently overflow into reused indices. */
+    rc = osh_beam_runtime_fill_pool_at(rt, seeding, pool, n, rt->primaries_generated);
     if (rc == OSH_OK) {
-        rt->primaries_generated += n;
+        rt->primaries_generated += (uint64_t) n;
     }
     return rc;
 }

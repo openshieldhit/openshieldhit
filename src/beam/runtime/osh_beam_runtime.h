@@ -47,7 +47,7 @@ extern "C" {
 struct osh_beam_runtime {
     struct beam_workspace const *workspace; /* cold storage — not owned */
     struct particle primary;                /* resolved species for beam primaries */
-    size_t primaries_generated;             /* serial-path cursor; see header doc */
+    uint64_t primaries_generated;           /* serial-path cursor; see header doc */
 
     union {
         /**

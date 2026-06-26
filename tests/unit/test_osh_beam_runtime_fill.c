@@ -19,6 +19,7 @@
  */
 
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "apps/osh/osh_app_osh.h"
@@ -229,11 +230,40 @@ static void test_at_does_not_touch_rt(void) {
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
 }
 
+/* ---- a base whose range would wrap uint64_t is rejected ------------------ */
+
+static void test_overflow_guard(void) {
+    struct osh_beam_workspace *wb = NULL;
+    struct osh_beam_runtime *rt = NULL;
+    struct osh_particle_pool pool;
+    struct osh_rng_seeding seeding;
+
+    make_runtime(&wb, &rt);
+    seeding_init(&seeding);
+    ASSERT_TRUE(osh_particle_pool_init(&pool, POOL_CAP) == OSH_OK);
+
+    /* [base, base + NPRIM) would wrap uint64_t: rejected, pool left untouched —
+     * fail loudly rather than reuse history indices / RNG streams. */
+    ASSERT_TRUE(osh_beam_runtime_fill_pool_at(rt, &seeding, &pool, NPRIM, UINT64_MAX - 3u) == OSH_EINVAL);
+    ASSERT_TRUE(pool.n == 0u);
+
+    /* A large but non-wrapping base is accepted and assigns those global indices. */
+    ASSERT_TRUE(osh_beam_runtime_fill_pool_at(rt, &seeding, &pool, NPRIM, UINT64_MAX - 1000u) == OSH_OK);
+    ASSERT_TRUE(pool.n == NPRIM);
+    ASSERT_TRUE(pool.prim_idx[0] == UINT64_MAX - 1000u);
+    ASSERT_TRUE(pool.prim_idx[NPRIM - 1u] == (UINT64_MAX - 1000u) + (NPRIM - 1u));
+
+    osh_particle_pool_free(&pool);
+    osh_beam_runtime_free(&rt);
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+}
+
 int main(void) {
     test_split_matches_single();
     test_order_independent();
     test_wrapper_advances_cursor();
     test_at_does_not_touch_rt();
+    test_overflow_guard();
     printf("All osh_beam_runtime_fill tests passed.\n");
     return 0;
 }
