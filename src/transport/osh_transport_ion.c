@@ -55,12 +55,14 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  * so it can be driven over an explicit history range instead of always the whole
  * run.  The worker context isolates the *transport-local* mutable state — the
  * particle pool and per-step batch scratch — for one slice [hist_lo, hist_hi).
- * That is a necessary building block for parallel execution but not sufficient on
- * its own: @p beam_rt (its primaries_generated cursor), @p score_rt's shared
- * accumulators and @p transport_ctx->profile are still shared, so running slices
- * concurrently would additionally need per-worker or otherwise coordinated beam,
- * scoring and profile state.  Today a single worker covers [0, nstat), so none of
- * that sharing is yet exercised.
+ * Primary generation is already partition-safe: this loop fills the pool through
+ * osh_beam_runtime_fill_pool_at() with an explicit global base derived from the
+ * worker's own range, never the shared beam cursor.  Two pieces of shared state
+ * still stand between this and concurrent execution: @p score_rt's accumulators
+ * (deposits land in the shared master) and @p transport_ctx->profile (its
+ * counters are summed in place).  Both want per-worker copies merged at the end;
+ * see the @c accumulators field on @ref osh_worker_context.  Today a single worker
+ * covers [0, nstat), so none of that sharing is yet exercised.
  *
  *   1. When the pool is empty and primaries remain, fill it from beam_runtime
  *      (up to the worker's pool capacity).
@@ -72,16 +74,14 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  *   5. Repeat until every history in the range is done and the pool is empty.
  *
  * Each primary is seeded from its global history index (rndoffset + hist_lo +
- * the worker-local primary index).  For the single worker over [0, nstat) used
- * today (hist_lo == 0) this reproduces the canonical per-history streams.
- * Splitting the run into arbitrary sub-ranges and replaying them in any order
- * reproduces those same streams only once each worker draws primaries from its
- * own beam cursor (or an explicit global base is threaded through
- * osh_beam_runtime_fill_pool()); with the single shared cursor today a non-zero
- * hist_lo would be double-counted, so that per-worker beam-cursor change is
- * deferred follow-up.  Deposits currently land in the shared master accumulators
- * in @p score_rt; per-worker private accumulators (@c wctx->accumulators) will
- * route here once parallel scoring lands.
+ * the worker-local primary index), assembled by passing hist_lo + primaries_done
+ * as the explicit global base to osh_beam_runtime_fill_pool_at().  Splitting the
+ * run into arbitrary disjoint sub-ranges and replaying them in any order
+ * therefore reproduces the canonical per-history streams exactly — the seed is a
+ * pure function of the index, with no shared, mutable beam cursor in the path.
+ * Deposits currently land in the shared master accumulators in @p score_rt;
+ * per-worker private accumulators (@c wctx->accumulators) will route here once
+ * parallel scoring lands.
  */
 static enum osh_status run_history_range(struct osh_worker_context *wctx,
                                          struct osh_transport_context *transport_ctx,
@@ -113,17 +113,23 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     enum osh_status rc = OSH_OK;
 
     /* Per-history seeding context.  Every primary derives independent BEAM and
-     * PHYSICS streams from its global history index (rndoffset + hist_lo +
-     * prim_idx), so a history sees the same random draws on any pool capacity,
-     * thread, or rank.  (Scored output is therefore invariant up to
-     * floating-point summation order in the shared scoring accumulators, not
-     * byte-for-byte.)  Offsetting the base by hist_lo gives this worker a
-     * disjoint, non-overlapping stream range.  Keeping BEAM and PHYSICS on
+     * PHYSICS streams from its global history index, so a history sees the same
+     * random draws on any pool capacity, thread, or rank.  (Scored output is
+     * therefore invariant up to floating-point summation order in the shared
+     * scoring accumulators, not byte-for-byte.)  Keeping BEAM and PHYSICS on
      * separate purposes makes NUCRE/MSCAT/STRAGG comparisons launch the same
-     * primary histories. */
+     * primary histories.
+     *
+     * The global history index is rndoffset + (hist_lo + worker-local index).
+     * We keep hist_base at rndoffset alone and carry the worker's hist_lo in the
+     * explicit global base passed to osh_beam_runtime_fill_pool_at() below, so
+     * the full global index is assembled in exactly one place.  Splitting the
+     * run into disjoint sub-ranges and running them in any order then reproduces
+     * the canonical per-history streams, because each primary's seed depends
+     * only on its index — never on a shared, mutable beam cursor. */
     seeding.type = OSH_RNG_TYPE_PCG32;
     seeding.seed = (uint64_t) params->rndseed;
-    seeding.hist_base = (uint64_t) params->rndoffset + (uint64_t) wctx->hist_lo;
+    seeding.hist_base = (uint64_t) params->rndoffset;
 
     /* Total step budget: nstat × max_steps, capped at SIZE_MAX to avoid overflow. */
     if (nstat > (size_t) -1 / OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY) {
@@ -155,7 +161,12 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
             if (prof) {
                 t_phase = osh_monotonic_seconds();
             }
-            rc = osh_beam_runtime_fill_pool(beam_rt, &seeding, pool, n_fill);
+            /* Cursor-free fill: the global index of the first primary in this
+             * chunk is this worker's range base plus the primaries it has
+             * already emitted.  No shared beam cursor is read or mutated, so
+             * disjoint workers can fill concurrently and remain reproducible. */
+            rc = osh_beam_runtime_fill_pool_at(
+                beam_rt, &seeding, pool, n_fill, (uint64_t) wctx->hist_lo + (uint64_t) primaries_done);
             if (prof) {
                 prof->fill_s += osh_monotonic_seconds() - t_phase;
             }

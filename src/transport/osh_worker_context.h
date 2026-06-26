@@ -21,11 +21,13 @@ struct osh_scoring_accumulator;
  * batch scratch — for one slice of the run, so this state stops being a barrier
  * to partitioning work across workers (threads, MPI ranks, or sequential
  * profiling replicas) over disjoint history ranges.  It is one building block,
- * not the whole story: the beam runtime (its primaries_generated cursor), the
- * scoring accumulators in score_rt and transport_ctx->profile are owned
- * elsewhere and remain shared, so concurrent execution will additionally need
- * per-worker or coordinated beam/scoring/profile state (the @ref accumulators
- * field below is where per-worker scoring memory will attach).
+ * not the whole story: the scoring accumulators in score_rt and
+ * transport_ctx->profile are owned elsewhere and remain shared, so concurrent
+ * execution will additionally need per-worker or coordinated scoring/profile
+ * state (the @ref accumulators field below is where per-worker scoring memory
+ * will attach).  Beam primary generation is no longer in that list — a worker
+ * fills its pool through osh_beam_runtime_fill_pool_at() with an explicit global
+ * base from its own range, so the beam runtime is shared read-only.
  *
  * The assigned work is the half-open history range [@ref hist_lo, @ref hist_hi).
  * Per-history RNG seeding is derived from the global history index
