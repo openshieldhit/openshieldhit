@@ -888,7 +888,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
         st.w[2] = ctx->nuclear_event.primary_dir[2];
     }
 
-    rc = osh_scoring_score_step(score_rt, ctx->part, &st);
+    rc = osh_scoring_score_step(score_rt, osh_scoring_runtime_master_accumulators(score_rt), ctx->part, &st);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(transport_ctx->diag,
                         "transport: scoring rejected step rc=%d ds=%.17g p=(%.17g, %.17g, %.17g) "

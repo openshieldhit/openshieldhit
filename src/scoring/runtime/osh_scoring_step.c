@@ -19,49 +19,56 @@ static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime
                                              double *voxel_volume_inv_out);
 static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                             struct osh_raytrace_grid *grid);
-static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_energy(struct osh_scoring_runtime const *rt,
+                                          struct osh_scoring_accumulator *acc_set,
                                           struct osh_scoring_geometry_score_group const *group,
                                           struct osh_voxel_crossing const *crossings,
                                           size_t ncross,
                                           struct particle const *part,
                                           struct step const *st,
                                           double score_len);
-static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
+                                           struct osh_scoring_accumulator *acc_set,
                                            struct osh_scoring_geometry_score_group const *group,
                                            struct osh_voxel_crossing const *crossings,
                                            size_t ncross,
                                            struct particle const *part,
                                            struct step const *st,
                                            double score_len);
-static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_dose(struct osh_scoring_runtime const *rt,
+                                        struct osh_scoring_accumulator *acc_set,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
                                         struct particle const *part,
                                         struct step const *st,
                                         double score_len);
-static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_dlet(struct osh_scoring_runtime const *rt,
+                                        struct osh_scoring_accumulator *acc_set,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
                                         struct particle const *part,
                                         struct step const *st,
                                         double score_len);
-static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_tlet(struct osh_scoring_runtime const *rt,
+                                        struct osh_scoring_accumulator *acc_set,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
                                         struct particle const *part,
                                         struct step const *st,
                                         double score_len);
-static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_dqeff(struct osh_scoring_runtime const *rt,
+                                         struct osh_scoring_accumulator *acc_set,
                                          struct osh_scoring_geometry_score_group const *group,
                                          struct osh_voxel_crossing const *crossings,
                                          size_t ncross,
                                          struct particle const *part,
                                          struct step const *st,
                                          double score_len);
-static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_tqeff(struct osh_scoring_runtime const *rt,
+                                         struct osh_scoring_accumulator *acc_set,
                                          struct osh_scoring_geometry_score_group const *group,
                                          struct osh_voxel_crossing const *crossings,
                                          size_t ncross,
@@ -69,8 +76,10 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
                                          struct step const *st,
                                          double score_len);
 
-enum osh_status
-osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *part, struct step const *st) {
+enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
+                                       struct osh_scoring_accumulator *acc_set,
+                                       struct particle const *part,
+                                       struct step const *st) {
     size_t i;
     size_t j;
     size_t cap;
@@ -84,6 +93,9 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
     int is_cyl;
 
     if (!rt || !part || !st) {
+        return OSH_EINVAL;
+    }
+    if (rt->npages > 0u && !acc_set) {
         return OSH_EINVAL;
     }
     if (!(st->ds > 0.0)) {
@@ -169,26 +181,26 @@ osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *pa
         for (g = 0; g < geo->ngroups; ++g) {
             switch (geo->groups[g].score_kind) {
             case OSH_SCORING_SCORE_ENERGY:
-                rc = score_group_energy(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                rc = score_group_energy(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_FLUENCE:
-                rc = score_group_fluence(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                rc = score_group_fluence(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_DOSE:
             case OSH_SCORING_SCORE_DOSEGY:
-                rc = score_group_dose(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                rc = score_group_dose(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_DLET:
-                rc = score_group_dlet(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                rc = score_group_dlet(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_TLET:
-                rc = score_group_tlet(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                rc = score_group_tlet(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_DQEFF:
-                rc = score_group_dqeff(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                rc = score_group_dqeff(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             case OSH_SCORING_SCORE_TQEFF:
-                rc = score_group_tqeff(rt, &geo->groups[g], crossings, ncross, part, st, score_len);
+                rc = score_group_tqeff(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
                 break;
             default:
                 rc = OSH_ENOTSUP;
@@ -658,7 +670,8 @@ static double diff2_step_val(struct osh_scoring_page_runtime const *page,
  *
  * Distributes st->de proportionally to path length in each crossed voxel.
  */
-static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_energy(struct osh_scoring_runtime const *rt,
+                                          struct osh_scoring_accumulator *acc_set,
                                           struct osh_scoring_geometry_score_group const *group,
                                           struct osh_voxel_crossing const *crossings,
                                           size_t ncross,
@@ -672,10 +685,12 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
     int dv_ok;
     double dv;
     double frac;
-    struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
@@ -712,9 +727,8 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
             frac = crossings[j].path_len / score_len;
-            osh_score_deposit(page->acc.data,
-                              crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride),
-                              st->de * frac);
+            osh_score_deposit(
+                acc->data, crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride), st->de * frac);
         }
     }
     return OSH_OK;
@@ -726,7 +740,8 @@ static enum osh_status score_group_energy(struct osh_scoring_runtime *rt,
  * Scores track_length * vol_inv per voxel crossing.  vol_inv is pre-filled into
  * each crossing by the caller (uniform for Mesh; per-R-bin LUT for Cyl).
  */
-static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
+                                           struct osh_scoring_accumulator *acc_set,
                                            struct osh_scoring_geometry_score_group const *group,
                                            struct osh_voxel_crossing const *crossings,
                                            size_t ncross,
@@ -739,11 +754,13 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
     size_t db2; /* diff2 bin index for current page (0 when no second diff axis) */
     int dv_ok;  /* flag: differential axis value is physically valid for this step */
     double dv;  /* value on the diff axis (energy, LET, or Qeff at step midpoint) */
-    struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
     (void) score_len; /* unused for non-differential fluence; kept for diff LET/QEFF */
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
@@ -779,7 +796,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
             }
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
-            osh_score_deposit(page->acc.data,
+            osh_score_deposit(acc->data,
                               crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride),
                               crossings[j].path_len * crossings[j].vol_inv);
         }
@@ -798,7 +815,8 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime *rt,
  * dose-to-medium scoring.  Pure density overrides do not change the dose
  * (Fano theorem).
  */
-static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_dose(struct osh_scoring_runtime const *rt,
+                                        struct osh_scoring_accumulator *acc_set,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
@@ -819,7 +837,8 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
     double sp_ovr;
     size_t proj_idx;
     int have_proj;
-    struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
     struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
     e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table-based projectile data is available */
@@ -846,6 +865,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
@@ -892,7 +912,7 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
             }
             /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
              * When differential axes are inactive the extra terms evaluate to 0. */
-            osh_score_deposit(page->acc.data,
+            osh_score_deposit(acc->data,
                               crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride),
                               crossings[j].path_len * crossings[j].vol_inv * dose_scale);
         }
@@ -906,7 +926,8 @@ static enum osh_status score_group_dose(struct osh_scoring_runtime *rt,
  * Uses S(medium,E)·ρ from the SP tables when available; falls back to de/score_len.
  * Per-page Settings overrides apply S(ovr,E)·ρ_ovr (medium) or S(tr,E)·ρ_ovr (density-only).
  */
-static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_dlet(struct osh_scoring_runtime const *rt,
+                                        struct osh_scoring_accumulator *acc_set,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
@@ -924,7 +945,8 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
     double w;
     size_t proj_idx;
     int have_proj;
-    struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
     struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
     e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table-based projectile data is available */
@@ -953,6 +975,7 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
@@ -976,8 +999,8 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
              *   data2 = sum(dose_weight)          [MeV]
              * osh_scoring_postprocess() divides data by data2 to yield LETd. */
             w = st->de * crossings[j].path_len / score_len;
-            osh_score_deposit(page->acc.data, crossings[j].idx, let_step * w);
-            osh_score_deposit(page->acc.data2, crossings[j].idx, w);
+            osh_score_deposit(acc->data, crossings[j].idx, let_step * w);
+            osh_score_deposit(acc->data2, crossings[j].idx, w);
         }
     }
     return OSH_OK;
@@ -989,7 +1012,8 @@ static enum osh_status score_group_dlet(struct osh_scoring_runtime *rt,
  * Same table lookup as score_group_dlet(); uses track-length ds_vox as the weight
  * rather than dose weight.
  */
-static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_tlet(struct osh_scoring_runtime const *rt,
+                                        struct osh_scoring_accumulator *acc_set,
                                         struct osh_scoring_geometry_score_group const *group,
                                         struct osh_voxel_crossing const *crossings,
                                         size_t ncross,
@@ -1007,7 +1031,8 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
     double ds_vox;
     size_t proj_idx;
     int have_proj;
-    struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
     struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
     e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table-based projectile data is available */
@@ -1034,6 +1059,7 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
@@ -1057,8 +1083,8 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
              *   data2 = sum(ds_vox)         [cm]
              * osh_scoring_postprocess() divides data by data2 to yield LETt. */
             ds_vox = st->ds * crossings[j].path_len / score_len;
-            osh_score_deposit(page->acc.data, crossings[j].idx, let_step * ds_vox);
-            osh_score_deposit(page->acc.data2, crossings[j].idx, ds_vox);
+            osh_score_deposit(acc->data, crossings[j].idx, let_step * ds_vox);
+            osh_score_deposit(acc->data2, crossings[j].idx, ds_vox);
         }
     }
     return OSH_OK;
@@ -1074,7 +1100,8 @@ static enum osh_status score_group_tlet(struct osh_scoring_runtime *rt,
  *      https://doi.org/10.1002/mp.16029
  *
  */
-static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_dqeff(struct osh_scoring_runtime const *rt,
+                                         struct osh_scoring_accumulator *acc_set,
                                          struct osh_scoring_geometry_score_group const *group,
                                          struct osh_voxel_crossing const *crossings,
                                          size_t ncross,
@@ -1088,7 +1115,8 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
     double qeff;
     double w;
     size_t proj_idx;
-    struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
 
     if (part->z == 0) {
@@ -1110,6 +1138,7 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
@@ -1122,8 +1151,8 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
              *   data2 = sum(dose_weight)           [MeV]
              * osh_scoring_postprocess() divides to yield the dose-averaged value. */
             w = st->de * crossings[j].path_len / score_len;
-            osh_score_deposit(page->acc.data, crossings[j].idx, qeff * w);
-            osh_score_deposit(page->acc.data2, crossings[j].idx, w);
+            osh_score_deposit(acc->data, crossings[j].idx, qeff * w);
+            osh_score_deposit(acc->data2, crossings[j].idx, w);
         }
     }
     return OSH_OK;
@@ -1138,7 +1167,8 @@ static enum osh_status score_group_dqeff(struct osh_scoring_runtime *rt,
  *      https://doi.org/10.1002/mp.16029
  *
  */
-static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
+static enum osh_status score_group_tqeff(struct osh_scoring_runtime const *rt,
+                                         struct osh_scoring_accumulator *acc_set,
                                          struct osh_scoring_geometry_score_group const *group,
                                          struct osh_voxel_crossing const *crossings,
                                          size_t ncross,
@@ -1152,7 +1182,8 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
     double qeff;
     double ds_vox;
     size_t proj_idx;
-    struct osh_scoring_page_runtime *page;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
     struct osh_material_runtime const *mat_tables = rt->mat_tables;
 
     if (part->z == 0) {
@@ -1174,6 +1205,7 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
@@ -1186,8 +1218,8 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime *rt,
              *   data2 = sum(ds_vox)           [cm]
              * osh_scoring_postprocess() divides to yield the track-averaged value. */
             ds_vox = st->ds * crossings[j].path_len / score_len;
-            osh_score_deposit(page->acc.data, crossings[j].idx, qeff * ds_vox);
-            osh_score_deposit(page->acc.data2, crossings[j].idx, ds_vox);
+            osh_score_deposit(acc->data, crossings[j].idx, qeff * ds_vox);
+            osh_score_deposit(acc->data2, crossings[j].idx, ds_vox);
         }
     }
     return OSH_OK;

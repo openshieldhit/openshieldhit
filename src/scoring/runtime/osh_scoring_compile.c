@@ -592,6 +592,9 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     }
     free(rt->outputs);
     free(rt->crossing_buf);
+    /* master_acc only shallow-aliases the per-page accumulators (freed above);
+     * release the view array itself, not the arrays it points into. */
+    free(rt->master_acc);
 
     memset(rt, 0, sizeof(*rt));
 }
@@ -1091,6 +1094,21 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 double r1 = r0 + dr;
                 g->cyl_vol_inv[ir] = 1.0 / (OSH_M_PI * (r1 * r1 - r0 * r0) * dz);
             }
+        }
+    }
+
+    /* Build the master accumulator view: one entry per page, shallow-aliasing
+     * each page's accumulator storage.  The serial driver hands this to
+     * osh_scoring_score_step() so the deposit path has the same shape as a
+     * parallel worker's private set, with no per-step allocation. */
+    if (rt->npages > 0u) {
+        rt->master_acc = (struct osh_scoring_accumulator *) calloc(rt->npages, sizeof(*rt->master_acc));
+        if (!rt->master_acc) {
+            osh_scoring_runtime_free(rt);
+            return OSH_ENOMEM;
+        }
+        for (i = 0; i < rt->npages; ++i) {
+            rt->master_acc[i] = rt->pages[i].acc;
         }
     }
 

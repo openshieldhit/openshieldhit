@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -84,7 +85,7 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     st.prim_idx = 7u;
     st.gen = 0u;
 
-    rc = osh_scoring_score_step(&rt, &part, &st);
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     energy0_idx = rt.outputs[0].page_indices[0];
@@ -109,7 +110,7 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     assert_close(rt.pages[filtered_idx].acc.data[2], 0.125);
 
     st.gen = 1u;
-    rc = osh_scoring_score_step(&rt, &part, &st);
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_postprocess(&rt);
@@ -198,7 +199,7 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     st.prim_idx = 7u;
     st.gen = 0u;
 
-    rc = osh_scoring_score_step(&rt, &part, &st);
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     energy0_idx = rt.outputs[0].page_indices[0];
@@ -286,7 +287,7 @@ static void test_score_mesh_neutron_id_filter(void) {
     st.prim_idx = 1u;
     st.gen = 1u;
 
-    rc = osh_scoring_score_step(&rt, &neutron, &st);
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &neutron, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     fluence_idx = rt.outputs[0].page_indices[0];
@@ -300,7 +301,7 @@ static void test_score_mesh_neutron_id_filter(void) {
     assert_close(rt.pages[neutron_idx].acc.data[2], 0.5);
 
     neutron.pdg = OSH_PART_PDG_PROTON;
-    rc = osh_scoring_score_step(&rt, &neutron, &st);
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &neutron, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     assert_close(rt.pages[fluence_idx].acc.data[0], 1.0);
@@ -372,7 +373,7 @@ static void test_score_mesh_dose_and_let_geometric(void) {
     st.wt = 1.0;
     st.medium = 0;
 
-    rc = osh_scoring_score_step(&rt, &part, &st);
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_postprocess(&rt);
@@ -493,7 +494,7 @@ static void test_score_mesh_dqeff_tqeff(void) {
     st.wt = 1.0;
     st.medium = 0;
 
-    rc = osh_scoring_score_step(&rt, &part, &st);
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_postprocess(&rt);
@@ -523,11 +524,120 @@ static void test_score_mesh_dqeff_tqeff(void) {
     osh_scoring_workspace_free(ws);
 }
 
+/* Allocate a private accumulator set cloning the shape of every page in rt
+ * (same len and data2 presence), zero-initialised.  Mirrors what a future
+ * worker_accumulators_alloc() does, but inline for the test. */
+static struct osh_scoring_accumulator *alloc_private_acc_set(struct osh_scoring_runtime const *rt) {
+    struct osh_scoring_accumulator *set;
+    size_t i;
+
+    set = (struct osh_scoring_accumulator *) calloc(rt->npages, sizeof(*set));
+    /* calloc(0, ...) may legitimately return NULL; an empty set is valid. */
+    ASSERT_TRUE(set != NULL || rt->npages == 0u);
+    for (i = 0; i < rt->npages; ++i) {
+        ASSERT_TRUE(osh_scoring_accumulator_alloc(&set[i], rt->pages[i].len, rt->pages[i].has_data2) == OSH_OK);
+    }
+    return set;
+}
+
+static void free_acc_set(struct osh_scoring_accumulator *set, size_t n) {
+    size_t i;
+    for (i = 0; i < n; ++i) {
+        osh_scoring_accumulator_free(&set[i]);
+    }
+    free(set);
+}
+
+static void assert_arrays_bit_equal(double const *a, double const *b, size_t n) {
+    size_t i;
+    if (!a || !b) {
+        ASSERT_TRUE(a == b);
+        return;
+    }
+    /* Compare the IEEE-754 representations as integers: this is a true bit-for-bit
+     * check (distinguishes +0.0 from -0.0, matches identical NaN payloads) rather
+     * than the value comparison == would do.  memcpy into uint64_t avoids both the
+     * value comparison and the bugprone-suspicious-memory-comparison clang-tidy
+     * diagnostic that memcmp on a double (no unique object representation) trips. */
+    for (i = 0; i < n; ++i) {
+        uint64_t ua;
+        uint64_t ub;
+        memcpy(&ua, &a[i], sizeof(ua));
+        memcpy(&ub, &b[i], sizeof(ub));
+        ASSERT_TRUE(ua == ub);
+    }
+}
+
+/* Acceptance criterion: scoring a step into a private acc_set and then merging
+ * that set into a zeroed master must equal scoring the same step directly into
+ * the master.  Both paths run identical floating-point ops and the merge is a
+ * plain add onto zero, so the two results are bit-for-bit identical. */
+static void test_score_private_then_merge_equals_direct(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_accumulator *priv;
+    struct osh_scoring_accumulator *merged;
+    enum osh_status rc;
+    size_t i;
+
+    snprintf(path, sizeof(path), "%s/tests/fixtures/test_let/detect.dat", OSH_PROJECT_SOURCE_DIR);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&part, 0, sizeof(part));
+    part.z = 1u;
+    part.a = 1u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[2] = 0.5;
+    st.p[3] = 150.0;
+    st.q[2] = 2.5;
+    st.q[3] = 148.0;
+    st.v[2] = 1.0;
+    st.ds = 2.0;
+    st.de = 2.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+
+    /* Direct: deposit straight into the master view (rt->pages[*].acc). */
+    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    /* Private: deposit into a private set, then fold into a zeroed master. */
+    priv = alloc_private_acc_set(&rt);
+    merged = alloc_private_acc_set(&rt); /* starts zeroed */
+    rc = osh_scoring_score_step(&rt, priv, &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+    for (i = 0; i < rt.npages; ++i) {
+        ASSERT_TRUE(osh_scoring_accumulator_merge(&merged[i], &priv[i]) == OSH_OK);
+    }
+
+    /* merged (zero + private) must equal the direct master deposit, bit-for-bit. */
+    for (i = 0; i < rt.npages; ++i) {
+        assert_arrays_bit_equal(merged[i].data, rt.pages[i].acc.data, rt.pages[i].len);
+        assert_arrays_bit_equal(merged[i].data2, rt.pages[i].acc.data2, rt.pages[i].len);
+    }
+
+    free_acc_set(priv, rt.npages);
+    free_acc_set(merged, rt.npages);
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
 int main(void) {
     test_score_mesh_energy_and_fluence_with_filters();
     test_score_mesh_uses_step_chord_after_bending();
     test_score_mesh_neutron_id_filter();
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
+    test_score_private_then_merge_equals_direct();
     return 0;
 }
