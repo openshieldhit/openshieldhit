@@ -531,7 +531,8 @@ static struct osh_scoring_accumulator *alloc_private_acc_set(struct osh_scoring_
     size_t i;
 
     set = (struct osh_scoring_accumulator *) calloc(rt->npages, sizeof(*set));
-    ASSERT_TRUE(set != NULL);
+    /* calloc(0, ...) may legitimately return NULL; an empty set is valid. */
+    ASSERT_TRUE(set != NULL || rt->npages == 0u);
     for (i = 0; i < rt->npages; ++i) {
         ASSERT_TRUE(osh_scoring_accumulator_alloc(&set[i], rt->pages[i].len, rt->pages[i].has_data2) == OSH_OK);
     }
@@ -552,8 +553,11 @@ static void assert_arrays_bit_equal(double const *a, double const *b, size_t n) 
         ASSERT_TRUE(a == b);
         return;
     }
+    /* Compare the IEEE-754 representations bytewise: this is a true bit-for-bit
+     * check (distinguishes +0.0 from -0.0, matches identical NaN payloads) rather
+     * than the value comparison == would do. */
     for (i = 0; i < n; ++i) {
-        ASSERT_TRUE(a[i] == b[i]);
+        ASSERT_TRUE(memcmp(&a[i], &b[i], sizeof(double)) == 0);
     }
 }
 
