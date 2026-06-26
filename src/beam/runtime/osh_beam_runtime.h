@@ -37,15 +37,17 @@ extern "C" {
  *   time.  This mode is not yet implemented — fill_pool returns
  *   OSH_ENOTSUP until MCPL support is added.
  *
- * primaries_generated tracks the total number of primary histories emitted
- * across all fill_pool calls on this runtime.  It is used to assign globally
- * unique prim_idx values when the transport loop chunks a large beam into
- * multiple pool fills.
+ * primaries_generated is serial-path bookkeeping: it counts the primaries
+ * emitted through the convenience wrapper osh_beam_runtime_fill_pool() so that
+ * successive chunked fills get contiguous, globally-unique prim_idx values.
+ * The cursor-free osh_beam_runtime_fill_pool_at() neither reads nor writes it —
+ * a parallel driver supplies each worker's global base explicitly instead, so
+ * the shared cursor is never a point of contention.
  */
 struct osh_beam_runtime {
     struct beam_workspace const *workspace; /* cold storage — not owned */
     struct particle primary;                /* resolved species for beam primaries */
-    size_t primaries_generated;             /* total primaries emitted so far */
+    size_t primaries_generated;             /* serial-path cursor; see header doc */
 
     union {
         /**
@@ -122,30 +124,58 @@ void osh_beam_runtime_free(struct osh_beam_runtime **rt);
 /* ---- Primary generation -------------------------------------------------- */
 
 /**
- * @brief Fill @p n new primary histories into the pool.
+ * @brief Fill @p n new primary histories into the pool at an explicit global base.
  *
  * @details
- * Appends @p n entries to @p pool starting at pool->n, then increments
- * pool->n by @p n.  The caller must ensure pool->n + n <= pool->capacity
- * before calling; OSH_EINVAL is returned otherwise.
+ * The cursor-free core of primary generation.  Appends @p n entries to @p pool
+ * starting at pool->n, then increments pool->n by @p n.  The caller must ensure
+ * pool->n + n <= pool->capacity before calling; OSH_EINVAL is returned otherwise.
  *
- * For SPOTS/SOBP mode: samples spot, energy, and phase space for each
- * primary using the beam model in beam/osh_beam_model.c.  Each entry is
- * written directly into the pool SoA arrays, bypassing the intermediate
- * AoS ray_v representation.  gen is set to 0 (beam primary) and prim_idx
- * is assigned from rt->primaries_generated so that indices are unique and
- * contiguous across multiple fill calls on the same runtime.
+ * The global history index of the i-th primary in this fill is
+ * @p global_prim_base + i — supplied by the caller, not read from any internal
+ * cursor.  This is the property that makes primary generation safe to partition
+ * across workers: each worker fills its own slice of the run by passing its own
+ * base (e.g. wctx->hist_lo + primaries_done), and because each primary is seeded
+ * purely from its global index — gen is set to 0 (beam primary), prim_idx to the
+ * global index, a transient BEAM stream samples the source phase space and the
+ * slot's persistent PHYSICS stream (pool->rng[slot]) is initialised — the same
+ * history draws the same numbers no matter which worker, thread, or rank emits
+ * it, or in what order.  Concatenating the primaries of any contiguous partition
+ * of [0, N) reproduces the single-pass [0, N) sequence exactly.
  *
- * Each primary is seeded independently from its global history index
- * (@p seeding->hist_base + prim_idx): a transient BEAM stream samples the
- * source phase space, and the slot's persistent PHYSICS stream
- * (pool->rng[slot]) is initialised for the transport loop.  Seeding by index
- * rather than from a shared stream makes the generated primaries — and the
- * whole run — reproducible and independent of pool capacity, thread, or rank.
+ * @ref osh_beam_runtime::primaries_generated is neither read nor written here;
+ * the caller owns the global index space.
  *
  * For PHSP mode: not yet implemented; returns OSH_ENOTSUP.
  *
- * @param[in,out] rt       Beam runtime (primaries_generated is updated).
+ * @param[in,out] rt               Beam runtime (read-only here; cursor untouched).
+ * @param[in]     seeding          Run-wide RNG seeding context (engine, seed, base).
+ * @param[in,out] pool             Pool to fill; must have capacity >= pool->n + n.
+ * @param[in]     n                Number of primaries to generate.
+ * @param[in]     global_prim_base Global history index of the first primary.
+ *
+ * @returns OSH_OK on success, OSH_E* on failure.
+ */
+enum osh_status osh_beam_runtime_fill_pool_at(struct osh_beam_runtime *rt,
+                                              struct osh_rng_seeding const *seeding,
+                                              struct osh_particle_pool *pool,
+                                              size_t n,
+                                              uint64_t global_prim_base);
+
+/**
+ * @brief Fill @p n new primary histories into the pool (serial convenience).
+ *
+ * @details
+ * Thin wrapper over @ref osh_beam_runtime_fill_pool_at that uses the runtime's
+ * own @ref osh_beam_runtime::primaries_generated cursor as the global base and
+ * advances it by @p n on success.  This is the right call for a single-stream
+ * serial driver that fills one runtime in order; for partitioned/parallel work
+ * call @ref osh_beam_runtime_fill_pool_at with an explicit base instead, so the
+ * shared cursor is never read or mutated concurrently.
+ *
+ * Behaviour is otherwise identical to @ref osh_beam_runtime_fill_pool_at.
+ *
+ * @param[in,out] rt       Beam runtime (primaries_generated is advanced).
  * @param[in]     seeding  Run-wide RNG seeding context (engine, seed, base).
  * @param[in,out] pool     Pool to fill; must have capacity >= pool->n + n.
  * @param[in]     n        Number of primaries to generate.

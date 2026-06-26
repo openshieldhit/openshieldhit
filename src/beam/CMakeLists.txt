@@ -14,6 +14,10 @@ target_include_directories(osh_beam
 )
 
 target_link_libraries(osh_beam
+    PUBLIC
+        # osh_beam_model.c samples via osh_rng_*, and struct osh_rng appears in
+        # the public osh_beam_model.h API, so osh_random is a usage requirement.
+        osh_random
     PRIVATE
         osh_common
         osh_particle
