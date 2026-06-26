@@ -109,7 +109,11 @@ static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
     st.gen = pool->gen[k];
     st.has_voxel = (zone_ref && zone_ref->has_hu) ? 1u : 0u;
 
-    return osh_scoring_score_step(score_rt, osh_scoring_runtime_master_accumulators(score_rt), &k_neutron_species, &st);
+    return osh_scoring_score_step(score_rt,
+                                  osh_scoring_runtime_master_accumulators(score_rt),
+                                  osh_scoring_runtime_master_scratch(score_rt),
+                                  &k_neutron_species,
+                                  &st);
 }
 
 /*

@@ -85,7 +85,8 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     st.prim_idx = 7u;
     st.gen = 0u;
 
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     energy0_idx = rt.outputs[0].page_indices[0];
@@ -110,7 +111,8 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     assert_close(rt.pages[filtered_idx].acc.data[2], 0.125);
 
     st.gen = 1u;
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_postprocess(&rt);
@@ -199,7 +201,8 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     st.prim_idx = 7u;
     st.gen = 0u;
 
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     energy0_idx = rt.outputs[0].page_indices[0];
@@ -287,7 +290,8 @@ static void test_score_mesh_neutron_id_filter(void) {
     st.prim_idx = 1u;
     st.gen = 1u;
 
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &neutron, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &neutron, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     fluence_idx = rt.outputs[0].page_indices[0];
@@ -301,7 +305,8 @@ static void test_score_mesh_neutron_id_filter(void) {
     assert_close(rt.pages[neutron_idx].acc.data[2], 0.5);
 
     neutron.pdg = OSH_PART_PDG_PROTON;
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &neutron, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &neutron, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     assert_close(rt.pages[fluence_idx].acc.data[0], 1.0);
@@ -373,7 +378,8 @@ static void test_score_mesh_dose_and_let_geometric(void) {
     st.wt = 1.0;
     st.medium = 0;
 
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_postprocess(&rt);
@@ -494,7 +500,8 @@ static void test_score_mesh_dqeff_tqeff(void) {
     st.wt = 1.0;
     st.medium = 0;
 
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_postprocess(&rt);
@@ -608,13 +615,14 @@ static void test_score_private_then_merge_equals_direct(void) {
     st.medium = 0;
 
     /* Direct: deposit straight into the master view (rt->pages[*].acc). */
-    rc = osh_scoring_score_step(&rt, osh_scoring_runtime_master_accumulators(&rt), &part, &st);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
     /* Private: deposit into a private set, then fold into a zeroed master. */
     priv = alloc_private_acc_set(&rt);
     merged = alloc_private_acc_set(&rt); /* starts zeroed */
-    rc = osh_scoring_score_step(&rt, priv, &part, &st);
+    rc = osh_scoring_score_step(&rt, priv, osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
     for (i = 0; i < rt.npages; ++i) {
         ASSERT_TRUE(osh_scoring_accumulator_merge(&merged[i], &priv[i]) == OSH_OK);

@@ -23,14 +23,20 @@ extern "C" {
  * @p rt is the read-only compiled descriptor (bin layout, filters, geometry,
  * group ranges); the deposit path never writes through it.  @p acc_set is the
  * mutable accumulator storage to deposit into, indexed in lockstep with
- * @c rt->pages (length @c rt->npages).  The single-worker serial driver passes
- * the master view (@ref osh_scoring_runtime_master_accumulators) so deposits land
- * straight in the shared master pages; a parallel worker passes its own private
- * set and the driver folds it into the master afterwards with
- * @ref osh_scoring_accumulator_merge.
+ * @c rt->pages (length @c rt->npages).  @p scratch is the caller-owned per-step
+ * voxel-crossing scratch traversal writes into; it must be private to the worker
+ * calling this function.  The single-worker serial driver passes the master views
+ * (@ref osh_scoring_runtime_master_accumulators and
+ * @ref osh_scoring_runtime_master_scratch) so deposits land straight in the shared
+ * master pages; a parallel worker passes its own private accumulator set and scratch,
+ * and the driver folds the accumulators into the master afterwards with
+ * @ref osh_scoring_accumulator_merge.  Because both the deposit target and the
+ * traversal scratch are caller-owned, multiple workers may share one read-only
+ * @p rt without racing.
  */
 enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
                                        struct osh_scoring_accumulator *acc_set,
+                                       struct osh_scoring_scratch *scratch,
                                        struct particle const *part,
                                        struct step const *st);
 
