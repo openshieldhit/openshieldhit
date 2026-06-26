@@ -149,6 +149,36 @@ design is **not reproducible** the moment you change batch size or add a thread,
 and it cannot be split across lanes/threads/ranks without serialising draws or
 abandoning reproducibility.
 
+### The ELI5 version
+
+Workers do not reserve chunks of one long random-number sequence.  They reserve
+history IDs.
+
+For example, a run with `nstat = 1000` can be split into four worker ranges:
+
+```text
+worker 0: histories [0, 250)
+worker 1: histories [250, 500)
+worker 2: histories [500, 750)
+worker 3: histories [750, 1000)
+```
+
+History 17 might need ten random draws, while history 18 might need ten thousand
+because it scatters more, creates secondaries, or stays in the geometry longer.
+That variation is fine because history 18 does not continue where history 17
+stopped.  Instead, each primary history starts its own RNG stream from its
+global history index:
+
+```text
+history_index = RNDOFFSET + worker_range_start + worker_local_index
+```
+
+So worker 1's first primary is seeded from history index `RNDOFFSET + 250`,
+regardless of how many random numbers worker 0 consumed.  The important
+parallelism rule is therefore simple: worker ranges must be disjoint and
+together cover `[0, nstat)`.  Then each history ID is generated once, and each
+history gets the same random stream no matter which worker runs it.
+
 ### The model
 
 Every history owns an **independent stream keyed by its global index**, carried
