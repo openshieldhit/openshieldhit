@@ -27,7 +27,11 @@ layer parses input and hands the save backends fully-resolved paths.
   arrays live in a `struct osh_scoring_accumulator` (`page->acc`), distinct
   from the page *descriptor* (geometry indices, strides, differential-axis
   config). That storage is the unit a future parallel worker owns privately and
-  folds back with `osh_scoring_accumulator_merge()`.
+  folds back with `osh_scoring_accumulator_merge()`. `osh_scoring_score_step()`
+  takes the deposit target as an explicit `acc_set` parameter (read-only `rt`
+  for layout, mutable `acc_set` for storage): the serial driver passes the
+  master view (`osh_scoring_runtime_master_accumulators()`, a per-page alias
+  array built once at compile time), while a worker passes its own private set.
 - **One deposit seam.** Every tally funnels through `osh_score_deposit()` —
   today a plain `+=`, tomorrow the single place an atomic / private / locked
   write policy plugs in.

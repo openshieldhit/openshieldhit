@@ -4,6 +4,7 @@
 #include "common/osh_step.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
+#include "scoring/runtime/osh_scoring_accumulator.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 
 #ifdef __cplusplus
@@ -18,9 +19,20 @@ extern "C" {
  * implementation supports Mesh (X,Y,Z) and Cyl (R,Z) geometries and the
  * step-based page kinds implemented in osh_scoring_step.c (ENERGY, FLUENCE,
  * DOSE, DOSEGY, DLET, TLET, DQEFF, TQEFF).
+ *
+ * @p rt is the read-only compiled descriptor (bin layout, filters, geometry,
+ * group ranges); the deposit path never writes through it.  @p acc_set is the
+ * mutable accumulator storage to deposit into, indexed in lockstep with
+ * @c rt->pages (length @c rt->npages).  The single-worker serial driver passes
+ * the master view (@ref osh_scoring_runtime_master_accumulators) so deposits land
+ * straight in the shared master pages; a parallel worker passes its own private
+ * set and the driver folds it into the master afterwards with
+ * @ref osh_scoring_accumulator_merge.
  */
-enum osh_status
-osh_scoring_score_step(struct osh_scoring_runtime *rt, struct particle const *part, struct step const *st);
+enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
+                                       struct osh_scoring_accumulator *acc_set,
+                                       struct particle const *part,
+                                       struct step const *st);
 
 /**
  * @brief Score one point event into the compiled scoring runtime.

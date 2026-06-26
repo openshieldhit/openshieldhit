@@ -42,7 +42,27 @@ struct osh_scoring_runtime {
     struct osh_voxel_crossing *crossing_buf;       /* reusable per-step scratch buffer */
     size_t crossing_cap;                           /* allocated length of crossing_buf */
     struct osh_material_runtime const *mat_tables; /* SP tables; NULL until wired by simulation */
+    /* Master accumulator view: an npages-long array whose element i shallow-aliases
+     * pages[i].acc (same data pointers).  Built once by osh_scoring_compile() so the
+     * single-worker serial driver can hand osh_scoring_score_step() a deposit target
+     * that is identical in shape to a parallel worker's private set, with no per-step
+     * allocation.  NULL when npages == 0.  Owns only the array; the arrays it points
+     * into are owned by the pages. */
+    struct osh_scoring_accumulator *master_acc;
 };
+
+/**
+ * @brief Master accumulator-set view (length npages) aliasing each page's storage.
+ *
+ * @details
+ * The serial single-worker driver passes this to @ref osh_scoring_score_step so its
+ * deposits land straight in the shared master pages, while a parallel worker passes
+ * its own private set instead.  Built once by @ref osh_scoring_compile; never
+ * allocated on the hot path.  Returns NULL when there are no pages.
+ */
+static inline struct osh_scoring_accumulator *osh_scoring_runtime_master_accumulators(struct osh_scoring_runtime *rt) {
+    return rt ? rt->master_acc : NULL;
+}
 
 #ifdef __cplusplus
 }
