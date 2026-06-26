@@ -1019,9 +1019,11 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
     free(prepared_pages);
 
     /* Pre-allocate the serial driver's per-step voxel-crossing scratch buffer.
-     * The maximum capacity needed is the sum of nbins across all axes of the
-     * largest geometry (matching the cap = n[0]+n[1]+n[2] formula in
-     * osh_scoring_step.c).  One buffer is reused for every geometry on every
+     * Size it to the largest per-geometry cap, computed with the same formula
+     * each traversal path uses in osh_scoring_step.c: mesh needs n[0]+n[1]+n[2]
+     * (sum of axis nbins), while CYL needs 2*nr+nz (== 2*n[0]+n[2]).  The two
+     * cases are handled separately below; keep both in sync with score_step so
+     * the buffer never overflows.  One buffer is reused for every geometry on every
      * physics step, eliminating the calloc/free pair that was spending ~60% of
      * total CPU time on memset.  It lives in rt->master_scratch and is handed to
      * osh_scoring_score_step() by the serial driver via

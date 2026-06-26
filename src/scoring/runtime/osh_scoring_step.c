@@ -99,6 +99,11 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
     if (rt->npages > 0u && !acc_set) {
         return OSH_EINVAL;
     }
+    /* Traversal writes into the caller-owned scratch; require it whenever there
+     * is geometry to traverse, alongside the other argument checks. */
+    if (rt->ngeometries > 0u && !scratch) {
+        return OSH_EINVAL;
+    }
     if (!(st->ds > 0.0)) {
         return OSH_EINVAL;
     }
@@ -144,7 +149,7 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             if (cap == 0u) {
                 continue;
             }
-            if (!scratch || cap > scratch->crossing_cap || !scratch->crossing_buf) {
+            if (cap > scratch->crossing_cap || !scratch->crossing_buf) {
                 return OSH_ESTATE;
             }
             crossings = scratch->crossing_buf;
@@ -164,7 +169,7 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             if (cap == 0u) {
                 continue;
             }
-            if (!scratch || cap > scratch->crossing_cap || !scratch->crossing_buf) {
+            if (cap > scratch->crossing_cap || !scratch->crossing_buf) {
                 return OSH_ESTATE;
             }
             crossings = scratch->crossing_buf;
