@@ -26,6 +26,26 @@ parallel-ready. Every routine is a pure function of an explicit
   results do not depend on batch size, thread, or rank — the basis for
   reproducible SIMD/multithread/MPI/GPU transport.
 
+## The quick mental model
+
+Parallel workers are assigned **history-index ranges**, not slices of one shared
+random-number sequence.  For example, a run with `nstat = 1000` might give
+worker 0 histories `[0, 250)`, worker 1 histories `[250, 500)`, and so on.  A
+history may consume a few random draws or many random draws during transport,
+but that does not affect any other worker because each primary history is seeded
+from its own global index:
+
+```text
+history_index = rndoffset + hist_lo + worker_local_index
+```
+
+That is why the beam fill path takes the first global history index for the
+current fill explicitly.  The beam runtime should not ask "how many primaries
+have I generated so far?" from a shared counter when workers are filling
+disjoint ranges.  The worker already knows the stable history IDs it owns, and
+those IDs are enough to recreate the same primary and transport RNG streams
+regardless of pool capacity, thread scheduling, or MPI rank.
+
 ## Full documentation
 
 The detailed treatment — engine motivation and references, the distribution
