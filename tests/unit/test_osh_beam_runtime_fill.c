@@ -242,16 +242,29 @@ static void test_overflow_guard(void) {
     seeding_init(&seeding);
     ASSERT_TRUE(osh_particle_pool_init(&pool, POOL_CAP) == OSH_OK);
 
-    /* [base, base + NPRIM) would wrap uint64_t: rejected, pool left untouched —
+    /* [base, base + NPRIM) would wrap prim_idx: rejected, pool left untouched —
      * fail loudly rather than reuse history indices / RNG streams. */
     ASSERT_TRUE(osh_beam_runtime_fill_pool_at(rt, &seeding, &pool, NPRIM, UINT64_MAX - 3u) == OSH_EINVAL);
     ASSERT_TRUE(pool.n == 0u);
 
-    /* A large but non-wrapping base is accepted and assigns those global indices. */
-    ASSERT_TRUE(osh_beam_runtime_fill_pool_at(rt, &seeding, &pool, NPRIM, UINT64_MAX - 1000u) == OSH_OK);
+    /* Even when prim_idx itself would not wrap, RNDOFFSET + prim_idx must not
+     * wrap the final RNG history key. */
+    ASSERT_TRUE(osh_beam_runtime_fill_pool_at(rt, &seeding, &pool, NPRIM, UINT64_MAX - 1000u) == OSH_EINVAL);
+    ASSERT_TRUE(pool.n == 0u);
+
+    /* A large but non-wrapping final history-index range is accepted. With
+     * hist_base = 1000 and NPRIM = 10, this lands exactly on UINT64_MAX. */
+    ASSERT_TRUE(osh_beam_runtime_fill_pool_at(rt, &seeding, &pool, NPRIM, UINT64_MAX - 1009u) == OSH_OK);
     ASSERT_TRUE(pool.n == NPRIM);
-    ASSERT_TRUE(pool.prim_idx[0] == UINT64_MAX - 1000u);
-    ASSERT_TRUE(pool.prim_idx[NPRIM - 1u] == (UINT64_MAX - 1000u) + (NPRIM - 1u));
+    ASSERT_TRUE(pool.prim_idx[0] == UINT64_MAX - 1009u);
+    ASSERT_TRUE(pool.prim_idx[NPRIM - 1u] == UINT64_MAX - 1000u);
+
+    /* Off-by-one boundary: a single primary at UINT64_MAX is valid when
+     * RNDOFFSET is zero, because the last index is base + (n - 1). */
+    seeding.hist_base = 0u;
+    ASSERT_TRUE(osh_beam_runtime_fill_pool_at(rt, &seeding, &pool, 1u, UINT64_MAX) == OSH_OK);
+    ASSERT_TRUE(pool.n == NPRIM + 1u);
+    ASSERT_TRUE(pool.prim_idx[NPRIM] == UINT64_MAX);
 
     osh_particle_pool_free(&pool);
     osh_beam_runtime_free(&rt);

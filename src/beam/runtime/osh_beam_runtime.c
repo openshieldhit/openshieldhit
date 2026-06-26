@@ -93,16 +93,28 @@ enum osh_status osh_beam_runtime_fill_pool_at(struct osh_beam_runtime *rt,
     if (n == 0u) {
         return OSH_OK;
     }
-    if (pool->n + n > pool->capacity) {
+    if (pool->n > pool->capacity || n > pool->capacity - pool->n) {
         return OSH_EINVAL;
     }
-    /* The global history index of the last primary in this fill is
-     * global_prim_base + (n - 1).  Reject a base that would wrap uint64_t rather
-     * than silently reuse indices/RNG streams.  (Unreachable in practice — it
-     * needs ~2^64 histories — but the seam is the contract for parallel fills,
-     * so fail loudly instead of corrupting tallies.) */
-    if (global_prim_base > UINT64_MAX - (uint64_t) n) {
-        return OSH_EINVAL;
+    /* The last primary in this fill has prim_idx = global_prim_base + (n - 1)
+     * and hist_index = seeding->hist_base + prim_idx.  Reject any range that
+     * would wrap either value rather than silently reusing indices/RNG streams.
+     * (Unreachable in practice -- it needs ~2^64 histories -- but this is the
+     * contract for parallel fills, so fail loudly instead of corrupting tallies.) */
+    {
+        uint64_t const last_offset = (uint64_t) n - 1u;
+        uint64_t first_hist_index;
+
+        if (global_prim_base > UINT64_MAX - last_offset) {
+            return OSH_EINVAL;
+        }
+        if (seeding->hist_base > UINT64_MAX - global_prim_base) {
+            return OSH_EINVAL;
+        }
+        first_hist_index = seeding->hist_base + global_prim_base;
+        if (first_hist_index > UINT64_MAX - last_offset) {
+            return OSH_EINVAL;
+        }
     }
 
     switch (rt->workspace->beam_mode) {
