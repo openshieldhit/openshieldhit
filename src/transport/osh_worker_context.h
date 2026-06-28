@@ -12,20 +12,23 @@ extern "C" {
 struct osh_particle_pool;
 struct osh_zone_ref;
 struct osh_scoring_accumulator;
+struct osh_transport_profile;
 
 /**
  * @brief Everything one transport worker needs to run an assigned slice of histories.
  *
  * @details
- * Bundles the *transport-local* mutable state — the particle pool and per-step
- * batch scratch — for one slice of the run, so this state stops being a barrier
- * to partitioning work across workers (threads, MPI ranks, or sequential
- * profiling replicas) over disjoint history ranges.  It is one building block,
- * not the whole story: the scoring accumulators in score_rt and
- * transport_ctx->profile are owned elsewhere and remain shared, so concurrent
- * execution will additionally need per-worker or coordinated scoring/profile
- * state (the @ref accumulators field below is where per-worker scoring memory
- * will attach).  Beam primary generation is no longer in that list — a worker
+ * Bundles the *transport-local* mutable state — the particle pool, per-step
+ * batch scratch, and the run-profile counters — for one slice of the run, so
+ * this state stops being a barrier to partitioning work across workers (threads,
+ * MPI ranks, or sequential profiling replicas) over disjoint history ranges.  It
+ * is one building block, not the whole story: the scoring accumulators in
+ * score_rt are owned elsewhere and remain shared, so concurrent execution will
+ * additionally need per-worker scoring state (the @ref accumulators field below
+ * is where per-worker scoring memory will attach).  The profile counters are no
+ * longer in that list — each worker accumulates into its own @ref profile and
+ * the driver merges them (see osh_transport_profile_merge).  Beam primary
+ * generation is no longer in that list either — a worker
  * fills its pool through osh_beam_runtime_fill_pool_at() with an explicit global
  * base from its own range, so the beam runtime is shared read-only.
  *
@@ -59,6 +62,15 @@ struct osh_worker_context {
      * here without touching the transport loop. */
     struct osh_scoring_accumulator *accumulators;
     size_t naccumulators;
+
+    /* Per-worker transport profile (phase timers + event counters).  The worker
+     * accumulates here on the hot path, never into a shared profile, so workers
+     * do not race on these counters; the driver folds them into the run's master
+     * profile with osh_transport_profile_merge() once the range completes.  NULL
+     * disables profiling.  In the single-worker baseline this points straight at
+     * the simulation's master profile (transport_ctx->profile), so the lone
+     * worker writes the master directly and no merge is needed. */
+    struct osh_transport_profile *profile;
 };
 
 /**
@@ -70,8 +82,10 @@ struct osh_worker_context {
  * simulation's pre-allocated ion pool and scratch (transport_ctx->ion_pool /
  * zone_refs / dist_batch), so nothing here is owned and there is nothing to free.
  * @ref capacity is taken from @p pool->capacity; the scratch arrays must be at
- * least that long.  The private scoring accumulators are left NULL (shared-master
- * scoring, the current baseline).  A future parallel worker that owns a private
+ * least that long.  The private scoring accumulators and the profile are left
+ * NULL; the caller wires @ref profile to the run's master profile (serial) or to
+ * a private one (parallel), and the accumulators stay NULL for shared-master
+ * scoring (the current baseline).  A future parallel worker that owns a private
  * pool would use a separate owning constructor.
  *
  * @param[out] wctx       Context to populate (overwritten; must be non-NULL).

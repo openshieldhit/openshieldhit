@@ -15,6 +15,7 @@
 struct osh_particle_pool;
 struct osh_gemca_runtime;
 struct osh_transport_context;
+struct osh_transport_profile;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
 struct osh_rng;
@@ -43,6 +44,11 @@ struct osh_rng;
  * pool->e[slot] is zeroed and OSH_OK is returned; the slot is collected by
  * the next osh_particle_pool_compact() call.  Only allocation or I/O errors
  * from scoring propagate as non-OK status.
+ *
+ * @p prof is the caller's (per-worker) profile for the nuclear-event counters;
+ * pass NULL to disable, or the worker's own profile so concurrent workers never
+ * race on shared counters.  It is read-only diagnostics: it never touches the
+ * RNG or physics state.
  */
 enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        size_t slot,
@@ -51,6 +57,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        size_t n_step_segments,
                                        struct osh_gemca_runtime const *geom_rt,
                                        struct osh_transport_context *transport_ctx,
+                                       struct osh_transport_profile *prof,
                                        struct osh_material_runtime const *material_rt,
                                        struct osh_scoring_runtime *score_rt,
                                        struct osh_rng *rng);

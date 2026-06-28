@@ -93,6 +93,17 @@ scratch lives in a `struct osh_scoring_scratch` passed into
 compile time in `osh_scoring_runtime.master_scratch` (exposed via
 `osh_scoring_runtime_master_scratch()`) and a parallel worker owning its own.
 
+The same caller-owned discipline applies to mutable counters on the hot path.
+The transport profile (`struct osh_transport_profile`) is per-worker: a worker
+accumulates phase timers and event counters into its own profile carried on
+`osh_worker_context.profile` (and threaded into `osh_transport_ion_step()`), never
+a shared one, so concurrent workers do not race. The serial worker points its
+profile straight at the run's master, so its values are unchanged; a parallel
+driver gives each worker a private profile and folds them in afterwards with
+`osh_transport_profile_merge()` (counters and per-phase `*_s` sum as aggregate
+work; `total_s` combines by maximum, since concurrent workers overlap in
+wall-clock time).
+
 #### API Stability
 
 The public API is still early and **not yet frozen**.

@@ -202,6 +202,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        size_t n_step_segments,
                                        struct osh_gemca_runtime const *geom_rt,
                                        struct osh_transport_context *transport_ctx,
+                                       struct osh_transport_profile *prof,
                                        struct osh_material_runtime const *material_rt,
                                        struct osh_scoring_runtime *score_rt,
                                        struct osh_rng *rng) {
@@ -246,10 +247,11 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
         return rc;
     }
 
-    /* Profiling counters only; never touches RNG or physics state. */
-    if (transport_ctx->profile && ctx.nuclear_event.kind != OSH_NUCLEAR_EVENT_NONE) {
-        transport_ctx->profile->nuclear_events++;
-        transport_ctx->profile->secondaries += (unsigned long long) ctx.nuclear_event.n_secondaries;
+    /* Profiling counters only; never touches RNG or physics state.  The profile
+     * is the caller's (per-worker), so concurrent workers do not race here. */
+    if (prof && ctx.nuclear_event.kind != OSH_NUCLEAR_EVENT_NONE) {
+        prof->nuclear_events++;
+        prof->secondaries += (unsigned long long) ctx.nuclear_event.n_secondaries;
     }
 
     /* Inject secondaries produced by a nuclear event (pp elastic recoil,

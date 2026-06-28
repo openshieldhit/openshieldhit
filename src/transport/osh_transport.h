@@ -111,6 +111,14 @@ struct osh_transport_params {
  * Profiling reads only the monotonic clock and pre-existing counters; it
  * never touches the RNG streams or any physics state, so instrumented runs
  * are bit-identical to un-instrumented ones.
+ *
+ * A profile is per-worker mutable state: each transport worker accumulates into
+ * its own instance on the hot path (carried on @ref osh_worker_context), never
+ * into a shared one, so concurrent workers do not race on these counters.  The
+ * driver folds the per-worker profiles into the run's master profile after the
+ * workers finish, with osh_transport_profile_merge().  In the single-worker
+ * build the lone worker writes straight into the master, so there is nothing to
+ * merge and the values are identical to the un-parallelised path.
  */
 struct osh_transport_profile {
     double fill_s;                     /**< Time spent refilling the pool [s]. */
@@ -124,6 +132,30 @@ struct osh_transport_profile {
     unsigned long long nuclear_events; /**< Nuclear interactions sampled (any kind). */
     unsigned long long secondaries;    /**< Secondaries produced by nuclear events. */
 };
+
+/**
+ * @brief Fold one worker's transport profile into a destination profile.
+ *
+ * @details
+ * The reduce step that combines per-worker profiles after a parallel run,
+ * mirroring osh_scoring_accumulator_merge() for scoring tallies.  Counters and
+ * per-phase timers are summed: the phase @c *_s fields therefore report
+ * aggregate work-in-phase across workers (their sum can exceed the elapsed wall
+ * time, which is the point — it exposes parallel efficiency).
+ *
+ * @c total_s is the exception.  Workers run concurrently, so elapsed time is the
+ * span of the longest worker, not the sum of their spans; it is combined by
+ * **maximum**, not addition.  A parallel driver that measures a single
+ * wall-clock span around the whole parallel region may overwrite @c total_s with
+ * that span afterwards; until then the max of the per-worker spans is a faithful
+ * lower-bound proxy.  Merging one worker into a zeroed destination reproduces
+ * that worker's values exactly (sum with zero; max with zero), so the
+ * single-worker path is bit-identical whether or not the merge is used.
+ *
+ * @param[in,out] dst  Destination profile (accumulates @p src).  No-op if NULL.
+ * @param[in]     src  Source profile to fold in.  No-op if NULL.
+ */
+void osh_transport_profile_merge(struct osh_transport_profile *dst, struct osh_transport_profile const *src);
 
 /**
  * @brief Per-run transport context: immutable knobs plus mutable run state.
@@ -148,7 +180,11 @@ struct osh_transport_context {
     struct osh_zone_ref *zone_refs;                    /**< Transport scratch: zone/material per slot. */
     double *dist_batch;                                /**< Transport scratch: boundary distance per slot. */
     size_t scratch_capacity;                           /**< Number of entries in zone_refs and dist_batch. */
-    struct osh_transport_profile *profile;             /**< Borrowed; NULL disables phase timers/counters. */
+    struct osh_transport_profile *profile;             /**< Borrowed master/destination profile; NULL disables
+                                                            phase timers/counters.  Written by a worker (the lone
+                                                            serial worker points its own profile here) or by the
+                                                            driver merging per-worker profiles — not on the hot
+                                                            path through this pointer. */
     char warned_boundary_demin_override;
 };
 
