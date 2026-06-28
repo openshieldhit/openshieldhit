@@ -591,7 +591,7 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
         }
     }
     free(rt->outputs);
-    free(rt->crossing_buf);
+    free(rt->master_scratch.crossing_buf);
     /* master_acc only shallow-aliases the per-page accumulators (freed above);
      * release the view array itself, not the arrays it points into. */
     free(rt->master_acc);
@@ -1018,11 +1018,17 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
     free(geom_page_counts);
     free(prepared_pages);
 
-    /* Pre-allocate the per-step voxel-crossing scratch buffer.  The maximum
-     * capacity needed is the sum of nbins across all axes of the largest
-     * geometry (matching the cap = n[0]+n[1]+n[2] formula in osh_scoring_step.c).
-     * One buffer is reused for every geometry on every physics step, eliminating
-     * the calloc/free pair that was spending ~60% of total CPU time on memset. */
+    /* Pre-allocate the serial driver's per-step voxel-crossing scratch buffer.
+     * Size it to the largest per-geometry cap, computed with the same formula
+     * each traversal path uses in osh_scoring_step.c: mesh needs n[0]+n[1]+n[2]
+     * (sum of axis nbins), while CYL needs 2*nr+nz (== 2*n[0]+n[2]).  The two
+     * cases are handled separately below; keep both in sync with score_step so
+     * the buffer never overflows.  One buffer is reused for every geometry on every
+     * physics step, eliminating the calloc/free pair that was spending ~60% of
+     * total CPU time on memset.  It lives in rt->master_scratch and is handed to
+     * osh_scoring_score_step() by the serial driver via
+     * osh_scoring_runtime_master_scratch(); a parallel worker owns its own scratch
+     * instead, so the buffer is never shared mutable state on the deposit path. */
     {
         size_t max_cap = 0;
         for (i = 0; i < rt->ngeometries; ++i) {
@@ -1049,12 +1055,13 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             }
         }
         if (max_cap > 0) {
-            rt->crossing_buf = (struct osh_voxel_crossing *) malloc(max_cap * sizeof(*rt->crossing_buf));
-            if (!rt->crossing_buf) {
+            rt->master_scratch.crossing_buf =
+                (struct osh_voxel_crossing *) malloc(max_cap * sizeof(*rt->master_scratch.crossing_buf));
+            if (!rt->master_scratch.crossing_buf) {
                 osh_scoring_runtime_free(rt);
                 return OSH_ENOMEM;
             }
-            rt->crossing_cap = max_cap;
+            rt->master_scratch.crossing_cap = max_cap;
         }
     }
 

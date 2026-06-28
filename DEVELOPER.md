@@ -86,7 +86,12 @@ i.e. inside `osh_scoring_score_step()`, `osh_transport_step()`, or anything they
 call. Per-step `calloc`/`free` of scratch buffers was found to dominate CPU time
 (zeroing via `memset` accounted for ~60 % of all instructions in a CT transport
 run). All scratch buffers must be pre-allocated at compile/setup time and stored
-in the corresponding runtime struct (e.g. `osh_scoring_runtime.crossing_buf`).
+where the hot-path code can reuse them. Buffers that traversal *mutates* per step
+are caller-owned so they can be made per-worker without churn: the voxel-crossing
+scratch lives in a `struct osh_scoring_scratch` passed into
+`osh_scoring_score_step()`, with the serial driver's long-lived copy pre-sized at
+compile time in `osh_scoring_runtime.master_scratch` (exposed via
+`osh_scoring_runtime_master_scratch()`) and a parallel worker owning its own.
 
 #### API Stability
 

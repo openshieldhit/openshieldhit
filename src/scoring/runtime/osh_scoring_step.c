@@ -78,6 +78,7 @@ static enum osh_status score_group_tqeff(struct osh_scoring_runtime const *rt,
 
 enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
                                        struct osh_scoring_accumulator *acc_set,
+                                       struct osh_scoring_scratch *scratch,
                                        struct particle const *part,
                                        struct step const *st) {
     size_t i;
@@ -96,6 +97,11 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
         return OSH_EINVAL;
     }
     if (rt->npages > 0u && !acc_set) {
+        return OSH_EINVAL;
+    }
+    /* Traversal writes into the caller-owned scratch; require it whenever there
+     * is geometry to traverse, alongside the other argument checks. */
+    if (rt->ngeometries > 0u && !scratch) {
         return OSH_EINVAL;
     }
     if (!(st->ds > 0.0)) {
@@ -143,10 +149,10 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             if (cap == 0u) {
                 continue;
             }
-            if (cap > rt->crossing_cap || !rt->crossing_buf) {
+            if (cap > scratch->crossing_cap || !scratch->crossing_buf) {
                 return OSH_ESTATE;
             }
-            crossings = rt->crossing_buf;
+            crossings = scratch->crossing_buf;
             hit = osh_raytrace_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
             if (!hit || ncross == 0u) {
                 continue;
@@ -163,10 +169,10 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             if (cap == 0u) {
                 continue;
             }
-            if (cap > rt->crossing_cap || !rt->crossing_buf) {
+            if (cap > scratch->crossing_cap || !scratch->crossing_buf) {
                 return OSH_ESTATE;
             }
-            crossings = rt->crossing_buf;
+            crossings = scratch->crossing_buf;
             hit = osh_raytrace_cyl_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
             if (!hit || ncross == 0u) {
                 continue;

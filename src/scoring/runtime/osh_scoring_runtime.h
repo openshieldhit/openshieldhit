@@ -14,6 +14,29 @@
 extern "C" {
 #endif
 
+/* ---- Per-worker traversal scratch ---------------------------------------- */
+
+/**
+ * @brief Caller-owned voxel-crossing scratch for one @ref osh_scoring_score_step call.
+ *
+ * @details
+ * Holds the reusable per-step buffer that raytrace / voxel-crossing traversal
+ * writes into before the per-group deposits consume it.  It is mutated on every
+ * step, so it must be private to the worker doing the traversal: the serial
+ * single-worker driver hands the long-lived @ref osh_scoring_runtime.master_scratch
+ * (built once at compile time, see @ref osh_scoring_runtime_master_scratch), while a
+ * parallel worker passes its own instance.  Keeping this off the read-only compiled
+ * descriptor is what lets multiple workers share one @c rt without racing on the
+ * traversal scratch.
+ *
+ * @c crossing_buf is grown to fit by the owner (the serial scratch is pre-sized at
+ * compile time to the largest geometry, so the serial hot path never reallocates).
+ */
+struct osh_scoring_scratch {
+    struct osh_voxel_crossing *crossing_buf; /* reusable per-step voxel-crossing scratch buffer */
+    size_t crossing_cap;                     /* allocated length of crossing_buf */
+};
+
 /* ---- Top-level compiled runtime ------------------------------------------ */
 
 /**
@@ -39,8 +62,13 @@ struct osh_scoring_runtime {
     size_t ngeometries;
     size_t npages;
     size_t noutputs;
-    struct osh_voxel_crossing *crossing_buf;       /* reusable per-step scratch buffer */
-    size_t crossing_cap;                           /* allocated length of crossing_buf */
+    /* Serial single-worker traversal scratch: the long-lived per-step voxel-crossing
+     * buffer the serial driver passes to osh_scoring_score_step() (see
+     * osh_scoring_runtime_master_scratch).  Pre-sized once by osh_scoring_compile() to
+     * the largest geometry, so the serial hot path never reallocates.  Not consulted
+     * by the deposit path itself: score_step uses the caller-supplied scratch, so a
+     * parallel worker passes its own and this stays the serial driver's private copy. */
+    struct osh_scoring_scratch master_scratch;
     struct osh_material_runtime const *mat_tables; /* SP tables; NULL until wired by simulation */
     /* Master accumulator view: an npages-long array whose element i shallow-aliases
      * pages[i].acc (same data pointers).  Built once by osh_scoring_compile() so the
@@ -62,6 +90,20 @@ struct osh_scoring_runtime {
  */
 static inline struct osh_scoring_accumulator *osh_scoring_runtime_master_accumulators(struct osh_scoring_runtime *rt) {
     return rt ? rt->master_acc : NULL;
+}
+
+/**
+ * @brief Serial single-worker traversal scratch, pre-sized for the largest geometry.
+ *
+ * @details
+ * The serial driver passes this to @ref osh_scoring_score_step as its per-step
+ * voxel-crossing scratch, mirroring @ref osh_scoring_runtime_master_accumulators for the
+ * deposit target.  A parallel worker passes its own @ref osh_scoring_scratch instead, so
+ * the compiled @c rt is never the source of the mutable traversal scratch.  Built once by
+ * @ref osh_scoring_compile; never allocated on the hot path.
+ */
+static inline struct osh_scoring_scratch *osh_scoring_runtime_master_scratch(struct osh_scoring_runtime *rt) {
+    return rt ? &rt->master_scratch : NULL;
 }
 
 #ifdef __cplusplus

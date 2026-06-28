@@ -32,6 +32,11 @@ layer parses input and hands the save backends fully-resolved paths.
   for layout, mutable `acc_set` for storage): the serial driver passes the
   master view (`osh_scoring_runtime_master_accumulators()`, a per-page alias
   array built once at compile time), while a worker passes its own private set.
+  The per-step voxel-crossing traversal scratch is caller-owned the same way: a
+  `struct osh_scoring_scratch` is passed in alongside `acc_set`, so neither the
+  deposit target nor the traversal scratch is shared mutable state on `rt` and
+  multiple workers can share one read-only `rt`. The serial driver passes
+  `osh_scoring_runtime_master_scratch()` (pre-sized once at compile time).
 - **One deposit seam.** Every tally funnels through `osh_score_deposit()` —
   today a plain `+=`, tomorrow the single place an atomic / private / locked
   write policy plugs in.
