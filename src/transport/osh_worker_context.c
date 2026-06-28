@@ -19,4 +19,5 @@ void osh_worker_context_attach(struct osh_worker_context *wctx,
     wctx->dist_batch = dist_batch; /* borrowed */
     wctx->accumulators = NULL;
     wctx->naccumulators = 0u;
+    wctx->profile = NULL; /* caller wires this to the master (serial) or a private profile (parallel). */
 }
