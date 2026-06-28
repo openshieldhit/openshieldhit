@@ -15,6 +15,8 @@ enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *ac
     acc->data_var = NULL;
     acc->data2_var = NULL;
     acc->len = len;
+    acc->weight = 0.0;
+    acc->nbatch = 0u;
 
     acc->data = (double *) calloc(n, sizeof(*acc->data));
     if (!acc->data) {
@@ -37,6 +39,8 @@ void osh_scoring_accumulator_zero(struct osh_scoring_accumulator *acc) {
     if (!acc || acc->len == 0u) {
         return;
     }
+    acc->weight = 0.0; /* a zeroed accumulator represents no batches yet */
+    acc->nbatch = 0u;
     if (acc->data) {
         memset(acc->data, 0, acc->len * sizeof(*acc->data));
     }
@@ -83,6 +87,50 @@ static void merge_array(double *dst_arr, double const *src_arr, size_t len) {
     }
 }
 
+/*
+ * Schubert & Gertz (2018) numerically-stable parallel merge of two Welford M2
+ * arrays, in place: dst_m2 becomes the combined M2 of batch A (dst_*, holding
+ * running sum dst_sum and weight dst_w) and batch B (src_*).  Per-bin means are
+ * derived as sum/weight; the weights are the batches' history counts.
+ *
+ *   M2 = M2_A + M2_B + (mean_B − mean_A)² · w_A·w_B / (w_A + w_B)
+ *
+ * The cross-term is what a plain element-wise += cannot express; dropping it
+ * silently corrupts the variance.  This must run before the additive fields
+ * (dst_sum / dst_w) are folded, since it reads dst's pre-merge values.  Empty
+ * batches act as the identity.
+ */
+static void merge_m2(double *dst_m2,
+                     double const *dst_sum,
+                     double dst_w,
+                     double const *src_m2,
+                     double const *src_sum,
+                     double src_w,
+                     size_t len) {
+    size_t i;
+    double w;
+    if (!dst_m2 || !src_m2 || !dst_sum || !src_sum) {
+        return;
+    }
+    if (src_w == 0.0) {
+        return; /* B empty: A unchanged */
+    }
+    if (dst_w == 0.0) {
+        /* A empty: the combined batch is B. */
+        for (i = 0; i < len; ++i) {
+            dst_m2[i] = src_m2[i];
+        }
+        return;
+    }
+    w = dst_w + src_w;
+    for (i = 0; i < len; ++i) {
+        double const mean_a = dst_sum[i] / dst_w;
+        double const mean_b = src_sum[i] / src_w;
+        double const delta = mean_b - mean_a;
+        dst_m2[i] += src_m2[i] + delta * delta * (dst_w * src_w / w);
+    }
+}
+
 enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *dst,
                                               struct osh_scoring_accumulator const *src) {
     if (!dst || !src) {
@@ -99,10 +147,19 @@ enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *ds
         || ((dst->data2_var == NULL) != (src->data2_var == NULL))) {
         return OSH_EINVAL;
     }
+    /* Variance (Welford M2) arrays first — they need dst's pre-merge sums and
+     * weight to form the Schubert-Gertz cross-term.  data_var pairs with data,
+     * data2_var with data2; both use the per-accumulator history weight.  NULL
+     * variance arrays (the current default) make these no-ops, leaving the plain
+     * additive reduction over data / data2. */
+    merge_m2(dst->data_var, dst->data, dst->weight, src->data_var, src->data, src->weight, dst->len);
+    merge_m2(dst->data2_var, dst->data2, dst->weight, src->data2_var, src->data2, src->weight, dst->len);
+
+    /* Additive fields: raw sums and the batch bookkeeping. */
     merge_array(dst->data, src->data, dst->len);
     merge_array(dst->data2, src->data2, dst->len);
-    merge_array(dst->data_var, src->data_var, dst->len);
-    merge_array(dst->data2_var, src->data2_var, dst->len);
+    dst->weight += src->weight;
+    dst->nbatch += src->nbatch;
     return OSH_OK;
 }
 
@@ -119,4 +176,6 @@ void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc) {
     acc->data_var = NULL;
     acc->data2_var = NULL;
     acc->len = 0u;
+    acc->weight = 0.0;
+    acc->nbatch = 0u;
 }

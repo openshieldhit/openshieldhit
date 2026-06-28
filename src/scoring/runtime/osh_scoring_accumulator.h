@@ -24,13 +24,54 @@ extern "C" {
  * Array layout matches the page descriptor: row-major spatial bins, with the
  * differential axes appended as outer strides (see osh_scoring_page_runtime).
  *
- *   - @p data      primary accumulator (always allocated).
+ *   - @p data      primary accumulator (always allocated): the running sum of
+ *                  per-history deposits Σx in each bin (additive across batches).
  *   - @p data2     secondary weight accumulator for two-pass averages
  *                  (dose/track-averaged LET and Qeff); NULL for simple scorers.
- *   - @p data_var  running sum-of-squares for @p data variance; NULL until the
- *                  variance (x²/σ) feature allocates it.
- *   - @p data2_var running sum-of-squares for @p data2 variance; NULL until then.
+ *   - @p data_var  Welford M2 (sum of squared deviations from the mean) for the
+ *                  @p data estimator; NULL until the variance feature allocates
+ *                  it.  See "Uncertainty representation" below.
+ *   - @p data2_var Welford M2 for the @p data2 estimator; NULL until then.
  *   - @p len       element count of every allocated array.
+ *   - @p weight    statistical weight (history count W) of the batch these
+ *                  accumulators represent — the Schubert–Gertz merge weight.
+ *   - @p nbatch    number of independent batches folded in so far (B); the
+ *                  degrees of freedom for the error estimate are B − 1.
+ *
+ * @par Uncertainty representation (batch-means, Welford/Schubert–Gertz)
+ * Monte-Carlo uncertainty here is a **batch-means** estimate: a *batch* is one
+ * independent unit of work — a parallel worker's history range, a periodic
+ * partial-dump interval, an internal sub-split of a serial run, or a separate
+ * run — and each batch is treated as a single weighted observation of the
+ * per-primary mean @c data/@c weight.  True per-history variance would need an
+ * @c nbins × live-histories scratch buffer (prohibitive for the wavefront
+ * design), so the spread *between batches* is the estimator instead.  This is
+ * why @p weight / @p nbatch are per-accumulator scalars, not per-bin arrays:
+ * every bin is exposed to the same set of histories (most depositing zero), so
+ * the observation count is identical across bins.
+ *
+ * The variance state is combined with the numerically-stable parallel formula of
+ * Schubert & Gertz (2018): merging batch A (weight @c wA, mean @c mA, M2 @c M2A)
+ * with batch B yields
+ *
+ *   w  = wA + wB
+ *   δ  = mB − mA                       (means derived as data/weight)
+ *   M2 = M2A + M2B + δ² · wA·wB / w
+ *
+ * The δ²·wA·wB/w cross-term is exactly what a plain element-wise @c += cannot
+ * express, and it handles **unequal-size batches by construction** — the normal
+ * case under heterogeneous CPU cores and arbitrary dump boundaries.  @p data and
+ * @p data2 (raw sums) and @p weight / @p nbatch stay additive; only the M2 arrays
+ * use the cross-term.  Folding a brand-new batch (one observation, M2 = 0) is the
+ * single-observation special case, equivalent to West's (1979) weighted update.
+ *
+ * A single batch (B = 1, e.g. a plain serial run with no sub-splitting) has zero
+ * degrees of freedom and therefore no error estimate — at least two batches
+ * (threads, dumps, sub-splits, or independent runs) are required.  At finalize
+ * time the standard error of the per-primary mean in a bin is
+ * @c sqrt(M2 / ((nbatch − 1) · weight)); this conversion lives in the (not-yet-
+ * wired) variance feature, not here — this struct stores only the sufficient
+ * statistics and the merge contract that combines them.
  */
 struct osh_scoring_accumulator {
     double *data;
@@ -38,6 +79,8 @@ struct osh_scoring_accumulator {
     double *data_var;
     double *data2_var;
     size_t len;
+    double weight;             /* Σ history weight (W) of the batches folded in; 0 when variance inactive. */
+    unsigned long long nbatch; /* Number of batches folded in (B); error-estimate dof is B − 1. */
 };
 
 /**
@@ -120,23 +163,41 @@ enum osh_status osh_scoring_accumulator_finalize_average(struct osh_scoring_accu
 void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc);
 
 /**
- * @brief Element-wise reduce: @p dst += @p src over every array.
+ * @brief Reduce @p src into @p dst: combine two batches' statistics.
  *
  * @details
  * The reduction at the heart of any parallel scoring scheme: each worker scores
- * its histories into a private accumulator, then the master set is formed by
- * merging every worker's set into one.  Because Monte Carlo histories are
- * independent and the deposits commute, merging in any order yields the same
+ * its histories into a private accumulator (one batch), then the master set is
+ * formed by merging every worker's set into one.  Because Monte Carlo histories
+ * are independent and the deposits commute, merging in any order yields the same
  * totals (up to floating-point summation order).
  *
- * Adds @p src into @p dst for @c data, @c data2, @c data_var and @c data2_var.
- * All four arrays must have matching presence between @p dst and @p src: an array
- * allocated on one side but NULL on the other is rejected (OSH_EINVAL) rather than
- * silently dropped, since that would lose the source's tally.  Accumulators
- * compiled from the same page descriptor always agree.
+ * The reduction is **representation-aware**, not a blanket element-wise add:
+ *   - @c data, @c data2 (raw sums) and @c weight, @c nbatch are **additive** —
+ *     @p dst += @p src.
+ *   - @c data_var, @c data2_var hold Welford M2 and are combined with the
+ *     Schubert–Gertz cross-term @c δ²·wA·wB/w (see @ref osh_scoring_accumulator),
+ *     using the pre-merge sums and weights to derive the batch means.  A plain
+ *     @c += over these arrays would silently drop the cross-term and corrupt the
+ *     variance, so it is deliberately *not* used.
+ *
+ * The variance arrays are combined first (they need @p dst's pre-merge @c data /
+ * @c weight), then the additive fields are folded.  Empty batches (@c weight 0)
+ * are handled as the identity.  When the variance arrays are NULL — the current
+ * default, since the variance feature is unwired — the merge reduces to the
+ * familiar additive behaviour over @c data / @c data2.
+ *
+ * All optional arrays must have matching presence between @p dst and @p src: an
+ * array allocated on one side but NULL on the other is rejected (OSH_EINVAL)
+ * rather than silently dropped.  Accumulators compiled from the same page
+ * descriptor always agree.
+ *
+ * @note MPI: the additive fields can ride @c MPI_SUM, but the M2 arrays cannot —
+ *       a rank-level reduction needs a custom @c MPI_Op_create that applies this
+ *       same combine to the whole accumulator (data + weight + M2 together).
  *
  * @param[in,out] dst  Destination accumulator (must be non-NULL).
- * @param[in]     src  Source accumulator to add (must be non-NULL).
+ * @param[in]     src  Source accumulator to fold in (must be non-NULL).
  * @returns OSH_OK on success, OSH_EINVAL if either pointer is NULL, the two
  *          accumulators have different @c len, or their optional arrays
  *          (@c data2 / @c data_var / @c data2_var) disagree on presence.

@@ -33,10 +33,11 @@ The accumulator arrays are:
 
 | Array | Meaning |
 |---|---|
-| `data` | Primary accumulator (always allocated). |
+| `data` | Primary accumulator (always allocated): running sum of per-history deposits Σx per bin. |
 | `data2` | Secondary weight accumulator for two-pass averages (D/T-LET, D/T-Qeff); `NULL` for simple scorers. |
-| `data_var`, `data2_var` | Running sum-of-squares for variance; `NULL` until the variance feature wires them. |
+| `data_var`, `data2_var` | Welford **M2** (sum of squared deviations from the mean) for `data` / `data2`; `NULL` until the variance feature wires them. See §3. |
 | `len` | Element count of every allocated array. |
+| `weight`, `nbatch` | Per-accumulator scalars: statistical weight `W` (history count) and number of batches `B` folded in. See §3. |
 
 Bins are row-major (`idx = ix + nx*(iy + ny*iz)`), with differential axes
 appended as outer strides.
@@ -77,7 +78,78 @@ each page simply owns one accumulator inline and no merge happens.
 See [issue #161](https://github.com/openshieldhit/openshieldhit/issues/161) for
 the parallelism roadmap these seams unblock.
 
-## 3. Output formats: normalisation and multi-run merging
+## 3. Uncertainty: batch-means variance and the merge contract
+
+Monte-Carlo results need an error bar, and the representation chosen for it is
+what the merge above must compute. OpenShieldHIT uses a **batch-means** estimate
+(decision recorded in
+[issue #169](https://github.com/openshieldhit/openshieldhit/issues/169)).
+
+### Why batch-means (not per-history)
+
+The textbook MC uncertainty is the variance of the per-primary mean over
+**independent histories**. Computing it exactly needs each history's complete
+per-bin tally before squaring — an `nbins × live-histories` scratch buffer, which
+is prohibitive for the wavefront/pool transport (many histories are in flight at
+once, depositing per step). So instead a **batch** — one independent unit of work
+— is treated as a single observation, and the spread *between batches* estimates
+the error. A batch is any of:
+
+- a parallel worker's history range (threads / MPI ranks),
+- a periodic partial-dump interval (see the run-control work, #170),
+- an internal sub-split of a single serial run,
+- a separate independent run.
+
+Because every bin is exposed to the **same** set of histories (most depositing
+zero), the observation count is identical across bins — so the batch weight `W`
+and batch count `B` are **per-accumulator scalars** (`weight`, `nbatch`), not
+per-bin arrays. The only per-bin variance state is one extra array, the Welford
+**M2** (`data_var`), reusing the scaffold already present.
+
+### Representation and the merge contract
+
+Per bin the accumulator stores the running sum `data` (= Σx) and the Welford
+`M2` (`data_var`); the per-primary mean is `data / weight`. Two batches are
+combined with the numerically-stable parallel formula of
+**Schubert & Gertz (2018)** (the single-batch fold is the weighted update of
+**West (1979)**):
+
+```
+w  = wA + wB
+δ  = meanB − meanA            (means = data/weight)
+M2 = M2_A + M2_B + δ² · wA·wB / w      ← the cross-term a plain += cannot express
+data, data2, weight, nbatch  → additive
+```
+
+`osh_scoring_accumulator_merge()` applies exactly this: the raw sums and the
+batch bookkeeping are additive, but the M2 arrays use the cross-term. A blanket
+`+=` over `data_var` would silently drop `δ²·wA·wB/w` and corrupt the variance —
+the reason the merge is representation-aware rather than a flat element-wise add.
+The `wA·wB/w` weighting handles **unequal-size batches by construction**, which
+is the normal case under heterogeneous CPU cores and arbitrary dump boundaries.
+
+### Degrees of freedom and finalisation
+
+At save time the standard error of the per-primary mean in a bin is
+
+```
+SE = sqrt( M2 / ((nbatch − 1) · weight) )
+```
+
+so a single batch (`nbatch == 1`, e.g. a plain serial run with no sub-splitting)
+has **zero degrees of freedom and no error estimate** — at least two batches are
+required. This finalisation, and the deposit-side writes into `data_var`, are the
+*variance feature* itself, still unwired; this section and the merge define the
+**contract** the feature will plug into, so wiring it is a local change, not a
+representation hunt.
+
+> **MPI / GPU note.** The additive fields can ride `MPI_Reduce(MPI_SUM)`, but the
+> M2 arrays cannot — a rank reduction needs a custom `MPI_Op_create` that applies
+> the same combine to the whole accumulator (sums + weight + M2 together). On GPU,
+> per-worker private accumulators reduced on the host with this same merge avoid
+> needing float atomics entirely.
+
+## 4. Output formats: normalisation and multi-run merging
 
 `osh_scoring_save()` dispatches on each output's `fileformat`. The two
 general-purpose formats take deliberately different positions on normalisation;
@@ -121,7 +193,7 @@ layer), replaces the pixel data with scored values normalised by `nstat` and
 preserved unchanged. Only single-page (single-quantity) outputs are supported;
 multi-page output returns `OSH_ENOTSUP`.
 
-## 4. Unit handling and post-processing
+## 5. Unit handling and post-processing
 
 `osh_scoring_postprocess()` applies physics transforms once per bin before
 saving:
@@ -142,7 +214,7 @@ After post-processing, page buffers are in one of these states:
 because `data2` is discarded at post-process; merging requires re-weighting by
 each file's `nstat`.
 
-## 5. Lifecycle and module boundaries
+## 6. Lifecycle and module boundaries
 
 ```
 osh_scoring_workspace_create()   allocate cold workspace

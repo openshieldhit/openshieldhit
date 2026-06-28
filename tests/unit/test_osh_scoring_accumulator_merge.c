@@ -13,14 +13,28 @@
  *   test_zero                  — zero() clears every allocated array, keeps len
  *   test_rescale               — rescale() scales data in place, NULL-safe
  *   test_finalize_average      — finalize_average() divides data/data2, guards eps
+ *   test_merge_variance_two_batches        — Welford M2 merge: exact dyadic case
+ *   test_merge_variance_unequal_single_pass — unequal batches match single-pass
+ *                                             weighted M2, order-independent
+ *   test_merge_variance_empty_identity     — a weight-0 batch is the merge identity
  */
 
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "openshieldhit/status.h"
 #include "scoring/runtime/osh_scoring_accumulator.h"
 #include "test_assert.h"
+
+/* Relative-tolerance compare: the Welford/Schubert-Gertz merge divides sums by
+ * weights, so results are bit-exact only for dyadic test vectors; non-dyadic
+ * cases and cross-order comparisons use this. */
+static int approx(double a, double b) {
+    double const d = fabs(a - b);
+    return d <= 1.0e-9 * (1.0 + fabs(b));
+}
 
 /* Bit-exact comparison: the merge only adds, so integer-valued doubles that fit
  * exactly in a double must reproduce exactly regardless of order. */
@@ -252,6 +266,134 @@ static void test_finalize_average(void) {
     osh_scoring_accumulator_free(&nodata2);
 }
 
+/* ---- Variance (Welford M2) merge: Schubert-Gertz cross-term ----------------
+ *
+ * The variance feature is unwired, so osh_scoring_accumulator_alloc() does not
+ * create the M2 arrays.  These tests build single-batch accumulators by hand:
+ * data + a calloc'd data_var (M2 = 0 for one observation), with weight = the
+ * batch's history count and nbatch = 1.  osh_scoring_accumulator_free() releases
+ * data_var, so teardown is the usual free().
+ */
+
+/* Build a one-observation batch: data = per-bin sum, M2 = 0, weight = w. */
+static void make_batch(struct osh_scoring_accumulator *acc, size_t len, double const *data, double weight) {
+    size_t i;
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(acc, len, 0) == OSH_OK);
+    acc->data_var = (double *) calloc(len ? len : 1u, sizeof(double));
+    ASSERT_TRUE(acc->data_var != NULL);
+    for (i = 0; i < len; ++i) {
+        acc->data[i] = data[i];
+    }
+    acc->weight = weight;
+    acc->nbatch = 1u;
+}
+
+/* Two dyadic batches merge to the exact hand-computed M2 and additive fields. */
+static void test_merge_variance_two_batches(void) {
+    struct osh_scoring_accumulator a;
+    struct osh_scoring_accumulator b;
+    double const da[2] = {8.0, 4.0};  /* means 4, 2 at weight 2 */
+    double const db[2] = {16.0, 4.0}; /* means 8, 2 at weight 2 */
+
+    make_batch(&a, 2u, da, 2.0);
+    make_batch(&b, 2u, db, 2.0);
+
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&a, &b) == OSH_OK);
+
+    /* bin0: δ = 8 − 4 = 4, M2 = 4² · (2·2/4) = 16.  bin1: δ = 0, M2 = 0. */
+    ASSERT_TRUE(a.data_var[0] == 16.0);
+    ASSERT_TRUE(a.data_var[1] == 0.0);
+    /* Additive fields. */
+    ASSERT_TRUE(a.data[0] == 24.0);
+    ASSERT_TRUE(a.data[1] == 8.0);
+    ASSERT_TRUE(a.weight == 4.0);
+    ASSERT_TRUE(a.nbatch == 2u);
+
+    osh_scoring_accumulator_free(&a);
+    osh_scoring_accumulator_free(&b);
+}
+
+/* Three unequal-size batches: pairwise merge reproduces the single-pass weighted
+ * M2, and the result is order-independent (within FP tolerance). */
+static void test_merge_variance_unequal_single_pass(void) {
+    struct osh_scoring_accumulator a, b, c;    /* order 1: (a⊕b)⊕c */
+    struct osh_scoring_accumulator a2, b2, c2; /* order 2: (c⊕b)⊕a */
+    /* weights 2,3,5; bin0 means 5,10,1; bin1 means 2,1,1. */
+    double const da[2] = {10.0, 4.0};
+    double const db[2] = {30.0, 3.0};
+    double const dc[2] = {5.0, 5.0};
+    /* Single-pass weighted M2 (hand-computed):
+     *   bin0: M = 45/10 = 4.5; M2 = 2·.25 + 3·30.25 + 5·12.25 = 152.5
+     *   bin1: M = 12/10 = 1.2; M2 = 2·.64 + 3·.04 + 5·.04 = 1.6           */
+    double const expect_m2[2] = {152.5, 1.6};
+
+    make_batch(&a, 2u, da, 2.0);
+    make_batch(&b, 2u, db, 3.0);
+    make_batch(&c, 2u, dc, 5.0);
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&a, &b) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&a, &c) == OSH_OK);
+
+    ASSERT_TRUE(approx(a.data_var[0], expect_m2[0]));
+    ASSERT_TRUE(approx(a.data_var[1], expect_m2[1]));
+    ASSERT_TRUE(a.data[0] == 45.0); /* sums are exact */
+    ASSERT_TRUE(a.weight == 10.0);
+    ASSERT_TRUE(a.nbatch == 3u);
+
+    /* Reverse fold order must agree within tolerance (FP, not bit-exact). */
+    make_batch(&a2, 2u, da, 2.0);
+    make_batch(&b2, 2u, db, 3.0);
+    make_batch(&c2, 2u, dc, 5.0);
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&c2, &b2) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&c2, &a2) == OSH_OK);
+
+    ASSERT_TRUE(approx(c2.data_var[0], a.data_var[0]));
+    ASSERT_TRUE(approx(c2.data_var[1], a.data_var[1]));
+    ASSERT_TRUE(c2.weight == 10.0);
+    ASSERT_TRUE(c2.nbatch == 3u);
+
+    osh_scoring_accumulator_free(&a);
+    osh_scoring_accumulator_free(&b);
+    osh_scoring_accumulator_free(&c);
+    osh_scoring_accumulator_free(&a2);
+    osh_scoring_accumulator_free(&b2);
+    osh_scoring_accumulator_free(&c2);
+}
+
+/* An empty batch (weight 0) is the merge identity in both directions. */
+static void test_merge_variance_empty_identity(void) {
+    struct osh_scoring_accumulator empty;
+    struct osh_scoring_accumulator b;
+    double const zero[2] = {0.0, 0.0};
+    double const db[2] = {30.0, 6.0};
+
+    /* empty ⊕ b  ⇒  empty becomes b. */
+    make_batch(&empty, 2u, zero, 0.0);
+    empty.nbatch = 0u; /* no batches yet */
+    make_batch(&b, 2u, db, 3.0);
+
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&empty, &b) == OSH_OK);
+    ASSERT_TRUE(empty.data_var[0] == 0.0); /* single observation ⇒ M2 still 0 */
+    ASSERT_TRUE(empty.data[0] == 30.0);
+    ASSERT_TRUE(empty.weight == 3.0);
+    ASSERT_TRUE(empty.nbatch == 1u);
+
+    /* b ⊕ empty(weight 0)  ⇒  b unchanged. */
+    {
+        struct osh_scoring_accumulator e2;
+        make_batch(&e2, 2u, zero, 0.0);
+        e2.nbatch = 0u;
+        ASSERT_TRUE(osh_scoring_accumulator_merge(&empty, &e2) == OSH_OK);
+        ASSERT_TRUE(empty.data_var[0] == 0.0);
+        ASSERT_TRUE(empty.data[0] == 30.0);
+        ASSERT_TRUE(empty.weight == 3.0);
+        ASSERT_TRUE(empty.nbatch == 1u);
+        osh_scoring_accumulator_free(&e2);
+    }
+
+    osh_scoring_accumulator_free(&empty);
+    osh_scoring_accumulator_free(&b);
+}
+
 int main(void) {
     test_merge_identity();
     test_merge_correctness();
@@ -262,6 +404,9 @@ int main(void) {
     test_zero();
     test_rescale();
     test_finalize_average();
+    test_merge_variance_two_batches();
+    test_merge_variance_unequal_single_pass();
+    test_merge_variance_empty_identity();
     printf("All osh_scoring_accumulator tests passed.\n");
     return 0;
 }
