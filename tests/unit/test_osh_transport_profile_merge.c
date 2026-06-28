@@ -8,8 +8,17 @@
  *                           exactly (the single-worker / serial case)
  *   test_merge_sums       — counters and per-phase timers add across workers
  *   test_merge_total_max  — total_s combines by maximum, not addition
- *   test_merge_commutative— merge order does not change the result
+ *   test_merge_commutative— merge order does not change the result for these
+ *                           integer-valued test vectors (see note below)
  *   test_merge_null       — NULL operands are no-ops, not crashes
+ *
+ * Note on bit-exact assertions: production phase timers are arbitrary doubles
+ * read from the monotonic clock, and double addition is not associative, so the
+ * real merge is only invariant up to summation order, not byte-for-byte.  These
+ * tests deliberately use small integer-valued seconds, which fit exactly in a
+ * double and sum without rounding, so `==` comparisons and the order-independence
+ * checks below are exact here — a property of the chosen vectors, not a claim
+ * about measured timings.
  */
 
 #include <stdio.h>
@@ -18,8 +27,10 @@
 #include "test_assert.h"
 #include "transport/osh_transport.h"
 
-/* Bit-exact comparison: the merge only adds integer-valued doubles or takes a
- * max, so results must reproduce exactly. */
+/* Bit-exact comparison: these test vectors use integer-valued seconds, which sum
+ * in a double without rounding (and max is always exact), so equal results must
+ * reproduce exactly here.  This is not true of production timers — see the file
+ * header note on summation order. */
 static void assert_profile_equal(struct osh_transport_profile const *a, struct osh_transport_profile const *b) {
     ASSERT_TRUE(a->fill_s == b->fill_s);
     ASSERT_TRUE(a->zone_ref_s == b->zone_ref_s);
@@ -95,8 +106,10 @@ static void test_merge_commutative(void) {
     struct osh_transport_profile dst1 = base;
     struct osh_transport_profile dst2 = base;
 
-    /* dst1: +b then +c ; dst2: +c then +b.  Integer-valued sums and max are
-     * order-independent, so the two must be bit-equal. */
+    /* dst1: +b then +c ; dst2: +c then +b.  For these integer-valued vectors the
+     * sums incur no rounding and max is order-free, so the two must be bit-equal.
+     * Arbitrary measured timings would only match up to summation order, not
+     * byte-for-byte (see the file header note). */
     osh_transport_profile_merge(&dst1, &b);
     osh_transport_profile_merge(&dst1, &c);
     osh_transport_profile_merge(&dst2, &c);
