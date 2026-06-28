@@ -172,10 +172,14 @@ enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *ds
     if (dst->len != src->len) {
         return OSH_EINVAL;
     }
+    /* data is documented as always allocated; a NULL here means freed/uninitialised. */
+    if (!dst->data || !src->data) {
+        return OSH_EINVAL;
+    }
     /* Reject mismatched optional-array presence: an array allocated on one side
      * but NULL on the other would silently drop tallies.  Accumulators cloned
      * from the same page descriptor always agree, so disagreement is a bug. */
-    if (((dst->data == NULL) != (src->data == NULL)) || ((dst->data2 == NULL) != (src->data2 == NULL))
+    if (((dst->data2 == NULL) != (src->data2 == NULL))
         || ((dst->data_var == NULL) != (src->data_var == NULL))
         || ((dst->data2_var == NULL) != (src->data2_var == NULL))) {
         return OSH_EINVAL;

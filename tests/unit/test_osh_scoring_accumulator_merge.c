@@ -8,7 +8,7 @@
  *   test_merge_correctness     — three partial sums fold to the exact total
  *   test_merge_commutative     — merge order does not change the result
  *   test_merge_len_mismatch    — differing lengths are rejected (OSH_EINVAL)
- *   test_merge_null            — NULL operands are rejected without crashing
+ *   test_merge_null            — NULL operands and freed/uninitialised data are rejected
  *   test_merge_shape_mismatch  — mismatched optional-array presence is rejected
  *   test_zero                  — zero() clears every allocated array, keeps len
  *   test_rescale               — rescale() scales data in place, NULL-safe
@@ -161,7 +161,7 @@ static void test_merge_len_mismatch(void) {
     osh_scoring_accumulator_free(&b);
 }
 
-/* ---- Rejection: NULL operands -------------------------------------------- */
+/* ---- Rejection: NULL operands or freed/uninitialised data array ----------- */
 
 static void test_merge_null(void) {
     struct osh_scoring_accumulator a;
@@ -171,6 +171,27 @@ static void test_merge_null(void) {
     ASSERT_TRUE(osh_scoring_accumulator_merge(&a, NULL) == OSH_EINVAL);
     ASSERT_TRUE(osh_scoring_accumulator_merge(NULL, NULL) == OSH_EINVAL);
     osh_scoring_accumulator_free(&a);
+
+    /* data==NULL on either side (freed/uninitialised accumulator) is also rejected. */
+    {
+        struct osh_scoring_accumulator freed_dst;
+        struct osh_scoring_accumulator freed_src;
+        struct osh_scoring_accumulator good;
+
+        ASSERT_TRUE(osh_scoring_accumulator_alloc(&good, 2u, 0) == OSH_OK);
+        ASSERT_TRUE(osh_scoring_accumulator_alloc(&freed_dst, 2u, 0) == OSH_OK);
+        ASSERT_TRUE(osh_scoring_accumulator_alloc(&freed_src, 2u, 0) == OSH_OK);
+        osh_scoring_accumulator_free(&freed_dst); /* data now NULL */
+        osh_scoring_accumulator_free(&freed_src); /* data now NULL */
+        freed_dst.len = 2u; /* restore len so the len-mismatch guard doesn't fire first */
+        freed_src.len = 2u;
+
+        ASSERT_TRUE(osh_scoring_accumulator_merge(&freed_dst, &good) == OSH_EINVAL);
+        ASSERT_TRUE(osh_scoring_accumulator_merge(&good, &freed_src) == OSH_EINVAL);
+        ASSERT_TRUE(osh_scoring_accumulator_merge(&freed_dst, &freed_src) == OSH_EINVAL);
+
+        osh_scoring_accumulator_free(&good);
+    }
 }
 
 /* ---- Reuse: zero() clears every allocated array but keeps len ------------ */
@@ -424,9 +445,8 @@ static void test_merge_variance_inconsistent_rejected(void) {
         osh_scoring_accumulator_free(&e);
     }
 
-    /* data_var present without its companion data array (symmetric guard).  Both
-     * sides drop data so the presence check passes and the variance-consistency
-     * check is what rejects. */
+    /* data_var present without its companion data array: the explicit NULL-data
+     * guard fires first (before the variance-consistency check). */
     {
         struct osh_scoring_accumulator f;
         struct osh_scoring_accumulator g;

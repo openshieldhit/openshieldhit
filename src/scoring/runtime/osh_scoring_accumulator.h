@@ -209,7 +209,8 @@ void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc);
  *
  * @param[in,out] dst  Destination accumulator (must be non-NULL).
  * @param[in]     src  Source accumulator to fold in (must be non-NULL).
- * @returns OSH_OK on success, OSH_EINVAL if either pointer is NULL, the two
+ * @returns OSH_OK on success, OSH_EINVAL if either pointer is NULL, @c data is
+ *          NULL on either side (freed/uninitialised accumulator), the two
  *          accumulators have different @c len, or their optional arrays
  *          (@c data2 / @c data_var / @c data2_var) disagree on presence.
  */

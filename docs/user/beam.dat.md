@@ -335,7 +335,7 @@ independent runs — the standard approach for Monte Carlo uncertainty estimatio
     random stream is a pure function of its global index, splitting the work into
     batches (across threads, dumps, or runs) does not bias the result — only the
     error estimate it makes possible.  The developer reference in
-    `docs/dev/scoring.md` (§3) documents the batch-means representation and the
+    `docs/dev/scoring.md` (§4) documents the batch-means representation and the
     numerically-stable parallel merge.
 
 ---
