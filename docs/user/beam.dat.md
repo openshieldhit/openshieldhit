@@ -326,6 +326,18 @@ Random number generator seed (integer).  Fixing the seed makes a run
 bit-for-bit reproducible.  Using different seeds produces statistically
 independent runs — the standard approach for Monte Carlo uncertainty estimation.
 
+!!! note "How statistical uncertainty is estimated"
+    OpenShieldHIT estimates the error bar on each scored bin from the spread
+    **between batches**, where a batch is one independent unit of work — a
+    parallel worker, a periodic intermediate dump, an internal sub-split of a
+    run, or a separate run with a different `RNDSEED`.  A single batch therefore
+    has **no error estimate**: at least two are needed.  Because each history's
+    random stream is a pure function of its global index, splitting the work into
+    batches (across threads, dumps, or runs) does not bias the result — only the
+    error estimate it makes possible.  The developer reference in
+    `docs/dev/scoring.md` (§4) documents the batch-means representation and the
+    numerically-stable parallel merge.
+
 ---
 
 ## Beam mode modifiers (advanced)
