@@ -183,7 +183,7 @@ static void test_merge_null(void) {
         ASSERT_TRUE(osh_scoring_accumulator_alloc(&freed_src, 2u, 0) == OSH_OK);
         osh_scoring_accumulator_free(&freed_dst); /* data now NULL */
         osh_scoring_accumulator_free(&freed_src); /* data now NULL */
-        freed_dst.len = 2u; /* restore len so the len-mismatch guard doesn't fire first */
+        freed_dst.len = 2u;                       /* restore len so the len-mismatch guard doesn't fire first */
         freed_src.len = 2u;
 
         ASSERT_TRUE(osh_scoring_accumulator_merge(&freed_dst, &good) == OSH_EINVAL);

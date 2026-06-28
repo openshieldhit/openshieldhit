@@ -179,8 +179,7 @@ enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *ds
     /* Reject mismatched optional-array presence: an array allocated on one side
      * but NULL on the other would silently drop tallies.  Accumulators cloned
      * from the same page descriptor always agree, so disagreement is a bug. */
-    if (((dst->data2 == NULL) != (src->data2 == NULL))
-        || ((dst->data_var == NULL) != (src->data_var == NULL))
+    if (((dst->data2 == NULL) != (src->data2 == NULL)) || ((dst->data_var == NULL) != (src->data_var == NULL))
         || ((dst->data2_var == NULL) != (src->data2_var == NULL))) {
         return OSH_EINVAL;
     }
