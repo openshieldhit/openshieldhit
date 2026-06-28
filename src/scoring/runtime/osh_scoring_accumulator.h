@@ -50,7 +50,9 @@ extern "C" {
  * every bin is exposed to the same set of histories (most depositing zero), so
  * the observation count is identical across bins.
  *
- * The variance state is combined with the numerically-stable parallel formula of
+ * The per-bin variance state is the **M2** of Welford's online algorithm (the
+ * running sum of squared deviations from the mean; variance = M2/(n−1)).  It is
+ * combined across batches with the numerically-stable parallel formula of
  * Schubert & Gertz (2018): merging batch A (weight @c wA, mean @c mA, M2 @c M2A)
  * with batch B yields
  *
@@ -72,6 +74,15 @@ extern "C" {
  * @c sqrt(M2 / ((nbatch − 1) · weight)); this conversion lives in the (not-yet-
  * wired) variance feature, not here — this struct stores only the sufficient
  * statistics and the merge contract that combines them.
+ *
+ * @par References
+ * Welford BP. Note on a method for calculating corrected sums of squares and
+ * products. Technometrics. 1962;4(3):419-420. doi:10.1080/00401706.1962.10490022
+ * (the online mean/M2 update).
+ * West DHD. Updating mean and variance estimates: an improved method. Commun ACM.
+ * 1979;22(9):532-535. doi:10.1145/359146.359153 (weighted update).
+ * Schubert E, Gertz M. Numerically stable parallel computation of (co-)variance.
+ * SSDBM '18. 2018;Article 10:1-12. doi:10.1145/3221269.3223036 (parallel merge).
  */
 struct osh_scoring_accumulator {
     double *data;

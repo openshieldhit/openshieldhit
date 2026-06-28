@@ -94,10 +94,10 @@ static void merge_array(double *dst_arr, double const *src_arr, size_t len) {
 }
 
 /*
- * Schubert & Gertz (2018) numerically-stable parallel merge of two Welford M2
- * arrays, in place: dst_m2 becomes the combined M2 of batch A (dst_*, holding
- * running sum dst_sum and weight dst_w) and batch B (src_*).  Per-bin means are
- * derived as sum/weight; the weights are the batches' history counts.
+ * Numerically-stable parallel merge of two Welford M2 arrays, in place: dst_m2
+ * becomes the combined M2 of batch A (dst_*, holding running sum dst_sum and
+ * weight dst_w) and batch B (src_*).  Per-bin means are derived as sum/weight;
+ * the weights are the batches' history counts.
  *
  *   M2 = M2_A + M2_B + (mean_B − mean_A)² · w_A·w_B / (w_A + w_B)
  *
@@ -105,6 +105,10 @@ static void merge_array(double *dst_arr, double const *src_arr, size_t len) {
  * silently corrupts the variance.  This must run before the additive fields
  * (dst_sum / dst_w) are folded, since it reads dst's pre-merge values.  Empty
  * batches act as the identity.
+ *
+ * M2 is the running sum-of-squared-deviations of Welford's online variance
+ * (Welford 1962); the weighted form is West (1979); the pairwise combine below is
+ * Schubert & Gertz (2018).  Full citations in osh_scoring_accumulator.h.
  */
 static void merge_m2(double *dst_m2,
                      double const *dst_sum,
