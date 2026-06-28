@@ -208,16 +208,20 @@ struct enum_ctx {
 
 /* Compute weight prefactor for the partition currently assembled in ctx->buf_[]. */
 static float compute_nbody_prefactor(struct enum_ctx const *ctx, int n) {
-    double q = ctx->m_parent;
-    double prod_m32 = 1.0;
-    double prod_g = 1.0;
+    double q;
+    double prod_m32;
+    double prod_g;
     int counts[FBU_SPECIES_COUNT];
     int i, wsp, c;
     double id_denom;
+    double mi;
 
     memset(counts, 0, sizeof(counts));
+    q = ctx->m_parent;
+    prod_m32 = 1.0;
+    prod_g = 1.0;
     for (i = 0; i < n; ++i) {
-        double mi = ctx->mass_mev[_za_idx(ctx->buf_z[i], ctx->buf_a[i])];
+        mi = ctx->mass_mev[_za_idx(ctx->buf_z[i], ctx->buf_a[i])];
         q -= mi;
         prod_m32 *= mi * sqrt(mi);
         prod_g *= spin_degeneracy(ctx->buf_z[i], ctx->buf_a[i]);
@@ -246,6 +250,7 @@ static float compute_nbody_prefactor(struct enum_ctx const *ctx, int n) {
 static void enum_wl_rec(struct enum_ctx *ctx, int k_rem, int z_rem, int a_rem,
                          int min_sp, int buf_pos) {
     int sp, zi, ai, n, i;
+    double q;
 
     if (k_rem == 0) {
         if (z_rem != 0 || a_rem != 0) {
@@ -253,7 +258,7 @@ static void enum_wl_rec(struct enum_ctx *ctx, int k_rem, int z_rem, int a_rem,
         }
         n = ctx->n_total;
         if (ctx->part_pool != NULL) {
-            double q = ctx->m_parent;
+            q = ctx->m_parent;
             for (i = 0; i < n; ++i) {
                 q -= ctx->mass_mev[_za_idx(ctx->buf_z[i], ctx->buf_a[i])];
             }
@@ -303,17 +308,21 @@ static size_t enumerate_all_partitions(double const *mass_mev,
                                         uint32_t *part_offset,
                                         uint16_t *part_count,
                                         size_t *nfspecs_out) {
-    size_t part_total = 0u;
-    size_t fspec_total = 0u;
+    size_t part_total;
+    size_t fspec_total;
     unsigned int z, a, z1, a1, z2, a2;
+    double mp, m1, m2, pref;
+    size_t part_start;
     size_t idx;
     int n;
 
+    part_total = 0u;
+    fspec_total = 0u;
     for (z = 1u; z <= OSH_FERMI_BREAKUP_ZMAX; ++z) {
         for (a = 2u; a <= OSH_FERMI_BREAKUP_AMAX; ++a) {
             idx = _za_idx(z, a);
-            double mp = mass_mev[idx];
-            size_t part_start = part_total;
+            mp = mass_mev[idx];
+            part_start = part_total;
 
             if (mp > 0.0) {
                 /* N=2 binary pairs from the full mass table. */
@@ -324,15 +333,15 @@ static size_t enumerate_all_partitions(double const *mass_mev,
                         if (a1 == a2 && z1 > z2) {
                             continue; /* already listed in the other order */
                         }
-                        double m1 = mass_mev[_za_idx(z1, a1)];
-                        double m2 = mass_mev[_za_idx(z2, a2)];
+                        m1 = mass_mev[_za_idx(z1, a1)];
+                        m2 = mass_mev[_za_idx(z2, a2)];
                         if (m1 <= 0.0 || m2 <= 0.0) {
                             continue;
                         }
                         if (part_pool != NULL) {
                             /* Weight prefactor uses prod(m_i^3/2)/Gamma(3/2)
                              * for consistency with the N>=3 formula. */
-                            double pref = (double)spin_degeneracy(z1, a1)
+                            pref = (double)spin_degeneracy(z1, a1)
                                         * (double)spin_degeneracy(z2, a2)
                                         * m1 * sqrt(m1) * m2 * sqrt(m2)
                                         / s_gamma[2];
@@ -366,15 +375,18 @@ static size_t enumerate_all_partitions(double const *mass_mev,
                  * stack its e_star = exc_kev/1000 enables further decay. */
                 {
                     size_t ei;
-                    size_t nexc = sizeof(s_exc_states) / sizeof(s_exc_states[0]);
+                    size_t nexc;
+                    unsigned int z_exc, a_exc, z_oth, a_oth;
+                    uint16_t exc_kev;
+                    double exc_mev;
+                    double m_exc, m_oth, m_exc_eff;
+
+                    nexc = sizeof(s_exc_states) / sizeof(s_exc_states[0]);
                     for (ei = 0u; ei < nexc; ++ei) {
-                        unsigned int z_exc = s_exc_states[ei].z;
-                        unsigned int a_exc = s_exc_states[ei].a;
-                        uint16_t exc_kev = s_exc_states[ei].exc_kev;
-                        double exc_mev = (double)exc_kev / 1000.0;
-                        unsigned int z_oth;
-                        unsigned int a_oth;
-                        double m_exc, m_oth, m_exc_eff, pref;
+                        z_exc = s_exc_states[ei].z;
+                        a_exc = s_exc_states[ei].a;
+                        exc_kev = s_exc_states[ei].exc_kev;
+                        exc_mev = (double)exc_kev / 1000.0;
 
                         if (a_exc >= a || z_exc > z) {
                             continue;
@@ -452,10 +464,14 @@ static size_t enumerate_all_partitions(double const *mass_mev,
 /* Sample chi from pdf proportional to chi^(3K-5) * (1-chi) via rejection.
  * Used by the Kopylov algorithm for K >= 2. */
 static double beta_kopylov(int k, struct osh_rng *rng) {
-    int npow = 3 * k - 5;
-    double xn = (double)npow;
-    double fmax = sqrt(pow(xn / (xn + 1.0), npow) / (xn + 1.0));
+    int npow;
+    double xn;
+    double fmax;
     double chi, f;
+
+    npow = 3 * k - 5;
+    xn = (double)npow;
+    fmax = sqrt(pow(xn / (xn + 1.0), npow) / (xn + 1.0));
     do {
         chi = osh_rng_double(rng);
         f = sqrt(pow(chi, npow) * (1.0 - chi));
@@ -550,14 +566,20 @@ static void kopylov_nbody(int n, double const m[], double m_eff,
  * given excitation energy.  Returns 0 if no channel is open. */
 static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model,
                                     size_t idx, double e_star) {
-    double wsum = 0.0;
-    uint32_t off = model->part_offset[idx];
-    uint16_t cnt = model->part_count[idx];
+    double wsum;
+    uint32_t off;
+    uint16_t cnt;
     uint16_t i;
+    double t;
+    int nf;
+
+    wsum = 0.0;
+    off = model->part_offset[idx];
+    cnt = model->part_count[idx];
     for (i = 0u; i < cnt; ++i) {
-        double t = e_star + (double)model->part_pool[off + i].q_mev;
+        t = e_star + (double)model->part_pool[off + i].q_mev;
         if (t > 0.0) {
-            int nf = model->part_pool[off + i].n_frags;
+            nf = model->part_pool[off + i].n_frags;
             wsum += (double)model->part_pool[off + i].weight_prefactor
                   * pow(t, 1.5 * nf - 2.5);
         }
@@ -572,7 +594,7 @@ enum osh_status osh_nuclear_fermi_breakup_compile(struct osh_nuclear_fermi_break
         OSH_PART_PDG_NEUTRON, OSH_PART_PDG_PROTON,
         OSH_PART_PDG_DEUTERON, OSH_PART_PDG_TRITON,
         OSH_PART_PDG_HE3, OSH_PART_PDG_HE4};
-    size_t nfspecs = 0u;
+    size_t nfspecs;
     size_t npart;
     int i;
 
@@ -636,19 +658,29 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
     /* Work stack for N=2 chain decays (He-5→αn, Li-5→αp, Be-8→2α). */
     struct fbu_work_item stack[OSH_FERMI_BREAKUP_AMAX];
     struct fbu_work_item node;
+    struct fbu_work_item tmp;
     struct osh_nuclear_fragment frag;
     struct osh_nuclear_secondary *sec;
+    double m_arr[FBU_NMAX];
+    double p_out[FBU_NMAX][3];
+    double e_tot[FBU_NMAX];
     size_t idx;
     size_t n_emitted;
     int sp;
     int spec_idx;
     int room;
-    uint32_t off;
-    uint16_t cnt;
-    uint16_t i, c;
+    int fi;
     int nf;
+    uint32_t off;
+    uint32_t fspec_off;
+    uint16_t cnt;
+    uint16_t exc1, exc2;
+    uint16_t i, c;
+    uint8_t z1, a1, z2, a2;
+    uint8_t zi, ai;
     double wsum, threshold, cumulative, t, w;
     double m_eff, m1, m2;
+    double mi;
     double p_star, cos_theta, sin_theta, cos_phi, sin_phi;
     double p_cm[3], e_cm, e_lab;
     double m_node, p_norm, p2;
@@ -742,16 +774,16 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
         }
 
         nf = model->part_pool[off + c].n_frags;
-        uint32_t fspec_off = model->part_pool[off + c].fspec_offset;
+        fspec_off = model->part_pool[off + c].fspec_offset;
 
         if (nf == 2) {
             /* Two-body decay: push both products on the work stack. */
-            uint8_t z1 = model->fspec_pool[fspec_off].z;
-            uint8_t a1 = model->fspec_pool[fspec_off].a;
-            uint16_t exc1 = model->fspec_pool[fspec_off].exc_kev;
-            uint8_t z2 = model->fspec_pool[fspec_off + 1u].z;
-            uint8_t a2 = model->fspec_pool[fspec_off + 1u].a;
-            uint16_t exc2 = model->fspec_pool[fspec_off + 1u].exc_kev;
+            z1 = model->fspec_pool[fspec_off].z;
+            a1 = model->fspec_pool[fspec_off].a;
+            exc1 = model->fspec_pool[fspec_off].exc_kev;
+            z2 = model->fspec_pool[fspec_off + 1u].z;
+            a2 = model->fspec_pool[fspec_off + 1u].a;
+            exc2 = model->fspec_pool[fspec_off + 1u].exc_kev;
 
             /* Use excited effective masses for kinematics when exc > 0. */
             m1 = model->mass_mev[_za_idx(z1, a1)] + (double)exc1 / 1000.0;
@@ -791,11 +823,6 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
 
         } else {
             /* N>=3 partition: Kopylov kinematics, emit all directly as secondaries. */
-            double m_arr[FBU_NMAX];
-            double p_out[FBU_NMAX][3];
-            double e_tot[FBU_NMAX];
-            int fi;
-
             m_eff = model->mass_mev[idx] + node.e_star;
             for (fi = 0; fi < nf; ++fi) {
                 m_arr[fi] = model->mass_mev[_za_idx(
@@ -805,20 +832,21 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
             kopylov_nbody(nf, m_arr, m_eff, node.p, rng, p_out, e_tot);
 
             for (fi = 0; fi < nf && room; ++fi) {
-                uint8_t zi = model->fspec_pool[fspec_off + fi].z;
-                uint8_t ai = model->fspec_pool[fspec_off + fi].a;
+                zi = model->fspec_pool[fspec_off + fi].z;
+                ai = model->fspec_pool[fspec_off + fi].a;
                 spec_idx = final_species_index(zi, ai);
                 if (spec_idx < 0) {
                     /* Shouldn't happen for whitelist-only N>=3 partitions. */
-                    struct fbu_work_item tmp;
-                    tmp.z = zi; tmp.a = ai; tmp.e_star = 0.0;
+                    tmp.z = zi;
+                    tmp.a = ai;
+                    tmp.e_star = 0.0;
                     tmp.p[0] = p_out[fi][0];
                     tmp.p[1] = p_out[fi][1];
                     tmp.p[2] = p_out[fi][2];
                     append_unprocessed_fragment(&tmp, event_out);
                     continue;
                 }
-                double mi = m_arr[fi];
+                mi = m_arr[fi];
                 p2 = p_out[fi][0]*p_out[fi][0] + p_out[fi][1]*p_out[fi][1]
                    + p_out[fi][2]*p_out[fi][2];
                 p_norm = sqrt(p2);
