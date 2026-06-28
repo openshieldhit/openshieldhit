@@ -423,6 +423,23 @@ static void test_merge_variance_inconsistent_rejected(void) {
         osh_scoring_accumulator_free(&c);
         osh_scoring_accumulator_free(&e);
     }
+
+    /* data_var present without its companion data array (symmetric guard).  Both
+     * sides drop data so the presence check passes and the variance-consistency
+     * check is what rejects. */
+    {
+        struct osh_scoring_accumulator f;
+        struct osh_scoring_accumulator g;
+        make_batch(&f, 2u, d, 2.0);
+        make_batch(&g, 2u, d, 2.0);
+        free(f.data);
+        f.data = NULL;
+        free(g.data);
+        g.data = NULL;
+        ASSERT_TRUE(osh_scoring_accumulator_merge(&f, &g) == OSH_EINVAL);
+        osh_scoring_accumulator_free(&f);
+        osh_scoring_accumulator_free(&g);
+    }
 }
 
 int main(void) {
