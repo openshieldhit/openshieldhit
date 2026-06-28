@@ -36,11 +36,17 @@ enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *ac
 }
 
 void osh_scoring_accumulator_zero(struct osh_scoring_accumulator *acc) {
-    if (!acc || acc->len == 0u) {
+    if (!acc) {
         return;
     }
-    acc->weight = 0.0; /* a zeroed accumulator represents no batches yet */
+    /* Reset the batch bookkeeping unconditionally: alloc() supports len==0 (it
+     * still allocates one element), so a zeroed accumulator must read as "no
+     * batches yet" even then. */
+    acc->weight = 0.0;
     acc->nbatch = 0u;
+    if (acc->len == 0u) {
+        return;
+    }
     if (acc->data) {
         memset(acc->data, 0, acc->len * sizeof(*acc->data));
     }
@@ -108,7 +114,9 @@ static void merge_m2(double *dst_m2,
                      double src_w,
                      size_t len) {
     size_t i;
-    double w;
+    double inv_dst_w;
+    double inv_src_w;
+    double cross;
     if (!dst_m2 || !src_m2 || !dst_sum || !src_sum) {
         return;
     }
@@ -122,13 +130,34 @@ static void merge_m2(double *dst_m2,
         }
         return;
     }
-    w = dst_w + src_w;
+    /* All three factors are loop-invariant; hoist them so the per-bin work is
+     * multiplies only (no divisions), which matters for large meshes. */
+    inv_dst_w = 1.0 / dst_w;
+    inv_src_w = 1.0 / src_w;
+    cross = dst_w * src_w / (dst_w + src_w);
     for (i = 0; i < len; ++i) {
-        double const mean_a = dst_sum[i] / dst_w;
-        double const mean_b = src_sum[i] / src_w;
+        double const mean_a = dst_sum[i] * inv_dst_w;
+        double const mean_b = src_sum[i] * inv_src_w;
         double const delta = mean_b - mean_a;
-        dst_m2[i] += src_m2[i] + delta * delta * (dst_w * src_w / w);
+        dst_m2[i] += src_m2[i] + delta * delta * cross;
     }
+}
+
+/* A variance-tracking accumulator must be self-consistent, or merge_m2() would
+ * silently short-circuit and produce wrong M2 state: an M2 array needs its
+ * companion sum array (it derives the mean from it), and a batch's weight and
+ * count must agree on emptiness (W == 0 iff B == 0). */
+static int variance_inconsistent(struct osh_scoring_accumulator const *a) {
+    if (a->data_var && !a->data) {
+        return 1;
+    }
+    if (a->data2_var && !a->data2) {
+        return 1;
+    }
+    if ((a->data_var || a->data2_var) && ((a->weight == 0.0) != (a->nbatch == 0u))) {
+        return 1;
+    }
+    return 0;
 }
 
 enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *dst,
@@ -145,6 +174,10 @@ enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *ds
     if (((dst->data == NULL) != (src->data == NULL)) || ((dst->data2 == NULL) != (src->data2 == NULL))
         || ((dst->data_var == NULL) != (src->data_var == NULL))
         || ((dst->data2_var == NULL) != (src->data2_var == NULL))) {
+        return OSH_EINVAL;
+    }
+    /* Reject inconsistent variance bookkeeping rather than silently mis-merging. */
+    if (variance_inconsistent(dst) || variance_inconsistent(src)) {
         return OSH_EINVAL;
     }
     /* Variance (Welford M2) arrays first — they need dst's pre-merge sums and

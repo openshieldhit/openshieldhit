@@ -17,6 +17,7 @@
  *   test_merge_variance_unequal_single_pass — unequal batches match single-pass
  *                                             weighted M2, order-independent
  *   test_merge_variance_empty_identity     — a weight-0 batch is the merge identity
+ *   test_merge_variance_inconsistent_rejected — malformed variance bookkeeping → EINVAL
  */
 
 #include <math.h>
@@ -394,6 +395,36 @@ static void test_merge_variance_empty_identity(void) {
     osh_scoring_accumulator_free(&b);
 }
 
+/* Inconsistent variance bookkeeping is rejected rather than silently mis-merged. */
+static void test_merge_variance_inconsistent_rejected(void) {
+    struct osh_scoring_accumulator a;
+    struct osh_scoring_accumulator b;
+    double const d[2] = {10.0, 4.0};
+
+    /* weight == 0 but nbatch != 0 is a malformed batch. */
+    make_batch(&a, 2u, d, 2.0);
+    make_batch(&b, 2u, d, 2.0);
+    a.weight = 0.0; /* nbatch stays 1 -> inconsistent */
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&a, &b) == OSH_EINVAL);
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&b, &a) == OSH_EINVAL); /* src side too */
+    osh_scoring_accumulator_free(&a);
+    osh_scoring_accumulator_free(&b);
+
+    /* data2_var present without its companion data2 array. */
+    {
+        struct osh_scoring_accumulator c;
+        struct osh_scoring_accumulator e;
+        make_batch(&c, 2u, d, 2.0); /* no data2 (alloc want_data2=0) */
+        make_batch(&e, 2u, d, 2.0);
+        c.data2_var = (double *) calloc(2u, sizeof(double));
+        e.data2_var = (double *) calloc(2u, sizeof(double));
+        ASSERT_TRUE(c.data2_var != NULL && e.data2_var != NULL);
+        ASSERT_TRUE(osh_scoring_accumulator_merge(&c, &e) == OSH_EINVAL);
+        osh_scoring_accumulator_free(&c);
+        osh_scoring_accumulator_free(&e);
+    }
+}
+
 int main(void) {
     test_merge_identity();
     test_merge_correctness();
@@ -407,6 +438,7 @@ int main(void) {
     test_merge_variance_two_batches();
     test_merge_variance_unequal_single_pass();
     test_merge_variance_empty_identity();
+    test_merge_variance_inconsistent_rejected();
     printf("All osh_scoring_accumulator tests passed.\n");
     return 0;
 }
