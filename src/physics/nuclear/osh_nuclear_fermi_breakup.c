@@ -106,7 +106,7 @@ static double const s_gamma[FBU_NMAX + 1] = {
 
 /* Dense (z, a) index. */
 static inline size_t _za_idx(unsigned int z, unsigned int a) {
-    return (size_t) z * (size_t) (OSH_FERMI_BREAKUP_AMAX + 1) + (size_t) a;
+    return ((size_t) z * (size_t) (OSH_FERMI_BREAKUP_AMAX + 1)) + (size_t) a;
 }
 
 /* Ground-state spin degeneracy 2J+1; 1 if not tabulated. */
@@ -123,22 +123,28 @@ static unsigned int spin_degeneracy(unsigned int z, unsigned int a) {
 /* Index into model->species if (z, a) is a whitelisted transportable product;
  * -1 otherwise. */
 static int final_species_index(unsigned int z, unsigned int a) {
-    if (a == 1u && z == 0u)
+    if (a == 1u && z == 0u) {
         return FBU_SPECIES_NEUTRON;
+    }
     if (z == 1u) {
-        if (a == 1u)
+        if (a == 1u) {
             return FBU_SPECIES_PROTON;
-        if (a == 2u)
+        }
+        if (a == 2u) {
             return FBU_SPECIES_DEUTERON;
-        if (a == 3u)
+        }
+        if (a == 3u) {
             return FBU_SPECIES_TRITON;
+        }
         return -1;
     }
     if (z == 2u) {
-        if (a == 3u)
+        if (a == 3u) {
             return FBU_SPECIES_HE3;
-        if (a == 4u)
+        }
+        if (a == 4u) {
             return FBU_SPECIES_HE4;
+        }
         return -1;
     }
     return -1;
@@ -158,8 +164,9 @@ static double volume_coeff(unsigned int a_parent) {
 
 /* Fill ground-state nuclear mass table [MeV/c^2] from the isotope database. */
 static void fill_mass_table(double *mass_mev) {
-    unsigned int z, a;
-    double m;
+    unsigned int z; /* candidate nuclide charge */
+    unsigned int a; /* candidate nuclide mass number */
+    double m;       /* nuclear mass from the isotope database [MeV/c^2] */
 
     mass_mev[_za_idx(0u, 1u)] = OSH_PART_MASS_NEUTRON;
     for (z = 1u; z <= OSH_FERMI_BREAKUP_ZMAX; ++z) {
@@ -216,7 +223,8 @@ struct enum_ctx {
 /* Build the enumeration alphabet: every (z, a) with a tabulated ground-state
  * mass, in canonical non-decreasing order (a, then z). */
 static void build_alphabet(double const *mass_mev, struct fbu_alphabet *alpha) {
-    unsigned int z, a;
+    unsigned int z; /* charge of the candidate species */
+    unsigned int a; /* mass number of the candidate species */
     alpha->n = 0;
     for (a = 1u; a <= OSH_FERMI_BREAKUP_AMAX; ++a) {
         for (z = 0u; z <= OSH_FERMI_BREAKUP_ZMAX; ++z) {
@@ -234,11 +242,13 @@ static void build_alphabet(double const *mass_mev, struct fbu_alphabet *alpha) {
  * buf_[] is in non-decreasing alphabet order, so identical species are
  * adjacent and the identical-particle factorial is a product over run lengths. */
 static double compute_prefactor(struct enum_ctx const *ctx, int n) {
-    double prod_m32;
-    double prod_g;
-    double id_denom;
-    double mi;
-    int i, run, f;
+    double prod_m32; /* running product of m_i^(3/2) over fragments */
+    double prod_g;   /* running product of spin degeneracies (2J+1) */
+    double id_denom; /* identical-particle factorial prod(n_k!) */
+    double mi;       /* current fragment mass [MeV/c^2] */
+    int i;           /* start index of the current identical-species run */
+    int run;         /* length of the identical-species run at i */
+    int f;           /* factorial counter while folding the run into id_denom */
 
     prod_m32 = 1.0;
     prod_g = 1.0;
@@ -271,10 +281,14 @@ static double compute_prefactor(struct enum_ctx const *ctx, int n) {
  * min_sp: minimum alphabet index (canonical non-decreasing order).
  * buf_pos: next write position in ctx->buf_[]. */
 static void enum_rec(struct enum_ctx *ctx, int k_rem, int z_rem, int a_rem, int min_sp, int buf_pos) {
-    struct fbu_alphabet const *alpha = ctx->alpha;
-    struct osh_fermi_partition *part;
-    int sp, zi, ai, n, i;
-    double q;
+    struct fbu_alphabet const *alpha = ctx->alpha; /* candidate species list */
+    struct osh_fermi_partition *part;              /* partition slot written on the fill pass */
+    int sp;                                        /* current alphabet index being tried */
+    int zi;                                        /* charge of species sp */
+    int ai;                                        /* mass number of species sp */
+    int n;                                         /* fragment multiplicity of the completed partition */
+    int i;                                         /* fragment loop index */
+    double q;                                      /* Q-value = M_parent - sum(m_i) [MeV] */
 
     if (k_rem == 0) {
         if (z_rem != 0 || a_rem != 0) {
@@ -332,13 +346,14 @@ static size_t enumerate_all_partitions(double const *mass_mev,
                                        uint32_t *part_offset,
                                        uint16_t *part_count,
                                        size_t *nfspecs_out) {
-    size_t part_total;
-    size_t fspec_total;
-    unsigned int z, a;
-    double mp;
-    size_t part_start;
-    size_t idx;
-    int n;
+    size_t part_total;  /* running count of partitions emitted so far */
+    size_t fspec_total; /* running count of fragment-spec (z,a) entries */
+    unsigned int z;     /* parent charge */
+    unsigned int a;     /* parent mass number */
+    double mp;          /* parent ground-state mass [MeV/c^2] */
+    size_t part_start;  /* first partition index belonging to this parent */
+    size_t idx;         /* dense (z,a) table index of the parent */
+    int n;              /* target fragment multiplicity for this pass */
     struct enum_ctx ctx;
 
     part_total = 0u;
@@ -385,12 +400,13 @@ static size_t enumerate_all_partitions(double const *mass_mev,
 /* Sample chi from pdf proportional to chi^(3K-5) * (1-chi) via rejection.
  * Used by the Kopylov algorithm for K >= 2. */
 static double beta_kopylov(int k, struct osh_rng *rng) {
-    int npow;
-    double xn;
-    double fmax;
-    double chi, f;
+    int npow;    /* exponent 3K-5 of the chi^(3K-5)*(1-chi) pdf */
+    double xn;   /* npow as a double */
+    double fmax; /* pdf maximum, used as the rejection envelope */
+    double chi;  /* trial sample in [0,1) */
+    double f;    /* pdf value at chi */
 
-    npow = 3 * k - 5;
+    npow = (3 * k) - 5;
     xn = (double) npow;
     fmax = sqrt(pow(xn / (xn + 1.0), npow) / (xn + 1.0));
     do {
@@ -412,20 +428,25 @@ static void kopylov_nbody(int n,
                           struct osh_rng *rng,
                           double p_out[][3],
                           double e_tot[]) {
-    double mu;         /* running remaining mass (unplaced fragments) */
-    double mass;       /* current subsystem effective mass */
-    double t;          /* available kinetic energy for current subsystem */
-    double rest_mass;  /* effective mass of the "rest" pseudo-particle */
-    double p_rest[3];  /* lab momentum of the rest pseudo-particle */
-    double rest_m_cur; /* rest mass of the rest pseudo-particle (for boost) */
-    double p_cm[3];
-    double p_cm_mag;
-    double cos_theta, sin_theta, cos_phi, sin_phi;
-    double e_frag_cm, e_rest_cm;
-    double e_frag_lab, e_rest_lab;
-    double p_rest_new[3];
-    double p2;
-    int k;
+    double mu;            /* running remaining mass (unplaced fragments) */
+    double mass;          /* current subsystem effective mass */
+    double t;             /* available kinetic energy for current subsystem */
+    double rest_mass;     /* effective mass of the "rest" pseudo-particle */
+    double p_rest[3];     /* lab momentum of the rest pseudo-particle */
+    double rest_m_cur;    /* rest mass of the rest pseudo-particle (for boost) */
+    double p_cm[3];       /* fragment momentum in the current subsystem CM frame */
+    double p_cm_mag;      /* magnitude of p_cm */
+    double cos_theta;     /* polar cosine of the CM emission direction */
+    double sin_theta;     /* polar sine of the CM emission direction */
+    double cos_phi;       /* azimuth cosine */
+    double sin_phi;       /* azimuth sine */
+    double e_frag_cm;     /* fragment k total energy in the subsystem CM */
+    double e_rest_cm;     /* rest pseudo-particle total energy in the subsystem CM */
+    double e_frag_lab;    /* fragment k total energy in the lab */
+    double e_rest_lab;    /* rest pseudo-particle total energy in the lab */
+    double p_rest_new[3]; /* updated lab momentum of the rest pseudo-particle */
+    double p2;            /* squared lab momentum of fragment 0 */
+    int k;                /* fragment index, processed from n-1 down to 1 */
 
     mu = 0.0;
     for (k = 0; k < n; ++k) {
@@ -451,14 +472,14 @@ static void kopylov_nbody(int n,
 
         p_cm_mag = osh_kinematics_two_body_decay_p(mass, m[k], rest_mass);
 
-        cos_theta = 2.0 * osh_rng_double(rng) - 1.0;
-        sin_theta = sqrt(fmax(0.0, 1.0 - cos_theta * cos_theta));
+        cos_theta = (2.0 * osh_rng_double(rng)) - 1.0;
+        sin_theta = sqrt(fmax(0.0, 1.0 - (cos_theta * cos_theta)));
         osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
         p_cm[0] = p_cm_mag * sin_theta * cos_phi;
         p_cm[1] = p_cm_mag * sin_theta * sin_phi;
         p_cm[2] = p_cm_mag * cos_theta;
 
-        e_frag_cm = sqrt(m[k] * m[k] + p_cm_mag * p_cm_mag);
+        e_frag_cm = sqrt((m[k] * m[k]) + (p_cm_mag * p_cm_mag));
         osh_kinematics_boost_to_lab(rest_m_cur, p_rest, e_frag_cm, p_cm, &e_frag_lab, p_out[k]);
         e_tot[k] = e_frag_lab;
 
@@ -466,7 +487,7 @@ static void kopylov_nbody(int n,
         p_cm[0] = -p_cm[0];
         p_cm[1] = -p_cm[1];
         p_cm[2] = -p_cm[2];
-        e_rest_cm = sqrt(rest_mass * rest_mass + p_cm_mag * p_cm_mag);
+        e_rest_cm = sqrt((rest_mass * rest_mass) + (p_cm_mag * p_cm_mag));
         osh_kinematics_boost_to_lab(rest_m_cur, p_rest, e_rest_cm, p_cm, &e_rest_lab, p_rest_new);
         p_rest[0] = p_rest_new[0];
         p_rest[1] = p_rest_new[1];
@@ -479,8 +500,8 @@ static void kopylov_nbody(int n,
     p_out[0][0] = p_rest[0];
     p_out[0][1] = p_rest[1];
     p_out[0][2] = p_rest[2];
-    p2 = p_rest[0] * p_rest[0] + p_rest[1] * p_rest[1] + p_rest[2] * p_rest[2];
-    e_tot[0] = sqrt(m[0] * m[0] + p2);
+    p2 = (p_rest[0] * p_rest[0]) + (p_rest[1] * p_rest[1]) + (p_rest[2] * p_rest[2]);
+    e_tot[0] = sqrt((m[0] * m[0]) + p2);
 }
 
 /* ---- Weight selection helper --------------------------------------------- */
@@ -488,12 +509,12 @@ static void kopylov_nbody(int n,
 /* Compute total open-partition weight for parent at dense index idx and the
  * given excitation energy.  Returns 0 if no channel is open. */
 static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model, size_t idx, double e_star) {
-    double wsum;
-    uint32_t off;
-    uint16_t cnt;
-    uint16_t i;
-    double t;
-    int nf;
+    double wsum;  /* accumulated weight of all open partitions */
+    uint32_t off; /* first partition index for this parent */
+    uint16_t cnt; /* number of partitions for this parent */
+    uint16_t i;   /* partition loop index */
+    double t;     /* released kinetic energy E*+Q of partition i [MeV] */
+    int nf;       /* fragment multiplicity of partition i */
 
     wsum = 0.0;
     off = model->part_offset[idx];
@@ -502,7 +523,7 @@ static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model
         t = e_star + (double) model->part_pool[off + i].q_mev;
         if (t > 0.0) {
             nf = model->part_pool[off + i].n_frags;
-            wsum += model->part_pool[off + i].weight_prefactor * pow(t, 1.5 * nf - 2.5);
+            wsum += model->part_pool[off + i].weight_prefactor * pow(t, (1.5 * nf) - 2.5);
         }
     }
     return wsum;
@@ -517,10 +538,10 @@ enum osh_status osh_nuclear_fermi_breakup_compile(struct osh_nuclear_fermi_break
                                                   OSH_PART_PDG_TRITON,
                                                   OSH_PART_PDG_HE3,
                                                   OSH_PART_PDG_HE4};
-    struct fbu_alphabet *alpha;
-    size_t nfspecs;
-    size_t npart;
-    int i;
+    struct fbu_alphabet *alpha; /* candidate species list (freed before return) */
+    size_t nfspecs;             /* total fragment-spec entries (sizing pass) */
+    size_t npart;               /* total partitions (sizing pass) */
+    int i;                      /* species loop index */
 
     if (out == NULL) {
         return OSH_EINVAL;
@@ -590,9 +611,11 @@ static int emit_terminal(struct osh_nuclear_fermi_breakup const *model,
                          struct fbu_work_item const *node,
                          int room,
                          struct osh_nuclear_event *event_out) {
-    struct osh_nuclear_secondary *sec;
-    int spec_idx;
-    double m_node, p2, p_norm;
+    struct osh_nuclear_secondary *sec; /* output secondary slot */
+    int spec_idx;                      /* whitelist species index, or -1 if not transportable */
+    double m_node;                     /* rest mass of this fragment [MeV/c^2] */
+    double p2;                         /* squared lab momentum [MeV^2/c^2] */
+    double p_norm;                     /* lab momentum magnitude [MeV/c] */
 
     spec_idx = final_species_index(node->z, node->a);
     if (!room || spec_idx < 0) {
@@ -601,10 +624,10 @@ static int emit_terminal(struct osh_nuclear_fermi_breakup const *model,
     }
 
     m_node = model->mass_mev[_za_idx(node->z, node->a)];
-    p2 = node->p[0] * node->p[0] + node->p[1] * node->p[1] + node->p[2] * node->p[2];
+    p2 = (node->p[0] * node->p[0]) + (node->p[1] * node->p[1]) + (node->p[2] * node->p[2]);
     p_norm = sqrt(p2);
     sec = &event_out->secondaries[event_out->n_secondaries];
-    sec->energy = sqrt(m_node * m_node + p2) - m_node;
+    sec->energy = sqrt((m_node * m_node) + p2) - m_node;
     if (p_norm > 0.0) {
         sec->dir[0] = node->p[0] / p_norm;
         sec->dir[1] = node->p[1] / p_norm;
@@ -623,27 +646,38 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
                                     struct osh_nuclear_fragment const *fragment,
                                     struct osh_rng *rng,
                                     struct osh_nuclear_event *event_out) {
-    struct fbu_work_item stack[FBU_WORK_STACK];
-    struct fbu_work_item node;
-    struct fbu_work_item child;
-    struct osh_nuclear_fragment frag;
-    double m_arr[FBU_NMAX];
-    double p_out[FBU_NMAX][3];
-    double e_tot[FBU_NMAX];
-    size_t idx;
-    size_t n_emitted;
-    int sp;
-    int room;
-    int fi;
-    int nf;
-    uint32_t off;
-    uint32_t fspec_off;
-    uint16_t cnt;
-    uint16_t i, c;
-    double wsum, threshold, cumulative, t, w;
-    double m_eff;
-    double p_star, cos_theta, sin_theta, cos_phi, sin_phi;
-    double p_cm[3], e_cm, e_lab;
+    struct fbu_work_item stack[FBU_WORK_STACK]; /* pending nuclides still to de-excite */
+    struct fbu_work_item node;                  /* current item popped off the stack */
+    struct fbu_work_item child;                 /* one decay product being pushed back */
+    struct osh_nuclear_fragment frag;           /* local copy of the input prefragment */
+    double m_arr[FBU_NMAX];                     /* selected partition's fragment masses [MeV/c^2] */
+    double p_out[FBU_NMAX][3];                  /* per-fragment lab momenta from the decay [MeV/c] */
+    double e_tot[FBU_NMAX];                     /* per-fragment lab energies (Kopylov scratch; unused here) */
+    size_t idx;                                 /* dense (z,a) index of the current node */
+    size_t n_emitted;                           /* number of transportable secondaries produced */
+    int sp;                                     /* work-stack height (next free slot) */
+    int room;                                   /* 1 while the secondaries array still has space */
+    int fi;                                     /* fragment loop index */
+    int nf;                                     /* fragment multiplicity of the selected partition */
+    uint32_t off;                               /* first partition index for the current node */
+    uint32_t fspec_off;                         /* fragment-spec offset of the selected partition */
+    uint16_t cnt;                               /* partition count for the current node */
+    uint16_t i;                                 /* partition loop index */
+    uint16_t c;                                 /* index of the selected partition */
+    double wsum;                                /* total weight of the current node's open partitions */
+    double threshold;                           /* RNG draw scaled into [0,wsum) for selection */
+    double cumulative;                          /* running weight sum during selection */
+    double t;                                   /* released kinetic energy E*+Q of a partition [MeV] */
+    double w;                                   /* weight of a single partition */
+    double m_eff;                               /* effective parent mass m_gs + E* [MeV/c^2] */
+    double p_star;                              /* two-body CM momentum magnitude [MeV/c] */
+    double cos_theta;                           /* polar cosine of the two-body CM direction */
+    double sin_theta;                           /* polar sine of the two-body CM direction */
+    double cos_phi;                             /* azimuth cosine */
+    double sin_phi;                             /* azimuth sine */
+    double p_cm[3];                             /* product momentum in the parent rest frame [MeV/c] */
+    double e_cm;                                /* product total energy in the parent rest frame [MeV] */
+    double e_lab;                               /* product total lab energy [MeV] (discarded; momentum is kept) */
 
     frag = *fragment; /* local copy: fragment may alias event_out->fragments[0] */
 
@@ -700,7 +734,7 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
             t = node.e_star + (double) model->part_pool[off + i].q_mev;
             if (t > 0.0) {
                 nf = model->part_pool[off + i].n_frags;
-                w = model->part_pool[off + i].weight_prefactor * pow(t, 1.5 * nf - 2.5);
+                w = model->part_pool[off + i].weight_prefactor * pow(t, (1.5 * nf) - 2.5);
                 cumulative += w;
                 c = i;
                 if (threshold <= cumulative) {
@@ -712,6 +746,15 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
         nf = model->part_pool[off + c].n_frags;
         fspec_off = model->part_pool[off + c].fspec_offset;
         m_eff = model->mass_mev[idx] + node.e_star;
+
+        /* Invariant: every compiled partition has 2..FBU_NMAX fragments.  Guard
+         * it explicitly so a corrupt table can never index m_arr[]/p_out[] out
+         * of bounds (and so the static analyzer can prove m_arr[] is fully
+         * written before kopylov_nbody() reads m_arr[0]). */
+        if (nf < 2 || nf > FBU_NMAX) {
+            append_unprocessed_fragment(&node, event_out);
+            continue;
+        }
 
         /* Capacity guard: a partition can push up to nf products. */
         if (sp + nf > FBU_WORK_STACK) {
@@ -727,19 +770,19 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
         if (nf == 2) {
             /* Two-body decay (exact). */
             p_star = osh_kinematics_two_body_decay_p(m_eff, m_arr[0], m_arr[1]);
-            cos_theta = 2.0 * osh_rng_double(rng) - 1.0;
-            sin_theta = sqrt(fmax(0.0, 1.0 - cos_theta * cos_theta));
+            cos_theta = (2.0 * osh_rng_double(rng)) - 1.0;
+            sin_theta = sqrt(fmax(0.0, 1.0 - (cos_theta * cos_theta)));
             osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
             p_cm[0] = p_star * sin_theta * cos_phi;
             p_cm[1] = p_star * sin_theta * sin_phi;
             p_cm[2] = p_star * cos_theta;
 
-            e_cm = sqrt(m_arr[0] * m_arr[0] + p_star * p_star);
+            e_cm = sqrt((m_arr[0] * m_arr[0]) + (p_star * p_star));
             osh_kinematics_boost_to_lab(m_eff, node.p, e_cm, p_cm, &e_lab, p_out[0]);
             p_cm[0] = -p_cm[0];
             p_cm[1] = -p_cm[1];
             p_cm[2] = -p_cm[2];
-            e_cm = sqrt(m_arr[1] * m_arr[1] + p_star * p_star);
+            e_cm = sqrt((m_arr[1] * m_arr[1]) + (p_star * p_star));
             osh_kinematics_boost_to_lab(m_eff, node.p, e_cm, p_cm, &e_lab, p_out[1]);
         } else {
             /* N>=3: Kopylov phase space. */
