@@ -91,6 +91,11 @@ struct osh_scoring_output_def const *osh_scoring_output_by_filename(struct osh_s
  */
 struct osh_scoring_mem_estimate {
     uint64_t accum_bytes;                               /**< Total bytes across all scoring accumulator arrays. */
+    uint64_t shadow_bytes;                              /**< Extra bytes a mid-run snapshot needs: one `data`
+                                                         *   array per page whose postprocess writes data
+                                                         *   (DOSEGY, LET/Qeff).  0 when no such page exists.
+                                                         *   The dump run-control reserves this up front only
+                                                         *   when periodic dumps are scheduled (see #170/#193). */
     size_t npages;                                      /**< Total (Output, Quantity) pairs across all Output blocks.
                                                          *   Each Output block may declare any number of Quantity
                                                          *   lines; this is their sum, not a geometry × quantity
