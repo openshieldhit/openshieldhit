@@ -37,6 +37,12 @@ static void test_estimate_known_fixture(void) {
     ASSERT_TRUE(est.largest_page_bytes == 1600u);
     ASSERT_TRUE(strcmp(est.largest_geometry, "G") == 0);
 
+    /* A mid-run snapshot copies only the `data` array of pages whose postprocess
+     * writes data.  Dose (MeV/g) is a no-op, so it contributes nothing; DLET's
+     * single data array is 100*8 = 800 (its data2 weight array is aliased, not
+     * copied).  shadow_bytes is therefore strictly less than accum_bytes here. */
+    ASSERT_TRUE(est.shadow_bytes == 800u);
+
     osh_scoring_workspace_free(ws);
 }
 
