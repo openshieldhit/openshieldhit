@@ -86,8 +86,8 @@ struct particle;
 
 /** One N-body decay partition: parent -> N fragments listed in fspec_pool. */
 struct osh_fermi_partition {
-    double weight_prefactor; /**< [V/((2pi)^3/2 hbar^3)]^(N-1) * prod(g_i)/prod(n_k!)
-                              *   * prod(m_i^3/2) / Gamma(3N/2-3/2). */
+    double weight_prefactor; /**< C^(N-1) * prod(g_i)/prod(n_k!) * prod(m_i^(3/2)) / Gamma(3N/2-3/2).
+                              where C = V / ((2*pi)^(3/2) * (hbar*c)^3). */
     uint32_t fspec_offset;   /**< First index in fspec_pool for this partition's (z,a) list. */
     float q_mev;             /**< Q = M_parent_gs - sum(m_i_gs) [MeV]. */
     uint8_t n_frags;         /**< N: number of fragments. */
