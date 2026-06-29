@@ -10,6 +10,7 @@
 #include "openshieldhit/const.h"
 #include "openshieldhit/scoring.h"
 #include "scoring/runtime/osh_scoring_accumulator.h"
+#include "scoring/runtime/osh_scoring_postprocess.h"
 
 /* Scratch record built during the first compile pass; sorted by geometry+kind
  * so pages that share a geometry and scorer type end up in the same hot group. */
@@ -196,6 +197,7 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
     }
 
     out->accum_bytes = 0u;
+    out->shadow_bytes = 0u;
     out->npages = 0u;
     out->largest_page_bytes = 0u;
     out->largest_geometry[0] = '\0';
@@ -239,6 +241,17 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
             out->accum_bytes =
                 (out->accum_bytes <= UINT64_MAX - page_bytes) ? (out->accum_bytes + page_bytes) : UINT64_MAX;
             out->npages += 1u;
+
+            /* A mid-run snapshot copies only the `data` array (one, never data2)
+             * of pages whose postprocess writes data — DOSEGY and the LET/Qeff
+             * averages.  Same per-page bin count as above, so the estimate cannot
+             * drift from the shadow's real allocation. */
+            if (len > 0u && osh_scoring_postprocess_writes_data(kind)) {
+                uint64_t const shadow_page =
+                    (len <= UINT64_MAX / (uint64_t) sizeof(double)) ? (len * (uint64_t) sizeof(double)) : UINT64_MAX;
+                out->shadow_bytes =
+                    (out->shadow_bytes <= UINT64_MAX - shadow_page) ? (out->shadow_bytes + shadow_page) : UINT64_MAX;
+            }
 
             if (page_bytes > out->largest_page_bytes) {
                 char const *name = (geo && geo->name)      ? geo->name

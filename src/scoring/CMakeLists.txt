@@ -4,8 +4,11 @@ add_library(osh_scoring
     runtime/osh_scoring_compile.c
     runtime/osh_scoring_filter_runtime.c
     runtime/osh_scoring_postprocess.c
+    runtime/osh_scoring_shadow.c
+    runtime/osh_scoring_snapshot.c
     runtime/osh_scoring_step.c
     save/osh_scoring_save.c
+    save/osh_scoring_sink.c
     save/osh_scoring_save_ascii.c
     save/osh_scoring_save_bdo2019_raw.c
     save/osh_scoring_save_bdo2019.c
