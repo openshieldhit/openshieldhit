@@ -36,6 +36,13 @@ static enum osh_status page_postprocess_into(struct osh_scoring_page_runtime *ds
     if (dst->acc.len != len) {
         return OSH_EINVAL;
     }
+    /* dst and src must describe the same page.  Only src->score_kind / postproc
+     * are read for the transform, but a kind mismatch means the caller paired the
+     * wrong pages, so fail fast rather than silently transform under the wrong
+     * rule. */
+    if (dst->score_kind != src->score_kind) {
+        return OSH_EINVAL;
+    }
 
     switch (src->score_kind) {
 
@@ -103,6 +110,11 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
         return OSH_EINVAL;
     }
     if (dst->npages != src->npages) {
+        return OSH_EINVAL;
+    }
+    /* A non-zero page count with a NULL page array is a malformed runtime; guard
+     * it here so the per-page loop never dereferences NULL. */
+    if (src->npages > 0u && (!dst->pages || !src->pages)) {
         return OSH_EINVAL;
     }
 

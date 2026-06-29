@@ -4,11 +4,13 @@
  * Coverage:
  *   test_shadow_alias_and_ownership — view aliases live; only transformed pages
  *                                     own scratch; shadow_bytes counts data-only
- *   test_snapshot_nondestructive    — snapshot leaves every live array byte-identical
+ *   test_snapshot_nondestructive    — snapshot leaves every live array unchanged
  *                                     while the view holds the postprocessed values
  *   test_snapshot_reuse             — scratch is allocated once and reused across dumps
  *   test_snapshot_selector          — the output selector (G2) is passed to the sink
  *   test_snapshot_errors            — NULL sink / sink->save / shadow are rejected
+ *   test_shadow_edge_args           — NULL / empty-runtime paths on every entry point
+ *   test_snapshot_refresh_failure   — a postprocess error propagates out, no save
  *
  * Uses a mock sink so no files are written; pure arithmetic, identical on every OS.
  */
@@ -25,6 +27,19 @@
 #include "scoring/runtime/osh_scoring_snapshot.h"
 #include "scoring/save/osh_scoring_sink.h"
 #include "test_assert.h"
+
+/* Element-wise equality: doubles do not have a unique object representation, so
+ * compare values, never memcmp (which clang-tidy bugprone flags). The arrays
+ * here hold integer-valued doubles, so == is exact. */
+static int doubles_equal(double const *a, double const *b, size_t n) {
+    size_t i;
+    for (i = 0; i < n; ++i) {
+        if (a[i] != b[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 /* ---- A live runtime: DOSEGY (transform) + DLET (transform) + ENERGY (alias) -- */
 
@@ -139,8 +154,11 @@ static void test_snapshot_nondestructive(void) {
     struct osh_scoring_sink sink;
     struct osh_scoring_runtime const *view;
 
-    /* Byte images of live state before the snapshot. */
-    double d0[3], d1[3], w1[3], d2[3];
+    /* Value images of live state before the snapshot. */
+    double d0[3];
+    double d1[3];
+    double w1[3];
+    double d2[3];
 
     live_fixture_init(&f);
     memcpy(d0, f.pages[0].acc.data, sizeof(d0));
@@ -169,11 +187,11 @@ static void test_snapshot_nondestructive(void) {
     ASSERT_TRUE(view->pages[1].has_data2 == 0);
     ASSERT_TRUE(view->pages[2].acc.data[1] == 200.0); /* simple page passes raw values through */
 
-    /* Live state is byte-identical — the whole point. */
-    ASSERT_TRUE(memcmp(f.pages[0].acc.data, d0, sizeof(d0)) == 0);
-    ASSERT_TRUE(memcmp(f.pages[1].acc.data, d1, sizeof(d1)) == 0);
-    ASSERT_TRUE(memcmp(f.pages[1].acc.data2, w1, sizeof(w1)) == 0);
-    ASSERT_TRUE(memcmp(f.pages[2].acc.data, d2, sizeof(d2)) == 0);
+    /* Live state is unchanged — the whole point. */
+    ASSERT_TRUE(doubles_equal(f.pages[0].acc.data, d0, 3u));
+    ASSERT_TRUE(doubles_equal(f.pages[1].acc.data, d1, 3u));
+    ASSERT_TRUE(doubles_equal(f.pages[1].acc.data2, w1, 3u));
+    ASSERT_TRUE(doubles_equal(f.pages[2].acc.data, d2, 3u));
     ASSERT_TRUE(f.pages[1].has_data2 == 1); /* live flag untouched */
 
     osh_scoring_shadow_free(&shadow);
@@ -187,8 +205,10 @@ static void test_snapshot_reuse(void) {
     struct osh_scoring_shadow shadow;
     struct mock_sink_ctx ctx = {0};
     struct osh_scoring_sink sink;
-    double *s0, *s1;
-    double d1[3], w1[3];
+    double *s0;
+    double *s1;
+    double d1[3];
+    double w1[3];
 
     live_fixture_init(&f);
     memcpy(d1, f.pages[1].acc.data, sizeof(d1));
@@ -210,8 +230,8 @@ static void test_snapshot_reuse(void) {
     ASSERT_TRUE(ctx.last_nstat == 20ull);
 
     /* Live still intact after two dumps. */
-    ASSERT_TRUE(memcmp(f.pages[1].acc.data, d1, sizeof(d1)) == 0);
-    ASSERT_TRUE(memcmp(f.pages[1].acc.data2, w1, sizeof(w1)) == 0);
+    ASSERT_TRUE(doubles_equal(f.pages[1].acc.data, d1, 3u));
+    ASSERT_TRUE(doubles_equal(f.pages[1].acc.data2, w1, 3u));
 
     osh_scoring_shadow_free(&shadow);
     live_fixture_free(&f);
@@ -264,12 +284,74 @@ static void test_snapshot_errors(void) {
     live_fixture_free(&f);
 }
 
+/* ---- NULL / empty-runtime paths on every entry point ---------------------- */
+
+static void test_shadow_edge_args(void) {
+    struct live_fixture f;
+    struct osh_scoring_shadow shadow;
+    struct osh_scoring_runtime empty;
+
+    live_fixture_init(&f);
+
+    /* init rejects NULL args. */
+    ASSERT_TRUE(osh_scoring_shadow_init(NULL, &f.rt) == OSH_EINVAL);
+    ASSERT_TRUE(osh_scoring_shadow_init(&shadow, NULL) == OSH_EINVAL);
+
+    /* Accessors are NULL-safe. */
+    ASSERT_TRUE(osh_scoring_shadow_bytes(NULL) == 0u);
+    ASSERT_TRUE(osh_scoring_shadow_view(NULL) == NULL);
+    ASSERT_TRUE(osh_scoring_shadow_refresh(NULL) == OSH_EINVAL);
+    osh_scoring_shadow_free(NULL); /* must not crash */
+
+    /* Empty runtime (npages == 0): init/refresh/bytes/free all degenerate cleanly. */
+    memset(&empty, 0, sizeof(empty));
+    ASSERT_TRUE(osh_scoring_shadow_init(&shadow, &empty) == OSH_OK);
+    ASSERT_TRUE(shadow.view.pages == NULL);
+    ASSERT_TRUE(osh_scoring_shadow_bytes(&shadow) == 0u);
+    ASSERT_TRUE(osh_scoring_shadow_refresh(&shadow) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_shadow_view(&shadow) == &shadow.view);
+    osh_scoring_shadow_free(&shadow);
+
+    live_fixture_free(&f);
+}
+
+/* ---- A postprocess error during refresh propagates; the sink is not called - */
+
+static void test_snapshot_refresh_failure(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+    struct osh_scoring_shadow shadow;
+    struct mock_sink_ctx ctx = {0};
+    struct osh_scoring_sink sink;
+
+    /* A simple scorer carrying has_data2 is an unhandled two-pass page, so
+     * postprocess returns OSH_ENOTSUP — exercising the refresh-failure return in
+     * osh_scoring_snapshot_save. */
+    make_page(&page, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+    page.has_data2 = 1;
+    memset(&rt, 0, sizeof(rt));
+    rt.pages = &page;
+    rt.npages = 1u;
+
+    sink.save = mock_save;
+    sink.ctx = &ctx;
+
+    ASSERT_TRUE(osh_scoring_shadow_init(&shadow, &rt) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_snapshot_save(&sink, &shadow, 1ull, NULL, 0u) == OSH_ENOTSUP);
+    ASSERT_TRUE(ctx.calls == 0);
+
+    osh_scoring_shadow_free(&shadow);
+    osh_scoring_accumulator_free(&page.acc);
+}
+
 int main(void) {
     test_shadow_alias_and_ownership();
     test_snapshot_nondestructive();
     test_snapshot_reuse();
     test_snapshot_selector();
     test_snapshot_errors();
+    test_shadow_edge_args();
+    test_snapshot_refresh_failure();
     printf("All osh_scoring_shadow tests passed.\n");
     return 0;
 }

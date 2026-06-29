@@ -214,6 +214,94 @@ static void test_into_errors(void) {
 
     osh_scoring_accumulator_free(&pa.acc);
     osh_scoring_accumulator_free(&pb.acc);
+
+    /* npages > 0 with a NULL page array is rejected up front. */
+    {
+        struct osh_scoring_runtime bad_pages;
+        struct osh_scoring_runtime ok;
+        struct osh_scoring_page_runtime pc;
+
+        make_page(&pc, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+        make_runtime(&ok, &pc, 1u);
+        memset(&bad_pages, 0, sizeof(bad_pages));
+        bad_pages.npages = 1u; /* pages stays NULL */
+
+        ASSERT_TRUE(osh_scoring_postprocess_into(&bad_pages, &ok) == OSH_EINVAL);
+        osh_scoring_accumulator_free(&pc.acc);
+    }
+}
+
+/* dst/src describing different kinds is rejected (mispaired pages). */
+static void test_into_kind_mismatch(void) {
+    struct osh_scoring_page_runtime spage;
+    struct osh_scoring_page_runtime dpage;
+    struct osh_scoring_runtime src;
+    struct osh_scoring_runtime dst;
+
+    make_page(&spage, OSH_SCORING_SCORE_DOSEGY, 3u, 0);
+    make_page(&dpage, OSH_SCORING_SCORE_DLET, 3u, 1); /* same len, different kind */
+    make_runtime(&src, &spage, 1u);
+    make_runtime(&dst, &dpage, 1u);
+
+    ASSERT_TRUE(osh_scoring_postprocess_into(&dst, &src) == OSH_EINVAL);
+
+    osh_scoring_accumulator_free(&spage.acc);
+    osh_scoring_accumulator_free(&dpage.acc);
+}
+
+/* Missing required arrays are rejected, not dereferenced. */
+static void test_into_missing_arrays(void) {
+    /* LET with no data2 (the divisor) -> EINVAL. */
+    {
+        struct osh_scoring_page_runtime page;
+        struct osh_scoring_runtime rt;
+        make_page(&page, OSH_SCORING_SCORE_DLET, 3u, 0); /* want_data2 = 0 -> data2 NULL */
+        make_runtime(&rt, &page, 1u);
+        ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_EINVAL);
+        osh_scoring_accumulator_free(&page.acc);
+    }
+    /* DOSEGY with a NULL dst data buffer -> EINVAL. */
+    {
+        struct osh_scoring_page_runtime spage;
+        struct osh_scoring_page_runtime dpage;
+        struct osh_scoring_runtime src;
+        struct osh_scoring_runtime dst;
+
+        make_page(&spage, OSH_SCORING_SCORE_DOSEGY, 3u, 0);
+        memset(&dpage, 0, sizeof(dpage)); /* acc.data NULL */
+        dpage.acc.len = 3u;
+        dpage.len = 3u;
+        dpage.score_kind = OSH_SCORING_SCORE_DOSEGY;
+        make_runtime(&src, &spage, 1u);
+        make_runtime(&dst, &dpage, 1u);
+
+        ASSERT_TRUE(osh_scoring_postprocess_into(&dst, &src) == OSH_EINVAL);
+        osh_scoring_accumulator_free(&spage.acc);
+    }
+}
+
+/* Unhandled postproc shapes return OSH_ENOTSUP. */
+static void test_into_unsupported(void) {
+    /* A simple scorer carrying has_data2 is an unhandled two-pass page. */
+    {
+        struct osh_scoring_page_runtime page;
+        struct osh_scoring_runtime rt;
+        make_page(&page, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+        page.has_data2 = 1;
+        make_runtime(&rt, &page, 1u);
+        ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_ENOTSUP);
+        osh_scoring_accumulator_free(&page.acc);
+    }
+    /* AVER postproc on a non-LET kind has no finaliser. */
+    {
+        struct osh_scoring_page_runtime page;
+        struct osh_scoring_runtime rt;
+        make_page(&page, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+        page.postproc = OSH_SCORING_POSTPROC_AVER;
+        make_runtime(&rt, &page, 1u);
+        ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_ENOTSUP);
+        osh_scoring_accumulator_free(&page.acc);
+    }
 }
 
 int main(void) {
@@ -224,6 +312,9 @@ int main(void) {
     test_into_out_of_place();
     test_into_let_nondestructive();
     test_into_errors();
+    test_into_kind_mismatch();
+    test_into_missing_arrays();
+    test_into_unsupported();
     printf("All osh_scoring_postprocess_into tests passed.\n");
     return 0;
 }

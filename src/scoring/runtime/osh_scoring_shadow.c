@@ -58,7 +58,19 @@ enum osh_status osh_scoring_shadow_refresh(struct osh_scoring_shadow *shadow) {
                 size_t const n = lp->acc.len ? lp->acc.len : 1u;
                 double *buf = (double *) malloc(n * sizeof(*buf));
                 if (!buf) {
-                    return OSH_ENOMEM; /* partially-allocated scratch is released by _free */
+                    /* Roll back this attempt: free the scratch allocated so far and
+                     * restore the aliased data pointers, leaving the shadow in its
+                     * pristine all-aliased state.  scratch_ready stays 0, so a later
+                     * refresh (or free) is well-defined and leaks nothing. */
+                    size_t j;
+                    for (j = 0; j < shadow->npages; ++j) {
+                        if (shadow->scratch[j]) {
+                            free(shadow->scratch[j]);
+                            shadow->scratch[j] = NULL;
+                            shadow->pages[j].acc.data = shadow->live->pages[j].acc.data;
+                        }
+                    }
+                    return OSH_ENOMEM;
                 }
                 shadow->scratch[i] = buf;
                 shadow->pages[i].acc.data = buf; /* redirect the write target off the live array */
