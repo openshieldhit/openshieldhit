@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "openshieldhit/const.h"
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
@@ -13,24 +14,26 @@
 #include "random/osh_rng.h"
 
 /* Dense (z, a) table size: z in [0, ZMAX], a in [0, AMAX]. */
-#define FBU_NDENSE ((size_t)(OSH_FERMI_BREAKUP_ZMAX + 1) * (size_t)(OSH_FERMI_BREAKUP_AMAX + 1))
+#define FBU_NDENSE ((size_t) (OSH_FERMI_BREAKUP_ZMAX + 1) * (size_t) (OSH_FERMI_BREAKUP_AMAX + 1))
 
-/* Maximum N-body partition size we enumerate.
- * Capped at N=3: the 3-body channels (e.g. 3-alpha from C-12) fix the main
- * high-E* multiplicity deficit without producing the T^(3N/2-5/2) runaway
- * that occurs for N>=4.  A full N>=4 model requires nuclear excited-state
- * data to give smooth interpolation (as in G4FermiBreakUp 9.1); that is
- * deferred to a future enhancement. */
-#define FBU_NMAX 3
+/* Maximum N-body partition size we enumerate (ground-state fragments). */
+#define FBU_NMAX OSH_FERMI_BREAKUP_NMAX
+
+/* Work-stack depth: a partition pushes up to FBU_NMAX products and the sum of
+ * nucleons across all pending items can never exceed the parent A (<= AMAX),
+ * so AMAX + FBU_NMAX is a safe upper bound. */
+#define FBU_WORK_STACK (OSH_FERMI_BREAKUP_AMAX + FBU_NMAX)
 
 /* Final-product species indices into model->species. */
-#define FBU_SPECIES_NEUTRON  0
-#define FBU_SPECIES_PROTON   1
-#define FBU_SPECIES_DEUTERON 2
-#define FBU_SPECIES_TRITON   3
-#define FBU_SPECIES_HE3      4
-#define FBU_SPECIES_HE4      5
-#define FBU_SPECIES_COUNT    6
+enum fbu_species {
+    FBU_SPECIES_NEUTRON = 0,
+    FBU_SPECIES_PROTON,
+    FBU_SPECIES_DEUTERON,
+    FBU_SPECIES_TRITON,
+    FBU_SPECIES_HE3,
+    FBU_SPECIES_HE4,
+    FBU_SPECIES_COUNT
+};
 
 /* One pending nuclide on the de-excitation work stack. */
 struct fbu_work_item {
@@ -85,49 +88,25 @@ static struct fbu_spin_entry const s_spin_table[] = {
     {8u, 16u, 1u}, /* O-16  0    */
 };
 
-/* Whitelist species (z, a) for N>=3 partitions, in canonical enumeration order
- * (ascending species index = ascending a, then z). */
-static uint8_t const s_wl_z[FBU_SPECIES_COUNT] = {0u, 1u, 1u, 1u, 2u, 2u};
-static uint8_t const s_wl_a[FBU_SPECIES_COUNT] = {1u, 1u, 2u, 3u, 3u, 4u};
-
 /* Gamma(3N/2 - 3/2) for N = 2..FBU_NMAX.
- * N=2: Gamma(3/2) = sqrt(pi)/2 ~ 0.8862
- * N=3: Gamma(3)   = 2 */
+ * N=2: Gamma(3/2)  = sqrt(pi)/2
+ * N=3: Gamma(3)
+ * N=4: Gamma(9/2)
+ * N=5: Gamma(6)
+ * N=6: Gamma(15/2) */
 static double const s_gamma[FBU_NMAX + 1] = {
-    0.0, 0.0,
-    0.88622692545275801, /* N=2 */
-    2.0,                 /* N=3 */
-};
-
-/* Particle-unstable nuclear excited states included as binary-channel products.
- * Each entry (z, a, exc_kev) is added to the N=2 channel table with effective
- * mass M_gs + exc_kev/1000.  When selected at runtime, the product is pushed
- * to the work stack with e_star = exc_kev/1000 MeV, enabling further decay.
- *
- * Selected levels (ENSDF/TUNL):
- *  Li-7*(4.63 MeV): decays to t+He-4 (Q=-0.925, T=3.7 MeV).  Key for
- *    chains C-12→p+B-11*(14)→p+He-4+Li-7*(4.63)→p+He-4+t+He-4 (mult=4).
- *  B-11*(8.92 MeV): decays to He-4+Li-7 (T≈0.18 MeV, just open).
- *  B-11*(9.27 MeV): decays to He-4+Li-7 (T≈0.53 MeV, stronger).
- *  B-11*(14.0 MeV): decays to He-4+Li-7*(4.63) (T≈0.6 MeV), enabling the
- *    mult=4 chain.  Approximates several real B-11 levels near 14 MeV.
- *  Be-9*(2.43 MeV): decays to n+Be-8(unstable)→n+He-4+He-4 (mult=3). */
-struct fbu_exc_entry {
-    uint8_t z;
-    uint8_t a;
-    uint16_t exc_kev;
-};
-static struct fbu_exc_entry const s_exc_states[] = {
-    {3u,  7u,  4630u},
-    {5u, 11u,  8920u},
-    {5u, 11u,  9270u},
-    {5u, 11u, 14000u},
-    {4u,  9u,  2430u},
+    0.0,
+    0.0,
+    0.88622692545275801,  /* N=2 */
+    2.0,                  /* N=3 */
+    11.63172839656744790, /* N=4 */
+    120.0,                /* N=5 */
+    1871.25430573160160,  /* N=6 */
 };
 
 /* Dense (z, a) index. */
 static inline size_t _za_idx(unsigned int z, unsigned int a) {
-    return (size_t)z * (size_t)(OSH_FERMI_BREAKUP_AMAX + 1) + (size_t)a;
+    return (size_t) z * (size_t) (OSH_FERMI_BREAKUP_AMAX + 1) + (size_t) a;
 }
 
 /* Ground-state spin degeneracy 2J+1; 1 if not tabulated. */
@@ -141,21 +120,40 @@ static unsigned int spin_degeneracy(unsigned int z, unsigned int a) {
     return 1u;
 }
 
-/* Index into model->species if (z, a) is a whitelisted product; -1 otherwise. */
+/* Index into model->species if (z, a) is a whitelisted transportable product;
+ * -1 otherwise. */
 static int final_species_index(unsigned int z, unsigned int a) {
-    if (a == 1u && z == 0u) return FBU_SPECIES_NEUTRON;
+    if (a == 1u && z == 0u)
+        return FBU_SPECIES_NEUTRON;
     if (z == 1u) {
-        if (a == 1u) return FBU_SPECIES_PROTON;
-        if (a == 2u) return FBU_SPECIES_DEUTERON;
-        if (a == 3u) return FBU_SPECIES_TRITON;
+        if (a == 1u)
+            return FBU_SPECIES_PROTON;
+        if (a == 2u)
+            return FBU_SPECIES_DEUTERON;
+        if (a == 3u)
+            return FBU_SPECIES_TRITON;
         return -1;
     }
     if (z == 2u) {
-        if (a == 3u) return FBU_SPECIES_HE3;
-        if (a == 4u) return FBU_SPECIES_HE4;
+        if (a == 3u)
+            return FBU_SPECIES_HE3;
+        if (a == 4u)
+            return FBU_SPECIES_HE4;
         return -1;
     }
     return -1;
+}
+
+/* Break-up free-volume / density-of-states coefficient C such that the
+ * N-fragment phase-space weight scales as C^(N-1).
+ *   C = V / ((2 pi)^(3/2) * (hbar c)^3),   V = (4/3) pi r0^3 A   [MeV^-3]
+ * A is the parent mass number (the break-up volume is a property of the
+ * decaying nucleus). */
+static double volume_coeff(unsigned int a_parent) {
+    double r0 = OSH_FERMI_BREAKUP_R0_FM;
+    double v = (4.0 / 3.0) * OSH_M_PI * r0 * r0 * r0 * (double) a_parent;
+    double denom = pow(2.0 * OSH_M_PI, 1.5) * OSH_HBARC * OSH_HBARC * OSH_HBARC;
+    return v / denom;
 }
 
 /* Fill ground-state nuclear mass table [MeV/c^2] from the isotope database. */
@@ -174,8 +172,7 @@ static void fill_mass_table(double *mass_mev) {
 }
 
 /* Append an unprocessed fragment.  Drops silently if the array is full. */
-static void append_unprocessed_fragment(struct fbu_work_item const *node,
-                                         struct osh_nuclear_event *event_out) {
+static void append_unprocessed_fragment(struct fbu_work_item const *node, struct osh_nuclear_event *event_out) {
     struct osh_nuclear_fragment *f;
     if (event_out->n_fragments >= OSH_NUCLEAR_MAX_FRAGMENTS) {
         return;
@@ -192,63 +189,90 @@ static void append_unprocessed_fragment(struct fbu_work_item const *node,
 
 /* ---- Partition enumeration ------------------------------------------------ */
 
-/* Context for the recursive N>=3 whitelist-only partition enumeration. */
+/* Candidate ground-state fragment species (the enumeration alphabet), built
+ * once from the mass table and shared by the recursion. */
+struct fbu_alphabet {
+    uint8_t z[FBU_NDENSE];
+    uint8_t a[FBU_NDENSE];
+    int n;
+};
+
+/* Context for the recursive N-body partition enumeration. */
 struct enum_ctx {
     double const *mass_mev;
+    struct fbu_alphabet const *alpha;
     double m_parent;
-    int n_total;       /* target N for this recursion subtree */
+    double c_parent; /* volume coefficient C for this parent */
+    int n_total;     /* target N for this recursion subtree */
     uint8_t buf_z[FBU_NMAX];
     uint8_t buf_a[FBU_NMAX];
-    /* output pointers (NULL during size pass) */
+    /* output pointers (NULL during the size pass) */
     struct osh_fermi_partition *part_pool;
     struct osh_fermi_frag_spec *fspec_pool;
     size_t *part_total;
     size_t *fspec_total;
 };
 
-/* Compute weight prefactor for the partition currently assembled in ctx->buf_[]. */
-static float compute_nbody_prefactor(struct enum_ctx const *ctx, int n) {
-    double q;
-    double prod_m32;
-    double prod_g;
-    int counts[FBU_SPECIES_COUNT];
-    int i, wsp, c;
-    double id_denom;
-    double mi;
-
-    memset(counts, 0, sizeof(counts));
-    q = ctx->m_parent;
-    prod_m32 = 1.0;
-    prod_g = 1.0;
-    for (i = 0; i < n; ++i) {
-        mi = ctx->mass_mev[_za_idx(ctx->buf_z[i], ctx->buf_a[i])];
-        q -= mi;
-        prod_m32 *= mi * sqrt(mi);
-        prod_g *= spin_degeneracy(ctx->buf_z[i], ctx->buf_a[i]);
-        for (wsp = 0; wsp < FBU_SPECIES_COUNT; ++wsp) {
-            if (s_wl_z[wsp] == ctx->buf_z[i] && s_wl_a[wsp] == ctx->buf_a[i]) {
-                counts[wsp]++;
-                break;
+/* Build the enumeration alphabet: every (z, a) with a tabulated ground-state
+ * mass, in canonical non-decreasing order (a, then z). */
+static void build_alphabet(double const *mass_mev, struct fbu_alphabet *alpha) {
+    unsigned int z, a;
+    alpha->n = 0;
+    for (a = 1u; a <= OSH_FERMI_BREAKUP_AMAX; ++a) {
+        for (z = 0u; z <= OSH_FERMI_BREAKUP_ZMAX; ++z) {
+            if (mass_mev[_za_idx(z, a)] > 0.0) {
+                alpha->z[alpha->n] = (uint8_t) z;
+                alpha->a[alpha->n] = (uint8_t) a;
+                alpha->n += 1;
             }
         }
     }
-    id_denom = 1.0;
-    for (wsp = 0; wsp < FBU_SPECIES_COUNT; ++wsp) {
-        for (c = counts[wsp]; c > 1; --c) {
-            id_denom *= c;
-        }
-    }
-    (void)q; /* q is used by caller via part_pool write */
-    return (float)(prod_g / id_denom * prod_m32 / s_gamma[n]);
 }
 
-/* Recursive enumeration of whitelist-only N-body partitions.
+/* Weight prefactor for the partition currently assembled in ctx->buf_[]:
+ *   C^(N-1) * prod(g_i) / prod(n_k!) * prod(m_i^3/2) / Gamma(3N/2-3/2).
+ * buf_[] is in non-decreasing alphabet order, so identical species are
+ * adjacent and the identical-particle factorial is a product over run lengths. */
+static double compute_prefactor(struct enum_ctx const *ctx, int n) {
+    double prod_m32;
+    double prod_g;
+    double id_denom;
+    double mi;
+    int i, run, f;
+
+    prod_m32 = 1.0;
+    prod_g = 1.0;
+    id_denom = 1.0;
+    i = 0;
+    while (i < n) {
+        mi = ctx->mass_mev[_za_idx(ctx->buf_z[i], ctx->buf_a[i])];
+        prod_m32 *= mi * sqrt(mi);
+        prod_g *= (double) spin_degeneracy(ctx->buf_z[i], ctx->buf_a[i]);
+        /* Count the run of identical species starting at i. */
+        run = 1;
+        while (i + run < n && ctx->buf_z[i + run] == ctx->buf_z[i] && ctx->buf_a[i + run] == ctx->buf_a[i]) {
+            mi = ctx->mass_mev[_za_idx(ctx->buf_z[i + run], ctx->buf_a[i + run])];
+            prod_m32 *= mi * sqrt(mi);
+            prod_g *= (double) spin_degeneracy(ctx->buf_z[i + run], ctx->buf_a[i + run]);
+            ++run;
+        }
+        for (f = run; f > 1; --f) {
+            id_denom *= (double) f;
+        }
+        i += run;
+    }
+
+    return pow(ctx->c_parent, n - 1) * prod_g / id_denom * prod_m32 / s_gamma[n];
+}
+
+/* Recursive enumeration of N-body partitions over the full alphabet.
  * k_rem: number of fragments still to place.
  * z_rem, a_rem: remaining charge and mass to distribute.
- * min_sp: minimum species index (canonical non-decreasing order).
+ * min_sp: minimum alphabet index (canonical non-decreasing order).
  * buf_pos: next write position in ctx->buf_[]. */
-static void enum_wl_rec(struct enum_ctx *ctx, int k_rem, int z_rem, int a_rem,
-                         int min_sp, int buf_pos) {
+static void enum_rec(struct enum_ctx *ctx, int k_rem, int z_rem, int a_rem, int min_sp, int buf_pos) {
+    struct fbu_alphabet const *alpha = ctx->alpha;
+    struct osh_fermi_partition *part;
     int sp, zi, ai, n, i;
     double q;
 
@@ -258,63 +282,64 @@ static void enum_wl_rec(struct enum_ctx *ctx, int k_rem, int z_rem, int a_rem,
         }
         n = ctx->n_total;
         if (ctx->part_pool != NULL) {
+            part = &ctx->part_pool[*ctx->part_total];
             q = ctx->m_parent;
             for (i = 0; i < n; ++i) {
                 q -= ctx->mass_mev[_za_idx(ctx->buf_z[i], ctx->buf_a[i])];
             }
-            ctx->part_pool[*ctx->part_total].q_mev = (float)q;
-            ctx->part_pool[*ctx->part_total].weight_prefactor = compute_nbody_prefactor(ctx, n);
-            ctx->part_pool[*ctx->part_total].fspec_offset = (uint32_t)*ctx->fspec_total;
-            ctx->part_pool[*ctx->part_total].n_frags = (uint8_t)n;
-            ctx->part_pool[*ctx->part_total]._pad[0] = 0;
-            ctx->part_pool[*ctx->part_total]._pad[1] = 0;
-            ctx->part_pool[*ctx->part_total]._pad[2] = 0;
+            part->weight_prefactor = compute_prefactor(ctx, n);
+            part->fspec_offset = (uint32_t) *ctx->fspec_total;
+            part->q_mev = (float) q;
+            part->n_frags = (uint8_t) n;
+            part->_pad[0] = 0;
+            part->_pad[1] = 0;
+            part->_pad[2] = 0;
             for (i = 0; i < n; ++i) {
                 ctx->fspec_pool[*ctx->fspec_total].z = ctx->buf_z[i];
                 ctx->fspec_pool[*ctx->fspec_total].a = ctx->buf_a[i];
                 (*ctx->fspec_total)++;
             }
         } else {
-            *ctx->fspec_total += (size_t)ctx->n_total;
+            *ctx->fspec_total += (size_t) n;
         }
         (*ctx->part_total)++;
         return;
     }
 
-    /* Try each whitelist species at or after min_sp. */
-    for (sp = min_sp; sp < FBU_SPECIES_COUNT; ++sp) {
-        zi = s_wl_z[sp];
-        ai = s_wl_a[sp];
+    for (sp = min_sp; sp < alpha->n; ++sp) {
+        zi = alpha->z[sp];
+        ai = alpha->a[sp];
         if (zi > z_rem || ai > a_rem) {
             continue;
         }
-        /* Pruning: remaining k_rem fragments each need at least ai mass. */
+        /* Pruning: the remaining k_rem fragments each have at least mass ai
+         * (species are non-decreasing in a, so ai is the current minimum). */
         if (ai * k_rem > a_rem) {
             continue;
         }
-        ctx->buf_z[buf_pos] = (uint8_t)zi;
-        ctx->buf_a[buf_pos] = (uint8_t)ai;
-        enum_wl_rec(ctx, k_rem - 1, z_rem - zi, a_rem - ai, sp, buf_pos + 1);
+        ctx->buf_z[buf_pos] = (uint8_t) zi;
+        ctx->buf_a[buf_pos] = (uint8_t) ai;
+        enum_rec(ctx, k_rem - 1, z_rem - zi, a_rem - ai, sp, buf_pos + 1);
     }
 }
 
-/* Enumerate all N-body partitions for every valid parent (z, a).
- * N=2: full mass-table binary pairs.
- * N=3..NMAX: whitelist-only.
+/* Enumerate all N=2..FBU_NMAX partitions for every valid parent (z, a).
  * Pass pool==NULL, fspec==NULL for the sizing pass. */
 static size_t enumerate_all_partitions(double const *mass_mev,
-                                        struct osh_fermi_partition *part_pool,
-                                        struct osh_fermi_frag_spec *fspec_pool,
-                                        uint32_t *part_offset,
-                                        uint16_t *part_count,
-                                        size_t *nfspecs_out) {
+                                       struct fbu_alphabet const *alpha,
+                                       struct osh_fermi_partition *part_pool,
+                                       struct osh_fermi_frag_spec *fspec_pool,
+                                       uint32_t *part_offset,
+                                       uint16_t *part_count,
+                                       size_t *nfspecs_out) {
     size_t part_total;
     size_t fspec_total;
-    unsigned int z, a, z1, a1, z2, a2;
-    double mp, m1, m2, pref;
+    unsigned int z, a;
+    double mp;
     size_t part_start;
     size_t idx;
     int n;
+    struct enum_ctx ctx;
 
     part_total = 0u;
     fspec_total = 0u;
@@ -325,130 +350,26 @@ static size_t enumerate_all_partitions(double const *mass_mev,
             part_start = part_total;
 
             if (mp > 0.0) {
-                /* N=2 binary pairs from the full mass table. */
-                for (a1 = 1u; a1 <= a / 2u; ++a1) {
-                    a2 = a - a1;
-                    for (z1 = 0u; z1 <= z; ++z1) {
-                        z2 = z - z1;
-                        if (a1 == a2 && z1 > z2) {
-                            continue; /* already listed in the other order */
-                        }
-                        m1 = mass_mev[_za_idx(z1, a1)];
-                        m2 = mass_mev[_za_idx(z2, a2)];
-                        if (m1 <= 0.0 || m2 <= 0.0) {
-                            continue;
-                        }
-                        if (part_pool != NULL) {
-                            /* Weight prefactor uses prod(m_i^3/2)/Gamma(3/2)
-                             * for consistency with the N>=3 formula. */
-                            pref = (double)spin_degeneracy(z1, a1)
-                                        * (double)spin_degeneracy(z2, a2)
-                                        * m1 * sqrt(m1) * m2 * sqrt(m2)
-                                        / s_gamma[2];
-                            if (z1 == z2 && a1 == a2) {
-                                pref *= 0.5; /* identical products: 1/2! */
-                            }
-                            part_pool[part_total].q_mev = (float)(mp - m1 - m2);
-                            part_pool[part_total].weight_prefactor = (float)pref;
-                            part_pool[part_total].fspec_offset = (uint32_t)fspec_total;
-                            part_pool[part_total].n_frags = 2u;
-                            part_pool[part_total]._pad[0] = 0;
-                            part_pool[part_total]._pad[1] = 0;
-                            part_pool[part_total]._pad[2] = 0;
-                            fspec_pool[fspec_total].z = (uint8_t)z1;
-                            fspec_pool[fspec_total].a = (uint8_t)a1;
-                            fspec_pool[fspec_total].exc_kev = 0u;
-                            fspec_pool[fspec_total + 1u].z = (uint8_t)z2;
-                            fspec_pool[fspec_total + 1u].a = (uint8_t)a2;
-                            fspec_pool[fspec_total + 1u].exc_kev = 0u;
-                        }
-                        part_total++;
-                        fspec_total += 2u;
+                ctx.mass_mev = mass_mev;
+                ctx.alpha = alpha;
+                ctx.m_parent = mp;
+                ctx.c_parent = volume_coeff(a);
+                ctx.part_pool = part_pool;
+                ctx.fspec_pool = fspec_pool;
+                ctx.part_total = &part_total;
+                ctx.fspec_total = &fspec_total;
+                for (n = 2; n <= FBU_NMAX; ++n) {
+                    if (n > (int) a) {
+                        break; /* more fragments than nucleons */
                     }
-                }
-
-                /* N=2 channels with particle-unstable excited-state products.
-                 * Each s_exc_states entry (z_exc, a_exc, exc_kev) is the
-                 * excited fragment; the other product (z_other, a_other) is
-                 * ground-state.  Q uses the excited mass M_gs + exc_mev.
-                 * When the excited product is later popped from the work
-                 * stack its e_star = exc_kev/1000 enables further decay. */
-                {
-                    size_t ei;
-                    size_t nexc;
-                    unsigned int z_exc, a_exc, z_oth, a_oth;
-                    uint16_t exc_kev;
-                    double exc_mev;
-                    double m_exc, m_oth, m_exc_eff;
-
-                    nexc = sizeof(s_exc_states) / sizeof(s_exc_states[0]);
-                    for (ei = 0u; ei < nexc; ++ei) {
-                        z_exc = s_exc_states[ei].z;
-                        a_exc = s_exc_states[ei].a;
-                        exc_kev = s_exc_states[ei].exc_kev;
-                        exc_mev = (double)exc_kev / 1000.0;
-
-                        if (a_exc >= a || z_exc > z) {
-                            continue;
-                        }
-                        a_oth = a - a_exc;
-                        z_oth = z - z_exc;
-                        if (a_oth < 1u) {
-                            continue;
-                        }
-                        m_exc = mass_mev[_za_idx(z_exc, a_exc)];
-                        m_oth = mass_mev[_za_idx(z_oth, a_oth)];
-                        if (m_exc <= 0.0 || m_oth <= 0.0) {
-                            continue;
-                        }
-                        m_exc_eff = m_exc + exc_mev;
-                        if (part_pool != NULL) {
-                            pref = (double)spin_degeneracy(z_oth, a_oth)
-                                 * (double)spin_degeneracy(z_exc, a_exc)
-                                 * m_oth * sqrt(m_oth)
-                                 * m_exc_eff * sqrt(m_exc_eff)
-                                 / s_gamma[2];
-                            part_pool[part_total].q_mev = (float)(mp - m_oth - m_exc_eff);
-                            part_pool[part_total].weight_prefactor = (float)pref;
-                            part_pool[part_total].fspec_offset = (uint32_t)fspec_total;
-                            part_pool[part_total].n_frags = 2u;
-                            part_pool[part_total]._pad[0] = 0;
-                            part_pool[part_total]._pad[1] = 0;
-                            part_pool[part_total]._pad[2] = 0;
-                            fspec_pool[fspec_total].z = (uint8_t)z_oth;
-                            fspec_pool[fspec_total].a = (uint8_t)a_oth;
-                            fspec_pool[fspec_total].exc_kev = 0u;
-                            fspec_pool[fspec_total + 1u].z = (uint8_t)z_exc;
-                            fspec_pool[fspec_total + 1u].a = (uint8_t)a_exc;
-                            fspec_pool[fspec_total + 1u].exc_kev = exc_kev;
-                        }
-                        part_total++;
-                        fspec_total += 2u;
-                    }
-                }
-
-                /* N=3..NMAX whitelist-only partitions. */
-                {
-                    struct enum_ctx ctx;
-                    ctx.mass_mev = mass_mev;
-                    ctx.m_parent = mp;
-                    ctx.part_pool = part_pool;
-                    ctx.fspec_pool = fspec_pool;
-                    ctx.part_total = &part_total;
-                    ctx.fspec_total = &fspec_total;
-                    for (n = 3; n <= FBU_NMAX; ++n) {
-                        if (n > (int)a) {
-                            break; /* more fragments than nucleons */
-                        }
-                        ctx.n_total = n;
-                        enum_wl_rec(&ctx, n, (int)z, (int)a, 0, 0);
-                    }
+                    ctx.n_total = n;
+                    enum_rec(&ctx, n, (int) z, (int) a, 0, 0);
                 }
             }
 
             if (part_offset != NULL) {
-                part_offset[idx] = (uint32_t)part_start;
-                part_count[idx] = (uint16_t)(part_total - part_start);
+                part_offset[idx] = (uint32_t) part_start;
+                part_count[idx] = (uint16_t) (part_total - part_start);
             }
         }
     }
@@ -470,7 +391,7 @@ static double beta_kopylov(int k, struct osh_rng *rng) {
     double chi, f;
 
     npow = 3 * k - 5;
-    xn = (double)npow;
+    xn = (double) npow;
     fmax = sqrt(pow(xn / (xn + 1.0), npow) / (xn + 1.0));
     do {
         chi = osh_rng_double(rng);
@@ -484,15 +405,19 @@ static double beta_kopylov(int k, struct osh_rng *rng) {
  * m_eff: parent effective mass (m_gs + E*) [MeV].
  * p_parent[3]: parent lab momentum [MeV/c].
  * Output: p_out[i][3] lab momenta; e_tot[i] total lab energies (includes rest mass). */
-static void kopylov_nbody(int n, double const m[], double m_eff,
-                           double const p_parent[3], struct osh_rng *rng,
-                           double p_out[][3], double e_tot[]) {
-    double mu;          /* running remaining mass (unplaced fragments) */
-    double mass;        /* current subsystem effective mass */
-    double t;           /* available kinetic energy for current subsystem */
-    double rest_mass;   /* effective mass of the "rest" pseudo-particle */
-    double p_rest[3];   /* lab momentum of the rest pseudo-particle */
-    double rest_m_cur;  /* rest mass of the rest pseudo-particle (for boost) */
+static void kopylov_nbody(int n,
+                          double const m[],
+                          double m_eff,
+                          double const p_parent[3],
+                          struct osh_rng *rng,
+                          double p_out[][3],
+                          double e_tot[]) {
+    double mu;         /* running remaining mass (unplaced fragments) */
+    double mass;       /* current subsystem effective mass */
+    double t;          /* available kinetic energy for current subsystem */
+    double rest_mass;  /* effective mass of the "rest" pseudo-particle */
+    double p_rest[3];  /* lab momentum of the rest pseudo-particle */
+    double rest_m_cur; /* rest mass of the rest pseudo-particle (for boost) */
     double p_cm[3];
     double p_cm_mag;
     double cos_theta, sin_theta, cos_phi, sin_phi;
@@ -534,8 +459,7 @@ static void kopylov_nbody(int n, double const m[], double m_eff,
         p_cm[2] = p_cm_mag * cos_theta;
 
         e_frag_cm = sqrt(m[k] * m[k] + p_cm_mag * p_cm_mag);
-        osh_kinematics_boost_to_lab(rest_m_cur, p_rest, e_frag_cm, p_cm,
-                                     &e_frag_lab, p_out[k]);
+        osh_kinematics_boost_to_lab(rest_m_cur, p_rest, e_frag_cm, p_cm, &e_frag_lab, p_out[k]);
         e_tot[k] = e_frag_lab;
 
         /* Boost rest pseudo-particle (opposite direction) to lab. */
@@ -543,8 +467,7 @@ static void kopylov_nbody(int n, double const m[], double m_eff,
         p_cm[1] = -p_cm[1];
         p_cm[2] = -p_cm[2];
         e_rest_cm = sqrt(rest_mass * rest_mass + p_cm_mag * p_cm_mag);
-        osh_kinematics_boost_to_lab(rest_m_cur, p_rest, e_rest_cm, p_cm,
-                                     &e_rest_lab, p_rest_new);
+        osh_kinematics_boost_to_lab(rest_m_cur, p_rest, e_rest_cm, p_cm, &e_rest_lab, p_rest_new);
         p_rest[0] = p_rest_new[0];
         p_rest[1] = p_rest_new[1];
         p_rest[2] = p_rest_new[2];
@@ -564,8 +487,7 @@ static void kopylov_nbody(int n, double const m[], double m_eff,
 
 /* Compute total open-partition weight for parent at dense index idx and the
  * given excitation energy.  Returns 0 if no channel is open. */
-static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model,
-                                    size_t idx, double e_star) {
+static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model, size_t idx, double e_star) {
     double wsum;
     uint32_t off;
     uint16_t cnt;
@@ -577,11 +499,10 @@ static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model
     off = model->part_offset[idx];
     cnt = model->part_count[idx];
     for (i = 0u; i < cnt; ++i) {
-        t = e_star + (double)model->part_pool[off + i].q_mev;
+        t = e_star + (double) model->part_pool[off + i].q_mev;
         if (t > 0.0) {
             nf = model->part_pool[off + i].n_frags;
-            wsum += (double)model->part_pool[off + i].weight_prefactor
-                  * pow(t, 1.5 * nf - 2.5);
+            wsum += model->part_pool[off + i].weight_prefactor * pow(t, 1.5 * nf - 2.5);
         }
     }
     return wsum;
@@ -590,10 +511,13 @@ static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model
 /* ---- Public API ----------------------------------------------------------- */
 
 enum osh_status osh_nuclear_fermi_breakup_compile(struct osh_nuclear_fermi_breakup *out) {
-    static int const s_pdgs[FBU_SPECIES_COUNT] = {
-        OSH_PART_PDG_NEUTRON, OSH_PART_PDG_PROTON,
-        OSH_PART_PDG_DEUTERON, OSH_PART_PDG_TRITON,
-        OSH_PART_PDG_HE3, OSH_PART_PDG_HE4};
+    static int const s_pdgs[FBU_SPECIES_COUNT] = {OSH_PART_PDG_NEUTRON,
+                                                  OSH_PART_PDG_PROTON,
+                                                  OSH_PART_PDG_DEUTERON,
+                                                  OSH_PART_PDG_TRITON,
+                                                  OSH_PART_PDG_HE3,
+                                                  OSH_PART_PDG_HE4};
+    struct fbu_alphabet *alpha;
     size_t nfspecs;
     size_t npart;
     int i;
@@ -620,21 +544,29 @@ enum osh_status osh_nuclear_fermi_breakup_compile(struct osh_nuclear_fermi_break
 
     fill_mass_table(out->mass_mev);
 
+    alpha = calloc(1u, sizeof(*alpha));
+    if (!alpha) {
+        osh_nuclear_fermi_breakup_free(out);
+        return OSH_ENOMEM;
+    }
+    build_alphabet(out->mass_mev, alpha);
+
     /* Sizing pass. */
-    npart = enumerate_all_partitions(out->mass_mev, NULL, NULL, NULL, NULL, &nfspecs);
+    npart = enumerate_all_partitions(out->mass_mev, alpha, NULL, NULL, NULL, NULL, &nfspecs);
 
     out->part_pool = calloc(npart > 0u ? npart : 1u, sizeof(*out->part_pool));
     out->fspec_pool = calloc(nfspecs > 0u ? nfspecs : 1u, sizeof(*out->fspec_pool));
     if (!out->part_pool || !out->fspec_pool) {
+        free(alpha);
         osh_nuclear_fermi_breakup_free(out);
         return OSH_ENOMEM;
     }
 
     /* Fill pass. */
-    out->npartitions = enumerate_all_partitions(out->mass_mev, out->part_pool,
-                                                 out->fspec_pool, out->part_offset,
-                                                 out->part_count, &out->nfspecs);
+    out->npartitions = enumerate_all_partitions(
+        out->mass_mev, alpha, out->part_pool, out->fspec_pool, out->part_offset, out->part_count, &out->nfspecs);
 
+    free(alpha);
     return OSH_OK;
 }
 
@@ -651,44 +583,71 @@ void osh_nuclear_fermi_breakup_free(struct osh_nuclear_fermi_breakup *m) {
     memset(m, 0, sizeof(*m));
 }
 
-void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *model,
-                                     struct osh_nuclear_fragment const *fragment,
-                                     struct osh_rng *rng,
-                                     struct osh_nuclear_event *event_out) {
-    /* Work stack for N=2 chain decays (He-5→αn, Li-5→αp, Be-8→2α). */
-    struct fbu_work_item stack[OSH_FERMI_BREAKUP_AMAX];
-    struct fbu_work_item node;
-    struct fbu_work_item tmp;
-    struct osh_nuclear_fragment frag;
+/* Emit one work-stack node as a transportable secondary (whitelist) or as an
+ * unprocessed residual fragment.  Returns 1 if a transportable secondary was
+ * emitted. */
+static int emit_terminal(struct osh_nuclear_fermi_breakup const *model,
+                         struct fbu_work_item const *node,
+                         int room,
+                         struct osh_nuclear_event *event_out) {
     struct osh_nuclear_secondary *sec;
+    int spec_idx;
+    double m_node, p2, p_norm;
+
+    spec_idx = final_species_index(node->z, node->a);
+    if (!room || spec_idx < 0) {
+        append_unprocessed_fragment(node, event_out);
+        return 0;
+    }
+
+    m_node = model->mass_mev[_za_idx(node->z, node->a)];
+    p2 = node->p[0] * node->p[0] + node->p[1] * node->p[1] + node->p[2] * node->p[2];
+    p_norm = sqrt(p2);
+    sec = &event_out->secondaries[event_out->n_secondaries];
+    sec->energy = sqrt(m_node * m_node + p2) - m_node;
+    if (p_norm > 0.0) {
+        sec->dir[0] = node->p[0] / p_norm;
+        sec->dir[1] = node->p[1] / p_norm;
+        sec->dir[2] = node->p[2] / p_norm;
+    } else {
+        sec->dir[0] = 0.0;
+        sec->dir[1] = 0.0;
+        sec->dir[2] = 1.0;
+    }
+    sec->species = &model->species[spec_idx];
+    event_out->n_secondaries += 1u;
+    return 1;
+}
+
+void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *model,
+                                    struct osh_nuclear_fragment const *fragment,
+                                    struct osh_rng *rng,
+                                    struct osh_nuclear_event *event_out) {
+    struct fbu_work_item stack[FBU_WORK_STACK];
+    struct fbu_work_item node;
+    struct fbu_work_item child;
+    struct osh_nuclear_fragment frag;
     double m_arr[FBU_NMAX];
     double p_out[FBU_NMAX][3];
     double e_tot[FBU_NMAX];
     size_t idx;
     size_t n_emitted;
     int sp;
-    int spec_idx;
     int room;
     int fi;
     int nf;
     uint32_t off;
     uint32_t fspec_off;
     uint16_t cnt;
-    uint16_t exc1, exc2;
     uint16_t i, c;
-    uint8_t z1, a1, z2, a2;
-    uint8_t zi, ai;
     double wsum, threshold, cumulative, t, w;
-    double m_eff, m1, m2;
-    double mi;
+    double m_eff;
     double p_star, cos_theta, sin_theta, cos_phi, sin_phi;
     double p_cm[3], e_cm, e_lab;
-    double m_node, p_norm, p2;
 
     frag = *fragment; /* local copy: fragment may alias event_out->fragments[0] */
 
-    if (frag.a < 2u || frag.a > OSH_FERMI_BREAKUP_AMAX
-        || frag.z < 1u || frag.z > OSH_FERMI_BREAKUP_ZMAX) {
+    if (frag.a < 2u || frag.a > OSH_FERMI_BREAKUP_AMAX || frag.z < 1u || frag.z > OSH_FERMI_BREAKUP_ZMAX) {
         return;
     }
     idx = _za_idx(frag.z, frag.a);
@@ -696,7 +655,7 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
         return;
     }
 
-    /* Gate: any open partition? */
+    /* Gate: any open partition?  If not, leave the event untouched. */
     if (partition_weight_sum(model, idx, frag.excitation_energy) <= 0.0) {
         return;
     }
@@ -710,8 +669,8 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
     stack[0].p[1] = frag.p[1];
     stack[0].p[2] = frag.p[2];
     stack[0].e_star = frag.excitation_energy;
-    stack[0].z = (uint8_t)frag.z;
-    stack[0].a = (uint8_t)frag.a;
+    stack[0].z = (uint8_t) frag.z;
+    stack[0].a = (uint8_t) frag.a;
     sp = 1;
 
     while (sp > 0) {
@@ -727,29 +686,7 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
 
         if (wsum <= 0.0) {
             /* No open channel (or secondaries full): route to terminal. */
-            spec_idx = final_species_index(node.z, node.a);
-            if (room && spec_idx >= 0) {
-                /* Whitelist species: emit as transportable secondary. */
-                m_node = model->mass_mev[idx];
-                p2 = node.p[0]*node.p[0] + node.p[1]*node.p[1] + node.p[2]*node.p[2];
-                p_norm = sqrt(p2);
-                sec = &event_out->secondaries[event_out->n_secondaries];
-                sec->energy = sqrt(m_node * m_node + p2) - m_node;
-                if (p_norm > 0.0) {
-                    sec->dir[0] = node.p[0] / p_norm;
-                    sec->dir[1] = node.p[1] / p_norm;
-                    sec->dir[2] = node.p[2] / p_norm;
-                } else {
-                    sec->dir[0] = 0.0;
-                    sec->dir[1] = 0.0;
-                    sec->dir[2] = 1.0;
-                }
-                sec->species = &model->species[spec_idx];
-                event_out->n_secondaries += 1u;
-                ++n_emitted;
-            } else {
-                append_unprocessed_fragment(&node, event_out);
-            }
+            n_emitted += (size_t) emit_terminal(model, &node, room, event_out);
             continue;
         }
 
@@ -760,11 +697,10 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
         cumulative = 0.0;
         c = 0;
         for (i = 0u; i < cnt; ++i) {
-            t = node.e_star + (double)model->part_pool[off + i].q_mev;
+            t = node.e_star + (double) model->part_pool[off + i].q_mev;
             if (t > 0.0) {
                 nf = model->part_pool[off + i].n_frags;
-                w = (double)model->part_pool[off + i].weight_prefactor
-                  * pow(t, 1.5 * nf - 2.5);
+                w = model->part_pool[off + i].weight_prefactor * pow(t, 1.5 * nf - 2.5);
                 cumulative += w;
                 c = i;
                 if (threshold <= cumulative) {
@@ -775,22 +711,22 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
 
         nf = model->part_pool[off + c].n_frags;
         fspec_off = model->part_pool[off + c].fspec_offset;
+        m_eff = model->mass_mev[idx] + node.e_star;
+
+        /* Capacity guard: a partition can push up to nf products. */
+        if (sp + nf > FBU_WORK_STACK) {
+            append_unprocessed_fragment(&node, event_out);
+            continue;
+        }
+
+        for (fi = 0; fi < nf; ++fi) {
+            m_arr[fi] =
+                model->mass_mev[_za_idx(model->fspec_pool[fspec_off + fi].z, model->fspec_pool[fspec_off + fi].a)];
+        }
 
         if (nf == 2) {
-            /* Two-body decay: push both products on the work stack. */
-            z1 = model->fspec_pool[fspec_off].z;
-            a1 = model->fspec_pool[fspec_off].a;
-            exc1 = model->fspec_pool[fspec_off].exc_kev;
-            z2 = model->fspec_pool[fspec_off + 1u].z;
-            a2 = model->fspec_pool[fspec_off + 1u].a;
-            exc2 = model->fspec_pool[fspec_off + 1u].exc_kev;
-
-            /* Use excited effective masses for kinematics when exc > 0. */
-            m1 = model->mass_mev[_za_idx(z1, a1)] + (double)exc1 / 1000.0;
-            m2 = model->mass_mev[_za_idx(z2, a2)] + (double)exc2 / 1000.0;
-            m_eff = model->mass_mev[idx] + node.e_star;
-            p_star = osh_kinematics_two_body_decay_p(m_eff, m1, m2);
-
+            /* Two-body decay (exact). */
+            p_star = osh_kinematics_two_body_decay_p(m_eff, m_arr[0], m_arr[1]);
             cos_theta = 2.0 * osh_rng_double(rng) - 1.0;
             sin_theta = sqrt(fmax(0.0, 1.0 - cos_theta * cos_theta));
             osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
@@ -798,74 +734,28 @@ void osh_nuclear_fermi_breakup_step(struct osh_nuclear_fermi_breakup const *mode
             p_cm[1] = p_star * sin_theta * sin_phi;
             p_cm[2] = p_star * cos_theta;
 
-            if (sp + 2 > (int)OSH_FERMI_BREAKUP_AMAX) {
-                /* Guard: mass conservation ensures this never fires. */
-                append_unprocessed_fragment(&node, event_out);
-                continue;
-            }
-
-            e_cm = sqrt(m1 * m1 + p_star * p_star);
-            osh_kinematics_boost_to_lab(m_eff, node.p, e_cm, p_cm, &e_lab, stack[sp].p);
-            stack[sp].e_star = (double)exc1 / 1000.0;
-            stack[sp].z = z1;
-            stack[sp].a = a1;
-            ++sp;
-
+            e_cm = sqrt(m_arr[0] * m_arr[0] + p_star * p_star);
+            osh_kinematics_boost_to_lab(m_eff, node.p, e_cm, p_cm, &e_lab, p_out[0]);
             p_cm[0] = -p_cm[0];
             p_cm[1] = -p_cm[1];
             p_cm[2] = -p_cm[2];
-            e_cm = sqrt(m2 * m2 + p_star * p_star);
-            osh_kinematics_boost_to_lab(m_eff, node.p, e_cm, p_cm, &e_lab, stack[sp].p);
-            stack[sp].e_star = (double)exc2 / 1000.0;
-            stack[sp].z = z2;
-            stack[sp].a = a2;
-            ++sp;
-
+            e_cm = sqrt(m_arr[1] * m_arr[1] + p_star * p_star);
+            osh_kinematics_boost_to_lab(m_eff, node.p, e_cm, p_cm, &e_lab, p_out[1]);
         } else {
-            /* N>=3 partition: Kopylov kinematics, emit all directly as secondaries. */
-            m_eff = model->mass_mev[idx] + node.e_star;
-            for (fi = 0; fi < nf; ++fi) {
-                m_arr[fi] = model->mass_mev[_za_idx(
-                    model->fspec_pool[fspec_off + fi].z,
-                    model->fspec_pool[fspec_off + fi].a)];
-            }
+            /* N>=3: Kopylov phase space. */
             kopylov_nbody(nf, m_arr, m_eff, node.p, rng, p_out, e_tot);
+        }
 
-            for (fi = 0; fi < nf && room; ++fi) {
-                zi = model->fspec_pool[fspec_off + fi].z;
-                ai = model->fspec_pool[fspec_off + fi].a;
-                spec_idx = final_species_index(zi, ai);
-                if (spec_idx < 0) {
-                    /* Shouldn't happen for whitelist-only N>=3 partitions. */
-                    tmp.z = zi;
-                    tmp.a = ai;
-                    tmp.e_star = 0.0;
-                    tmp.p[0] = p_out[fi][0];
-                    tmp.p[1] = p_out[fi][1];
-                    tmp.p[2] = p_out[fi][2];
-                    append_unprocessed_fragment(&tmp, event_out);
-                    continue;
-                }
-                mi = m_arr[fi];
-                p2 = p_out[fi][0]*p_out[fi][0] + p_out[fi][1]*p_out[fi][1]
-                   + p_out[fi][2]*p_out[fi][2];
-                p_norm = sqrt(p2);
-                sec = &event_out->secondaries[event_out->n_secondaries];
-                sec->energy = sqrt(mi * mi + p2) - mi;
-                if (p_norm > 0.0) {
-                    sec->dir[0] = p_out[fi][0] / p_norm;
-                    sec->dir[1] = p_out[fi][1] / p_norm;
-                    sec->dir[2] = p_out[fi][2] / p_norm;
-                } else {
-                    sec->dir[0] = 0.0;
-                    sec->dir[1] = 0.0;
-                    sec->dir[2] = 1.0;
-                }
-                sec->species = &model->species[spec_idx];
-                event_out->n_secondaries += 1u;
-                ++n_emitted;
-                room = (event_out->n_secondaries < OSH_NUCLEAR_MAX_SECONDARIES);
-            }
+        /* Push all products back onto the work stack (ground state). */
+        for (fi = 0; fi < nf; ++fi) {
+            child.p[0] = p_out[fi][0];
+            child.p[1] = p_out[fi][1];
+            child.p[2] = p_out[fi][2];
+            child.e_star = 0.0;
+            child.z = model->fspec_pool[fspec_off + fi].z;
+            child.a = model->fspec_pool[fspec_off + fi].a;
+            stack[sp] = child;
+            ++sp;
         }
     }
 
