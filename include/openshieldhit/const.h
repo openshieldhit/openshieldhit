@@ -19,8 +19,8 @@
 #define OSH_MB_TO_CM2 1.0e-27        /* 1 millibarn in cm² */
 #define OSH_CM2_TO_MB 1.0e27         /* 1 cm² in millibarns */
 
-#define OSH_HBARC 197.3269804        /* ħ·c [MeV·fm] (c = 1 convention) */
-#define OSH_HBAR 6.582119569e-22     /* reduced Planck constant ħ [MeV·s] */
+#define OSH_HBARC 197.3269804    /* ħ·c [MeV·fm] (c = 1 convention) */
+#define OSH_HBAR 6.582119569e-22 /* reduced Planck constant ħ [MeV·s] */
 
 #define OSH_M_PI 3.14159265358979323846       /* pi */
 #define OSH_M_1_PI 0.31830988618379067154     /* 1/pi */
