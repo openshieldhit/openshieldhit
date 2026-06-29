@@ -10,30 +10,41 @@
  * stage into nucleons and light ions via the simultaneous N-body Fermi
  * break-up (Fermi 1950), applicable to light nuclei A <= 16.
  *
- * The model enumerates at compile time all N-body partitions of the parent
- * (Z, A) into valid nuclear species.  N=2 partitions use the full isotope
- * database as candidate products (allowing heavy stable residues such as
- * Li-7, Be-9 and particle-unstable intermediates He-5, Li-5, Be-8 to
- * contribute).  N>=3 partitions are restricted to the transportable whitelist
- * {n, p, d, t, He-3, He-4}.
+ * The model enumerates at compile time all N-body partitions (N = 2 ..
+ * OSH_FERMI_BREAKUP_NMAX) of the parent (Z, A) into ground-state nuclear
+ * species drawn from the full isotope database.  Particle-unstable members of
+ * a partition (He-5, Li-5, Be-8, ...) are decayed further at runtime by a work
+ * stack; bound non-transportable residues (Li-6, Li-7, Be-9, ...) are returned
+ * as unprocessed fragments.
  *
- * At runtime, partition i is weighted by
+ * At runtime, partition i is weighted by the canonical microcanonical
+ * Fermi break-up phase-space probability
  *
- *   W_i = prefactor_i * (E* + Q_i)^(3N_i/2 - 5/2)
+ *   W_i = [V / ((2*pi)^(3/2) * hbar^3)]^(N_i - 1)
+ *         * (prod g_k / prod n_j!) * (prod m_k)^(3/2)
+ *         / Gamma(3 N_i / 2 - 3/2)
+ *         * (E* + Q_i)^(3 N_i / 2 - 5/2)
  *
- * where the prefactor encodes spin degeneracies, identical-particle
- * combinatorics, fragment masses, and the Gamma-function normalisation
- * 1/Gamma(3N/2 - 3/2).  For N=2 the exponent is 1/2 (two-body phase space);
- * for N=3 it is 2; for N=4 it is 7/2, etc.  At high E* the N>=3 channels
- * grow much faster than the N=2 channels, driving the multiplicity to rise as
- * observed in the Geant4 FermiBreakUp reference data.
+ * where the leading factor is the free-volume / density-of-states term that
+ * sets the multiplicity scale and makes the weights of different N
+ * dimensionally commensurable.  V = (4/3) pi r0^3 A is the break-up volume
+ * (single physical knob r0, calibrated against Geant4 FermiBreakUp; see
+ * OSH_FERMI_BREAKUP_R0_FM).  The remaining factors encode spin degeneracies,
+ * identical-particle combinatorics, fragment masses, and the Gamma
+ * normalisation.  At high E* the higher-N channels grow faster, driving the
+ * multiplicity to rise as observed in the Geant4 reference data.
  *
  * Kinematics: two-body decay (osh_kinematics) for N=2 partitions; Kopylov
- * N-body phase space for N>=3 partitions.
+ * N-body phase space for N>=3 partitions.  Every product is fed back through
+ * the work stack, so a single statistical picture applies at all N.
  *
  * Final-product policy (strict): only the whitelist {n, p, d, t, He-3, He-4}
  * is ever emitted as transportable secondaries.  Any other nuclide is returned
  * as an unprocessed fragment in the event.
+ *
+ * TODO(#196): fragments are produced in their ground state only.  Systematic
+ * particle-unstable excited-state level tables (which fill the residual
+ * high-E* multiplicity tail seen in G4FermiBreakUp) are a planned follow-up.
  *
  * The partition table and product species descriptors are compiled once at
  * startup from the isotope database; the per-event step performs no
@@ -60,20 +71,33 @@ struct particle;
 /** Maximum parent/product mass number handled by the break-up table. */
 #define OSH_FERMI_BREAKUP_AMAX 16
 
+/** Maximum fragment multiplicity N enumerated per partition. */
+#define OSH_FERMI_BREAKUP_NMAX 6
+
+/** Effective break-up volume radius r0 [fm]; the sole multiplicity calibration
+ *  knob (V = (4/3) pi r0^3 A).  Calibrated to G4FermiBreakUp mean multiplicity
+ *  vs excitation per nucleon over C-12/C-13/N-12/N-13 (RMS ~0.37).  It is
+ *  smaller than the geometric nuclear radius (~1.2 fm) because the
+ *  ground-state-only approximation routes all of E*+Q into kinetic energy and
+ *  would otherwise over-favour high multiplicity; the effective free volume
+ *  absorbs that bias.  A future excited-state treatment (TODO) would restore a
+ *  more physical value. */
+#define OSH_FERMI_BREAKUP_R0_FM 0.50
+
 /** One N-body decay partition: parent -> N fragments listed in fspec_pool. */
 struct osh_fermi_partition {
-    float q_mev;            /**< Q = M_parent_gs - sum(m_i_gs) [MeV]. */
-    float weight_prefactor; /**< prod(g_i)/prod(n_k!) * prod(m_i^3/2) / Gamma(3N/2-3/2). */
-    uint32_t fspec_offset;  /**< First index in fspec_pool for this partition's (z,a) list. */
-    uint8_t n_frags;        /**< N: number of fragments. */
+    double weight_prefactor; /**< [V/((2pi)^3/2 hbar^3)]^(N-1) * prod(g_i)/prod(n_k!)
+                              *   * prod(m_i^3/2) / Gamma(3N/2-3/2). */
+    uint32_t fspec_offset;   /**< First index in fspec_pool for this partition's (z,a) list. */
+    float q_mev;             /**< Q = M_parent_gs - sum(m_i_gs) [MeV]. */
+    uint8_t n_frags;         /**< N: number of fragments. */
     uint8_t _pad[3];
 };
 
-/** Fragment species entry: (z, a) of one fragment in a partition. */
+/** Fragment species entry: (z, a) of one ground-state fragment in a partition. */
 struct osh_fermi_frag_spec {
     uint8_t z;
     uint8_t a;
-    uint16_t exc_kev; /**< Excitation energy [keV]; 0 for ground state. */
 };
 
 /**
@@ -86,14 +110,14 @@ struct osh_fermi_frag_spec {
  * Free with osh_nuclear_fermi_breakup_free().
  */
 struct osh_nuclear_fermi_breakup {
-    double *mass_mev;                      /**< Ground-state nuclear masses per dense (z,a). */
-    struct particle *species;              /**< Final-product descriptors (n, p, d, t, He-3, He-4). */
-    struct osh_fermi_partition *part_pool; /**< Flat array of all parents' partitions. */
-    struct osh_fermi_frag_spec *fspec_pool;/**< Flat array of (z,a) fragment specs. */
-    uint32_t *part_offset;                 /**< part_offset[idx]: start of parent idx in part_pool. */
-    uint16_t *part_count;                  /**< part_count[idx]: partition count of parent idx. */
-    size_t npartitions;                    /**< Total entries in part_pool. */
-    size_t nfspecs;                        /**< Total entries in fspec_pool. */
+    double *mass_mev;                       /**< Ground-state nuclear masses per dense (z,a). */
+    struct particle *species;               /**< Final-product descriptors (n, p, d, t, He-3, He-4). */
+    struct osh_fermi_partition *part_pool;  /**< Flat array of all parents' partitions. */
+    struct osh_fermi_frag_spec *fspec_pool; /**< Flat array of (z,a) fragment specs. */
+    uint32_t *part_offset;                  /**< part_offset[idx]: start of parent idx in part_pool. */
+    uint16_t *part_count;                   /**< part_count[idx]: partition count of parent idx. */
+    size_t npartitions;                     /**< Total entries in part_pool. */
+    size_t nfspecs;                         /**< Total entries in fspec_pool. */
 };
 
 /**

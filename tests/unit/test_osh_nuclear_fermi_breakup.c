@@ -91,10 +91,11 @@ static void test_compile_channels(void) {
     found_2alpha = 0;
     for (c = 0u; c < cnt; ++c) {
         struct osh_fermi_partition const *p = &model.part_pool[off + c];
-        if (p->n_frags != 2u) continue;
+        if (p->n_frags != 2u)
+            continue;
         uint32_t fs = p->fspec_offset;
-        if (model.fspec_pool[fs].z == 2u && model.fspec_pool[fs].a == 4u
-            && model.fspec_pool[fs + 1u].z == 2u && model.fspec_pool[fs + 1u].a == 4u) {
+        if (model.fspec_pool[fs].z == 2u && model.fspec_pool[fs].a == 4u && model.fspec_pool[fs + 1u].z == 2u
+            && model.fspec_pool[fs + 1u].a == 4u) {
             found_2alpha = 1;
             ASSERT_TRUE(p->q_mev > 0.05f && p->q_mev < 0.15f);
         }
@@ -108,11 +109,12 @@ static void test_compile_channels(void) {
     found_3alpha = 0;
     for (c = 0u; c < cnt; ++c) {
         struct osh_fermi_partition const *p = &model.part_pool[off + c];
-        if (p->n_frags != 3u) continue;
+        if (p->n_frags != 3u)
+            continue;
         uint32_t fs = p->fspec_offset;
-        if (model.fspec_pool[fs].z == 2u && model.fspec_pool[fs].a == 4u
-            && model.fspec_pool[fs + 1u].z == 2u && model.fspec_pool[fs + 1u].a == 4u
-            && model.fspec_pool[fs + 2u].z == 2u && model.fspec_pool[fs + 2u].a == 4u) {
+        if (model.fspec_pool[fs].z == 2u && model.fspec_pool[fs].a == 4u && model.fspec_pool[fs + 1u].z == 2u
+            && model.fspec_pool[fs + 1u].a == 4u && model.fspec_pool[fs + 2u].z == 2u
+            && model.fspec_pool[fs + 2u].a == 4u) {
             found_3alpha = 1;
             /* 3-alpha Q = M(C-12) - 3*M(He-4) ≈ -7.27 MeV */
             ASSERT_TRUE(p->q_mev > -8.0f && p->q_mev < -6.5f);
@@ -450,11 +452,20 @@ static void test_moving_parent(void) {
 
 static void test_g4_multiplicity_anchors(void) {
     /* Anchor points from the canonical G4FermiBreakUp (Geant4 9.1 fixed),
-     * see examples/05_fermi_breakup_validation/.
+     * see examples/05_fermi_breakup_validation/.  The free-volume weight is
+     * calibrated (r0 = 0.50 fm) against the full mean-multiplicity vs
+     * excitation-per-nucleon curve; these pins guard that calibration.
+     * Reference values read directly from
+     * g4fbu_9.1_fixed/C12_multiplicity.dat:
      *
-     * C-12 at E* = 12.6 MeV (1.05 MeV/u): 3-alpha dominates → <mult> ≈ 3.0.
-     * C-12 at E* = 60.0 MeV (5.0 MeV/u):  many channels open → <mult> > 4.0
-     *   (old binary model plateaued at ~2.8; this anchors the high-E* fix).
+     *   1.05 MeV/u (E* = 12.6 MeV): G4 ~2.3.  osh ~3.0 — the
+     *     ground-state-only model overshoots here because, once the 3-alpha
+     *     (N=3) channel opens, all of E*+Q is kinetic and its large phase
+     *     space dominates (no energy goes into fragment excitation).  This is
+     *     the documented low-E* limitation, not a calibration target.
+     *   5.0  MeV/u (E* = 60 MeV):  G4 ~3.08.  osh matches well (~3.1).
+     *   10.0 MeV/u (E* = 120 MeV): G4 ~4.43.  osh rises toward it from
+     *     below (~3.9); the residual gap is the excited-state tail (TODO).
      */
     struct osh_nuclear_fermi_breakup model;
     struct osh_rng rng;
@@ -474,29 +485,37 @@ static void test_g4_multiplicity_anchors(void) {
     p0[2] = 0.0;
     n_events = 4000;
 
-    /* Low E*: just above 3-alpha threshold; 3-alpha (N=3) dominates strongly
-     * with the proper weight T^2, giving multiplicity ≈ 3. */
+    /* Low E* (1.05 MeV/u): 3-alpha (N=3) dominance → multiplicity ≈ 3
+     * (osh-specific; see note above). */
     mult_sum = 0.0;
     for (i = 0; i < n_events; ++i) {
         init_abrasion_event(&ev, 6u, 12u, 12.6, p0);
         osh_nuclear_fermi_breakup_step(&model, &ev.fragments[0], &rng, &ev);
-        mult_sum += (double)(ev.n_secondaries + ev.n_fragments);
+        mult_sum += (double) (ev.n_secondaries + ev.n_fragments);
     }
     mean = mult_sum / n_events;
-    ASSERT_NEAR(mean, 3.0, 3.0 * 0.05);
+    ASSERT_NEAR(mean, 3.0, 0.15);
 
-    /* High E* (5 MeV/u): N=3 channels dominate; multiplicity must be clearly
-     * above the old sequential-binary plateau (~2.8).  Full G4 9.1 reference
-     * reaches ~4.5 via excited-state chains; the current model approximates
-     * this with direct N=3 partitions + a limited excited-state table. */
+    /* Mid E* (5 MeV/u): calibrated to match the G4 reference (~3.08). */
     mult_sum = 0.0;
     for (i = 0; i < n_events; ++i) {
         init_abrasion_event(&ev, 6u, 12u, 60.0, p0);
         osh_nuclear_fermi_breakup_step(&model, &ev.fragments[0], &rng, &ev);
-        mult_sum += (double)(ev.n_secondaries + ev.n_fragments);
+        mult_sum += (double) (ev.n_secondaries + ev.n_fragments);
     }
     mean = mult_sum / n_events;
-    ASSERT_TRUE(mean > 2.9); /* clearly above old sequential-binary plateau (~2.8) */
+    ASSERT_NEAR(mean, 3.08, 0.25);
+
+    /* High E* (10 MeV/u): rises toward G4's ~4.43 from below; the residual
+     * deficit is the excited-state tail deferred to a follow-up. */
+    mult_sum = 0.0;
+    for (i = 0; i < n_events; ++i) {
+        init_abrasion_event(&ev, 6u, 12u, 120.0, p0);
+        osh_nuclear_fermi_breakup_step(&model, &ev.fragments[0], &rng, &ev);
+        mult_sum += (double) (ev.n_secondaries + ev.n_fragments);
+    }
+    mean = mult_sum / n_events;
+    ASSERT_TRUE(mean > 3.5 && mean < 4.5);
 
     osh_nuclear_fermi_breakup_free(&model);
 }
