@@ -523,6 +523,16 @@ static double partition_weight_sum(struct osh_nuclear_fermi_breakup const *model
         t = e_star + (double) model->part_pool[off + i].q_mev;
         if (t > 0.0) {
             nf = model->part_pool[off + i].n_frags;
+            /* TODO(perf): pow() here (and in the step selection loop and
+             * beta_kopylov) is a libm call on the FBU hot path.  The exponent
+             * is the half-integer (3*nf-5)/2, i.e. npow/2 with npow = 3*nf-5 in
+             * {1,4,7,10,13}, so it equals __builtin_powi(sqrt(t), npow): one
+             * hardware sqrt + a short integer multiply chain, exact-er and far
+             * cheaper than pow.  Worth a small inlined half-integer-power helper
+             * (shared .h, switch/powi over exponents 0..~10 in 0.5 steps) IF a
+             * profile of a fragmentation-heavy run shows __pow with real
+             * self-time; FBU fires only on inelastic events, so measure first.
+             * Needs an MSVC fallback (__builtin_powi is gcc/clang only). */
             wsum += model->part_pool[off + i].weight_prefactor * pow(t, (1.5 * nf) - 2.5);
         }
     }
