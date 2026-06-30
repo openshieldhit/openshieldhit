@@ -1,40 +1,38 @@
-#include <signal.h>
-
 #include "apps/osh/osh_signals.h"
 #include "test_assert.h"
 
-/* The stop-flag accessor always returns a usable, initially-clear flag. */
-static void test_stop_flag_accessor(void) {
-    sig_atomic_t volatile *flag = osh_signals_stop_flag();
-    ASSERT_TRUE(flag != NULL);
+#if !defined(_WIN32)
+#include <signal.h> /* raise, SIGINT */
+#endif
+
+/* The stop request starts (and resets) clear; the adapter reports it. */
+static void test_stop_starts_clear(void) {
+    osh_signals_reset_stop();
+    ASSERT_TRUE(osh_signals_should_stop(NULL) == 0);
 }
 
 /*
- * Installing the handler must be safe, and on POSIX a delivered SIGINT must set
- * the stop flag (exercising on_sigint).  On Windows the console Ctrl-C handler
- * cannot be triggered portably from a unit test, so there we only assert that
- * install is a safe no-op and the flag stays readable; the flag contract itself
- * is what callers rely on and it is identical across platforms.
+ * Installing the handler must be safe and must not raise the flag.  On POSIX a
+ * delivered SIGINT must then set it (exercising on_sigint), and a reset clears
+ * it again.  On Windows the console Ctrl-C handler runs on its own thread and
+ * cannot be triggered portably from a unit test, so there we only assert the
+ * install/poll/reset contract, which is identical across platforms.
  */
 static void test_install_and_signal(void) {
-    sig_atomic_t volatile *flag = osh_signals_stop_flag();
-
-    *flag = 0;
+    osh_signals_reset_stop();
     osh_signals_install_stop();
-    ASSERT_TRUE(*flag == 0);                         /* installing must not raise the flag */
-    ASSERT_TRUE(osh_signals_should_stop(NULL) == 0); /* adapter agrees: not stopping yet */
+    ASSERT_TRUE(osh_signals_should_stop(NULL) == 0); /* installing must not raise the flag */
 
 #if !defined(_WIN32)
     raise(SIGINT);                                   /* handler is installed, so this does not terminate */
-    ASSERT_TRUE(*flag == 1);                         /* the handler raised the flag */
-    ASSERT_TRUE(osh_signals_should_stop(NULL) == 1); /* the run-control adapter reports the stop */
-    *flag = 0;                                       /* leave it clear for any later use */
-    ASSERT_TRUE(osh_signals_should_stop(NULL) == 0);
+    ASSERT_TRUE(osh_signals_should_stop(NULL) == 1); /* the handler raised the flag */
+    osh_signals_reset_stop();
+    ASSERT_TRUE(osh_signals_should_stop(NULL) == 0); /* reset clears it again */
 #endif
 }
 
 int main(void) {
-    test_stop_flag_accessor();
+    test_stop_starts_clear();
     test_install_and_signal();
     return 0;
 }
