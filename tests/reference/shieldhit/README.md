@@ -7,6 +7,26 @@ This directory now serves two related purposes:
 - curated SH12A gold-standard result fixtures for manual comparison against
   OpenSHIELDHIT
 
+## MCS isolation decks (issue #133)
+
+`idd_water_200mev_scat0/`, `scat1/`, `scat2/` are runnable SH12A-syntax mirrors
+of the matching `tests/reference/idd_water_200mev_scat*` OpenSHIELDHIT cases:
+200 MeV protons in water (R = 20 cm, L = 28 cm), NUCRE off + STRAGG off, differing
+only in the MSCAT switch (0 = no scatter, 1 = Gaussian, 2 = Molière). They probe the
+multiple-scattering distal-edge problem in isolation. `detect.dat` and `Water.txt`
+are shared verbatim with the OSH cases; `beam.dat` (JPART0), `geo.dat` (zone→medium
+map) and `mat.dat` (MEDIUM) carry the SH12A syntax.
+
+Run with the installed `shieldhit`, then copy the produced `idd.dat` (its Page(0)
+is the primary-proton fluence, which `compare_idd.py` reads directly) to
+`../idd_water_200mev_scat<N>/reference/idd_sh12a.dat` to activate the CTest
+`reference` comparison:
+
+```bash
+cd tests/reference/shieldhit/idd_water_200mev_scat2 && shieldhit .
+cp idd.dat ../../idd_water_200mev_scat2/reference/idd_sh12a.dat
+```
+
 The curated fixture sets currently live in:
 
 - `plan01_geoA_sobpcent/`

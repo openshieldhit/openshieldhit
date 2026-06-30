@@ -1,0 +1,52 @@
+# MCS distal-edge benchmark scoring (issue #133): primary-proton fluence & energy vs depth.
+# NUCRE off + STRAGG off => only EM stopping + MCS, so the distal edge is governed by
+# multiple scattering alone.
+
+Filter
+    Name Primary           # primary protons only
+    GEN = 0
+    Z = 1
+    A = 1
+
+# 1 cm^2 central column: sensitive to BOTH path-length bias and lateral escape.
+Geometry Mesh
+    Name DDCnarrow
+    X  -0.5    0.5     1
+    Y  -0.5    0.5     1
+    Z   0.0   28.0   560   # 0.5 mm bins for a sharp distal edge
+
+# Full-width laterally-integrated DDC: isolates path-length / range bias only.
+Geometry Mesh
+    Name DDCwide
+    X -20.0   20.0     1
+    Y -20.0   20.0     1
+    Z   0.0   28.0   560
+
+# Complementary radial scorer: 25 radial bins (2 mm) x coarse 2 cm depth slabs.
+Geometry Cyl
+    Name RadCyl
+    R   0.0    5.0    25
+    Z   0.0   28.0    14
+
+# idd.dat is the file the reference harness auto-compares (compare_idd.py reads col 4).
+# Fluence is listed FIRST so the auto-comparison targets the FLUENCE distal edge (#133).
+Output
+    Filename idd.dat
+    Fileformat TEXT
+    Geo DDCnarrow
+    Quantity Fluence Primary
+    Quantity Energy  Primary
+
+Output
+    Filename ddc_wide.dat
+    Fileformat TEXT
+    Geo DDCwide
+    Quantity Fluence Primary
+    Quantity Energy  Primary
+
+Output
+    Filename rad_cyl.dat
+    Fileformat TEXT
+    Geo RadCyl
+    Quantity Fluence Primary
+    Quantity Energy  Primary

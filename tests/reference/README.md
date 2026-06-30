@@ -19,6 +19,24 @@ Integral depth-dose curves for pencil beams in a water phantom:
 All use NUCRE 1, Gaussian straggling, Molière MCS, LOADDEDX water stopping
 power, NSTAT = 200000, fixed seeds.
 
+### MCS isolation set (issue #133)
+
+A second family probes the multiple-scattering distal-edge problem (issue #133)
+in isolation: **NUCRE off and STRAGG off**, so the distal edge is governed by MCS
+alone. All three share a 200 MeV pencil beam on a water phantom (R = 20 cm,
+L = 28 cm), NSTAT = 200000, fixed seeds, and differ only in the MSCAT switch:
+
+| case                     | MSCAT          |
+|--------------------------|----------------|
+| `idd_water_200mev_scat0` | 0 (no scatter) |
+| `idd_water_200mev_scat1` | 1 (Gaussian)   |
+| `idd_water_200mev_scat2` | 2 (Molière)    |
+
+Unlike the IDD cases above, the auto-compared `idd.dat` here is the **primary-proton
+fluence** on a **1 cm² central column** (0.5 mm bins, *not* laterally integrated), so
+it is sensitive to lateral escape; each case also writes a full-width laterally
+integrated `ddc_wide.dat` and a radial `rad_cyl.dat` for manual comparison.
+
 ### Workflow
 
 1. Reproduce the case setup in the reference code (see the per-case README;
