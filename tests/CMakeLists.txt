@@ -12,9 +12,14 @@
 # repeat `ctest` runs re-check the stamp and skip re-downloading.
 add_test(NAME fetch_dicom_fixtures
          COMMAND "${CMAKE_COMMAND}" -P "${PROJECT_SOURCE_DIR}/cmake/fetch_fixtures.cmake")
+# The "dicom" label is essential, not just descriptive: without it `ctest -LE
+# dicom` would still select this setup test and download the dataset on a clean
+# checkout. With it, excluding the dicom label excludes the fetch too. When a
+# DICOM test *is* selected, CTest still pulls this fixture in automatically as a
+# required FIXTURES_SETUP, regardless of label filtering.
 set_tests_properties(fetch_dicom_fixtures PROPERTIES
     FIXTURES_SETUP DICOM_FIXTURES
-    LABELS "fixtures")
+    LABELS "fixtures;dicom")
 
 add_subdirectory(unit)
 add_subdirectory(cases)
