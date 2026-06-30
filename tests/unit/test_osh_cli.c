@@ -216,12 +216,14 @@ static void test_parse_duration_bad(void) {
     ASSERT_TRUE(osh_parse_duration(NULL, &s) == 0);
     ASSERT_TRUE(osh_parse_duration("", &s) == 0);
     ASSERT_TRUE(osh_parse_duration("abc", &s) == 0);
-    ASSERT_TRUE(osh_parse_duration("30x", &s) == 0);  /* unknown unit */
-    ASSERT_TRUE(osh_parse_duration("30ss", &s) == 0); /* trailing junk after unit */
-    ASSERT_TRUE(osh_parse_duration(" 30", &s) == 0);  /* leading whitespace rejected */
-    ASSERT_TRUE(osh_parse_duration("+30", &s) == 0);  /* sign prefix rejected */
-    ASSERT_TRUE(osh_parse_duration("-30", &s) == 0);  /* negative rejected */
-    ASSERT_TRUE(osh_parse_duration("30 ", &s) == 0);  /* trailing whitespace rejected */
+    ASSERT_TRUE(osh_parse_duration("30x", &s) == 0);   /* unknown unit */
+    ASSERT_TRUE(osh_parse_duration("30ss", &s) == 0);  /* trailing junk after unit */
+    ASSERT_TRUE(osh_parse_duration(" 30", &s) == 0);   /* leading whitespace rejected */
+    ASSERT_TRUE(osh_parse_duration("+30", &s) == 0);   /* sign prefix rejected */
+    ASSERT_TRUE(osh_parse_duration("-30", &s) == 0);   /* negative rejected */
+    ASSERT_TRUE(osh_parse_duration("30 ", &s) == 0);   /* trailing whitespace rejected */
+    ASSERT_TRUE(osh_parse_duration(".", &s) == 0);     /* lone dot: no digits consumed (end == s) */
+    ASSERT_TRUE(osh_parse_duration("1e999", &s) == 0); /* out of range: strtod sets errno */
 }
 
 static void test_max_time_option(void) {
@@ -255,6 +257,8 @@ static void test_max_time_option(void) {
 
     rc = osh_cli_parse(2, argv_missing, &opt, err, sizeof(err));
     ASSERT_TRUE(rc != 0);
+    /* A recognized option missing its value must say so, not "unknown option". */
+    ASSERT_TRUE(strstr(err, "requires a value") != NULL);
 }
 
 static int run_named_test(char const *name) {

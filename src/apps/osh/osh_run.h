@@ -37,7 +37,7 @@ struct osh_run_options {
     char const *profile_path;         /**< Profile JSON output path; NULL disables profiling. */
     double max_time_s;                /**< Wall-time budget [s]; used only when has_max_time != 0. */
     int has_max_time;                 /**< 1 if max_time_s should override the beam file MAXTIME card. */
-    volatile sig_atomic_t *stop_flag; /**< Borrowed graceful-stop flag (e.g. from SIGINT); NULL = none. */
+    sig_atomic_t volatile *stop_flag; /**< Borrowed graceful-stop flag (e.g. from SIGINT); NULL = none. */
     struct osh_diag_sink const *diag; /**< Borrowed diagnostics sink for simulation/transport messages. */
 };
 

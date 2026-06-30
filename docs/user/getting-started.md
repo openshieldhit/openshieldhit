@@ -73,6 +73,17 @@ Write outputs somewhere else (the directory is created automatically):
 build/bin/openshieldhit --outdir /tmp/osh-run path/to/case/
 ```
 
+Run for at most a fixed wall-clock time, then stop cleanly and save the partial
+result (you can also press Ctrl-C at any time for the same clean stop):
+
+```bash
+build/bin/openshieldhit --max-time 30m path/to/case/
+```
+
+The partial result is normalised by the number of primaries that actually
+finished, so it stays a valid (just noisier) estimate — see
+[stopping a run early](command-line.md#stopping-a-run-early).
+
 ## Try the minimal example
 
 ```bash

@@ -1,6 +1,7 @@
 #include "apps/osh/osh_signals.h"
 
 #include <stddef.h> /* NULL */
+#include <string.h> /* memset */
 
 /*
  * Graceful-stop flag.  The only thing the OS handler touches, and it only ever
@@ -46,6 +47,10 @@ static void on_sigint(int sig) {
 
 void osh_signals_install_stop(void) {
     struct sigaction sa;
+    /* Zero every field first, including implementation-defined ones such as
+     * sa_restorer and any padding, so nothing uninitialised reaches the libc
+     * wrapper; sa_handler/sa_mask/sa_flags are then set explicitly below. */
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler = on_sigint;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0; /* no SA_RESTART: let blocking calls return so the flag is seen promptly */

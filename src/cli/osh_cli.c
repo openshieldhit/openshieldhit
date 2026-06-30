@@ -281,7 +281,9 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
     }
     if ((name_len == 8) && (strncmp(name, "max-time", name_len) == 0)) {
         if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
-            return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
+            /* Recognized option with a missing value: say so explicitly rather
+             * than the generic "unknown option", which misleads users/scripts. */
+            return set_err(err, err_cap, "option '%s' requires a value (e.g. 30s, 30m, 1h, or 500)", arg);
         }
         if (!osh_parse_duration(value, &opt->max_time_s)) {
             return set_err(err, err_cap, "invalid duration value for option '%s' (use e.g. 30s, 30m, 1h, or 500)", arg);
