@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/openshieldhit-matplotlib")
@@ -92,17 +93,34 @@ def set_nstat(case_dir: Path, dst: Path, nstat: int) -> None:
     beam.write_text("\n".join(out) + "\n")
 
 
+def format_elapsed(seconds):
+    if seconds is None:
+        return "n/a"
+    if seconds < 60.0:
+        return f"{seconds:.2f} s"
+    minutes, seconds = divmod(seconds, 60.0)
+    return f"{int(minutes)}m {seconds:.1f}s"
+
+
+def format_speedup(osh_s, sh_s):
+    if osh_s is None or sh_s is None or osh_s <= 0.0:
+        return "n/a"
+    return f"{sh_s / osh_s:.2f}x"
+
+
 def _run(cmd, cwd=None):
-    """Run a command; return (ok, last_stderr_line)."""
+    """Run a command; return (ok, last_stderr_line, elapsed_s)."""
+    start = time.perf_counter()
     r = subprocess.run(cmd, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    elapsed_s = time.perf_counter() - start
     if r.returncode == 0:
-        return True, ""
+        return True, "", elapsed_s
     errs = [ln.strip() for ln in r.stderr.splitlines() if ln.strip()]
     # Prefer the most informative line over the generic failure tail.
     for ln in errs:
         if "not implemented" in ln.lower():
-            return False, ln.split("]", 1)[-1].strip()
-    return False, (errs[-1] if errs else f"exit {r.returncode}")
+            return False, ln.split("]", 1)[-1].strip(), elapsed_s
+    return False, (errs[-1] if errs else f"exit {r.returncode}"), elapsed_s
 
 
 def run_osh(args, case: str):
@@ -111,16 +129,16 @@ def run_osh(args, case: str):
     out = args.workdir / "osh_out" / case
     set_nstat(src, deck, args.nstat)
     out.mkdir(parents=True, exist_ok=True)
-    ok, err = _run([str(args.osh), "-v", "--outdir", str(out), str(deck)])
-    return (out, "") if ok else (None, err)
+    ok, err, elapsed_s = _run([str(args.osh), "-v", "--outdir", str(out), str(deck)])
+    return (out, "", elapsed_s) if ok else (None, err, elapsed_s)
 
 
 def run_sh12a(args, case: str):
     src = args.repo_root / "tests" / "reference" / "shieldhit" / f"idd_water_200mev_{case}"
     deck = args.workdir / "sh12a_deck" / case
     set_nstat(src, deck, args.nstat)
-    ok, err = _run([args.sh12a, "."], cwd=deck)
-    return (deck, "") if ok else (None, err)
+    ok, err, elapsed_s = _run([args.sh12a, "."], cwd=deck)
+    return (deck, "", elapsed_s) if ok else (None, err, elapsed_s)
 
 
 def depth_fluence_energy(out_dir: Path, fname: str, code: str):
@@ -178,19 +196,24 @@ def main() -> int:
     data = {}
     for case in args.cases:
         if args.no_run:
-            osh_out, osh_err = args.workdir / "osh_out" / case, ""
-            sh_out, sh_err = args.workdir / "sh12a_deck" / case, ""
+            osh_out, osh_err, osh_s = args.workdir / "osh_out" / case, "", None
+            sh_out, sh_err, sh_s = args.workdir / "sh12a_deck" / case, "", None
         else:
             print(f"[{case}] running OpenSHIELDHIT (nstat={args.nstat}) ...", flush=True)
-            osh_out, osh_err = run_osh(args, case)
+            osh_out, osh_err, osh_s = run_osh(args, case)
             if osh_err:
-                print(f"[{case}] OpenSHIELDHIT unavailable: {osh_err}", flush=True)
+                print(f"[{case}] OpenSHIELDHIT unavailable after {format_elapsed(osh_s)}: {osh_err}", flush=True)
+            else:
+                print(f"[{case}] OpenSHIELDHIT done in {format_elapsed(osh_s)}", flush=True)
             print(f"[{case}] running SHIELD-HIT12A (nstat={args.nstat}) ...", flush=True)
-            sh_out, sh_err = run_sh12a(args, case)
+            sh_out, sh_err, sh_s = run_sh12a(args, case)
             if sh_err:
-                print(f"[{case}] SHIELD-HIT12A unavailable: {sh_err}", flush=True)
+                print(f"[{case}] SHIELD-HIT12A unavailable after {format_elapsed(sh_s)}: {sh_err}", flush=True)
+            else:
+                print(f"[{case}] SHIELD-HIT12A done in {format_elapsed(sh_s)}", flush=True)
         data[case] = {"osh": load_all(osh_out, "osh"), "osh_err": osh_err,
-                      "sh": load_all(sh_out, "sh12a"), "sh_err": sh_err}
+                      "osh_s": osh_s, "sh": load_all(sh_out, "sh12a"),
+                      "sh_err": sh_err, "sh_s": sh_s}
 
     with PdfPages(args.out) as pdf:
         for case in args.cases:
@@ -209,8 +232,11 @@ def main() -> int:
                 note = f"\n[OpenSHIELDHIT unavailable: {d['osh_err']}]"
             elif sh is None:
                 note = f"\n[SHIELD-HIT12A unavailable: {d['sh_err']}]"
+            timing = (f"\nTiming: OpenSHIELDHIT {format_elapsed(d['osh_s'])}, "
+                      f"SHIELD-HIT12A {format_elapsed(d['sh_s'])}")
             fig.suptitle(f"200 MeV p -> water, {MODEL[case]}   (NUCRE off, STRAGG off, "
-                         f"nstat={args.nstat})\nOpenSHIELDHIT {version} vs SHIELD-HIT12A{note}", fontsize=11)
+                         f"nstat={args.nstat})\nOpenSHIELDHIT {version} vs SHIELD-HIT12A{note}{timing}",
+                         fontsize=11)
 
             def overlay(a, key, idx, norm=False):
                 for c, style, name in ((osh, "-", "OpenSHIELDHIT"), (sh, "--", "SHIELD-HIT12A")):
@@ -256,7 +282,7 @@ def main() -> int:
             a.grid(True)
             a.legend(loc="upper right")
 
-            fig.tight_layout(rect=(0, 0, 1, 0.95))
+            fig.tight_layout(rect=(0, 0, 1, 0.93))
             pdf.savefig(fig)
             plt.close(fig)
 
@@ -278,12 +304,26 @@ def main() -> int:
                f"OpenSHIELDHIT {version} (solid) vs SHIELD-HIT12A (dashed)",
                xlabel="Depth (cm)", ylabel="Fluence (1/cm^2)")
         ax.grid(True)
-        ax.legend(fontsize=8)
-        fig.tight_layout()
+        handles, _ = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(fontsize=8)
+        timing_lines = ["Wall-clock timings:"]
+        for case in args.cases:
+            d = data[case]
+            timing_lines.append(f"{MODEL[case]}: OSH {format_elapsed(d['osh_s'])}, "
+                                f"SH12A {format_elapsed(d['sh_s'])}")
+        fig.text(0.01, 0.01, "\n".join(timing_lines), fontsize=8)
+        fig.tight_layout(rect=(0, 0.11, 1, 1))
         pdf.savefig(fig)
         plt.close(fig)
 
     print(f"\nWrote {args.out}")
+    print(f"\nTiming summary (wall clock, nstat={args.nstat}; speedup = SH12A / OSH):")
+    print(f"{'case':<8}{'OpenSHIELDHIT':>16}{'SHIELD-HIT12A':>16}{'speedup':>12}")
+    for case in args.cases:
+        d = data[case]
+        print(f"{case:<8}{format_elapsed(d['osh_s']):>16}{format_elapsed(d['sh_s']):>16}"
+              f"{format_speedup(d['osh_s'], d['sh_s']):>12}")
     return 0
 
 

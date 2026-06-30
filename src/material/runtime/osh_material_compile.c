@@ -348,6 +348,67 @@ compute_material_atomic(struct osh_material const *mat, float *z_mean_out, float
 }
 
 /**
+ * @brief Compute per-material Bethe-Molière (MCS mode 2) constants.
+ *
+ * @details
+ * Clean-room from published theory (Bethe, Phys. Rev. 89, 1256 (1953); Lynch &
+ * Dahl, NIM B58, 6 (1991); PDG).  Two composition-only scalars are precomputed:
+ *
+ *   chic2  = 0.157 · Σ_i w_i Z_i(Z_i+1)/A_i        [MeV² cm²/g]
+ *            → χ_c² = chic2 · z_eff² · d / (pβ)²   per step (d [g/cm²], pβ [MeV]).
+ *
+ *   screen_z = effective screening atomic number for the Molière screening
+ *            angle χ_a.  Defined so that ln(Z_scr^{2/3}) equals the
+ *            χ_c²-weighted average of ln(Z_i^{2/3}) over the elements (the
+ *            standard compound screening combination); χ_a is then evaluated
+ *            per step from screen_z, the momentum, and β.
+ *
+ * w_i are mass fractions, A_i in g/mol.  Returns 0 for both on invalid input.
+ */
+static void compute_moliere_constants(struct osh_material const *mat, float *chic2_out, float *screen_z_out) {
+    size_t i;
+    double sum_w; /* Σ w_i Z_i(Z_i+1)/A_i  [mol/g] */
+    double sum_w_lnz23;
+    double z_i;
+    double a_i;
+    double w_i;
+    double wi;
+
+    sum_w = 0.0;
+    sum_w_lnz23 = 0.0;
+
+    if (!mat || mat->nelements == 0u) {
+        *chic2_out = 0.0f;
+        *screen_z_out = 0.0f;
+        return;
+    }
+
+    for (i = 0; i < mat->nelements; ++i) {
+        z_i = (double) mat->elements[i].z;
+        w_i = (mat->elements[i].mass_fraction >= 0.0) ? mat->elements[i].mass_fraction : 0.0;
+        if (osh_material_atomic_mass_da(mat->elements[i].z, mat->elements[i].a, &a_i) != OSH_OK) {
+            a_i = 2.0 * z_i;
+        }
+        if (a_i <= 0.0 || z_i < 1.0) {
+            continue;
+        }
+        wi = w_i * z_i * (z_i + 1.0) / a_i; /* per-element χ_c² weight [mol/g] */
+        sum_w += wi;
+        sum_w_lnz23 += wi * log(pow(z_i, 2.0 / 3.0));
+    }
+
+    if (sum_w <= 0.0) {
+        *chic2_out = 0.0f;
+        *screen_z_out = 0.0f;
+        return;
+    }
+
+    *chic2_out = (float) (0.157 * sum_w);
+    /* Z_scr^{2/3} = exp(weighted mean of ln Z_i^{2/3}) → Z_scr = (…)^{3/2}. */
+    *screen_z_out = (float) pow(exp(sum_w_lnz23 / sum_w), 1.5);
+}
+
+/**
  * @brief Build one pure-element Bethe target for compound summation.
  *
  * @details
@@ -666,7 +727,10 @@ enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
     t.z_mean = calloc(nmat, sizeof(*t.z_mean));
     t.z_over_a = calloc(nmat, sizeof(*t.z_over_a));
     t.rad_length = calloc(nmat, sizeof(*t.rad_length));
-    if (!t.mass_stopping_power || !t.range_csda || !t.rho || !t.z_mean || !t.z_over_a || !t.rad_length) {
+    t.moliere_chic2 = calloc(nmat, sizeof(*t.moliere_chic2));
+    t.moliere_screen_z = calloc(nmat, sizeof(*t.moliere_screen_z));
+    if (!t.mass_stopping_power || !t.range_csda || !t.rho || !t.z_mean || !t.z_over_a || !t.rad_length
+        || !t.moliere_chic2 || !t.moliere_screen_z) {
         rc = OSH_ENOMEM;
         goto fail;
     }
@@ -687,12 +751,15 @@ enum osh_status osh_material_compile(struct osh_material_workspace const *wm,
          * straggling.  These depend only on composition, not on projectile or
          * energy, so they are computed once here and stored in the flat arrays. */
         compute_material_atomic(mat, &t.z_mean[mat_idx], &t.z_over_a[mat_idx], &t.rad_length[mat_idx]);
+        compute_moliere_constants(mat, &t.moliere_chic2[mat_idx], &t.moliere_screen_z[mat_idx]);
         OSH_DIAG_DEBUGF(diag,
-                        "Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2",
+                        "Material '%s': z_mean=%.2f  z/a=%.5f  X0=%.2f g/cm2  moliere_chic2=%.4g  screen_z=%.2f",
                         mat->name,
                         (double) t.z_mean[mat_idx],
                         (double) t.z_over_a[mat_idx],
-                        (double) t.rad_length[mat_idx]);
+                        (double) t.rad_length[mat_idx],
+                        (double) t.moliere_chic2[mat_idx],
+                        (double) t.moliere_screen_z[mat_idx]);
 
         /* ================================================================
          * Override and Bethe paths
@@ -801,6 +868,8 @@ void osh_material_runtime_free(struct osh_material_runtime *tables) {
     free(tables->z_mean);
     free(tables->z_over_a);
     free(tables->rad_length);
+    free(tables->moliere_chic2);
+    free(tables->moliere_screen_z);
     free(tables->hu_rho_lut);
     memset(tables, 0, sizeof(*tables));
 }

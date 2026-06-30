@@ -15,7 +15,8 @@
 #include "material/runtime/osh_material_runtime.h"
 #include "particle/osh_particle_pdg.h"
 #include "physics/atomic/osh_physics_bethe.h"
-#include "physics/atomic/osh_physics_moliere.h"
+#include "physics/atomic/osh_physics_scat.h"
+#include "physics/atomic/osh_physics_scat_highland.h"
 #include "physics/atomic/osh_physics_straggling.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
@@ -81,8 +82,11 @@ struct ion_step_ctx {
     double mat_z_mean;
     double mat_z_over_a;
     double mat_x0_gcm2;
+    double mat_moliere_chic2;    /* χ_c² coefficient for Bethe-Molière (mode 2) */
+    double mat_moliere_screen_z; /* effective screening Z for Bethe-Molière */
     double proj_mass_mev;
     char enable_mcs;
+    char mcs_model; /* enum osh_mcs_model selected for this run */
     char enable_straggling;
     char is_vacuum;          /* 1 if vacuum zone or ρ ≤ 0            */
     char done;               /* 1 if step already handled (kill/nudge/error) */
@@ -425,8 +429,11 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->mat_z_mean = (double) material_rt->z_mean[zone_ref->material_idx];
     ctx->mat_z_over_a = (double) material_rt->z_over_a[zone_ref->material_idx];
     ctx->mat_x0_gcm2 = (double) material_rt->rad_length[zone_ref->material_idx];
+    ctx->mat_moliere_chic2 = (double) material_rt->moliere_chic2[zone_ref->material_idx];
+    ctx->mat_moliere_screen_z = (double) material_rt->moliere_screen_z[zone_ref->material_idx];
     ctx->proj_mass_mev = material_rt->projectile_mass_mev[ctx->projectile_idx];
     ctx->enable_mcs = (params && params->mcs_mode != OSH_TRANSPORT_MCS_OFF);
+    ctx->mcs_model = params ? (char) params->mcs_mode : (char) OSH_MCS_OFF;
     ctx->enable_straggling = (params && params->straggling_mode != OSH_TRANSPORT_STRAGGLING_OFF);
     ctx->is_vacuum = (is_vacuum_material(zone_ref->material_idx) || ctx->rho <= 0.0);
 
@@ -529,7 +536,7 @@ static void ion_step_length(struct ion_step_ctx *ctx,
 
     if (ctx->enable_mcs) {
         z_eff_0 = osh_physics_bethe_z_eff(ctx->e0 / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
-        ds_theta = osh_physics_moliere_s_theta(
+        ds_theta = osh_physics_highland_s_theta(
             ctx->e0, ctx->proj_mass_mev, z_eff_0, ctx->rho, ctx->mat_x0_gcm2, OSH_TRANSPORT_THETA_MAX_RAD);
     } else {
         ds_theta = 0.0;
@@ -590,7 +597,6 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
     double proposed_ds_gcm2;
     double e_mid;
     double z_eff;
-    double theta0;
     double boundary_tail_ds;
     double v_in[3];
     struct ray hinge_ray;
@@ -633,13 +639,23 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
     z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
 
     if (ctx->enable_mcs && ctx->mat_x0_gcm2 > 0.0) {
-        theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, proposed_ds_gcm2, ctx->mat_x0_gcm2);
-        if (theta0 > 0.0) {
-            v_in[0] = pool->ux[slot];
-            v_in[1] = pool->uy[slot];
-            v_in[2] = pool->uz[slot];
-            osh_physics_moliere_scatter(v_in, ctx->w_scat, theta0, rng);
-        }
+        /* Leading scale = this substep (proposed_ds_gcm2); macroscopic scale for
+         * the Highland log / Molière B = residual range ctx->r0 (additive CH). */
+        v_in[0] = pool->ux[slot];
+        v_in[1] = pool->uy[slot];
+        v_in[2] = pool->uz[slot];
+        osh_physics_mcs_scatter((enum osh_mcs_model) ctx->mcs_model,
+                                v_in,
+                                ctx->w_scat,
+                                e_mid,
+                                ctx->proj_mass_mev,
+                                z_eff,
+                                proposed_ds_gcm2,
+                                ctx->r0,
+                                ctx->mat_x0_gcm2,
+                                ctx->mat_moliere_chic2,
+                                ctx->mat_moliere_screen_z,
+                                rng);
     }
 
     /* Build hinge ray and query boundary distance in the scattered direction */
@@ -695,7 +711,6 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     double e_mid;
     double z_eff;
     double sigma_strag;
-    double theta0;
     double v_in[3];
 
     ctx->ds_gcm2 = ctx->rho * ctx->step_len;
@@ -744,13 +759,21 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
          * MCS uses the post-straggling exit energy for consistency. */
         e_mid = 0.5 * (ctx->e0 + ctx->exit_energy);
         z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
-        theta0 = osh_physics_moliere_theta0(e_mid, ctx->proj_mass_mev, z_eff, ctx->ds_gcm2, ctx->mat_x0_gcm2);
-        if (theta0 > 0.0) {
-            v_in[0] = pool->ux[slot];
-            v_in[1] = pool->uy[slot];
-            v_in[2] = pool->uz[slot];
-            osh_physics_moliere_scatter(v_in, ctx->w_scat, theta0, rng);
-        }
+        v_in[0] = pool->ux[slot];
+        v_in[1] = pool->uy[slot];
+        v_in[2] = pool->uz[slot];
+        osh_physics_mcs_scatter((enum osh_mcs_model) ctx->mcs_model,
+                                v_in,
+                                ctx->w_scat,
+                                e_mid,
+                                ctx->proj_mass_mev,
+                                z_eff,
+                                ctx->ds_gcm2,
+                                ctx->r0,
+                                ctx->mat_x0_gcm2,
+                                ctx->mat_moliere_chic2,
+                                ctx->mat_moliere_screen_z,
+                                rng);
     }
 }
 

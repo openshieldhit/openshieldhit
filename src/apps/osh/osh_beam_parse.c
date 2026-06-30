@@ -739,7 +739,7 @@ static int _parse_mscat(PARSE_HANDLER_ARGS) {
         return OSH_EPARSE;
     }
     beam->scatter = (char) _i;
-    if (beam->scatter > OSH_BEAM_MSCAT_MOLIERE || beam->scatter < OSH_BEAM_MSCAT_OFF) {
+    if (beam->scatter > OSH_BEAM_MSCAT_WENTZEL || beam->scatter < OSH_BEAM_MSCAT_OFF) {
         OSH_DIAG_ERRORF(
             state->diag, "in %s line %i: invalid MSCAT mode '%i'", oshf->filename, oshf->lineno, beam->scatter);
         return OSH_EPARSE;

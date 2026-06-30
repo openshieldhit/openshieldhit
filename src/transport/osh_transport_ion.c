@@ -7,6 +7,7 @@
 #include "common/osh_time.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/runtime/osh_material_runtime.h"
+#include "physics/atomic/osh_physics_scat_moliere.h"
 #include "random/osh_rng.h"
 #include "transport/osh_transport.h"
 #include "transport/osh_transport_ion_step.h"
@@ -488,10 +489,15 @@ report_transport_progress(struct osh_diag_sink const *diag, size_t completed, si
 static enum osh_status validate_transport_modes(struct osh_transport_context const *transport_ctx) {
     switch ((enum osh_transport_mcs_mode) transport_ctx->params.mcs_mode) {
     case OSH_TRANSPORT_MCS_OFF:
-    case OSH_TRANSPORT_MCS_MOLIERE:
-        break;
     case OSH_TRANSPORT_MCS_GAUSSIAN:
-        OSH_DIAG_ERRORF(transport_ctx->diag, "%s", "transport: Gaussian MCS is not implemented");
+        break;
+    case OSH_TRANSPORT_MCS_MOLIERE:
+        /* Build the Molière reduced-angle tables once, here on the single
+         * setup thread, before the parallel transport loop starts. */
+        osh_physics_moliere_init();
+        break;
+    case OSH_TRANSPORT_MCS_WENTZEL:
+        OSH_DIAG_ERRORF(transport_ctx->diag, "%s", "transport: Wentzel-VI/Urban MCS is not implemented");
         return OSH_ENOTSUP;
     default:
         OSH_DIAG_ERRORF(

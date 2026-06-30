@@ -21,6 +21,7 @@
 
 #define OSH_HBARC 197.3269804    /* ħ·c [MeV·fm] (c = 1 convention) */
 #define OSH_HBAR 6.582119569e-22 /* reduced Planck constant ħ [MeV·s] */
+#define OSH_ALPHA_FS (1.0 / 137.035999084) /* fine-structure constant α */
 
 #define OSH_M_PI 3.14159265358979323846       /* pi */
 #define OSH_M_1_PI 0.31830988618379067154     /* 1/pi */
