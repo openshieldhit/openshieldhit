@@ -58,7 +58,7 @@ def main():
     fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True, sharey=True)
     for ax, (name, z, a) in zip(axes.flat, NUCLIDES):
         ax.plot([r[0] for r in g4[name]], [r[1] for r in g4[name]], "k-", lw=1.5, label="G4FermiBreakUp 9.1")
-        ax.plot([r[0] for r in osh[name]], [r[1] for r in osh[name]], "r--", lw=1.5, label="osh sequential-binary")
+        ax.plot([r[0] for r in osh[name]], [r[1] for r in osh[name]], "r--", lw=1.5, label="osh statistical FBU")
         ax.set_title(f"{name} (Z={z}, A={a})")
         ax.grid(alpha=0.3)
     axes[0, 0].legend(fontsize=9)
