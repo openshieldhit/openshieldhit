@@ -9,7 +9,7 @@ per case:
 
   * primary-proton fluence vs depth on the 1 cm^2 central column (idd.dat) and
     full-width laterally integrated (ddc_wide.dat) -- the issue #133 observable;
-  * energy deposition vs depth (Bragg curve, normalised);
+  * energy deposition per primary vs depth (Bragg curve);
   * radial primary-fluence profile at the Bragg-peak depth (rad_cyl.dat).
 
 A final summary page overlays the narrow-column fluence distal edges of all three
@@ -238,15 +238,14 @@ def main() -> int:
                          f"nstat={args.nstat})\nOpenSHIELDHIT {version} vs SHIELD-HIT12A{note}{timing}",
                          fontsize=11)
 
-            def overlay(a, key, idx, norm=False):
+            def overlay(a, key, idx):
                 for c, style, name in ((osh, "-", "OpenSHIELDHIT"), (sh, "--", "SHIELD-HIT12A")):
                     if c is None:
                         continue
                     z = c[key][0]
                     y = c[key][idx]
                     color = "C0" if name.startswith("Open") else "C1"
-                    a.plot(z, y / y.max() if norm else y, style, color=color, label=name,
-                           drawstyle="steps-mid")
+                    a.plot(z, y, style, color=color, label=name, drawstyle="steps-mid")
 
             a = ax[0, 0]
             overlay(a, "narrow", 1)
@@ -263,8 +262,8 @@ def main() -> int:
             a.legend(loc="lower left")
 
             a = ax[1, 0]
-            overlay(a, "narrow", 2, norm=True)
-            a.set(title="Energy deposition, 1 cm^2 column (normalised)", xlabel="Depth (cm)", ylabel="E / E_max")
+            overlay(a, "narrow", 2)
+            a.set(title="Energy deposition, 1 cm^2 column", xlabel="Depth (cm)", ylabel="Energy deposition per primary")
             a.grid(True)
             a.legend(loc="upper left")
 
