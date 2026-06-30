@@ -1,5 +1,6 @@
 add_library(osh_transport
     osh_transport.c
+    osh_run_control.c
     osh_transport_scheduler.c
     osh_neutron_pool.c
     osh_transport_ion.c

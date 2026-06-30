@@ -296,6 +296,22 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         }
     }
 
+    /* Clean-stop / wall-budget policy.  The CLI --max-time overrides the
+     * beam.dat MAXTIME card; the graceful-stop flag (e.g. from Ctrl-C) is wired
+     * in unconditionally so an interactive interrupt always stops cleanly. */
+    {
+        double wall_budget_s = opt->has_max_time ? opt->max_time_s : beam->wall_budget_s;
+        if (wall_budget_s > 0.0 || opt->stop_flag) {
+            osh_simulation_set_run_control(sim, wall_budget_s, opt->stop_flag);
+        }
+        if (out && wall_budget_s > 0.0) {
+            fprintf(out,
+                    "Wall-time budget : %g s%s (stop cleanly, save partial result)\n",
+                    wall_budget_s,
+                    opt->has_max_time ? " (--max-time)" : " (beam.dat MAXTIME)");
+        }
+    }
+
     t_mark = osh_monotonic_seconds();
     rc = osh_simulation_run(sim);
     run_s = osh_monotonic_seconds() - t_mark;
@@ -316,6 +332,19 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
     if (out) {
+        struct osh_results const *results = NULL;
+        if (osh_simulation_get_results(sim, &results) == OSH_OK && results) {
+            unsigned long long const requested = osh_results_requested_nstat(results);
+            unsigned long long const completed = osh_results_completed_nstat(results);
+            if (completed < requested) {
+                fprintf(out,
+                        "Stopped early: %llu of %llu primaries completed; "
+                        "partial result saved (normalised by %llu).\n",
+                        completed,
+                        requested,
+                        completed);
+            }
+        }
         fprintf(out, "Run completed. Outputs saved under %s\n", abs_outdir);
     }
 

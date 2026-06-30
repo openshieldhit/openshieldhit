@@ -52,6 +52,13 @@ Run with verbose logging:
 build/bin/openshieldhit --verbose tests/cases/00_minimal/
 ```
 
+Run for at most a fixed wall-clock time, then stop cleanly and save the partial
+result:
+
+```bash
+build/bin/openshieldhit --max-time 30m tests/cases/00_minimal/
+```
+
 ## Options
 
 ```text
@@ -68,7 +75,29 @@ build/bin/openshieldhit --verbose tests/cases/00_minimal/
 -d, --detect <file>   Override scoring input file
 -o, --outdir <dir>    Override output directory
     --profile <file>  Write a one-line JSON timing/counter profile to <file>
+    --max-time <dur>  Wall-time budget; stop cleanly and save the partial result
+                      (e.g. 30s, 30m, 1h, or a bare number of seconds)
 ```
+
+## Stopping a run early
+
+A run stops cleanly — rather than being killed mid-history — in two ways:
+
+- **Wall-time budget.** `--max-time <dur>` accepts a duration with an optional
+  unit suffix: `s` (seconds, also the default), `m` (minutes), or `h` (hours).
+  It overrides the `MAXTIME` card in `beam.dat`; `MAXTIME` accepts the same
+  syntax. `0` (the default) means unlimited.
+- **Ctrl-C (SIGINT).** Pressing Ctrl-C once requests the same clean stop. On
+  Windows the console Ctrl-C / close handler does the same.
+
+When a clean stop fires, transport stops *injecting* new primaries but lets
+every in-flight history finish and drains all the secondary families they
+spawned. The saved result is therefore **family-exact** for exactly the
+primaries that completed: every output is normalised by that true completed
+count (reported on the console and written to the `# PRIMARIES:` header), not by
+the originally requested `nstat`. Because each history is an independent
+function of its global index, the partial result is an unbiased Monte Carlo
+estimate from the histories that finished.
 
 ## Notes
 

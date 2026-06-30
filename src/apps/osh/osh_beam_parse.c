@@ -7,6 +7,7 @@
 
 #include "apps/osh/osh_beam_parse_keys.h"
 #include "common/osh_diag.h"
+#include "common/osh_duration.h"
 #include "common/osh_file.h"
 #include "common/osh_readline.h"
 #include "openshieldhit/beam.h"
@@ -73,6 +74,7 @@ static int _parse_demin(PARSE_HANDLER_ARGS);
 static int _parse_emtrans(PARSE_HANDLER_ARGS);
 static int _parse_extspec(PARSE_HANDLER_ARGS);
 static int _parse_makeln(PARSE_HANDLER_ARGS);
+static int _parse_maxtime(PARSE_HANDLER_ARGS);
 static int _parse_mscat(PARSE_HANDLER_ARGS);
 static int _parse_neutrfast(PARSE_HANDLER_ARGS);
 static int _parse_neutrlcut(PARSE_HANDLER_ARGS);
@@ -95,33 +97,20 @@ struct _beam_dispatch_entry {
 };
 
 static struct _beam_dispatch_entry _dispatch_table[] = {
-    {OSH_BEAM_KEY_APCORR, _parse_apcorr},
-    {OSH_BEAM_KEY_BEAMDIR, _parse_beamdir},
-    {OSH_BEAM_KEY_BEAMDIV, _parse_beamdiv},
-    {OSH_BEAM_KEY_BEAMPOS, _parse_beampos},
-    {OSH_BEAM_KEY_BEAMSAD, _parse_beamsad},
-    {OSH_BEAM_KEY_BEAMSIGMA, _parse_beamsigma},
-    {OSH_BEAM_KEY_BMODMC, _parse_bmodmc},
-    {OSH_BEAM_KEY_BMODTRANS, _parse_bmodtrans},
-    {OSH_BEAM_KEY_DELTAE, _parse_deltae},
-    {OSH_BEAM_KEY_DEMIN, _parse_demin},
-    {OSH_BEAM_KEY_EMTRANS, _parse_emtrans},
-    {OSH_BEAM_KEY_EXTSPEC, _parse_extspec},
-    {OSH_BEAM_KEY_MAKELN, _parse_makeln},
-    {OSH_BEAM_KEY_MSCAT, _parse_mscat},
-    {OSH_BEAM_KEY_NEUTRFAST, _parse_neutrfast},
-    {OSH_BEAM_KEY_NEUTRLCUT, _parse_neutrlcut},
-    {OSH_BEAM_KEY_NSTAT, _parse_nstat},
-    {OSH_BEAM_KEY_NUCRE, _parse_nucre},
-    {OSH_BEAM_KEY_PRIMARY, _parse_primary},
-    {OSH_BEAM_KEY_RNDSEED, _parse_rndseed},
-    {OSH_BEAM_KEY_STRAGG, _parse_stragg},
-    {OSH_BEAM_KEY_TMAX0, _parse_tmax0},
-    {OSH_BEAM_KEY_TCUT0, _parse_tcut0},
-    {OSH_BEAM_KEY_USEBMOD, _parse_usebmod},
-    {OSH_BEAM_KEY_USECBEAM, _parse_usecbeam},
-    {OSH_BEAM_KEY_USEPARLEV, _parse_useparlev},
-    {NULL, NULL} /* sentinel */
+    {OSH_BEAM_KEY_APCORR, _parse_apcorr},       {OSH_BEAM_KEY_BEAMDIR, _parse_beamdir},
+    {OSH_BEAM_KEY_BEAMDIV, _parse_beamdiv},     {OSH_BEAM_KEY_BEAMPOS, _parse_beampos},
+    {OSH_BEAM_KEY_BEAMSAD, _parse_beamsad},     {OSH_BEAM_KEY_BEAMSIGMA, _parse_beamsigma},
+    {OSH_BEAM_KEY_BMODMC, _parse_bmodmc},       {OSH_BEAM_KEY_BMODTRANS, _parse_bmodtrans},
+    {OSH_BEAM_KEY_DELTAE, _parse_deltae},       {OSH_BEAM_KEY_DEMIN, _parse_demin},
+    {OSH_BEAM_KEY_EMTRANS, _parse_emtrans},     {OSH_BEAM_KEY_EXTSPEC, _parse_extspec},
+    {OSH_BEAM_KEY_MAKELN, _parse_makeln},       {OSH_BEAM_KEY_MAXTIME, _parse_maxtime},
+    {OSH_BEAM_KEY_MSCAT, _parse_mscat},         {OSH_BEAM_KEY_NEUTRFAST, _parse_neutrfast},
+    {OSH_BEAM_KEY_NEUTRLCUT, _parse_neutrlcut}, {OSH_BEAM_KEY_NSTAT, _parse_nstat},
+    {OSH_BEAM_KEY_NUCRE, _parse_nucre},         {OSH_BEAM_KEY_PRIMARY, _parse_primary},
+    {OSH_BEAM_KEY_RNDSEED, _parse_rndseed},     {OSH_BEAM_KEY_STRAGG, _parse_stragg},
+    {OSH_BEAM_KEY_TMAX0, _parse_tmax0},         {OSH_BEAM_KEY_TCUT0, _parse_tcut0},
+    {OSH_BEAM_KEY_USEBMOD, _parse_usebmod},     {OSH_BEAM_KEY_USECBEAM, _parse_usecbeam},
+    {OSH_BEAM_KEY_USEPARLEV, _parse_useparlev}, {NULL, NULL} /* sentinel */
 };
 
 /* ---- Main parser entry point --------------------------------------------- */
@@ -713,6 +702,41 @@ static int _parse_makeln(PARSE_HANDLER_ARGS) {
         return OSH_EPARSE;
     }
     beam->makeln = (char) _i;
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse MAXTIME: wall-time budget for a graceful, partial-result stop.
+ *
+ * @details
+ * Syntax: MAXTIME \<duration\>
+ *
+ * The argument is a duration token accepted by @ref osh_parse_duration: a
+ * non-negative number with an optional unit suffix (`s`, `m`, `h`; bare number
+ * = seconds).  When the budget elapses the run stops cleanly at the next safe
+ * point — in-flight histories finish, all secondary families drain, and the
+ * partial result is saved normalised by the true completed-primary count.
+ * 0 means unlimited.  A CLI `--max-time` overrides this card.
+ *
+ * @param[in,out] beam  Writes beam->wall_budget_s [s].
+ * @param[in]     oshf  Used for error diagnostics.
+ * @param[in]     args  A single duration token, e.g. "30m" or "3600".
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on a malformed duration.
+ */
+static int _parse_maxtime(PARSE_HANDLER_ARGS) {
+    char tok[64];
+    double seconds;
+
+    if (sscanf(args, "%63s", tok) != 1 || !osh_parse_duration(tok, &seconds)) {
+        OSH_DIAG_ERRORF(state->diag,
+                        "in %s line %i: invalid MAXTIME duration '%s' (use e.g. 30s, 30m, 1h, or 3600)",
+                        oshf->filename,
+                        oshf->lineno,
+                        args);
+        return OSH_EPARSE;
+    }
+    beam->wall_budget_s = seconds;
     return OSH_OK;
 }
 

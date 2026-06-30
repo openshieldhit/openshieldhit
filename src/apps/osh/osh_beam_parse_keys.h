@@ -15,6 +15,7 @@
 #define OSH_BEAM_KEY_EMTRANS     "emtrans"
 #define OSH_BEAM_KEY_EXTSPEC     "extspec"
 #define OSH_BEAM_KEY_MAKELN      "makeln"
+#define OSH_BEAM_KEY_MAXTIME     "maxtime"
 #define OSH_BEAM_KEY_MSCAT       "mscat"
 #define OSH_BEAM_KEY_NEUTRFAST   "neutrfast"
 #define OSH_BEAM_KEY_NEUTRLCUT   "neutrlcut"

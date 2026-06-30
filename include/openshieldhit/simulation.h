@@ -1,6 +1,8 @@
 #ifndef OPENSHIELDHIT_SIMULATION_H
 #define OPENSHIELDHIT_SIMULATION_H
 
+#include <signal.h> /* sig_atomic_t */
+
 #include "openshieldhit/beam.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/material.h"
@@ -112,6 +114,32 @@ enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int ena
  *          be freed with osh_simulation_free()).
  */
 enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, size_t capacity);
+
+/**
+ * @brief Install a clean-stop / wall-time budget policy for the next run.
+ *
+ * @details
+ * Must be called after osh_simulation_create() and before osh_simulation_run().
+ * The control interface is deliberately a *flag*, not an OS signal, so it is
+ * portable: the caller raises @p stop_flag from a POSIX signal handler, a
+ * Windows console handler, a watchdog thread, or a WASM message, and the run
+ * stops cleanly at the next safe point.
+ *
+ * "Cleanly" means the transport stops *injecting* new primaries but lets every
+ * in-flight history finish, then drains all banked secondary families, so the
+ * partial result is family-exact for exactly the primaries that completed.
+ * osh_results_completed_nstat() then reports that true count and every output is
+ * normalised by it.  Passing wall_budget_s <= 0 and stop_flag == NULL disables
+ * the policy (identical to not calling this function).
+ *
+ * @param[in] sim            Simulation handle created by osh_simulation_create().
+ * @param[in] wall_budget_s  Wall-clock budget [s]; <= 0 means unlimited.
+ * @param[in] stop_flag      Borrowed flag; raised → stop cleanly.  NULL = none.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL when @p sim is NULL.
+ */
+enum osh_status
+osh_simulation_set_run_control(struct osh_simulation *sim, double wall_budget_s, sig_atomic_t volatile *stop_flag);
 
 /**
  * @brief Retrieve the transport profile of the last completed run.

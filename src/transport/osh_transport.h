@@ -169,6 +169,7 @@ struct osh_nuclear_handler;
 struct osh_fragment_pool;
 struct osh_neutron_pool;
 struct osh_particle_pool;
+struct osh_run_control;
 
 struct osh_transport_context {
     struct osh_transport_params params;
@@ -185,6 +186,15 @@ struct osh_transport_context {
                                                             serial worker points its own profile here) or by the
                                                             driver merging per-worker profiles — not on the hot
                                                             path through this pointer. */
+    struct osh_run_control const *run_control;         /**< Borrowed; clean-stop / wall-budget policy (issue #192).
+                                                            NULL = run to completion, no early stop.  Consulted only
+                                                            by the primary (ion) loop to halt new-primary injection;
+                                                            the family scheduler still drains every banked secondary
+                                                            so a partial result stays family-exact (issue #195). */
+    size_t completed_primaries;                        /**< Out: primaries fully transported by the last run.  Equals
+                                                            params.nstat unless a clean stop drained the run early; the
+                                                            driver copies it into completed_nstat so output normalises
+                                                            by the true count. */
     char warned_boundary_demin_override;
 };
 

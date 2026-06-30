@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "apps/osh/osh_run.h"
+#include "apps/osh/osh_signals.h"
 #include "cli/osh_cli.h"
 #include "common/osh_exit.h"
 #include "common/osh_file.h"
@@ -94,6 +95,15 @@ int main(int argc, char *argv[]) {
     run_opt.has_pool_capacity = opt.has_pool_capacity;
     run_opt.mem_budget = opt.mem_budget;
     run_opt.profile_path = opt.profile_path;
+    run_opt.max_time_s = opt.max_time_s;
+    run_opt.has_max_time = opt.has_max_time;
+
+    /* Install the graceful-stop handler before running so an interactive Ctrl-C
+     * (or a --max-time budget) ends the run cleanly with a saved partial result
+     * instead of killing the process mid-history.  No-op on platforms without a
+     * supported mechanism. */
+    osh_signals_install_stop();
+    run_opt.stop_flag = osh_signals_stop_flag();
     run_opt.diag = &diag;
 
     rc = osh_run(&run_opt, stdout, stderr);
