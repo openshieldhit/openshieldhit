@@ -24,7 +24,8 @@ static double osh_moliere_f1[OSH_MOLIERE_NF];
 static double osh_moliere_f2[OSH_MOLIERE_NF];
 static double osh_moliere_dth;
 static float osh_moliere_invcdf[OSH_MOLIERE_NB][OSH_MOLIERE_NU];
-static double osh_moliere_inv_db; /* (NB-1) / (B_MAX - B_MIN) */
+static double osh_moliere_m2[OSH_MOLIERE_NB]; /* ⟨ϑ²⟩ per B node (incl. Rutherford tail) */
+static double osh_moliere_inv_db;             /* (NB-1) / (B_MAX - B_MIN) */
 static int osh_moliere_inited;
 
 /* Bessel J0(x), Abramowitz & Stegun 9.4.1 / 9.4.3 polynomial approximation. */
@@ -64,14 +65,16 @@ static double osh_bessel_j0(double x) {
  * the reduced-angle grid, then inverts it onto NU uniform cumulative-probability
  * nodes.  Called only at init, once per B node; not on the hot path.
  *
- * @param[in]  b    Molière B parameter for this row.
- * @param[out] row  Destination of NU interpolated ϑ values.
+ * @param[in]  b      Molière B parameter for this row.
+ * @param[out] row    Destination of NU interpolated ϑ values.
+ * @param[out] m2_out ⟨ϑ²⟩ of the (clamped, truncated) distribution for this B.
  */
-static void moliere_build_invcdf_row(double b, float *row) {
+static void moliere_build_invcdf_row(double b, float *row, double *m2_out) {
     double cdf[OSH_MOLIERE_NF];
     double inv_b;
     double inv_b2;
     double acc;
+    double acc_m2;
     double total;
     double th;
     double pdf;
@@ -84,6 +87,7 @@ static void moliere_build_invcdf_row(double b, float *row) {
     inv_b = 1.0 / b;
     inv_b2 = inv_b * inv_b;
     acc = 0.0;
+    acc_m2 = 0.0;
     for (i = 0; i < OSH_MOLIERE_NF; ++i) {
         th = (double) i * osh_moliere_dth;
         pdf = th * (osh_moliere_f0[i] + osh_moliere_f1[i] * inv_b + osh_moliere_f2[i] * inv_b2);
@@ -91,10 +95,13 @@ static void moliere_build_invcdf_row(double b, float *row) {
             pdf = 0.0; /* clamp rare negative dips so the CDF stays monotone */
         }
         acc += pdf * osh_moliere_dth;
+        acc_m2 += th * th * pdf * osh_moliere_dth;
         cdf[i] = acc;
     }
 
     total = cdf[OSH_MOLIERE_NF - 1];
+    /* ⟨ϑ²⟩ over the same clamped/truncated density that is actually sampled. */
+    *m2_out = (total > 0.0) ? (acc_m2 / total) : 1.0;
     if (total <= 0.0) {
         for (k = 0; k < OSH_MOLIERE_NU; ++k) {
             row[k] = 0.0f;
@@ -171,7 +178,7 @@ void osh_physics_moliere_init(void) {
     osh_moliere_inv_db = (double) (OSH_MOLIERE_NB - 1) / (OSH_MOLIERE_B_MAX - OSH_MOLIERE_B_MIN);
     for (jb = 0; jb < OSH_MOLIERE_NB; ++jb) {
         bnode = OSH_MOLIERE_B_MIN + (double) jb / osh_moliere_inv_db;
-        moliere_build_invcdf_row(bnode, osh_moliere_invcdf[jb]);
+        moliere_build_invcdf_row(bnode, osh_moliere_invcdf[jb], &osh_moliere_m2[jb]);
     }
 
     osh_moliere_inited = 1;
@@ -306,8 +313,29 @@ double osh_physics_moliere_sample_reduced(double b, struct osh_rng *rng) {
     return osh_physics_moliere_inv_cdf(b, osh_rng_double(rng));
 }
 
+/* ⟨ϑ²⟩ of the reduced Molière distribution at B (linear interp on the B grid). */
+static double osh_moliere_mean_sq(double b) {
+    double gb;
+    double fb;
+    int jb;
+
+    if (b < OSH_MOLIERE_B_MIN) {
+        b = OSH_MOLIERE_B_MIN;
+    } else if (b > OSH_MOLIERE_B_MAX) {
+        b = OSH_MOLIERE_B_MAX;
+    }
+    gb = (b - OSH_MOLIERE_B_MIN) * osh_moliere_inv_db;
+    jb = (int) gb;
+    if (jb >= OSH_MOLIERE_NB - 1) {
+        jb = OSH_MOLIERE_NB - 2;
+    }
+    fb = gb - (double) jb;
+    return osh_moliere_m2[jb] * (1.0 - fb) + osh_moliere_m2[jb + 1] * fb;
+}
+
 int osh_physics_moliere_scatter(double const v[3],
                                 double w[3],
+                                double theta0,
                                 double t_kin_mev,
                                 double mass_mev,
                                 double z_eff,
@@ -321,12 +349,12 @@ int osh_physics_moliere_scatter(double const v[3],
     double pv;
     double beta2;
     double beta;
-    double chic2_step;
     double chic2_path;
     double alpha;
     double chi_a2;
     double omega;
     double b;
+    double scale;
     double theta;
     double st;
     double ct;
@@ -340,7 +368,7 @@ int osh_physics_moliere_scatter(double const v[3],
     w[1] = v[1];
     w[2] = v[2];
 
-    if (chic2_coeff <= 0.0 || z_eff <= 0.0 || screen_z <= 0.0 || d_gcm2 <= 0.0) {
+    if (theta0 <= 0.0 || chic2_coeff <= 0.0 || z_eff <= 0.0 || screen_z <= 0.0 || d_gcm2 <= 0.0) {
         return 0;
     }
     if (path_scale_gcm2 <= 0.0) {
@@ -360,24 +388,30 @@ int osh_physics_moliere_scatter(double const v[3],
         return 0;
     }
 
-    chic2_step = chic2_coeff * z_eff * z_eff * d_gcm2 / (pv * pv);
+    /* B (the distribution-shape parameter) from χ_c² over the macroscopic path
+     * and the screening angle χ_a (Lynch & Dahl). */
     chic2_path = chic2_coeff * z_eff * z_eff * path_scale_gcm2 / (pv * pv);
-
     alpha = z_eff * screen_z * OSH_ALPHA_FS / beta;
     chi_a2 = 2.007e-5 * pow(screen_z, 2.0 / 3.0) * (1.0 + 3.34 * alpha * alpha) / p2;
     if (chi_a2 <= 0.0) {
         return 0;
     }
-
     omega = chic2_path / (1.167 * chi_a2);
     if (!osh_physics_moliere_solve_b(omega, &b)) {
         return 0;
     }
 
+    /* Anchor the *magnitude* to the validated Highland width: the Molière
+     * distribution sets only the shape (Gaussian core + Rutherford tail), and
+     * we rescale so the sampled space angle has variance 2·θ₀² — i.e. projected
+     * RMS = θ₀ — using the precomputed ⟨ϑ²⟩(B).  This keeps mode 2's width equal
+     * to mode 1 (and to data) while retaining the tail. */
+    scale = theta0 * sqrt(2.0 / osh_moliere_mean_sq(b));
+
     theta = 0.0;
     for (tries = 0; tries < 16; ++tries) {
         tr = osh_physics_moliere_sample_reduced(b, rng);
-        th = sqrt(chic2_step * b) * tr;
+        th = scale * tr;
         if (th >= OSH_M_PI) {
             continue;
         }

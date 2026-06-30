@@ -73,8 +73,17 @@ double osh_physics_moliere_sample_reduced(double b, struct osh_rng *rng);
 /**
  * @brief Sample and apply a full Bethe-Moliere angular deflection.
  *
+ * @details
+ * The magnitude is anchored to the Highland width @p theta0 (the validated
+ * scattering power); the Molière distribution supplies only the angular *shape*
+ * (Gaussian core + Rutherford tail).  The sampled space angle is rescaled with
+ * the precomputed ⟨ϑ²⟩(B) so its projected RMS equals @p theta0, keeping mode 2
+ * consistent with mode 1 while retaining the tail.  B (the shape parameter) is
+ * derived from χ_c² over the macroscopic path and the screening angle.
+ *
  * @param[in]  v                Incident unit direction (length 3).
  * @param[out] w                Exit unit direction (length 3); always set.
+ * @param[in]  theta0           Highland projected-RMS width θ₀ [rad] (magnitude).
  * @param[in]  t_kin_mev        Kinetic energy at mid-step [MeV].
  * @param[in]  mass_mev         Projectile rest mass [MeV/c^2].
  * @param[in]  z_eff            Effective projectile charge.
@@ -87,6 +96,7 @@ double osh_physics_moliere_sample_reduced(double b, struct osh_rng *rng);
  */
 int osh_physics_moliere_scatter(double const v[3],
                                 double w[3],
+                                double theta0,
                                 double t_kin_mev,
                                 double mass_mev,
                                 double z_eff,
