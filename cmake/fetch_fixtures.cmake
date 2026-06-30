@@ -45,7 +45,14 @@ file(MAKE_DIRECTORY "${FIXTURES_DIR}")
 set(_archive "${FIXTURES_DIR}/${FIXTURE_ARCHIVE}")
 
 # ---- Download (hash-verified) ---------------------------------------------
-message(STATUS "Downloading DICOM fixtures: ${FIXTURE_URL}")
+message(STATUS "==============================================================")
+message(STATUS "Downloading DICOM test fixtures (one-time, on demand)")
+message(STATUS "  dataset : DCPT_headphantom (182 .dcm files)")
+message(STATUS "  download: ~26 MB compressed  →  ~267 MB unpacked on disk")
+message(STATUS "  from    : ${FIXTURE_URL}")
+message(STATUS "  into    : ${_dataset_dir}")
+message(STATUS "This is needed only by the DICOM tests; see tests/fixtures/dicom/README.md")
+message(STATUS "==============================================================")
 file(DOWNLOAD "${FIXTURE_URL}" "${_archive}"
      EXPECTED_HASH SHA256=${FIXTURE_SHA256}
      TLS_VERIFY ON
@@ -89,4 +96,4 @@ file(WRITE "${_marker}"
     "tag:    ${FIXTURE_TAG}\n"
     "source: ${FIXTURE_URL}\n"
     "sha256: ${FIXTURE_SHA256}\n")
-message(STATUS "DICOM fixtures ready in ${_dataset_dir}")
+message(STATUS "DICOM fixtures ready (~267 MB) in ${_dataset_dir}")
