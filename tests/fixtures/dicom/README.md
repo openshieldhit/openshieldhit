@@ -34,18 +34,21 @@ The script is idempotent: a stamp file
 (`DCPT_headphantom/.fixtures-test-fixtures-v1.stamp`) marks a completed fetch, so
 re-running it is a no-op.
 
-### Automatic fetch at configure time
+### Automatic fetch when the DICOM tests run
 
-When you configure the project with testing enabled (the default), CMake runs
-the fetch script for you. To skip it (e.g. when building offline or when you
-only run the non-DICOM tests):
+You don't have to fetch manually. The download is wired into CTest as a setup
+fixture (`DICOM_FIXTURES`) and runs **on demand, the first time a DICOM test is
+executed** — not when you configure or build the project. This means:
 
-```sh
-cmake -S . -B build -DOSH_FETCH_DICOM_FIXTURES=OFF
-```
+- Building `openshieldhit` just to run it never triggers the download.
+- `ctest` runs that don't include a DICOM test (e.g. `ctest -LE dicom`, or any
+  `-R`/`-E` selection that excludes them) never trigger it either.
+- Running the DICOM tests (`unit::test_osh_dicom`, `unit::test_osh_geometry_dcm`,
+  `cases::05_dicom_simple`) fetches the dataset once, beforehand.
 
-CI fetches the fixtures the same way, during the configure step, before the
-DICOM tests run.
+Because the fetch is idempotent (see the stamp file above), subsequent `ctest`
+runs re-check the stamp and skip the download. CI relies on exactly this: the
+fixtures are pulled during the test step, right before the DICOM tests.
 
 ## Provenance
 

@@ -76,3 +76,13 @@ set_tests_properties("unit::cli::version" "unit::cli::help" PROPERTIES LABELS "u
 set_tests_properties("unit::cli::print_resources" PROPERTIES
     LABELS "unit"
     PASS_REGULAR_EXPRESSION "Total RAM")
+
+# ---- DICOM tests depend on the fetched head-phantom dataset ----
+# Requiring the DICOM_FIXTURES setup fixture (defined in tests/CMakeLists.txt)
+# makes ctest download the fixtures on demand, only when these tests run.
+foreach(_dicom_test test_osh_dicom test_osh_geometry_dcm)
+    if(TEST "unit::${_dicom_test}")
+        set_tests_properties("unit::${_dicom_test}" PROPERTIES
+            FIXTURES_REQUIRED DICOM_FIXTURES)
+    endif()
+endforeach()

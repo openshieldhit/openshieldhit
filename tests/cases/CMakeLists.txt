@@ -39,3 +39,11 @@ foreach(case_dir ${CASE_DIRS})
         LABELS "cases"
     )
 endforeach()
+
+# The DICOM integration case needs the fetched head-phantom dataset; depend on
+# the DICOM_FIXTURES setup fixture so ctest downloads it on demand, only when
+# this case runs (see tests/CMakeLists.txt).
+if(TEST "cases::05_dicom_simple")
+    set_tests_properties("cases::05_dicom_simple" PROPERTIES
+        FIXTURES_REQUIRED DICOM_FIXTURES)
+endif()
