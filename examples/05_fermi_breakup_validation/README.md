@@ -1,9 +1,9 @@
 # Fermi break-up validation against G4FermiBreakUp
 
 Validates the openshieldhit Fermi break-up model
-(`src/physics/nuclear/osh_nuclear_fermi_breakup.c`, a sequential-binary
-development approximation) against the canonical **G4FermiBreakUp**
-implementation.
+(`src/physics/nuclear/osh_nuclear_fermi_breakup.c`, a microcanonical
+statistical break-up: all N=2..6 ground-state partitions weighted by their
+phase-space volume) against the canonical **G4FermiBreakUp** implementation.
 
 The reference curves in `g4fbu_9.1_fixed/` were extracted from the standalone
 Geant4 de-excitation test suite by **Igor Pshenichnov** (FermiTest, 2006;
@@ -26,21 +26,51 @@ This runs `fbu_scan <Z> <A>` (parent at rest, 100 E\* bins × 2000 events) for
 all four nuclides and writes `fbu_multiplicity.png` and `fbu_zyield_C12.png`
 next to this README.
 
-## Results (2026-06)
+The scan is **deterministic**: `fbu_scan` seeds PCG32 with a fixed value (4242)
+and sweeps fixed bins, so the committed `*_osh.dat` tables are byte-stable and
+the PNGs are visually stable across runs.  The `*_osh.dat` files and plots are
+committed deliberately as a **visual regression reference** — regenerate them
+after touching the model and a non-empty diff means the physics actually moved,
+not RNG noise.
 
-- **E\*/A ≲ 2 MeV/nucleon** (the region populated by the abrasion stage,
-  E\* ≈ 13.3 MeV per knocked-out nucleon): multiplicities agree with
-  G4FermiBreakUp to ~1 %; thresholds and the C-12 → 3α channel are exact.
-- **E\*/A ≳ 3 MeV/nucleon**: the sequential-binary scheme saturates near
-  multiplicity ≈ 2.8 while the canonical simultaneous n-body model rises to
-  ≈ 4.3 at 10 MeV/nucleon.  Cause: in a binary split all excitation converts
-  to fragment kinetic energy — the products emerge *cold* (ground state), so
-  the chain stops early.  The canonical model partitions the parent into n
-  bodies (including excited fragment states) simultaneously, reaching
-  high-multiplicity final states at high E\*.
+## Model
 
-Two anchor points from the validated region are pinned as unit tests in
-`tests/unit/test_osh_nuclear_fermi_breakup.c` to guard against regressions.
+Each prefragment `(Z, A, E*)` is broken into `N = 2 .. 6` ground-state
+fragments drawn from the full isotope database.  Partition `i` is sampled with
+the microcanonical Fermi break-up weight
+
+```
+W_i ∝ [V/((2π)^{3/2} ħ³)]^{N−1} · (∏g_k / ∏n_j!) · (∏m_k)^{3/2}
+        / Γ(3N/2−3/2) · (E*+Q_i)^{3N/2−5/2}
+```
+
+The leading free-volume / density-of-states factor (`V = (4/3)πr0³A`) sets the
+multiplicity scale and makes the different-N weights dimensionally
+commensurable.  `r0` is the **sole calibration knob**.  Two-body partitions use
+exact two-body kinematics; `N ≥ 3` use Kopylov phase space; particle-unstable
+products (He-5, Li-5, Be-8) are decayed further on a work stack.
+
+## Calibration & results (2026-06)
+
+`r0 = 0.50 fm` was fitted by minimising the RMS multiplicity deviation from
+G4FermiBreakUp over all four nuclides (RMS ≈ 0.37, down from ≈ 1.0 for the old
+sequential-binary model).  The effective `r0` is smaller than the geometric
+nuclear radius (~1.2 fm) because the **ground-state-only** approximation routes
+all of `E*+Q` into kinetic energy and would otherwise over-favour high
+multiplicity; the smaller free volume absorbs that bias.
+
+- **E\*/A ≳ 3 MeV/nucleon**: tracks G4 closely (within a few tenths of a unit)
+  all the way to 10 MeV/nucleon, replacing the old ≈ 2.8 plateau.
+- **Low E\* (~1–2 MeV/nucleon)**: a modest **overshoot** where a single
+  high-N channel (e.g. C-12 → 3α) opens — its large phase space dominates
+  because no energy is absorbed into fragment excitation.
+- **Highest E\* (~10 MeV/nucleon)**: a small **undershoot** (osh ≈ 3.9 vs
+  G4 ≈ 4.4 for C-12) — the tail that excited-state channels would fill.
+
+Both residuals are the expected signature of the ground-state-only
+approximation (see follow-up below), not a calibration deficiency.  Three
+anchor points (1.05 / 5 / 10 MeV/nucleon) are pinned as unit tests in
+`tests/unit/test_osh_nuclear_fermi_breakup.c` to guard the calibration.
 
 ## Regenerating the reference tables
 
@@ -55,9 +85,10 @@ installation:
 
 ## Known follow-ups
 
-- Share excitation among binary-split products (or implement true n-body
-  partitions with excited fragment states) to fix the high-E\* multiplicity
-  deficit.
+- **Excited fragment states (#196).**  Fragments are currently produced in their
+  ground state only.  Adding systematic particle-unstable excited-state level
+  tables would (a) fill the residual high-E\* multiplicity tail, (b) remove the
+  low-E\* overshoot, and (c) let `r0` move back toward a physical ~1.2 fm.
 - The same test suite contains SMM material (`MultiFragTestHisto`, Fortran
   SMM outputs for Pb-208) — relevant once heavy-residue de-excitation (SMM)
   is implemented.
