@@ -5,6 +5,7 @@
 #include "beam/runtime/osh_beam_runtime.h"
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
+#include "common/osh_time.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
@@ -18,6 +19,7 @@
 #include "scoring/save/osh_scoring_save.h"
 #include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
+#include "transport/osh_run_control.h"
 #include "transport/osh_transport.h"
 
 /* ---- Private definitions of the opaque handles --------------------------- */
@@ -44,6 +46,7 @@ struct osh_simulation {
     struct osh_particle_pool ion_pool;
     struct osh_neutron_pool neutron_pool;
     struct osh_transport_profile profile;
+    struct osh_run_control run_control;
 
     unsigned long long requested_nstat;
     unsigned long long completed_nstat;
@@ -364,6 +367,24 @@ enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int ena
     return OSH_OK;
 }
 
+enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
+                                               double wall_budget_s,
+                                               int (*should_stop)(void *user),
+                                               void *user) {
+    if (!sim) {
+        return OSH_EINVAL;
+    }
+    osh_run_control_init(&sim->run_control);
+    sim->run_control.wall_budget_s = (wall_budget_s > 0.0) ? wall_budget_s : 0.0;
+    sim->run_control.should_stop = should_stop;
+    sim->run_control.should_stop_user = user;
+    /* Wire the policy in only when it can actually stop the run; otherwise leave
+     * the transport pointer NULL so the hot path stays exactly as before. */
+    sim->transport_ctx.run_control =
+        (sim->run_control.wall_budget_s > 0.0 || sim->run_control.should_stop) ? &sim->run_control : NULL;
+    return OSH_OK;
+}
+
 enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, size_t capacity) {
     if (!sim) {
         return OSH_EINVAL;
@@ -401,6 +422,13 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
         return OSH_EINVAL;
     }
 
+    /* Arm the wall-time budget from the run's start instant, so "elapsed" in the
+     * transport loop is measured against now (no-op when run control is off). */
+    if (sim->transport_ctx.run_control) {
+        osh_run_control_start(&sim->run_control, osh_monotonic_seconds());
+    }
+    sim->transport_ctx.completed_primaries = (size_t) sim->transport_ctx.params.nstat;
+
     rc = osh_transport_run_minimal(
         &sim->transport_ctx, sim->beam_rt, &sim->geom_rt, &sim->transport_tables, &sim->scoring_runtime);
     if (rc != OSH_OK) {
@@ -408,7 +436,11 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
         return rc;
     }
 
-    sim->completed_nstat = (unsigned long long) sim->transport_ctx.params.nstat;
+    /* Real number of primaries whose histories finished.  A clean stop drains
+     * the pool, so this is exact; all banked secondaries from these primaries
+     * are drained by the family scheduler, so the snapshot is family-exact and
+     * normalising every output by it is correct (issue #192 / #195). */
+    sim->completed_nstat = (unsigned long long) sim->transport_ctx.completed_primaries;
 
     if (sim->neutron_pool.n_created > 0u) {
         OSH_DIAG_INFOF(sim->diag,

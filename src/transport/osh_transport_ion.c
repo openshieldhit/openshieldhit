@@ -8,6 +8,7 @@
 #include "gemca/runtime/osh_gemca_runtime.h"
 #include "material/runtime/osh_material_runtime.h"
 #include "random/osh_rng.h"
+#include "transport/osh_run_control.h"
 #include "transport/osh_transport.h"
 #include "transport/osh_transport_ion_step.h"
 #include "transport/osh_worker_context.h"
@@ -91,7 +92,8 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
                                          struct osh_beam_runtime *beam_rt,
                                          struct osh_gemca_runtime const *geom_rt,
                                          struct osh_material_runtime const *material_rt,
-                                         struct osh_scoring_runtime *score_rt) {
+                                         struct osh_scoring_runtime *score_rt,
+                                         size_t *completed_out) {
     struct osh_rng_seeding seeding;
     struct osh_transport_params const *params = &transport_ctx->params;
     struct osh_particle_pool *pool = wctx->pool;
@@ -110,9 +112,12 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     size_t next_report_completed;
     struct osh_step_segment step_seg;
     struct osh_transport_profile *prof = wctx->profile; /* per-worker; never the shared master on the hot path */
+    struct osh_run_control const *ctl = transport_ctx->run_control; /* clean-stop / wall-budget policy, or NULL */
+    double ctl_t_start;
     double t_start;
     double t_last_report;
     double t_phase = 0.0;
+    int stop = 0; /* set once a clean stop is requested: halt injection, keep draining */
     enum osh_status rc = OSH_OK;
 
     /* Per-history seeding context.  Every primary derives independent BEAM and
@@ -147,16 +152,28 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     next_report_completed = progress_chunk;
     t_start = osh_monotonic_seconds();
     t_last_report = t_start;
+    /* Measure the wall budget from the run-level start.  The driver always arms
+     * the control with osh_run_control_start() before transport begins, so a
+     * non-NULL ctl always carries a valid baseline — including a legitimate 0.0
+     * (the monotonic epoch is unspecified).  Fall back to this loop's start only
+     * when the run is uncontrolled. */
+    ctl_t_start = ctl ? ctl->t_start : t_start;
 
     report_transport_progress(transport_ctx->diag, 0u, nstat, 0.0);
 
-    while (primaries_done < nstat || pool->n > 0u) {
+    /* Loop until every requested primary has finished OR a clean stop was
+     * requested — but in both cases keep going while the pool is non-empty, so
+     * in-flight histories drain to termination rather than being abandoned.
+     * After a stop the pool empties to 0 and the loop exits with an *exact*
+     * completed count (primaries_done == primaries actually injected). */
+    while ((primaries_done < nstat && !stop) || pool->n > 0u) {
         if (prof) {
             prof->iterations++;
         }
 
-        /* Fill the pool when it is empty and primaries remain */
-        if (pool->n == 0u && primaries_done < nstat) {
+        /* Fill the pool when it is empty and primaries remain — never after a
+         * stop request, so no new primary is injected once we begin draining. */
+        if (!stop && pool->n == 0u && primaries_done < nstat) {
             n_fill = nstat - primaries_done;
             if (n_fill > pool->capacity) {
                 n_fill = pool->capacity;
@@ -289,12 +306,29 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
                 }
             }
         }
+
+        /* Safe point: re-evaluate the stop request once per wavefront pass,
+         * after compaction so the count reflects only finished histories.  A
+         * stop halts *injection* only (see the fill guard above); the pool keeps
+         * draining and, on return, the family scheduler still runs the remaining
+         * passes over the secondaries these primaries banked — so the partial
+         * result is family-exact for the completed primaries (issue #195). */
+        if (!stop && ctl) {
+            stop = run_ctl_should_stop(ctl, osh_monotonic_seconds() - ctl_t_start, primaries_completed);
+        }
+    }
+
+    /* The pool is fully drained here, so this is the exact number of primaries
+     * whose histories finished — equal to nstat unless a clean stop fired. */
+    if (completed_out) {
+        *completed_out = primaries_done - pool->n;
     }
 
     {
         double const t_end = osh_monotonic_seconds();
         double const total_s = t_end - t_start;
-        double const avg_pps = (total_s > 0.0) ? ((double) nstat / total_s) : 0.0;
+        size_t const completed = primaries_done - pool->n;
+        double const avg_pps = (total_s > 0.0) ? ((double) completed / total_s) : 0.0;
         unsigned int const th = (unsigned int) (total_s / 3600.0);
         unsigned int const tm = (unsigned int) ((total_s - th * 3600.0) / 60.0);
         unsigned int const ts = (unsigned int) (total_s - th * 3600.0 - tm * 60.0);
@@ -304,14 +338,24 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
             prof->steps = (unsigned long long) steps_taken;
         }
 
-        if (last_report_completed < nstat) {
-            report_transport_progress(transport_ctx->diag, nstat, nstat, total_s);
+        if (last_report_completed < completed) {
+            report_transport_progress(transport_ctx->diag, completed, nstat, total_s);
+        }
+
+        /* A clean stop is normal operation, not an error — say so explicitly so
+         * the true (partial) primary count is visible in the run log. */
+        if (stop && completed < nstat) {
+            OSH_DIAG_INFOF(transport_ctx->diag,
+                           "transport: clean stop after %zu of %zu requested primaries "
+                           "(wall budget or stop request); pool drained, output normalised by the true count",
+                           completed,
+                           nstat);
         }
 
         if (th > 0u) {
             OSH_DIAG_INFOF(transport_ctx->diag,
                            "Transport complete: %zu primaries in %u:%02u:%02u  (avg %.0f primaries/s)",
-                           nstat,
+                           completed,
                            th,
                            tm,
                            ts,
@@ -319,14 +363,14 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
         } else if (tm > 0u) {
             OSH_DIAG_INFOF(transport_ctx->diag,
                            "Transport complete: %zu primaries in %02u:%02u  (avg %.0f primaries/s)",
-                           nstat,
+                           completed,
                            tm,
                            ts,
                            avg_pps);
         } else {
             OSH_DIAG_INFOF(transport_ctx->diag,
                            "Transport complete: %zu primaries in %u s  (avg %.0f primaries/s)",
-                           nstat,
+                           completed,
                            ts,
                            avg_pps);
         }
@@ -418,7 +462,11 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
      * them into transport_ctx->profile with osh_transport_profile_merge(). */
     wctx.profile = transport_ctx->profile;
 
-    rc = run_history_range(&wctx, transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
+    /* Single worker covers [0, nstat); its completed count is the run's count.
+     * A future parallel driver sums per-worker counts into completed_primaries. */
+    transport_ctx->completed_primaries = 0u;
+    rc = run_history_range(
+        &wctx, transport_ctx, beam_rt, geom_rt, material_rt, score_rt, &transport_ctx->completed_primaries);
 
     return rc;
 }

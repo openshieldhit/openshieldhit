@@ -290,6 +290,164 @@ static void test_create_rejects_voxel_geometry_without_hutable(void) {
     remove(mat_path);
 }
 
+/* Read the "# PRIMARIES: <n>" header value from an ASCII scoring output. */
+static unsigned long long read_primaries_header(char const *path) {
+    FILE *fp;
+    char line[512];
+    unsigned long long primaries = 0ull;
+    int found = 0;
+
+    fp = fopen(path, "r");
+    ASSERT_TRUE(fp != NULL);
+    while (fgets(line, sizeof(line), fp)) {
+        if (sscanf(line, "# PRIMARIES: %llu", &primaries) == 1) {
+            found = 1;
+            break;
+        }
+    }
+    fclose(fp);
+    ASSERT_TRUE(found == 1);
+    return primaries;
+}
+
+/* Stop callback that always asks to stop (a constant-true should_stop). */
+static int always_stop(void *user) {
+    (void) user;
+    return 1;
+}
+
+/*
+ * Clean stop (issue #192 / #195): a should_stop callback that returns true
+ * halts new-primary injection at the first safe point.  In-flight histories
+ * drain, so the completed count is exactly one pool batch — deterministic, no
+ * timing dependence — which makes this assertion robust on every platform/CI OS.
+ * The partial result must save correctly, normalised by the *true* completed
+ * count, and the ASCII "# PRIMARIES:" header must echo that same count.
+ */
+static void test_clean_stop_partial_result_is_exact(void) {
+    char geo_path[512];
+    char beam_path[512];
+    char mat_path[512];
+    char scoring_path[512];
+    char scoring_text[1024];
+    char out_path[256];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+    struct osh_results const *results = NULL;
+    size_t const pool_cap = 100u;
+    unsigned long long const requested = 20000ull;
+    unsigned long long completed;
+
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/00_minimal/geo.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/00_minimal/beam.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/00_minimal/mat.dat", OSH_PROJECT_SOURCE_DIR);
+
+    /* A single TEXT output to a unique per-process filename, so there is exactly
+     * one ASCII file to read the "# PRIMARIES:" header back from (the shared
+     * 00_minimal detect.dat also emits a BDO, which would overwrite it). */
+    snprintf(out_path, sizeof(out_path), "osh_clean_stop_%d.dat", tmp_counter++);
+    snprintf(scoring_text,
+             sizeof(scoring_text),
+             "Geometry Mesh\n"
+             "  Name M\n"
+             "  X -5.0 5.0 1\n"
+             "  Y -5.0 5.0 1\n"
+             "  Z 0.0 20.0 200\n"
+             "Output\n"
+             "  Filename %s\n"
+             "  Fileformat TEXT\n"
+             "  Geo M\n"
+             "  Quantity Energy\n",
+             out_path);
+    write_temp_file(scoring_path, sizeof(scoring_path), scoring_text);
+
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
+
+    /* Request far more primaries than one pool batch so the stop is observable. */
+    beam->nstat = (size_t) requested;
+
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
+
+    /* Small batch + always-stop callback → exactly one batch of primaries completes. */
+    ASSERT_TRUE(osh_simulation_set_pool_capacity(sim, pool_cap) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_set_run_control(sim, 0.0, always_stop, NULL) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
+    completed = osh_results_completed_nstat(results);
+
+    /* Exact: one pool batch finished, far short of the request. */
+    ASSERT_TRUE(osh_results_requested_nstat(results) == requested);
+    ASSERT_TRUE(completed == (unsigned long long) pool_cap);
+    ASSERT_TRUE(completed < requested);
+    ASSERT_TRUE(osh_results_has_completed_run(results) == 1);
+
+    /* The partial result saves and its header echoes the true completed count. */
+    ASSERT_TRUE(osh_simulation_save(sim) == OSH_OK);
+    ASSERT_TRUE(read_primaries_header(out_path) == completed);
+
+    ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+    remove(out_path);
+    remove(scoring_path);
+}
+
+/*
+ * Run control left off (NULL callback, zero budget) must be bit-for-bit the old
+ * behaviour: every requested primary completes.
+ */
+static void test_no_run_control_runs_to_completion(void) {
+    char geo_path[512];
+    char beam_path[512];
+    char mat_path[512];
+    char scoring_path[512];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+    struct osh_results const *results = NULL;
+
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/00_minimal/geo.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/00_minimal/beam.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/00_minimal/mat.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(scoring_path, sizeof(scoring_path), "%s/tests/cases/00_minimal/detect.dat", OSH_PROJECT_SOURCE_DIR);
+
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
+
+    beam->nstat = 50u;
+
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
+    /* A disabled policy (no budget, no callback) is a no-op: leaves the fast path. */
+    ASSERT_TRUE(osh_simulation_set_run_control(sim, 0.0, NULL, NULL) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
+    ASSERT_TRUE(osh_results_completed_nstat(results) == 50ull);
+    ASSERT_TRUE(osh_results_requested_nstat(results) == 50ull);
+
+    ASSERT_TRUE(osh_simulation_set_run_control(NULL, 1.0, NULL, NULL) == OSH_EINVAL);
+
+    ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+}
+
 /* ---- Entry point --------------------------------------------------------- */
 
 int main(void) {
@@ -299,5 +457,7 @@ int main(void) {
     test_create_free_lifecycle();
     test_profiling_run_lifecycle();
     test_create_rejects_voxel_geometry_without_hutable();
+    test_clean_stop_partial_result_is_exact();
+    test_no_run_control_runs_to_completion();
     return 0;
 }

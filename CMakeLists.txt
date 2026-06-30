@@ -145,6 +145,8 @@ target_include_directories(osh_all INTERFACE
 # ---- Internal CLI parser (used by executable + tests, not installed) ----
 add_library(osh_cli STATIC src/cli/osh_cli.c)
 target_include_directories(osh_cli PUBLIC ${PROJECT_SOURCE_DIR}/src)
+# osh_common provides the shared duration parser used by --max-time.
+target_link_libraries(osh_cli PUBLIC osh_common)
 
 # ---- Main executable ----
 add_executable(openshieldhit src/apps/osh/main.c)

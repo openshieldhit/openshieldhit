@@ -41,6 +41,8 @@ struct osh_cli_options {
     int has_pool_capacity;            /**< Non-zero if --pool-capacity was explicitly given. */
     char const *mem_budget;           /**< Memory-budget override string (e.g. "8GB", "80%"); NULL = default policy. */
     char const *profile_path;         /**< Profile JSON output path; NULL disables profiling. */
+    double max_time_s;                /**< Wall-time budget [s] parsed from --max-time; valid when has_max_time. */
+    int has_max_time;                 /**< Non-zero if --max-time was explicitly given. */
 };
 
 /**

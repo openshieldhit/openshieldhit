@@ -18,6 +18,7 @@ add_library(osh_common
     osh_step.c
     osh_particle_pool.c
     osh_time.c
+    osh_duration.c
     osh_sysinfo.c
 )
 

@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "cli/osh_cli.h"
+#include "common/osh_duration.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -190,7 +191,89 @@ static void test_pool_capacity_option(void) {
     ASSERT_TRUE(rc != 0);
 }
 
+static void test_parse_duration_good(void) {
+    double s = -1.0;
+
+    /* Bare number = seconds. */
+    ASSERT_TRUE(osh_parse_duration("0", &s) == 1 && s == 0.0);
+    ASSERT_TRUE(osh_parse_duration("500", &s) == 1 && s == 500.0);
+
+    /* Unit suffixes (case-insensitive). */
+    ASSERT_TRUE(osh_parse_duration("30s", &s) == 1 && s == 30.0);
+    ASSERT_TRUE(osh_parse_duration("30S", &s) == 1 && s == 30.0);
+    ASSERT_TRUE(osh_parse_duration("30m", &s) == 1 && s == 1800.0);
+    ASSERT_TRUE(osh_parse_duration("1h", &s) == 1 && s == 3600.0);
+    ASSERT_TRUE(osh_parse_duration("1H", &s) == 1 && s == 3600.0);
+
+    /* Fractional values are allowed. */
+    ASSERT_TRUE(osh_parse_duration("1.5h", &s) == 1 && s == 5400.0);
+    ASSERT_TRUE(osh_parse_duration("0.5", &s) == 1 && s == 0.5);
+}
+
+static void test_parse_duration_bad(void) {
+    double s = -1.0;
+
+    ASSERT_TRUE(osh_parse_duration(NULL, &s) == 0);
+    ASSERT_TRUE(osh_parse_duration("", &s) == 0);
+    ASSERT_TRUE(osh_parse_duration("abc", &s) == 0);
+    ASSERT_TRUE(osh_parse_duration("30x", &s) == 0);   /* unknown unit */
+    ASSERT_TRUE(osh_parse_duration("30ss", &s) == 0);  /* trailing junk after unit */
+    ASSERT_TRUE(osh_parse_duration(" 30", &s) == 0);   /* leading whitespace rejected */
+    ASSERT_TRUE(osh_parse_duration("+30", &s) == 0);   /* sign prefix rejected */
+    ASSERT_TRUE(osh_parse_duration("-30", &s) == 0);   /* negative rejected */
+    ASSERT_TRUE(osh_parse_duration("30 ", &s) == 0);   /* trailing whitespace rejected */
+    ASSERT_TRUE(osh_parse_duration(".", &s) == 0);     /* lone dot: no digits consumed (end == s) */
+    ASSERT_TRUE(osh_parse_duration("1e999", &s) == 0); /* out of range: strtod sets errno */
+}
+
+static void test_max_time_option(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--max-time", "30m", "run_17", NULL};
+    char *argv_eq[] = {"openshieldhit", "--max-time=1h", NULL};
+    char *argv_plain[] = {"openshieldhit", "run_17", NULL};
+    char *argv_bad[] = {"openshieldhit", "--max-time=nope", NULL};
+    char *argv_missing[] = {"openshieldhit", "--max-time", NULL};
+
+    int rc = osh_cli_parse(4, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_max_time == 1);
+    ASSERT_TRUE(opt.max_time_s == 1800.0);
+    ASSERT_TRUE(opt.workdir != NULL && strcmp(opt.workdir, "run_17") == 0);
+
+    rc = osh_cli_parse(2, argv_eq, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_max_time == 1);
+    ASSERT_TRUE(opt.max_time_s == 3600.0);
+
+    /* Absent flag leaves the override off. */
+    rc = osh_cli_parse(2, argv_plain, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_max_time == 0);
+
+    rc = osh_cli_parse(2, argv_bad, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid duration value") != NULL);
+
+    rc = osh_cli_parse(2, argv_missing, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    /* A recognized option missing its value must say so, not "unknown option". */
+    ASSERT_TRUE(strstr(err, "requires a value") != NULL);
+}
+
 static int run_named_test(char const *name) {
+    if (strcmp(name, "parse_duration_good") == 0) {
+        test_parse_duration_good();
+        return 0;
+    }
+    if (strcmp(name, "parse_duration_bad") == 0) {
+        test_parse_duration_bad();
+        return 0;
+    }
+    if (strcmp(name, "max_time_option") == 0) {
+        test_max_time_option();
+        return 0;
+    }
     if (strcmp(name, "version_short_flag") == 0) {
         test_version_short_flag();
         return 0;
@@ -254,5 +337,8 @@ int main(int argc, char *argv[]) {
     test_rejects_extra_positional_argument();
     test_profile_option();
     test_pool_capacity_option();
+    test_parse_duration_good();
+    test_parse_duration_bad();
+    test_max_time_option();
     return 0;
 }

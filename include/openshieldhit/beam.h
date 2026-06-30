@@ -163,6 +163,8 @@ struct osh_beam_workspace {
     char has_primary;                   /**< Non-zero if primary species was explicitly set by the caller. */
     size_t nstat;                       /**< Total primary histories to simulate (NSTAT). */
     size_t nsave;                       /**< Save interval in histories; 0 = write only at end (NSTAT step). */
+    double wall_budget_s;               /**< Wall-time budget [s] from the MAXTIME card; 0 = unlimited.
+                                             A CLI --max-time overrides this value. */
     int rndseed;                        /**< RNG seed; same seed gives bit-for-bit reproducible results (RNDSEED). */
     int rndoffset;                      /**< RNG stream offset for producing independent parallel runs
                                              from the same seed. */

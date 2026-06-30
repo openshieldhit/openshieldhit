@@ -1,0 +1,17 @@
+10_max_time — graceful wall-time stop (issue #192, informed by #195)
+
+Runs the 00_minimal proton-in-water setup but requests 5,000,000 primaries with
+a 0.2 s wall-time budget and a small (200) wavefront pool.  The budget expires
+long before the run finishes, so transport stops cleanly at a safe point:
+
+  * new-primary injection halts, but in-flight histories finish;
+  * the family scheduler still drains every banked secondary, so the partial
+    result is family-exact for the primaries that completed;
+  * completed_nstat is the true (partial) count and every output is normalised
+    by it (the "# PRIMARIES:" header reflects it).
+
+The case asserts the end-to-end exit status (0).  Because a wall-time budget is
+intentionally non-deterministic, the exact completed count is pinned instead by
+the deterministic unit test
+test_osh_simulation::clean_stop_partial_result_is_exact, which stops via an
+always-stop callback and checks completed_nstat == one pool batch.

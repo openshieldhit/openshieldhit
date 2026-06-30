@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/osh_duration.h"
+
 /* Keep CLI-compatible behavior with original SHIELD-HIT seed offset bounds. */
 #define OSH_CLI_MAX_SEED_OFFSET 9999ull
 
@@ -44,6 +46,8 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
     opt->has_pool_capacity = 0;
     opt->mem_budget = NULL;
     opt->profile_path = NULL;
+    opt->max_time_s = 0.0;
+    opt->has_max_time = 0;
 
     if (argc <= 1) {
         opt->action = OSH_CLI_ACTION_HELP;
@@ -112,10 +116,17 @@ void osh_cli_print_help(FILE *out, char const *prog) {
             "                           a run whose scoring exceeds this is refused. Default: 80%% of\n"
             "                           available RAM\n");
     fprintf(out, "      --profile <file>  Write a one-line JSON timing/counter profile to <file>\n");
+    fprintf(out,
+            "      --max-time <dur>  Wall-time budget; stop cleanly at the next safe point and save the\n"
+            "                        partial result (e.g. 30s, 30m, 1h, or a bare number of seconds).\n"
+            "                        Overrides the beam.dat MAXTIME card.\n");
     fprintf(out, "\n");
     fprintf(out, "Notes:\n");
     fprintf(out, "  WORKDIR defaults input files to WORKDIR/{geo,beam,mat,detect}.dat.\n");
     fprintf(out, "  Input overrides replace only the corresponding default file.\n");
+    fprintf(out, "  Ctrl-C (SIGINT) requests the same clean stop: in-flight histories finish,\n");
+    fprintf(out, "  all secondaries drain, and the partial result is saved normalised by the\n");
+    fprintf(out, "  true number of completed primaries.\n");
 }
 
 /**
@@ -266,6 +277,18 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
             return set_err(err, err_cap, "unknown or invalid option '%s'", arg);
         }
         opt->mem_budget = value;
+        return 0;
+    }
+    if ((name_len == 8) && (strncmp(name, "max-time", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            /* Recognized option with a missing value: say so explicitly rather
+             * than the generic "unknown option", which misleads users/scripts. */
+            return set_err(err, err_cap, "option '%s' requires a value (e.g. 30s, 30m, 1h, or 500)", arg);
+        }
+        if (!osh_parse_duration(value, &opt->max_time_s)) {
+            return set_err(err, err_cap, "invalid duration value for option '%s' (use e.g. 30s, 30m, 1h, or 500)", arg);
+        }
+        opt->has_max_time = 1;
         return 0;
     }
     if ((name_len == 7) && (strncmp(name, "workdir", name_len) == 0)) {

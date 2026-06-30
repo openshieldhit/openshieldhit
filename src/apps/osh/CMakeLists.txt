@@ -12,6 +12,7 @@ add_library(osh_app_osh
     osh_app_osh.c
     osh_run.c
     osh_membudget.c
+    osh_signals.c
 )
 
 target_include_directories(osh_app_osh
