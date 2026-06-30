@@ -13,5 +13,5 @@ long before the run finishes, so transport stops cleanly at a safe point:
 The case asserts the end-to-end exit status (0).  Because a wall-time budget is
 intentionally non-deterministic, the exact completed count is pinned instead by
 the deterministic unit test
-test_osh_simulation::clean_stop_partial_result_is_exact, which stops via a
-pre-raised flag and checks completed_nstat == one pool batch.
+test_osh_simulation::clean_stop_partial_result_is_exact, which stops via an
+always-stop callback and checks completed_nstat == one pool batch.

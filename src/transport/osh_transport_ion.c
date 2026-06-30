@@ -152,9 +152,12 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     next_report_completed = progress_chunk;
     t_start = osh_monotonic_seconds();
     t_last_report = t_start;
-    /* Measure the wall budget from the run-level start (set by the driver
-     * before transport), falling back to this loop's start when uncontrolled. */
-    ctl_t_start = (ctl && ctl->t_start > 0.0) ? ctl->t_start : t_start;
+    /* Measure the wall budget from the run-level start.  The driver always arms
+     * the control with osh_run_control_start() before transport begins, so a
+     * non-NULL ctl always carries a valid baseline — including a legitimate 0.0
+     * (the monotonic epoch is unspecified).  Fall back to this loop's start only
+     * when the run is uncontrolled. */
+    ctl_t_start = ctl ? ctl->t_start : t_start;
 
     report_transport_progress(transport_ctx->diag, 0u, nstat, 0.0);
 
