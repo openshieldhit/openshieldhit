@@ -26,7 +26,8 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
+      # Packaging only — no test run, so skip the DICOM fixture download.
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF -DOSH_FETCH_DICOM_FIXTURES=OFF
 
     - name: Build project
       run: cmake --build build --parallel
@@ -61,7 +62,8 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
+      # Packaging only — no test run, so skip the DICOM fixture download.
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF -DOSH_FETCH_DICOM_FIXTURES=OFF
 
     - name: Build project
       run: cmake --build build --parallel
@@ -94,7 +96,8 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Configure project (Release)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
+      # Packaging only — no test run, so skip the DICOM fixture download.
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF -DOSH_FETCH_DICOM_FIXTURES=OFF
 
     - name: Build project
       run: cmake --build build --config Release --parallel

@@ -49,7 +49,9 @@ jobs:
       run: cmake --build build --parallel --config Debug
 
     - name: Run tests
-      run: ctest --test-dir build --output-on-failure -C Debug -E 'cases::05_dicom_simple|unit::test_osh_dicom|unit::test_osh_geometry_dcm'
+      # DICOM fixtures are fetched automatically during the configure step
+      # (OSH_FETCH_DICOM_FIXTURES, ON by default), so the DICOM tests run here too.
+      run: ctest --test-dir build --output-on-failure -C Debug
 
     - name: Print version information (Linux/macOS)
       if: runner.os != 'Windows'
@@ -85,7 +87,8 @@ jobs:
       uses: jwlawson/actions-setup-cmake@v2.2.0
 
     - name: Configure project (Release, examples off — no SDL2 on Windows CI)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF
+      # This job only builds (no test run), so skip the DICOM fixture download.
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOSH_BUILD_EXAMPLES=OFF -DOSH_FETCH_DICOM_FIXTURES=OFF
 
     - name: Build project (Release)
       run: cmake --build build --config Release --parallel
