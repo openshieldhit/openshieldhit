@@ -7,11 +7,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
 # ---- Version Information ----
-# Extract version from git at configure time and pass as compiler definition
+# Extract version from git at configure time and pass as compiler definition.
+# --match restricts the search to dotted semver release tags (vMAJOR.MINOR.PATCH,
+# optionally with a suffix) so non-release tags (e.g. the test-fixtures-v1 data
+# release, or a bare "v1") don't get picked up as the version and break the
+# semver parsing below. The glob requires the two dots of a vX.Y.Z tag.
 find_package(Git QUIET)
 if(GIT_FOUND)
     execute_process(
-        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty --match "v[0-9]*.[0-9]*.[0-9]*"
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         OUTPUT_VARIABLE GIT_VERSION
         OUTPUT_STRIP_TRAILING_WHITESPACE

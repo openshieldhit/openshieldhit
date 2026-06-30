@@ -1,5 +1,60 @@
-Complete datasets with CT,RS and RN files can go here.
+# DICOM test fixtures
+
+Complete datasets with CT, RS, RD and RN files go here.
 Keep this lean, < 500 MB. Only add what is absolutely needed for test and development.
 
-These fixtures are stored in Git LFS. Local checkouts and CI jobs that run the
-DICOM unit tests must fetch LFS payloads rather than plain pointer files.
+## Fetched on demand (not stored in git)
+
+The `DCPT_headphantom` dataset (182 `.dcm` files, ~267 MB uncompressed) used by
+the DICOM tests is **not** committed to the repository. It used to live in Git
+LFS, but the project exceeded its LFS bandwidth budget (see
+[#187](https://github.com/openshieldhit/openshieldhit/issues/187)), so the data
+now ships as an asset on a GitHub release and is downloaded on demand.
+
+- Release: [`test-fixtures-v1`](https://github.com/openshieldhit/openshieldhit/releases/tag/test-fixtures-v1)
+- Asset: `DCPT_headphantom.tar.gz`
+- SHA-256: `5ab7ac365ccbbf4e5d3eb915b30f8a123fce3d460b05c7a17ce4ce9d64707095`
+
+Git LFS is therefore no longer required to clone or build the project.
+
+### One-step fetch (Linux, macOS, Windows)
+
+Run from the repository root:
+
+```sh
+cmake -P cmake/fetch_fixtures.cmake
+```
+
+This downloads the archive, verifies its SHA-256, and unpacks it into
+`tests/fixtures/dicom/DCPT_headphantom/`. It uses only CMake built-ins
+(`file(DOWNLOAD)` and `cmake -E tar`), so it behaves identically on every
+platform — no `curl`, `wget`, `tar` or shell required.
+
+The script is idempotent: a stamp file
+(`DCPT_headphantom/.fixtures-test-fixtures-v1.stamp`) marks a completed fetch, so
+re-running it is a no-op.
+
+### Automatic fetch when the DICOM tests run
+
+You don't have to fetch manually. The download is wired into CTest as a setup
+fixture (`DICOM_FIXTURES`) and runs **on demand, the first time a DICOM test is
+executed** — not when you configure or build the project. This means:
+
+- Building `openshieldhit` just to run it never triggers the download.
+- `ctest` runs that don't include a DICOM test (e.g. `ctest -LE dicom`, or any
+  `-R`/`-E` selection that excludes them) never trigger it either.
+- Running the DICOM tests (`unit::test_osh_dicom`, `unit::test_osh_geometry_dcm`,
+  `cases::05_dicom_simple`) fetches the dataset once, beforehand.
+
+Because the fetch is idempotent (see the stamp file above), subsequent `ctest`
+runs re-check the stamp and skip the download. CI relies on exactly this: the
+fixtures are pulled during the test step, right before the DICOM tests.
+
+## Provenance
+
+> **TODO (tracked in [#187](https://github.com/openshieldhit/openshieldhit/issues/187)):**
+> document the origin, anonymization status and redistribution license of the
+> `DCPT_headphantom` dataset. It is a head-phantom CT with an associated proton
+> RTPLAN/RTDOSE (Brain_fin2). Confirm patient-identifying DICOM tags are scrubbed
+> and that the data may be redistributed in a public repository before treating
+> this release as permanent.

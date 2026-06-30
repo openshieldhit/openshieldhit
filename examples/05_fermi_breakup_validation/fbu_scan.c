@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("# openshieldhit sequential-binary Fermi break-up — Z=%u A=%u at rest\n", z_par, a_par);
+    printf("# openshieldhit statistical Fermi break-up — Z=%u A=%u at rest\n", z_par, a_par);
     printf("# E*_per_A_MeV  mean_mult  yield(Z=0..%d)\n", FBU_SCAN_ZMAX - 1);
     for (bin = 0; bin < FBU_SCAN_NBINS; ++bin) {
         printf("%8.4f %10.5f",
