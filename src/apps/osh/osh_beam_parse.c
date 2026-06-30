@@ -96,22 +96,41 @@ struct _beam_dispatch_entry {
     int (*handler)(PARSE_HANDLER_ARGS);
 };
 
+/* One dispatch entry per line for readable diffs; without this clang-format
+ * bin-packs them into a two-column grid.  Same idiom as the key table in
+ * osh_beam_parse_keys.h. */
+// clang-format off
 static struct _beam_dispatch_entry _dispatch_table[] = {
-    {OSH_BEAM_KEY_APCORR, _parse_apcorr},       {OSH_BEAM_KEY_BEAMDIR, _parse_beamdir},
-    {OSH_BEAM_KEY_BEAMDIV, _parse_beamdiv},     {OSH_BEAM_KEY_BEAMPOS, _parse_beampos},
-    {OSH_BEAM_KEY_BEAMSAD, _parse_beamsad},     {OSH_BEAM_KEY_BEAMSIGMA, _parse_beamsigma},
-    {OSH_BEAM_KEY_BMODMC, _parse_bmodmc},       {OSH_BEAM_KEY_BMODTRANS, _parse_bmodtrans},
-    {OSH_BEAM_KEY_DELTAE, _parse_deltae},       {OSH_BEAM_KEY_DEMIN, _parse_demin},
-    {OSH_BEAM_KEY_EMTRANS, _parse_emtrans},     {OSH_BEAM_KEY_EXTSPEC, _parse_extspec},
-    {OSH_BEAM_KEY_MAKELN, _parse_makeln},       {OSH_BEAM_KEY_MAXTIME, _parse_maxtime},
-    {OSH_BEAM_KEY_MSCAT, _parse_mscat},         {OSH_BEAM_KEY_NEUTRFAST, _parse_neutrfast},
-    {OSH_BEAM_KEY_NEUTRLCUT, _parse_neutrlcut}, {OSH_BEAM_KEY_NSTAT, _parse_nstat},
-    {OSH_BEAM_KEY_NUCRE, _parse_nucre},         {OSH_BEAM_KEY_PRIMARY, _parse_primary},
-    {OSH_BEAM_KEY_RNDSEED, _parse_rndseed},     {OSH_BEAM_KEY_STRAGG, _parse_stragg},
-    {OSH_BEAM_KEY_TMAX0, _parse_tmax0},         {OSH_BEAM_KEY_TCUT0, _parse_tcut0},
-    {OSH_BEAM_KEY_USEBMOD, _parse_usebmod},     {OSH_BEAM_KEY_USECBEAM, _parse_usecbeam},
-    {OSH_BEAM_KEY_USEPARLEV, _parse_useparlev}, {NULL, NULL} /* sentinel */
+    {OSH_BEAM_KEY_APCORR, _parse_apcorr},
+    {OSH_BEAM_KEY_BEAMDIR, _parse_beamdir},
+    {OSH_BEAM_KEY_BEAMDIV, _parse_beamdiv},
+    {OSH_BEAM_KEY_BEAMPOS, _parse_beampos},
+    {OSH_BEAM_KEY_BEAMSAD, _parse_beamsad},
+    {OSH_BEAM_KEY_BEAMSIGMA, _parse_beamsigma},
+    {OSH_BEAM_KEY_BMODMC, _parse_bmodmc},
+    {OSH_BEAM_KEY_BMODTRANS, _parse_bmodtrans},
+    {OSH_BEAM_KEY_DELTAE, _parse_deltae},
+    {OSH_BEAM_KEY_DEMIN, _parse_demin},
+    {OSH_BEAM_KEY_EMTRANS, _parse_emtrans},
+    {OSH_BEAM_KEY_EXTSPEC, _parse_extspec},
+    {OSH_BEAM_KEY_MAKELN, _parse_makeln},
+    {OSH_BEAM_KEY_MAXTIME, _parse_maxtime},
+    {OSH_BEAM_KEY_MSCAT, _parse_mscat},
+    {OSH_BEAM_KEY_NEUTRFAST, _parse_neutrfast},
+    {OSH_BEAM_KEY_NEUTRLCUT, _parse_neutrlcut},
+    {OSH_BEAM_KEY_NSTAT, _parse_nstat},
+    {OSH_BEAM_KEY_NUCRE, _parse_nucre},
+    {OSH_BEAM_KEY_PRIMARY, _parse_primary},
+    {OSH_BEAM_KEY_RNDSEED, _parse_rndseed},
+    {OSH_BEAM_KEY_STRAGG, _parse_stragg},
+    {OSH_BEAM_KEY_TMAX0, _parse_tmax0},
+    {OSH_BEAM_KEY_TCUT0, _parse_tcut0},
+    {OSH_BEAM_KEY_USEBMOD, _parse_usebmod},
+    {OSH_BEAM_KEY_USECBEAM, _parse_usecbeam},
+    {OSH_BEAM_KEY_USEPARLEV, _parse_useparlev},
+    {NULL, NULL} /* sentinel */
 };
+// clang-format on
 
 /* ---- Main parser entry point --------------------------------------------- */
 
