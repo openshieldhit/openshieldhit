@@ -15,7 +15,7 @@ int osh_physics_mcs_scatter(enum osh_mcs_model model,
                             double chic2_coeff,
                             double screen_z,
                             struct osh_rng *rng) {
-    double theta0;
+    double theta0; /* Highland RMS projected width θ₀ [rad]; the shared magnitude */
 
     w[0] = v[0];
     w[1] = v[1];

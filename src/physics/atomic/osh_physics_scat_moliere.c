@@ -70,19 +70,19 @@ static double osh_bessel_j0(double x) {
  * @param[out] m2_out ⟨ϑ²⟩ of the (clamped, truncated) distribution for this B.
  */
 static void moliere_build_invcdf_row(double b, float *row, double *m2_out) {
-    double cdf[OSH_MOLIERE_NF];
-    double inv_b;
-    double inv_b2;
-    double acc;
-    double acc_m2;
-    double total;
-    double th;
-    double pdf;
-    double target;
-    double seg;
-    int i;
-    int k;
-    int idx;
+    double cdf[OSH_MOLIERE_NF]; /* cumulative of ϑ·f(ϑ;B) over the ϑ grid       */
+    double inv_b;               /* 1/B                                           */
+    double inv_b2;              /* 1/B²                                          */
+    double acc;                 /* running CDF accumulator (∫ ϑ·f dϑ)            */
+    double acc_m2;              /* running ∫ ϑ²·(ϑ·f) dϑ for ⟨ϑ²⟩               */
+    double total;               /* CDF normalisation = ∫ ϑ·f dϑ                  */
+    double th;                  /* reduced angle ϑ at the current grid point     */
+    double pdf;                 /* sampling density ϑ·f(ϑ;B) (clamped ≥ 0)       */
+    double target;              /* u_k·total: CDF value to invert for u node k    */
+    double seg;                 /* CDF span of the bracketing ϑ interval         */
+    int i;                      /* ϑ-grid index                                  */
+    int k;                      /* u-grid (cumulative-probability) index         */
+    int idx;                    /* walking ϑ-grid cursor during inversion        */
 
     inv_b = 1.0 / b;
     inv_b2 = inv_b * inv_b;
@@ -128,18 +128,18 @@ static void moliere_build_invcdf_row(double b, float *row, double *m2_out) {
 }
 
 void osh_physics_moliere_init(void) {
-    double ymax;
-    double dy;
-    double th;
-    double s0;
-    double s1;
-    double s2;
-    double y;
-    double e;
-    double base;
-    double q;
-    double t1;
-    double bnode;
+    double ymax;  /* upper limit of the y (Hankel) integration                 */
+    double dy;    /* y quadrature step                                         */
+    double th;    /* current reduced angle ϑ on the f⁽ⁿ⁾ grid                  */
+    double s0;    /* running ∫ for f⁽⁰⁾(ϑ)                                     */
+    double s1;    /* running ∫ for f⁽¹⁾(ϑ)                                     */
+    double s2;    /* running ∫ for f⁽²⁾(ϑ) (before the 1/2! factor)            */
+    double y;     /* Hankel integration variable                              */
+    double e;     /* Gaussian damping e^(−y²/4)                               */
+    double base;  /* y·J₀(ϑy)·e^(−y²/4): common factor of all three integrands */
+    double q;     /* y²/4                                                      */
+    double t1;    /* (y²/4)·ln(y²/4): the per-order weight                     */
+    double bnode; /* B value at the current inverse-CDF table node            */
     int my;
     int i;
     int j;
@@ -261,14 +261,14 @@ double osh_physics_moliere_reduced_f(int n, double theta_reduced) {
 }
 
 double osh_physics_moliere_inv_cdf(double b, double u) {
-    double gb;
-    double fb;
-    double gu;
-    double fu;
-    double r0;
-    double r1;
-    int jb;
-    int ku;
+    double gb; /* fractional B-grid coordinate (b − B_MIN)·inv_db      */
+    double fb; /* interpolation weight within the B bracket            */
+    double gu; /* fractional u-grid coordinate u·(NU−1)                */
+    double fu; /* interpolation weight within the u bracket            */
+    double r0; /* ϑ interpolated in u at the lower B node              */
+    double r1; /* ϑ interpolated in u at the upper B node              */
+    int jb;    /* lower B-grid index                                   */
+    int ku;    /* lower u-grid index                                   */
 
     if (!osh_moliere_inited) {
         osh_physics_moliere_init();
@@ -344,26 +344,27 @@ int osh_physics_moliere_scatter(double const v[3],
                                 double chic2_coeff,
                                 double screen_z,
                                 struct osh_rng *rng) {
-    double p2;
-    double e_total;
-    double pv;
-    double beta2;
-    double beta;
-    double chic2_path;
-    double alpha;
-    double chi_a2;
-    double omega;
-    double b;
-    double scale;
-    double theta;
-    double st;
-    double ct;
-    double tr;
-    double th;
-    double cos_phi;
-    double sin_phi;
-    int tries;
+    double p2;         /* momentum² p² = T(T+2m)                       [MeV²]   */
+    double e_total;    /* total energy E = T + m                        [MeV]    */
+    double pv;         /* βcp = p²/E                                     [MeV]    */
+    double beta2;      /* β² = p²/E²                                     [—]      */
+    double beta;       /* velocity β = v/c                              [—]      */
+    double chic2_path; /* χ_c² over the macroscopic path scale          [rad²]   */
+    double alpha;      /* Born parameter α = z·Z·α_fs/β (screening)      [—]      */
+    double chi_a2;     /* Molière screening angle squared χ_a²          [rad²]   */
+    double omega;      /* Ω = χ_c²/(1.167·χ_a²): effective # of scatters [—]      */
+    double b;          /* Molière B: solves B − ln B = ln Ω             [—]      */
+    double scale;      /* θ = scale·ϑ; anchors RMS to Highland θ₀        [rad]    */
+    double theta;      /* sampled space polar deflection angle          [rad]    */
+    double st;         /* sin(theta)                                              */
+    double ct;         /* cos(theta)                                              */
+    double tr;         /* sampled reduced angle ϑ (Molière shape)       [—]      */
+    double th;         /* trial physical angle scale·ϑ before rejection [rad]    */
+    double cos_phi;    /* azimuth cosine (uniform φ)                              */
+    double sin_phi;    /* azimuth sine                                            */
+    int tries;         /* sin θ/θ rejection-loop counter                          */
 
+    /* Default: copy the incident direction (used on every early-out path). */
     w[0] = v[0];
     w[1] = v[1];
     w[2] = v[2];

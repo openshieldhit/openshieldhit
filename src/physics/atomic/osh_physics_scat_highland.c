@@ -7,13 +7,13 @@
 
 double osh_physics_highland_theta0(
     double t_total_mev, double mass_mev, double z_eff, double thickness_gcm2, double path_scale_gcm2, double x0_gcm2) {
-    double momentum; /* p = sqrt(T*(T + 2m)) [MeV/c] */
-    double e_total;  /* E = T + m [MeV] */
-    double pv;       /* beta*c*p = p^2/E [MeV] */
-    double d_over_x0;
-    double s_over_x0;
-    double log_arg;
-    double theta0;
+    double momentum;  /* p = sqrt(T*(T + 2m))                          [MeV/c]  */
+    double e_total;   /* E = T + m                                     [MeV]    */
+    double pv;        /* βcp = p²/E                                    [MeV]    */
+    double d_over_x0; /* substep thickness in radiation lengths d/X₀   [—]      */
+    double s_over_x0; /* macroscopic path scale in radiation lengths   [—]      */
+    double log_arg;   /* z² · s/X₀: argument of the Highland log term  [—]      */
+    double theta0;    /* RMS projected scattering angle θ₀             [rad]    */
 
     if (x0_gcm2 <= 0.0 || thickness_gcm2 <= 0.0 || z_eff <= 0.0) {
         return 0.0;
@@ -44,10 +44,10 @@ double osh_physics_highland_theta0(
 
 double osh_physics_highland_s_theta(
     double t_total_mev, double mass_mev, double z_eff, double rho_gcm3, double x0_gcm2, double theta_max_rad) {
-    double pv; /* beta*c*p = p^2/E [MeV] */
-    double momentum;
-    double e_total;
-    double ratio;
+    double pv;       /* βcp = p²/E                                  [MeV]   */
+    double momentum; /* p = sqrt(T*(T + 2m))                        [MeV/c] */
+    double e_total;  /* E = T + m                                   [MeV]   */
+    double ratio;    /* θ_max·βcp/(13.6·z): inverted Highland √(d/X₀)        */
 
     if (rho_gcm3 <= 0.0 || z_eff <= 0.0 || x0_gcm2 <= 0.0 || theta_max_rad <= 0.0) {
         return 0.0;
@@ -66,11 +66,11 @@ double osh_physics_highland_s_theta(
 }
 
 void osh_physics_highland_scatter(double const v[3], double w[3], double theta0, struct osh_rng *rng) {
-    double u1[3];
-    double u2[3];
-    double tx;
-    double ty;
-    double norm;
+    double u1[3]; /* first transverse basis vector ⟂ v          */
+    double u2[3]; /* second transverse basis vector ⟂ v         */
+    double tx;    /* projected scattering angle in u1, ~N(0,θ₀) [rad] */
+    double ty;    /* projected scattering angle in u2, ~N(0,θ₀) [rad] */
+    double norm;  /* length of the deflected vector (renormalise)    */
 
     if (theta0 < 1e-9) {
         w[0] = v[0];

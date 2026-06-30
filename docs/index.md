@@ -61,6 +61,14 @@ Where the formats differ or where openshieldhit extends SH12A, the relevant refe
 call out the difference explicitly.
 
 
+## Physics reference
+
+Developer-facing notes on the transport physics models:
+
+- [`physics/multiple-scattering.md`](physics/multiple-scattering.md) — multiple Coulomb scattering (Highland / Bethe-Molière)
+- [`physics/neutron-transport.md`](physics/neutron-transport.md) — neutron transport model
+- [`physics/neutron-cross-sections.md`](physics/neutron-cross-sections.md) — neutron cross-section tables
+
 ## API reference
 
 The C library API is documented via Doxygen: [API reference →](api/index.html)
