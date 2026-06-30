@@ -42,8 +42,10 @@ endforeach()
 
 # The DICOM integration case needs the fetched head-phantom dataset; depend on
 # the DICOM_FIXTURES setup fixture so ctest downloads it on demand, only when
-# this case runs (see tests/CMakeLists.txt).
+# this case runs (see tests/CMakeLists.txt). The "dicom" label lets callers
+# select/exclude it, e.g. `ctest -LE dicom`.
 if(TEST "cases::05_dicom_simple")
     set_tests_properties("cases::05_dicom_simple" PROPERTIES
         FIXTURES_REQUIRED DICOM_FIXTURES)
+    set_property(TEST "cases::05_dicom_simple" APPEND PROPERTY LABELS "dicom")
 endif()
