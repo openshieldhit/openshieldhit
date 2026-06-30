@@ -75,3 +75,7 @@ build/
 # Generated documentation
 docs/api/
 site/
+
+# DICOM test fixtures — fetched on demand from a GitHub release, never committed
+# (see cmake/fetch_fixtures.cmake and tests/fixtures/dicom/README.md)
+tests/fixtures/dicom/DCPT_headphantom/

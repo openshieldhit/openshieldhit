@@ -38,7 +38,10 @@ jobs:
       run: cmake --build build-coverage --parallel
 
     - name: Run tests
-      run: ctest --test-dir build-coverage --output-on-failure -E 'cases::05_dicom_simple|unit::test_osh_dicom|unit::test_osh_geometry_dcm'
+      # The DICOM fixtures are downloaded on demand here by ctest (the
+      # DICOM_FIXTURES setup fixture runs before the DICOM tests), not at
+      # configure/build time.
+      run: ctest --test-dir build-coverage --output-on-failure
 
     - name: Capture coverage
       run: |
