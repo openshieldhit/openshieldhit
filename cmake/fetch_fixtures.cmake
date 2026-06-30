@@ -63,14 +63,19 @@ endif()
 # Drop any stale extraction first so a re-fetch starts clean.
 file(REMOVE_RECURSE "${_dataset_dir}")
 message(STATUS "Extracting ${FIXTURE_ARCHIVE} into ${FIXTURES_DIR}")
+# `cmake -E tar xf` (no explicit compression flag) lets the bundled libarchive
+# auto-detect the format, so this handles .tar.gz, .tar.xz and .zip identically
+# on Linux, macOS and Windows — no system tar/unzip required.
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" -E tar xzf "${_archive}"
+    COMMAND "${CMAKE_COMMAND}" -E tar xf "${_archive}"
     WORKING_DIRECTORY "${FIXTURES_DIR}"
     RESULT_VARIABLE _tar_result)
-file(REMOVE "${_archive}")
+# Keep the archive on failure so it can be inspected / extraction retried
+# without re-downloading; only remove it once extraction succeeded.
 if(NOT _tar_result EQUAL 0)
     message(FATAL_ERROR "Failed to extract ${_archive} (tar exit ${_tar_result})")
 endif()
+file(REMOVE "${_archive}")
 
 if(NOT IS_DIRECTORY "${_dataset_dir}")
     message(FATAL_ERROR
