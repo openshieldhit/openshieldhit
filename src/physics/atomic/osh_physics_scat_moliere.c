@@ -6,7 +6,7 @@
 #include "physics/osh_kinematics.h"
 #include "random/osh_rng.h"
 
-#define OSH_MOLIERE_NF 257    /* reduced-angle (ϑ) grid points for f⁽ⁿ⁾ */
+#define OSH_MOLIERE_NF 257     /* reduced-angle (ϑ) grid points for f⁽ⁿ⁾ */
 #define OSH_MOLIERE_THMAX 12.0 /* maximum reduced angle ϑ */
 
 /* Inverse-CDF support table: ϑ as a function of (B, u).  The reduced-angle
@@ -14,9 +14,9 @@
  * smooth function of (B, u) that we tabulate once at init and bilinearly
  * interpolate on the hot path — no per-scatter CDF reconstruction.  Built from
  * our own f⁽ⁿ⁾ formulas (no external tables). */
-#define OSH_MOLIERE_NB 64    /* B-grid nodes */
-#define OSH_MOLIERE_NU 1024  /* u-grid nodes (cumulative probability) */
-#define OSH_MOLIERE_B_MIN 1.6 /* ≈ solve_b threshold (ln Ω = 1.0816 ⇒ B ≈ 1.6) */
+#define OSH_MOLIERE_NB 64      /* B-grid nodes */
+#define OSH_MOLIERE_NU 1024    /* u-grid nodes (cumulative probability) */
+#define OSH_MOLIERE_B_MIN 1.6  /* ≈ solve_b threshold (ln Ω = 1.0816 ⇒ B ≈ 1.6) */
 #define OSH_MOLIERE_B_MAX 40.0 /* above this the 1/B, 1/B² corrections are negligible */
 
 static double osh_moliere_f0[OSH_MOLIERE_NF];

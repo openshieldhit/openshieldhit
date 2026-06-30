@@ -181,7 +181,7 @@ static void test_inv_cdf_monotone(void) {
         for (k = 1; k <= 1000; ++k) {
             u = (double) k / 1000.0;
             th = osh_physics_moliere_inv_cdf(bvals[bi], u);
-            ASSERT_TRUE(th >= prev - 1e-9);  /* monotone non-decreasing */
+            ASSERT_TRUE(th >= prev - 1e-9);       /* monotone non-decreasing */
             ASSERT_TRUE(th >= 0.0 && th <= 12.0); /* within [0, THMAX] */
             prev = th;
         }
