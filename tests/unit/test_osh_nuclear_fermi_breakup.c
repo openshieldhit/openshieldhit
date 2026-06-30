@@ -70,7 +70,7 @@ static int is_whitelisted_pdg(int pdg) {
            || pdg == OSH_PART_PDG_TRITON || pdg == OSH_PART_PDG_HE3 || pdg == OSH_PART_PDG_HE4;
 }
 
-static void test_compile_channels(void) {
+static void test_compile_partitions(void) {
     struct osh_nuclear_fermi_breakup model;
     size_t idx;
     uint32_t off;
@@ -521,7 +521,7 @@ static void test_g4_multiplicity_anchors(void) {
 }
 
 int main(void) {
-    test_compile_channels();
+    test_compile_partitions();
     test_be8_breaks_to_two_alphas();
     test_o16_below_threshold_untouched();
     test_conservation_c12();
