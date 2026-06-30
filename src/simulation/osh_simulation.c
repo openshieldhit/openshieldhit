@@ -367,18 +367,21 @@ enum osh_status osh_simulation_set_profiling(struct osh_simulation *sim, int ena
     return OSH_OK;
 }
 
-enum osh_status
-osh_simulation_set_run_control(struct osh_simulation *sim, double wall_budget_s, sig_atomic_t volatile *stop_flag) {
+enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
+                                               double wall_budget_s,
+                                               int (*should_stop)(void *user),
+                                               void *user) {
     if (!sim) {
         return OSH_EINVAL;
     }
     osh_run_control_init(&sim->run_control);
     sim->run_control.wall_budget_s = (wall_budget_s > 0.0) ? wall_budget_s : 0.0;
-    sim->run_control.stop_flag = stop_flag;
+    sim->run_control.should_stop = should_stop;
+    sim->run_control.should_stop_user = user;
     /* Wire the policy in only when it can actually stop the run; otherwise leave
      * the transport pointer NULL so the hot path stays exactly as before. */
     sim->transport_ctx.run_control =
-        (sim->run_control.wall_budget_s > 0.0 || sim->run_control.stop_flag) ? &sim->run_control : NULL;
+        (sim->run_control.wall_budget_s > 0.0 || sim->run_control.should_stop) ? &sim->run_control : NULL;
     return OSH_OK;
 }
 

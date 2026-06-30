@@ -297,12 +297,12 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     }
 
     /* Clean-stop / wall-budget policy.  The CLI --max-time overrides the
-     * beam.dat MAXTIME card; the graceful-stop flag (e.g. from Ctrl-C) is wired
-     * in unconditionally so an interactive interrupt always stops cleanly. */
+     * beam.dat MAXTIME card; the graceful-stop callback (e.g. from Ctrl-C) is
+     * wired in unconditionally so an interactive interrupt always stops cleanly. */
     {
         double wall_budget_s = opt->has_max_time ? opt->max_time_s : beam->wall_budget_s;
-        if (wall_budget_s > 0.0 || opt->stop_flag) {
-            osh_simulation_set_run_control(sim, wall_budget_s, opt->stop_flag);
+        if (wall_budget_s > 0.0 || opt->should_stop) {
+            osh_simulation_set_run_control(sim, wall_budget_s, opt->should_stop, opt->should_stop_user);
         }
         if (out && wall_budget_s > 0.0) {
             fprintf(out,

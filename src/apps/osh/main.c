@@ -103,7 +103,8 @@ int main(int argc, char *argv[]) {
      * instead of killing the process mid-history.  No-op on platforms without a
      * supported mechanism. */
     osh_signals_install_stop();
-    run_opt.stop_flag = osh_signals_stop_flag();
+    run_opt.should_stop = osh_signals_should_stop;
+    run_opt.should_stop_user = NULL;
     run_opt.diag = &diag;
 
     rc = osh_run(&run_opt, stdout, stderr);

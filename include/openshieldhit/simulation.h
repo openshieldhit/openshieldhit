@@ -1,8 +1,6 @@
 #ifndef OPENSHIELDHIT_SIMULATION_H
 #define OPENSHIELDHIT_SIMULATION_H
 
-#include <signal.h> /* sig_atomic_t */
-
 #include "openshieldhit/beam.h"
 #include "openshieldhit/geometry.h"
 #include "openshieldhit/material.h"
@@ -120,26 +118,37 @@ enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, siz
  *
  * @details
  * Must be called after osh_simulation_create() and before osh_simulation_run().
- * The control interface is deliberately a *flag*, not an OS signal, so it is
- * portable: the caller raises @p stop_flag from a POSIX signal handler, a
- * Windows console handler, a watchdog thread, or a WASM message, and the run
- * stops cleanly at the next safe point.
+ * The control interface is deliberately a *callback*, not an OS signal or a
+ * typed flag, so it is portable: the library only asks @p should_stop(@p user)
+ * at safe points and never names a signal, thread, or browser primitive.  The
+ * caller backs that answer however it likes — a POSIX signal flag, a Windows
+ * console handler, a watchdog thread, a GUI button, or a WASM message — and the
+ * run stops cleanly the next time the callback returns non-zero.  @p user is an
+ * opaque context handed straight back to @p should_stop (the usual C "callback +
+ * context" idiom; mirrors the scoring sink).
  *
  * "Cleanly" means the transport stops *injecting* new primaries but lets every
  * in-flight history finish, then drains all banked secondary families, so the
  * partial result is family-exact for exactly the primaries that completed.
  * osh_results_completed_nstat() then reports that true count and every output is
- * normalised by it.  Passing wall_budget_s <= 0 and stop_flag == NULL disables
+ * normalised by it.  Passing wall_budget_s <= 0 and should_stop == NULL disables
  * the policy (identical to not calling this function).
+ *
+ * @p should_stop must be cheap and non-blocking: it is polled once per wavefront
+ * safe point, not once per history.
  *
  * @param[in] sim            Simulation handle created by osh_simulation_create().
  * @param[in] wall_budget_s  Wall-clock budget [s]; <= 0 means unlimited.
- * @param[in] stop_flag      Borrowed flag; raised → stop cleanly.  NULL = none.
+ * @param[in] should_stop    Borrowed callback; returns non-zero to stop cleanly.
+ *                           NULL = no external stop source.
+ * @param[in] user           Opaque context passed to @p should_stop; may be NULL.
  *
  * @returns OSH_OK on success, OSH_EINVAL when @p sim is NULL.
  */
-enum osh_status
-osh_simulation_set_run_control(struct osh_simulation *sim, double wall_budget_s, sig_atomic_t volatile *stop_flag);
+enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
+                                               double wall_budget_s,
+                                               int (*should_stop)(void *user),
+                                               void *user);
 
 /**
  * @brief Retrieve the transport profile of the last completed run.

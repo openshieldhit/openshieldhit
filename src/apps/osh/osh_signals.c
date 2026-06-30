@@ -59,6 +59,11 @@ void osh_signals_install_stop(void) {
 
 #endif
 
+int osh_signals_should_stop(void *user) {
+    (void) user; /* the flag is a process singleton; no per-call context needed */
+    return g_stop ? 1 : 0;
+}
+
 sig_atomic_t volatile *osh_signals_stop_flag(void) {
     return &g_stop;
 }

@@ -21,12 +21,15 @@ static void test_install_and_signal(void) {
 
     *flag = 0;
     osh_signals_install_stop();
-    ASSERT_TRUE(*flag == 0); /* installing must not raise the flag */
+    ASSERT_TRUE(*flag == 0);                         /* installing must not raise the flag */
+    ASSERT_TRUE(osh_signals_should_stop(NULL) == 0); /* adapter agrees: not stopping yet */
 
 #if !defined(_WIN32)
-    raise(SIGINT);           /* handler is installed, so this does not terminate */
-    ASSERT_TRUE(*flag == 1); /* the handler raised the flag */
-    *flag = 0;               /* leave it clear for any later use */
+    raise(SIGINT);                                   /* handler is installed, so this does not terminate */
+    ASSERT_TRUE(*flag == 1);                         /* the handler raised the flag */
+    ASSERT_TRUE(osh_signals_should_stop(NULL) == 1); /* the run-control adapter reports the stop */
+    *flag = 0;                                       /* leave it clear for any later use */
+    ASSERT_TRUE(osh_signals_should_stop(NULL) == 0);
 #endif
 }
 

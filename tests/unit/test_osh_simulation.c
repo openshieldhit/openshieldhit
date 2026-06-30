@@ -1,4 +1,3 @@
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -311,11 +310,17 @@ static unsigned long long read_primaries_header(char const *path) {
     return primaries;
 }
 
+/* Stop callback that always asks to stop (a constant-true should_stop). */
+static int always_stop(void *user) {
+    (void) user;
+    return 1;
+}
+
 /*
- * Clean stop (issue #192 / #195): a pre-raised stop flag halts new-primary
- * injection at the first safe point.  In-flight histories drain, so the
- * completed count is exactly one pool batch — deterministic, no timing
- * dependence — which makes this assertion robust on every platform/CI OS.
+ * Clean stop (issue #192 / #195): a should_stop callback that returns true
+ * halts new-primary injection at the first safe point.  In-flight histories
+ * drain, so the completed count is exactly one pool batch — deterministic, no
+ * timing dependence — which makes this assertion robust on every platform/CI OS.
  * The partial result must save correctly, normalised by the *true* completed
  * count, and the ASCII "# PRIMARIES:" header must echo that same count.
  */
@@ -332,7 +337,6 @@ static void test_clean_stop_partial_result_is_exact(void) {
     struct osh_scoring_workspace *scoring = NULL;
     struct osh_simulation *sim = NULL;
     struct osh_results const *results = NULL;
-    sig_atomic_t volatile stop = 1; /* already requested: stop at the first safe point */
     size_t const pool_cap = 100u;
     unsigned long long const requested = 20000ull;
     unsigned long long completed;
@@ -370,9 +374,9 @@ static void test_clean_stop_partial_result_is_exact(void) {
 
     ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
 
-    /* Small batch + pre-raised flag → exactly one batch of primaries completes. */
+    /* Small batch + always-stop callback → exactly one batch of primaries completes. */
     ASSERT_TRUE(osh_simulation_set_pool_capacity(sim, pool_cap) == OSH_OK);
-    ASSERT_TRUE(osh_simulation_set_run_control(sim, 0.0, &stop) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_set_run_control(sim, 0.0, always_stop, NULL) == OSH_OK);
 
     ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
 
@@ -399,7 +403,7 @@ static void test_clean_stop_partial_result_is_exact(void) {
 }
 
 /*
- * Run control left off (NULL flag, zero budget) must be bit-for-bit the old
+ * Run control left off (NULL callback, zero budget) must be bit-for-bit the old
  * behaviour: every requested primary completes.
  */
 static void test_no_run_control_runs_to_completion(void) {
@@ -427,15 +431,15 @@ static void test_no_run_control_runs_to_completion(void) {
     beam->nstat = 50u;
 
     ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
-    /* A disabled policy (no budget, no flag) is a no-op: leaves the fast path. */
-    ASSERT_TRUE(osh_simulation_set_run_control(sim, 0.0, NULL) == OSH_OK);
+    /* A disabled policy (no budget, no callback) is a no-op: leaves the fast path. */
+    ASSERT_TRUE(osh_simulation_set_run_control(sim, 0.0, NULL, NULL) == OSH_OK);
     ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
 
     ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
     ASSERT_TRUE(osh_results_completed_nstat(results) == 50ull);
     ASSERT_TRUE(osh_results_requested_nstat(results) == 50ull);
 
-    ASSERT_TRUE(osh_simulation_set_run_control(NULL, 1.0, NULL) == OSH_EINVAL);
+    ASSERT_TRUE(osh_simulation_set_run_control(NULL, 1.0, NULL, NULL) == OSH_EINVAL);
 
     ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
     osh_geometry_workspace_free(geo);

@@ -7,8 +7,8 @@ void osh_run_control_init(struct osh_run_control *ctl) {
     ctl->wall_budget_s = 0.0;
     ctl->dump_every_s = 0.0;
     ctl->dump_every_primaries = 0u;
-    ctl->stop_flag = NULL;
-    ctl->dump_flag = NULL;
+    ctl->should_stop = NULL;
+    ctl->should_stop_user = NULL;
     ctl->t_start = 0.0;
     ctl->last_dump_s = 0.0;
     ctl->last_dump_primaries = 0u;
@@ -32,7 +32,7 @@ int run_ctl_should_stop(const struct osh_run_control *ctl, double elapsed, size_
     if (ctl->wall_budget_s > 0.0 && elapsed >= ctl->wall_budget_s) {
         return 1;
     }
-    if (ctl->stop_flag && *ctl->stop_flag) {
+    if (ctl->should_stop && ctl->should_stop(ctl->should_stop_user)) {
         return 1;
     }
     return 0;

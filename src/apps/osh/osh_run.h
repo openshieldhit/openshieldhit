@@ -1,7 +1,6 @@
 #ifndef OSH_RUN_H
 #define OSH_RUN_H
 
-#include <signal.h> /* sig_atomic_t */
 #include <stdio.h>
 
 #include "openshieldhit/diag.h"
@@ -37,7 +36,8 @@ struct osh_run_options {
     char const *profile_path;         /**< Profile JSON output path; NULL disables profiling. */
     double max_time_s;                /**< Wall-time budget [s]; used only when has_max_time != 0. */
     int has_max_time;                 /**< 1 if max_time_s should override the beam file MAXTIME card. */
-    sig_atomic_t volatile *stop_flag; /**< Borrowed graceful-stop flag (e.g. from SIGINT); NULL = none. */
+    int (*should_stop)(void *user);   /**< Borrowed graceful-stop callback (e.g. SIGINT-backed); NULL = none. */
+    void *should_stop_user;           /**< Opaque context passed to @ref should_stop. */
     struct osh_diag_sink const *diag; /**< Borrowed diagnostics sink for simulation/transport messages. */
 };
 

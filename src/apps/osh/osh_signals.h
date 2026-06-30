@@ -28,13 +28,29 @@ extern "C" {
 void osh_signals_install_stop(void);
 
 /**
+ * @brief Run-control stop callback backed by the graceful-stop flag.
+ *
+ * @details
+ * Ready-made adapter matching @c osh_simulation_set_run_control's
+ * @c should_stop signature: returns non-zero once the installed handler has
+ * raised the flag.  This is the seam that keeps every signal/OS detail in the
+ * app layer — the library only ever calls this through a plain function pointer
+ * and never sees @c sig_atomic_t.  @p user is ignored (the flag is a process
+ * singleton), so pass NULL.
+ *
+ * @param[in] user  Unused; pass NULL.
+ * @returns 1 if a graceful stop has been requested, 0 otherwise.
+ */
+int osh_signals_should_stop(void *user);
+
+/**
  * @brief Borrow the process-wide graceful-stop flag.
  *
  * @details
- * Returns a pointer to the flag raised by the installed handler.  Pass it to
- * @c osh_simulation_set_run_control() so the run can observe interrupt
- * requests.  The pointer is always valid (it refers to a static); it just never
- * changes from 0 when no handler was installed.
+ * Returns a pointer to the flag raised by the installed handler.  Most callers
+ * want @ref osh_signals_should_stop instead; this raw accessor exists for
+ * tests and introspection.  The pointer is always valid (it refers to a
+ * static); it just never changes from 0 when no handler was installed.
  *
  * @returns Address of the volatile stop flag (non-NULL).
  */

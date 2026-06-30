@@ -1,7 +1,6 @@
 #ifndef OSH_RUN_CONTROL_H
 #define OSH_RUN_CONTROL_H
 
-#include <signal.h> /* sig_atomic_t */
 #include <stddef.h> /* size_t */
 
 #ifdef __cplusplus
@@ -14,16 +13,20 @@ extern "C" {
  * @details
  * Carries the *intent* knobs that let a driver stop a run cleanly or, later,
  * dump periodic previews — without the transport layer ever learning about
- * files, signals, or the host OS.  The control interface is deliberately
- * *flags*, not signals (goal G3): a borrowed @c stop_flag the app raises
- * however it likes (POSIX @c sigaction, a Windows console handler, a WASM
- * message, a watchdog thread), so the same transport code is portable.
+ * files, signals, or the host OS.  The external stop source is a generic
+ * *callback* (goal G3 — "how the stop is requested is platform glue"): the
+ * library only asks @c should_stop(user) at safe points and never names a
+ * signal, thread, or browser primitive.  The app supplies whatever backs that
+ * answer — a POSIX signal flag, a Windows console handler, a watchdog thread, a
+ * GUI button, or a WASM @c postMessage — so the same transport code is portable.
+ * This mirrors the @c fn + @c void* idiom already used by the scoring sink (G1).
  *
  * @b PR-2 scope (this struct, what is consumed now): @ref wall_budget_s and
- * @ref stop_flag drive @ref run_ctl_should_stop.  The dump-cadence fields are
+ * @ref should_stop drive @ref run_ctl_should_stop.  The dump-cadence scalars are
  * declared here so the struct shape is stable, but they are *not* read by the
- * transport yet — periodic / on-demand dumps land in PR-3 (issue #193), gated
- * on the checkpoint/quiescence contract worked out in issue #195.
+ * transport yet — periodic / on-demand dumps land in PR-3 (issue #193), which
+ * will add a symmetric @c should_dump callback, gated on the checkpoint /
+ * quiescence contract worked out in issue #195.
  *
  * @b Quiescence (issue #195): a clean stop is only *physically meaningful* at a
  * family-complete point.  This module never short-circuits the family
@@ -34,11 +37,12 @@ extern "C" {
  * that finished — never an ion-only fraction under a full @c completed_nstat.
  */
 struct osh_run_control {
-    double wall_budget_s;             /**< Wall-clock budget [s]; 0 = unlimited. */
-    double dump_every_s;              /**< Wall-time dump cadence [s]; 0 = off (consumed in PR-3). */
-    size_t dump_every_primaries;      /**< Primary-count dump cadence; 0 = off (consumed in PR-3). */
-    sig_atomic_t volatile *stop_flag; /**< Borrowed; raised → stop cleanly.  NULL = never stop early. */
-    sig_atomic_t volatile *dump_flag; /**< Borrowed; on-demand dump request.  NULL = none (PR-3). */
+    double wall_budget_s;           /**< Wall-clock budget [s]; 0 = unlimited. */
+    double dump_every_s;            /**< Wall-time dump cadence [s]; 0 = off (consumed in PR-3). */
+    size_t dump_every_primaries;    /**< Primary-count dump cadence; 0 = off (consumed in PR-3). */
+    int (*should_stop)(void *user); /**< Borrowed; returns non-zero to stop cleanly.  NULL = never stop
+                                         early.  Must be cheap and non-blocking — called at safe points. */
+    void *should_stop_user;         /**< Opaque context handed back to @ref should_stop. */
 
     /* Internal run-lifetime state (set by run_ctl_start, not by callers). */
     double t_start;             /**< Monotonic timestamp of run start [s]. */
@@ -71,7 +75,7 @@ void osh_run_control_start(struct osh_run_control *ctl, double t_now);
  *
  * @details
  * @c should_stop = (wall_budget_s > 0 && elapsed >= wall_budget_s)
- *                  || (stop_flag && *stop_flag).
+ *                  || (should_stop && should_stop(should_stop_user)).
  *
  * A NULL @p ctl never stops (the un-controlled baseline).  @p completed is
  * accepted for a stable signature and future count-based policies; it is not
