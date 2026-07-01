@@ -46,7 +46,7 @@
  * Particles below this threshold are killed regardless of tcut or table emin.
  * Mirrors the OSH_BEAM_TMIN floor previously imported from beam headers.
  */
-#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U 0.1
+#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U 0.025 /* TEMP(WIP): lowered from 0.1 to probe distal LET tail (= table emin) */
 
 /* ---- Per-step computation context --------------------------------------- */
 
