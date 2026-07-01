@@ -6,6 +6,7 @@ add_library(osh_physics
     osh_physics_straggling.c
     osh_physics_straggling_gauss.c
     osh_physics_straggling_vavilov.c
+    osh_physics_straggling_landau.c
 )
 
 target_include_directories(osh_physics
