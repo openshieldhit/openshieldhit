@@ -1,4 +1,4 @@
-# Universal Landau (DENLAN) inverse CDF lambda(u); clean-room reference.
+# Universal Landau (DENLAN) inverse CDF lambda(u); OpenShieldHIT reference.
 # lambda_denlan = (pi/2)*scipy.stats.landau.ppf(u) + b.  columns: u lambda
 1.000000e-03 -2.629162646e+00
 1.427091e-03 -2.562928164e+00

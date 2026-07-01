@@ -1,8 +1,9 @@
-"""Fit our own rational + Chebyshev inverse-CDF coefficients to the exact
-Vavilov reference (cached by gen_reference.py).  Clean-room: coefficients are
-determined solely by the exact distribution; the runtime C evaluator reuses the
-vavinv *architecture* (region branches; per region λ = P(x')/Q(x') with each
-coefficient a 2-D Chebyshev sum in (κ, β)) but none of Thomsen's numbers.
+"""Fit the rational + Chebyshev inverse-CDF coefficients to the exact Vavilov
+reference (cached by gen_reference.py).  The coefficients are OpenShieldHIT-
+specific, determined solely by the exact distribution; the runtime C evaluator
+follows the vavinv *architecture* of Bjarne Thomsen (Aarhus University, Aarhus,
+Denmark, 2012) — region branches; per region λ = P(x')/Q(x') with each
+coefficient a 2-D Chebyshev sum in (κ, β) — regenerated from the distribution.
 
 Per region: linearised rational least squares with IRLS reweighting (Loeb):
 minimise Σ w·(λ·Q − P)², w = 1/Q_prev², Q normalised (constant term 1).  x' is

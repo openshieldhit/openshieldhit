@@ -47,8 +47,7 @@ double osh_physics_straggling_vavilov_lambda(double kappa, double beta2, double 
             break;
         }
     }
-    kn = (2.0 * log(kappa) - log(osh_vav_klo[b]) - log(osh_vav_khi[b]))
-         / (log(osh_vav_khi[b]) - log(osh_vav_klo[b]));
+    kn = (2.0 * log(kappa) - log(osh_vav_klo[b]) - log(osh_vav_khi[b])) / (log(osh_vav_khi[b]) - log(osh_vav_klo[b]));
 
     /* u-band dispatch. */
     for (ub = 0; ub < OSH_VAV_NUB - 1; ++ub) {

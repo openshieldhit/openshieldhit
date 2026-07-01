@@ -1,11 +1,11 @@
-"""Exact Vavilov energy-loss distribution — clean-room from the published
+"""Exact Vavilov energy-loss distribution, computed from the published
 definition (Vavilov, Sov. Phys. JETP 5, 749 (1957); B. Schorr, Comput. Phys.
 Commun. 7, 215 (1974)).
 
 Offline tooling only (reference fixtures + sampler fit); NOT compiled into the
-OpenShieldHIT C build.  No source code or tabulated numbers are taken from
-GEANT3 (GPL) or from SHIELD-HIT12A / Thomsen's libvav; only the published
-distribution and its closed-form moments are used.
+OpenShieldHIT C build.  This module is an independent implementation of the
+published distribution and its closed-form moments — the reference the sampler
+fit is validated against.
 
 Density via the Fourier (imaginary-axis Bromwich) form:
 

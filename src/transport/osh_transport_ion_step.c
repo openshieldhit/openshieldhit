@@ -93,7 +93,7 @@ struct ion_step_ctx {
     char enable_mcs;
     char mcs_model; /* enum osh_mcs_model selected for this run */
     char enable_straggling;
-    char straggling_mode; /* enum osh_transport_straggling_mode selected for this run */
+    char straggling_mode;    /* enum osh_transport_straggling_mode selected for this run */
     char is_vacuum;          /* 1 if vacuum zone or ρ ≤ 0            */
     char done;               /* 1 if step already handled (kill/nudge/error) */
     enum osh_status done_rc; /* return value when done == 1           */
@@ -719,7 +719,7 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     double z_eff;
     double sigma_strag;
     double v_in[3];
-    double delta;  /* energy fluctuation added to the exit energy [MeV] */
+    double delta; /* energy fluctuation added to the exit energy [MeV] */
     double beta2;
     double gamma;
     double xi;
@@ -773,9 +773,8 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                 delta = (sigma_strag > 0.0) ? osh_rng_gauss(rng, 0.0, sigma_strag) : 0.0;
             } else {
                 u = osh_rng_double(rng);
-                lam = (kappa >= OSH_STRAGGLING_KAPPA_LANDAU)
-                          ? osh_physics_straggling_vavilov_lambda(kappa, beta2, u)
-                          : osh_physics_straggling_landau_lambda(u);
+                lam = (kappa >= OSH_STRAGGLING_KAPPA_LANDAU) ? osh_physics_straggling_vavilov_lambda(kappa, beta2, u)
+                                                             : osh_physics_straggling_landau_lambda(u);
                 /* Mean-preserving loss fluctuation; more loss lowers the exit energy. */
                 delta = -xi * (lam - osh_physics_straggling_lambda_bar(kappa, beta2));
             }

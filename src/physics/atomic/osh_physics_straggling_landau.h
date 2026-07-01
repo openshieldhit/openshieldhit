@@ -8,12 +8,14 @@
  *
  * @details
  * Returns the universal reduced Landau variable λ for a uniform deviate u, from
- * our own clean-room fit to the standard (DENLAN/CERNLIB) Landau inverse CDF —
- * the κ→0 limit of the Vavilov distribution.  The Landau λ is universal (no κ or
- * β² dependence; those enter the energy-loss fluctuation only through ξ and λ̄),
- * so this is a 1-D piecewise polynomial in a transformed u.  Coefficients (our
- * own) live in osh_physics_straggling_landau_coeffs.h; no GEANT3 or Thomsen
- * numbers are used.
+ * a reproducible fit of the standard (DENLAN/CERNLIB) Landau inverse CDF — the
+ * κ→0 limit of the Vavilov distribution.  The Landau λ is universal (no κ or β²
+ * dependence; those enter the energy-loss fluctuation only through ξ and λ̄), so
+ * this is a 1-D piecewise polynomial in a transformed u, following an approach
+ * by Bjarne Thomsen (Dept. of Physics and Astronomy, Aarhus University, Aarhus,
+ * Denmark, 2012).  The coefficients (generated into
+ * osh_physics_straggling_landau_coeffs.h by tools/vavilov_fit) are
+ * OpenShieldHIT-specific, regenerated from the distribution.
  *
  * The caller forms ΔE = ξ·(λ − λ̄) and adds it to the CSDA mean loss.
  *
