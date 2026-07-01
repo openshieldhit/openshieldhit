@@ -10,7 +10,7 @@ The rules Copilot most often needs when generating C for this project:
 - Use `struct foo` explicitly — **never** `typedef struct`.
 - Block comments `/* */` only; `//` is reserved for temporary notes.
 - `double const *p`, not `const double *p`.
-- No POSIX-only APIs (`strcasecmp`, `mkdtemp`, `getpid`, `<unistd.h>`, `<threads.h>`, …) — Windows is a target.
+- No non-portable APIs (POSIX-only or missing on MSVC): avoid `strcasecmp`/`<strings.h>`, `mkdtemp`, `getpid`, `<unistd.h>`, `<threads.h>`, … — Windows is a target.
 - No heap allocation on the simulation hot path.
 - Predicates return `int` (1 = yes); operations return `enum osh_status` (`OSH_OK = 0`).
 
