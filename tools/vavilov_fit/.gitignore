@@ -1,2 +1,3 @@
 gen.log
 *.log
+ref_cache.npz
