@@ -69,12 +69,12 @@ double osh_physics_straggling_vavilov_lambda(double kappa, double beta2, double 
     tb[2] = 2.0 * bn * bn - 1.0;
     for (i = 0; i < OSH_VAV_NKA; ++i) {
         for (j = 0; j < OSH_VAV_NBE; ++j) {
-            t[i * OSH_VAV_NBE + j] = tk[i] * tb[j];
+            t[(i * OSH_VAV_NBE) + j] = tk[i] * tb[j];
         }
     }
 
     /* λ = Horner in xn over powers 0..udeg; each coefficient a_k = Σ_i t[i]·c[k][i]. */
-    creg = &osh_vav_coef[((b * OSH_VAV_NUB + ub) * OSH_VAV_MAXP) * OSH_VAV_NT];
+    creg = &osh_vav_coef[(((size_t) b * OSH_VAV_NUB) + ub) * OSH_VAV_MAXP * OSH_VAV_NT];
     lam = 0.0;
     for (k = osh_vav_udeg[ub]; k >= 0; --k) {
         ak = 0.0;

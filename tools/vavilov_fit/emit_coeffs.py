@@ -89,11 +89,12 @@ def main():
     fx = os.path.join(HERE, "..", "..", "tests", "fixtures", "vavilov", "vavilov_ppf.csv")
     fdev = 0.0
     if os.path.exists(fx):
-        for ln in open(fx):
-            if ln.startswith("#") or not ln.strip():
-                continue
-            ka, be, uu, lr = map(float, ln.split())
-            fdev = max(fdev, abs(_eval(ka, be, uu) - lr))
+        with open(fx) as fh:
+            for ln in fh:
+                if ln.startswith("#") or not ln.strip():
+                    continue
+                ka, be, uu, lr = map(float, ln.split())
+                fdev = max(fdev, abs(_eval(ka, be, uu) - lr))
     worst = max(worst, fdev)
     print(f"worst maxdev(lambda) on independent fixture grid = {fdev:.3e}")
 

@@ -760,7 +760,6 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     if (ctx->enable_straggling) {
         e_mid = 0.5 * (ctx->e0 + ctx->exit_energy);
         z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
-        delta = 0.0;
 
         if (ctx->straggling_mode == OSH_TRANSPORT_STRAGGLING_VAVILOV) {
             gamma = 1.0 + e_mid / ctx->proj_mass_mev;
