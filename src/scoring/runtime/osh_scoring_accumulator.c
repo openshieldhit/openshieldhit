@@ -4,10 +4,13 @@
 #include <string.h>
 
 enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *acc, size_t len, int want_data2) {
-    size_t const n = len ? len : 1u; /* never allocate a zero-length array */
+    size_t n = len; /* never allocate a zero-length array */
 
     if (!acc) {
         return OSH_EINVAL;
+    }
+    if (n == 0u) {
+        n = 1u;
     }
 
     acc->data = NULL;

@@ -10,6 +10,10 @@
  *   test_snapshot_selector          — the output selector (G2) is passed to the sink
  *   test_snapshot_errors            — NULL sink / sink->save / shadow are rejected
  *   test_shadow_edge_args           — NULL / empty-runtime paths on every entry point
+ *   test_shadow_view_self_consistent— view drops the live master_acc/master_scratch
+ *                                     aliases; free() leaves the view benign (#1/#3)
+ *   test_shadow_bytes_zero_len_page — a len==0 page is counted as its rounded-up
+ *                                     one-element allocation, not 0 bytes (#2)
  *   test_snapshot_refresh_failure   — a postprocess error propagates out, no save
  *
  * Uses a mock sink so no files are written; pure arithmetic, identical on every OS.
@@ -315,6 +319,77 @@ static void test_shadow_edge_args(void) {
     live_fixture_free(&f);
 }
 
+/* ---- The view never aliases live master state; free() leaves it benign ----- */
+
+static void test_shadow_view_self_consistent(void) {
+    struct live_fixture f;
+    struct osh_scoring_shadow shadow;
+    struct osh_scoring_accumulator sentinel_acc;
+    struct osh_voxel_crossing sentinel_cross;
+
+    live_fixture_init(&f);
+
+    /* Give the live runtime the master views the serial driver would hold, so we
+     * can prove the shadow does NOT carry them into its presentation view: those
+     * aliases point at live (un-snapshotted) state. */
+    memset(&sentinel_acc, 0, sizeof(sentinel_acc));
+    memset(&sentinel_cross, 0, sizeof(sentinel_cross));
+    f.rt.master_acc = &sentinel_acc;
+    f.rt.master_scratch.crossing_buf = &sentinel_cross;
+    f.rt.master_scratch.crossing_cap = 7u;
+
+    ASSERT_TRUE(osh_scoring_shadow_init(&shadow, &f.rt) == OSH_OK);
+
+    /* Copilot #1: a consumer reaching the view via the master accessors must not
+     * get the live state back — the snapshot redirects only the page array. */
+    ASSERT_TRUE(shadow.view.master_acc == NULL);
+    ASSERT_TRUE(shadow.view.master_scratch.crossing_buf == NULL);
+    ASSERT_TRUE(shadow.view.master_scratch.crossing_cap == 0u);
+    ASSERT_TRUE(osh_scoring_runtime_master_accumulators(&shadow.view) == NULL);
+    ASSERT_TRUE(osh_scoring_runtime_master_scratch(&shadow.view)->crossing_buf == NULL);
+
+    ASSERT_TRUE(osh_scoring_shadow_refresh(&shadow) == OSH_OK);
+    ASSERT_TRUE(shadow.view.master_acc == NULL); /* refresh keeps it clear */
+
+    osh_scoring_shadow_free(&shadow);
+
+    /* Copilot #3: after free the view is a benign empty snapshot — pages no
+     * longer dangle at the freed array, so inspecting a freed shadow is safe. */
+    ASSERT_TRUE(osh_scoring_shadow_view(&shadow) == &shadow.view);
+    ASSERT_TRUE(shadow.view.pages == NULL);
+    ASSERT_TRUE(shadow.view.npages == 0u);
+
+    live_fixture_free(&f);
+}
+
+/* ---- shadow_bytes counts the rounded-up allocation for a len==0 page -------- */
+
+static void test_shadow_bytes_zero_len_page(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+    struct osh_scoring_shadow shadow;
+
+    /* DOSEGY page with len==0: osh_scoring_accumulator_alloc() still allocates one
+     * element and osh_scoring_shadow_refresh() one double, so shadow_bytes must
+     * report 8 (Copilot #2), not the 0 a plain `len` count would give. */
+    make_page(&page, OSH_SCORING_SCORE_DOSEGY, 0u, 0);
+    memset(&rt, 0, sizeof(rt));
+    rt.pages = &page;
+    rt.npages = 1u;
+
+    ASSERT_TRUE(osh_scoring_shadow_init(&shadow, &rt) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_shadow_bytes(&shadow) == 8u);
+
+    /* The advertised size matches the real allocation: refresh grabs a private
+     * one-double buffer and redirects the page off the live data. */
+    ASSERT_TRUE(osh_scoring_shadow_refresh(&shadow) == OSH_OK);
+    ASSERT_TRUE(shadow.scratch[0] != NULL);
+    ASSERT_TRUE(shadow.pages[0].acc.data != page.acc.data);
+
+    osh_scoring_shadow_free(&shadow);
+    osh_scoring_accumulator_free(&page.acc);
+}
+
 /* ---- A postprocess error during refresh propagates; the sink is not called - */
 
 static void test_snapshot_refresh_failure(void) {
@@ -351,6 +426,8 @@ int main(void) {
     test_snapshot_selector();
     test_snapshot_errors();
     test_shadow_edge_args();
+    test_shadow_view_self_consistent();
+    test_shadow_bytes_zero_len_page();
     test_snapshot_refresh_failure();
     printf("All osh_scoring_shadow tests passed.\n");
     return 0;

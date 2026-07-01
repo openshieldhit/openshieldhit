@@ -1,0 +1,23 @@
+# Fixture for the osh_scoring_estimate_memory() zero-bin (degenerate) test.
+#
+# Geometry "G" has a Z axis with 0 bins, so geometry_nbins() == 0 and every
+# page's len is 0.  osh_scoring_accumulator_alloc() still allocates one element
+# per array (it never makes a zero-length array), and osh_scoring_shadow_refresh()
+# still grabs one double, so the estimate must round len==0 up to one too:
+#   Dose  -> 1 accumulator  => max(0,1) * 8 * 1 =  8 bytes
+#   DLET  -> 2 accumulators => max(0,1) * 8 * 2 = 16 bytes
+# Expected: accum_bytes = 24, npages = 2, largest_page_bytes = 16, geometry "G",
+#           shadow_bytes = 8 (DLET's single data array; Dose is a no-op).
+
+Geometry Mesh
+    Name G
+    X -1.0   1.0     1
+    Y -1.0   1.0     1
+    Z  0.0  10.0     0
+
+Output
+    Filename est.dat
+    Fileformat TEXT
+    Geo G
+    Quantity Dose
+    Quantity DLET

@@ -12,6 +12,17 @@ enum osh_status osh_scoring_shadow_init(struct osh_scoring_shadow *shadow, struc
     }
 
     shadow->view = *live; /* alias outputs/geometries/settings/etc. */
+    /* The view is a read-only presentation snapshot consumed only through
+     * view.pages (osh_scoring_postprocess_into + the sink).  The struct-copy
+     * above also carried master_acc (a shallow alias of the *live* per-page
+     * accumulators) and master_scratch.crossing_buf (the *live* traversal
+     * scratch), so a consumer reaching the view via
+     * osh_scoring_runtime_master_accumulators() / _master_scratch() would
+     * silently read live state, not the snapshot.  Drop those aliases so the
+     * view is self-consistent; redirect happens only on the page array below. */
+    shadow->view.master_acc = NULL;
+    shadow->view.master_scratch.crossing_buf = NULL;
+    shadow->view.master_scratch.crossing_cap = 0u;
     shadow->live = live;
     shadow->npages = live->npages;
     shadow->pages = NULL;
@@ -55,8 +66,12 @@ enum osh_status osh_scoring_shadow_refresh(struct osh_scoring_shadow *shadow) {
         for (i = 0; i < shadow->npages; ++i) {
             struct osh_scoring_page_runtime const *lp = &shadow->live->pages[i];
             if (osh_scoring_postprocess_writes_data(lp->score_kind)) {
-                size_t const n = lp->acc.len ? lp->acc.len : 1u;
-                double *buf = (double *) malloc(n * sizeof(*buf));
+                size_t n = lp->acc.len; /* never allocate a zero-length buffer */
+                double *buf;
+                if (n == 0u) {
+                    n = 1u;
+                }
+                buf = (double *) malloc(n * sizeof(*buf));
                 if (!buf) {
                     /* Roll back this attempt: free the scratch allocated so far and
                      * restore the aliased data pointers, leaving the shadow in its
@@ -92,7 +107,13 @@ uint64_t osh_scoring_shadow_bytes(struct osh_scoring_shadow const *shadow) {
     for (i = 0; i < shadow->npages; ++i) {
         struct osh_scoring_page_runtime const *lp = &shadow->live->pages[i];
         if (osh_scoring_postprocess_writes_data(lp->score_kind)) {
-            uint64_t const n = (uint64_t) lp->acc.len;
+            uint64_t n = (uint64_t) lp->acc.len;
+            /* osh_scoring_shadow_refresh() allocates one double even for a len==0
+             * page (it never makes a zero-length buffer), so count one here too;
+             * plain len would advertise 0 bytes and desync from the real scratch. */
+            if (n == 0u) {
+                n = 1u;
+            }
             uint64_t const b =
                 (n <= UINT64_MAX / (uint64_t) sizeof(double)) ? (n * (uint64_t) sizeof(double)) : UINT64_MAX;
             total = (total <= UINT64_MAX - b) ? (total + b) : UINT64_MAX;
@@ -124,4 +145,14 @@ void osh_scoring_shadow_free(struct osh_scoring_shadow *shadow) {
     shadow->npages = 0u;
     shadow->live = NULL;
     shadow->scratch_ready = 0;
+
+    /* view.pages was set to shadow->pages (just freed); leaving it dangling
+     * makes a post-free osh_scoring_shadow_view() hand back a runtime whose
+     * page array points at freed memory.  Reset the view to a benign empty
+     * snapshot so inspecting a freed shadow is well-defined, not a UAF. */
+    shadow->view.pages = NULL;
+    shadow->view.npages = 0u;
+    shadow->view.master_acc = NULL;
+    shadow->view.master_scratch.crossing_buf = NULL;
+    shadow->view.master_scratch.crossing_cap = 0u;
 }

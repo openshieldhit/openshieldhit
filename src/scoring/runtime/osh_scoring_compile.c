@@ -231,11 +231,18 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
                 }
             }
 
-            if (len == 0u) {
-                page_bytes = 0u;
-            } else {
+            {
+                /* Size this page exactly as osh_scoring_accumulator_alloc() would,
+                 * so the estimate cannot drift from the real allocation (an
+                 * invariant the header documents). */
+                uint64_t n = len;
+                /* alloc never makes a zero-length array: a degenerate (bins==0)
+                 * page still gets one element per array, so round len up to one. */
+                if (n == 0u) {
+                    n = 1u;
+                }
                 uint64_t const bytes_per_bin = (uint64_t) sizeof(double) * (uint64_t) arrays;
-                page_bytes = (len <= UINT64_MAX / bytes_per_bin) ? (len * bytes_per_bin) : UINT64_MAX;
+                page_bytes = (n <= UINT64_MAX / bytes_per_bin) ? (n * bytes_per_bin) : UINT64_MAX;
             }
 
             out->accum_bytes =
@@ -244,13 +251,29 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
 
             /* A mid-run snapshot copies only the `data` array (one, never data2)
              * of pages whose postprocess writes data — DOSEGY and the LET/Qeff
-             * averages.  Same per-page bin count as above, so the estimate cannot
-             * drift from the shadow's real allocation. */
-            if (len > 0u && osh_scoring_postprocess_writes_data(kind)) {
-                uint64_t const shadow_page =
-                    (len <= UINT64_MAX / (uint64_t) sizeof(double)) ? (len * (uint64_t) sizeof(double)) : UINT64_MAX;
-                out->shadow_bytes =
-                    (out->shadow_bytes <= UINT64_MAX - shadow_page) ? (out->shadow_bytes + shadow_page) : UINT64_MAX;
+             * averages — at the same per-page bin count used above. */
+            if (osh_scoring_postprocess_writes_data(kind)) {
+                uint64_t shadow_n = len;
+                uint64_t shadow_page;
+                /* osh_scoring_shadow_refresh() grabs one double even for a len==0
+                 * page, so round up to keep the estimate matched to it. */
+                if (shadow_n == 0u) {
+                    shadow_n = 1u;
+                }
+                /* Bytes for this page's single shadow data array.  Guard the
+                 * multiply: saturate at UINT64_MAX rather than wrap on overflow. */
+                if (shadow_n <= UINT64_MAX / (uint64_t) sizeof(double)) {
+                    shadow_page = shadow_n * (uint64_t) sizeof(double);
+                } else {
+                    shadow_page = UINT64_MAX;
+                }
+                /* Fold into the running total, again saturating instead of
+                 * wrapping if the addition would overflow. */
+                if (out->shadow_bytes <= UINT64_MAX - shadow_page) {
+                    out->shadow_bytes += shadow_page;
+                } else {
+                    out->shadow_bytes = UINT64_MAX;
+                }
             }
 
             if (page_bytes > out->largest_page_bytes) {
