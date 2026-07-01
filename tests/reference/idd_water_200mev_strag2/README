@@ -1,0 +1,17 @@
+Straggling distal-edge benchmark — 200 MeV protons in water, STRAGG 2 (Vavilov)
+===============================================================================
+
+Part of the issue #190 set (idd_water_200mev_strag0/strag1/strag2); see
+../idd_water_200mev_strag0/README for the shared phantom, beam, scoring and
+reference-setup description.
+
+This case: STRAGG 2 (Vavilov energy straggling), MSCAT off, NUCRE off.
+
+PENDING — Vavilov is not yet implemented (issue #190). Current behaviour:
+  - With no reference/ curve committed, the CTest entry SKIPS (the harness
+    checks for reference data before running openshieldhit).
+  - Once an SH12A Vavilov curve is added to reference/, this case will FAIL:
+    openshieldhit aborts STRAGG 2 with OSH_ENOTSUP ("Vavilov straggling is not
+    implemented", validate_transport_modes in src/transport/osh_transport_ion.c).
+    That failing test is the intended driver for the Vavilov implementation
+    under #190 — it should turn green when Vavilov lands.

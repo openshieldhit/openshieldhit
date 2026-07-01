@@ -43,10 +43,13 @@
 
 /*
  * Hard minimum ion kinetic energy [MeV/nucleon].
- * Particles below this threshold are killed regardless of tcut or table emin.
- * Mirrors the OSH_BEAM_TMIN floor previously imported from beam headers.
+ * Particles below this threshold are killed regardless of tcut.
+ * Set to the runtime SP/range table lower bound OSH_MATERIAL_RUNTIME_EMIN
+ * (0.025 MeV/u): the lowest energy the tables are valid for, so the cutoff
+ * floor is aligned to table validity and no energy below it is extrapolated.
+ * TCUT0 can only raise the effective cutoff above this floor, never lower it.
  */
-#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U 0.025 /* TEMP(WIP): lowered from 0.1 to probe distal LET tail (= table emin) */
+#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U 0.025
 
 /* ---- Per-step computation context --------------------------------------- */
 
