@@ -17,7 +17,7 @@ from fit_vavilov import fit_region, kbands_by_index, NKA, NBE, NT
 
 HERE = os.path.dirname(__file__)
 HDR = os.path.join(HERE, "..", "..", "src", "physics", "atomic",
-                   "osh_physics_straggling_vavilov_coeffs.h")
+                   "osh_physics_strag_vavilov_coeffs.h")
 
 BLO, BHI = 0.05, 0.99
 NKB = 3  # wide κ-bands: many nodes per band vs NKA=4 keeps the κ-fit
@@ -106,8 +106,8 @@ def main():
         f.write(" * Astronomy, Aarhus University, Aarhus, Denmark (2012).  The coefficients are\n")
         f.write(" * OpenShieldHIT-specific, regenerated from the distribution by these scripts.\n")
         f.write(f" * Worst |lambda_fit - lambda_exact| over all regions: {worst:.2e}. */\n")
-        f.write("#ifndef OSH_PHYSICS_STRAGGLING_VAVILOV_COEFFS_H\n")
-        f.write("#define OSH_PHYSICS_STRAGGLING_VAVILOV_COEFFS_H\n\n")
+        f.write("#ifndef OSH_PHYSICS_STRAG_VAVILOV_COEFFS_H\n")
+        f.write("#define OSH_PHYSICS_STRAG_VAVILOV_COEFFS_H\n\n")
         f.write(f"#define OSH_VAV_NKA {NKA}\n#define OSH_VAV_NBE {NBE}\n")
         f.write(f"#define OSH_VAV_NT {NT}\n#define OSH_VAV_NKB {NKB}\n")
         f.write(f"#define OSH_VAV_NUB {len(UBANDS)}\n#define OSH_VAV_MAXP {MAXP}\n\n")
@@ -131,7 +131,7 @@ def main():
         f.write(f"static const double osh_vav_coef[{flat.size}] = {{\n")
         for i in range(0, flat.size, 6):
             f.write("  " + ", ".join(fmt(v) for v in flat[i:i + 6]) + ",\n")
-        f.write("};\n\n#endif /* OSH_PHYSICS_STRAGGLING_VAVILOV_COEFFS_H */\n")
+        f.write("};\n\n#endif /* OSH_PHYSICS_STRAG_VAVILOV_COEFFS_H */\n")
     print("wrote", os.path.normpath(HDR))
 
 

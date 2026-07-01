@@ -1,8 +1,8 @@
-#ifndef OSH_PHYSICS_STRAGGLING_LANDAU_H
-#define OSH_PHYSICS_STRAGGLING_LANDAU_H
+#ifndef OSH_PHYSICS_STRAG_LANDAU_H
+#define OSH_PHYSICS_STRAG_LANDAU_H
 
 /**
- * @file osh_physics_straggling_landau.h
+ * @file osh_physics_strag_landau.h
  *
  * @brief Landau energy-straggling sampler (thin-absorber regime κ < 0.01).
  *
@@ -14,7 +14,7 @@
  * this is a 1-D piecewise polynomial in a transformed u, following an approach
  * by Bjarne Thomsen (Dept. of Physics and Astronomy, Aarhus University, Aarhus,
  * Denmark, 2012).  The coefficients (generated into
- * osh_physics_straggling_landau_coeffs.h by tools/vavilov_fit) are
+ * osh_physics_strag_landau_coeffs.h by tools/vavilov_fit) are
  * OpenShieldHIT-specific, regenerated from the distribution.
  *
  * The caller forms ΔE = ξ·(λ − λ̄) and adds it to the CSDA mean loss.
@@ -37,10 +37,10 @@ extern "C" {
  *               [OSH_LAN_UMIN, OSH_LAN_UMAX].
  * @returns λ (dimensionless).
  */
-double osh_physics_straggling_landau_lambda(double u);
+double osh_physics_strag_landau_lambda(double u);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* OSH_PHYSICS_STRAGGLING_LANDAU_H */
+#endif /* OSH_PHYSICS_STRAG_LANDAU_H */

@@ -1,8 +1,8 @@
-#ifndef OSH_PHYSICS_STRAGGLING_GAUSS_H
-#define OSH_PHYSICS_STRAGGLING_GAUSS_H
+#ifndef OSH_PHYSICS_STRAG_GAUSS_H
+#define OSH_PHYSICS_STRAG_GAUSS_H
 
 /**
- * @file osh_physics_straggling_gauss.h
+ * @file osh_physics_strag_gauss.h
  *
  * @brief Gaussian (Bohr) energy-straggling width — the thick-absorber limit.
  *
@@ -22,7 +22,7 @@
  *   d      = areal density of the step ρ·ds [g/cm²]
  *
  * The Gaussian approximation is accurate for thick absorbers (κ ≫ 1 in Vavilov's
- * notation).  The dispatcher (osh_physics_straggling.h) selects it for κ ≳ 10 and
+ * notation).  The dispatcher (osh_physics_strag.h) selects it for κ ≳ 10 and
  * routes the intermediate/thin regimes to the Vavilov/Landau samplers.
  *
  * @par References
@@ -48,10 +48,10 @@ extern "C" {
  *
  * @returns σ [MeV], always ≥ 0.
  */
-double osh_physics_straggling_sigma(double z_eff, double z_over_a, double thickness_gcm2);
+double osh_physics_strag_sigma(double z_eff, double z_over_a, double thickness_gcm2);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* OSH_PHYSICS_STRAGGLING_GAUSS_H */
+#endif /* OSH_PHYSICS_STRAG_GAUSS_H */

@@ -5,8 +5,8 @@
  * Astronomy, Aarhus University, Aarhus, Denmark (2012).  The coefficients are
  * OpenShieldHIT-specific, regenerated from the distribution by these scripts.
  * Worst |lambda_fit - lambda_exact| over all regions: 2.48e-01. */
-#ifndef OSH_PHYSICS_STRAGGLING_VAVILOV_COEFFS_H
-#define OSH_PHYSICS_STRAGGLING_VAVILOV_COEFFS_H
+#ifndef OSH_PHYSICS_STRAG_VAVILOV_COEFFS_H
+#define OSH_PHYSICS_STRAG_VAVILOV_COEFFS_H
 
 #define OSH_VAV_NKA 4
 #define OSH_VAV_NBE 3
@@ -202,4 +202,4 @@ static const double osh_vav_coef[1008] = {
   -4.5364520981e-03, +8.7340832554e-03, +1.5658088630e-02, -6.7483660815e-03, -2.6011178269e-02, +1.6831402093e-02,
 };
 
-#endif /* OSH_PHYSICS_STRAGGLING_VAVILOV_COEFFS_H */
+#endif /* OSH_PHYSICS_STRAG_VAVILOV_COEFFS_H */

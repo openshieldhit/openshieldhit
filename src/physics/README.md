@@ -99,7 +99,7 @@ Key references:
 See [docs/physics/multiple-scattering.md](../../docs/physics/multiple-scattering.md)
 for the full strategy, the Highland-anchored-Molière rationale, and the validation.
 
-### Energy straggling — `osh_physics_straggling`
+### Energy straggling — `osh_physics_strag`
 
 The Bethe formula gives only the *mean* energy loss.  In reality, statistical
 fluctuations in the number of collisions broaden the energy distribution —

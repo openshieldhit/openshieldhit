@@ -1,9 +1,9 @@
-#include "physics/atomic/osh_physics_straggling_vavilov.h"
+#include "physics/atomic/osh_physics_strag_vavilov.h"
 
 #include <math.h>
 #include <stddef.h>
 
-#include "physics/atomic/osh_physics_straggling_vavilov_coeffs.h"
+#include "physics/atomic/osh_physics_strag_vavilov_coeffs.h"
 
 /* Per-u-band transform x'(u); ids match emit_coeffs.py (0=-log u, 1=u, 2=-log(1-u)). */
 static double _vav_xform(double u, int kind) {
@@ -17,7 +17,7 @@ static double _vav_xform(double u, int kind) {
     }
 }
 
-double osh_physics_straggling_vavilov_lambda(double kappa, double beta2, double u) {
+double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
     int b;
     int ub;
     int k;

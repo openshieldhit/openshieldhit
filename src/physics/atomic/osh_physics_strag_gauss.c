@@ -1,4 +1,4 @@
-#include "physics/atomic/osh_physics_straggling_gauss.h"
+#include "physics/atomic/osh_physics_strag_gauss.h"
 
 #include <math.h>
 
@@ -21,7 +21,7 @@
  */
 #define BOHR_SQRT_C 0.396128 /* sqrt(K_bethe × m_e c²) = sqrt(0.156917)  [MeV·cm/√(mol/g)·√(g/cm²)] */
 
-double osh_physics_straggling_sigma(double z_eff, double z_over_a, double thickness_gcm2) {
+double osh_physics_strag_sigma(double z_eff, double z_over_a, double thickness_gcm2) {
     if (z_eff <= 0.0 || z_over_a <= 0.0 || thickness_gcm2 <= 0.0) {
         return 0.0;
     }

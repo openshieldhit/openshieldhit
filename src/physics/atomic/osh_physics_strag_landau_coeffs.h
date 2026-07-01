@@ -5,8 +5,8 @@
  * Aarhus University, Aarhus, Denmark (2012).  The coefficients are
  * OpenShieldHIT-specific, regenerated from the distribution by these scripts.
  * Worst |lambda_fit - lambda_ref|: 9.65e-03. */
-#ifndef OSH_PHYSICS_STRAGGLING_LANDAU_COEFFS_H
-#define OSH_PHYSICS_STRAGGLING_LANDAU_COEFFS_H
+#ifndef OSH_PHYSICS_STRAG_LANDAU_COEFFS_H
+#define OSH_PHYSICS_STRAG_LANDAU_COEFFS_H
 
 #define OSH_LAN_NB 4
 #define OSH_LAN_MAXP 7
@@ -26,4 +26,4 @@ static double const osh_lan_coef[28] = {
     +1.6662798891e+01, +4.8487045420e+00, +1.1842510867e+00, +2.1804218192e-01,
 };
 
-#endif /* OSH_PHYSICS_STRAGGLING_LANDAU_COEFFS_H */
+#endif /* OSH_PHYSICS_STRAG_LANDAU_COEFFS_H */

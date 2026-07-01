@@ -3,10 +3,10 @@ add_library(osh_physics
     osh_physics_scat.c
     osh_physics_scat_highland.c
     osh_physics_scat_moliere.c
-    osh_physics_straggling.c
-    osh_physics_straggling_gauss.c
-    osh_physics_straggling_vavilov.c
-    osh_physics_straggling_landau.c
+    osh_physics_strag.c
+    osh_physics_strag_gauss.c
+    osh_physics_strag_vavilov.c
+    osh_physics_strag_landau.c
 )
 
 target_include_directories(osh_physics

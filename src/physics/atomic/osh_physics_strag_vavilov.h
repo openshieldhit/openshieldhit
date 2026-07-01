@@ -1,8 +1,8 @@
-#ifndef OSH_PHYSICS_STRAGGLING_VAVILOV_H
-#define OSH_PHYSICS_STRAGGLING_VAVILOV_H
+#ifndef OSH_PHYSICS_STRAG_VAVILOV_H
+#define OSH_PHYSICS_STRAG_VAVILOV_H
 
 /**
- * @file osh_physics_straggling_vavilov.h
+ * @file osh_physics_strag_vavilov.h
  *
  * @brief Vavilov energy-straggling sampler (intermediate regime 0.01 ≤ κ < 10).
  *
@@ -14,11 +14,11 @@
  * branches in (u, κ); per region a polynomial in a transformed u (the pole-free
  * Q=1 special case of the rational form) whose coefficients are 2-D Chebyshev
  * sums in (ln κ, β²).  The coefficients (generated into
- * osh_physics_straggling_vavilov_coeffs.h by tools/vavilov_fit) are
+ * osh_physics_strag_vavilov_coeffs.h by tools/vavilov_fit) are
  * OpenShieldHIT-specific, regenerated from the distribution.
  *
  * The caller forms the energy-loss fluctuation ΔE = ξ·(λ − λ̄) and adds it to the
- * CSDA mean loss (see osh_physics_straggling.h for ξ and λ̄).
+ * CSDA mean loss (see osh_physics_strag.h for ξ and λ̄).
  *
  * Pure function of (κ, β², u): no RNG, no state — the RNG draw stays in the
  * caller so a batched SoA form can be added without changing call sites.
@@ -38,10 +38,10 @@ extern "C" {
  *                   [OSH_VAV_UMIN, 0.995].
  * @returns λ (dimensionless).
  */
-double osh_physics_straggling_vavilov_lambda(double kappa, double beta2, double u);
+double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* OSH_PHYSICS_STRAGGLING_VAVILOV_H */
+#endif /* OSH_PHYSICS_STRAG_VAVILOV_H */

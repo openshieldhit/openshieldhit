@@ -1,9 +1,9 @@
-#include "physics/atomic/osh_physics_straggling_landau.h"
+#include "physics/atomic/osh_physics_strag_landau.h"
 
 #include <math.h>
 #include <stddef.h>
 
-#include "physics/atomic/osh_physics_straggling_landau_coeffs.h"
+#include "physics/atomic/osh_physics_strag_landau_coeffs.h"
 
 /* Per-band transform x'(u); ids match emit_landau.py (0=-log u, 1=u, 2=-log(1-u)). */
 static double _lan_xform(double u, int kind) {
@@ -17,7 +17,7 @@ static double _lan_xform(double u, int kind) {
     }
 }
 
-double osh_physics_straggling_landau_lambda(double u) {
+double osh_physics_strag_landau_lambda(double u) {
     int ub;
     int k;
     double xn;

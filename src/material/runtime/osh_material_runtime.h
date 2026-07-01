@@ -56,7 +56,7 @@ struct osh_material_runtime {
      * z_mean      — effective atomic number (mass-fraction-weighted sum of Z_i).
      *               Used by the Hubert effective-charge formula in osh_physics_bethe_z_eff().
      * z_over_a    — effective Z/A [mol/g] (sum_i w_i * Z_i / A_i).
-     *               Used by the Bohr straggling variance in osh_physics_straggling_sigma().
+     *               Used by the Bohr straggling variance in osh_physics_strag_sigma().
      * rad_length  — radiation length X₀ [g/cm²] (PDG approximate formula, mixture rule).
      *               Used by the Highland MCS formula in osh_physics_highland_theta0().
      *               Zero for vacuum and blackhole (skips scattering in transport).

@@ -19,7 +19,7 @@ from scipy.stats import landau
 
 HERE = os.path.dirname(__file__)
 HDR = os.path.join(HERE, "..", "..", "src", "physics", "atomic",
-                   "osh_physics_straggling_landau_coeffs.h")
+                   "osh_physics_strag_landau_coeffs.h")
 FIX = os.path.join(HERE, "..", "..", "tests", "fixtures", "vavilov", "landau_ppf.csv")
 
 A = np.pi / 2.0
@@ -80,8 +80,8 @@ def main():
         f.write(" * Aarhus University, Aarhus, Denmark (2012).  The coefficients are\n")
         f.write(" * OpenShieldHIT-specific, regenerated from the distribution by these scripts.\n")
         f.write(f" * Worst |lambda_fit - lambda_ref|: {worst:.2e}. */\n")
-        f.write("#ifndef OSH_PHYSICS_STRAGGLING_LANDAU_COEFFS_H\n")
-        f.write("#define OSH_PHYSICS_STRAGGLING_LANDAU_COEFFS_H\n\n")
+        f.write("#ifndef OSH_PHYSICS_STRAG_LANDAU_COEFFS_H\n")
+        f.write("#define OSH_PHYSICS_STRAG_LANDAU_COEFFS_H\n\n")
         f.write(f"#define OSH_LAN_NB {len(BANDS)}\n#define OSH_LAN_MAXP {MAXP}\n")
         f.write(f"#define OSH_LAN_UMIN {UMIN:.10e}\n#define OSH_LAN_UMAX {UMAX:.6f}\n\n")
         f.write("static const double osh_lan_uhi[] = {%s};\n" %
@@ -96,7 +96,7 @@ def main():
         f.write(f"static const double osh_lan_coef[{flat.size}] = {{\n")
         for i in range(0, flat.size, 6):
             f.write("  " + ", ".join(fmt(v) for v in flat[i:i + 6]) + ",\n")
-        f.write("};\n\n#endif /* OSH_PHYSICS_STRAGGLING_LANDAU_COEFFS_H */\n")
+        f.write("};\n\n#endif /* OSH_PHYSICS_STRAG_LANDAU_COEFFS_H */\n")
     print("wrote", os.path.normpath(HDR))
 
     with open(FIX, "w") as f:

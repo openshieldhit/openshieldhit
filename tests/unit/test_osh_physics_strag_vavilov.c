@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "physics/atomic/osh_physics_straggling_vavilov.h"
+#include "physics/atomic/osh_physics_strag_vavilov.h"
 #include "test_assert.h"
 
 #ifndef OSH_TEST_FIXTURES_DIR
@@ -42,7 +42,7 @@ static void test_vavilov_matches_fixture(void) {
         if (sscanf(line, "%lf %lf %lf %lf", &kappa, &beta2, &u, &lam_ref) != 4) {
             continue;
         }
-        double lam = osh_physics_straggling_vavilov_lambda(kappa, beta2, u);
+        double lam = osh_physics_strag_vavilov_lambda(kappa, beta2, u);
         double dev = fabs(lam - lam_ref);
         if (dev > worst) {
             worst = dev;
@@ -67,7 +67,7 @@ static void test_vavilov_monotone_in_u(void) {
             double prev = -1e30;
             double u;
             for (u = 0.005; u <= 0.99; u += 0.005) {
-                double lam = osh_physics_straggling_vavilov_lambda(kappas[ki], betas[bi], u);
+                double lam = osh_physics_strag_vavilov_lambda(kappas[ki], betas[bi], u);
                 ASSERT_TRUE(lam > prev);
                 prev = lam;
             }
@@ -93,6 +93,6 @@ int main(int argc, char *argv[]) {
     }
     test_vavilov_matches_fixture();
     test_vavilov_monotone_in_u();
-    printf("All osh_physics_straggling_vavilov tests passed.\n");
+    printf("All osh_physics_strag_vavilov tests passed.\n");
     return 0;
 }
