@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Overlay OpenSHIELDHIT vs SHIELD-HIT12A for the issue #190 straggling cases.
+"""Overlay OpenShieldHIT vs SHIELD-HIT12A for the issue #190 straggling cases.
 
 The cases tests/reference/idd_water_200mev_strag{0,1,2} (200 MeV protons in water,
 MSCAT off, NUCRE off; STRAGG 0/1/2) isolate the energy-straggling distal-edge
@@ -12,13 +12,12 @@ comparing, per case, on the single 1 cm^2 central column (idd.dat):
   * track-averaged LET (TLET) vs depth.
 
 A final summary page overlays the dose distal edge and the DLET tail of all three
-STRAGG modes for both codes.
-
-NOTE: STRAGG 2 (Vavilov) is not yet implemented in OpenSHIELDHIT (issue #190);
-that run is reported as unavailable until it lands.
+STRAGG modes for both codes.  All three modes (STRAGG 0/1/2) now run in
+OpenShieldHIT; STRAGG 2 dispatches Gaussian/Vavilov/Landau by the straggling
+parameter kappa.
 
 Column layouts handled (idd.dat = Dose, Fluence, DLET, TLET in detect.dat order):
-  OpenSHIELDHIT mesh : X Y Z DOSE FLUENCE DLET TLET   (Z=col2, quantities col3..6)
+  OpenShieldHIT mesh : X Y Z DOSE FLUENCE DLET TLET   (Z=col2, quantities col3..6)
   SHIELD-HIT12A 1D   : Z DOSE FLUENCE DLET TLET        (Z=col0, quantities col1..4)
 """
 
@@ -55,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--nstat", type=int, default=20000, help="primaries per run (default 20000)")
     p.add_argument("--repo-root", type=Path, default=root, help="openshieldhit repo root")
-    p.add_argument("--osh", type=Path, default=root / "build" / "bin" / "openshieldhit", help="OpenSHIELDHIT binary")
+    p.add_argument("--osh", type=Path, default=root / "build" / "bin" / "openshieldhit", help="OpenShieldHIT binary")
     p.add_argument("--sh12a", default="shieldhit", help="SHIELD-HIT12A binary (in PATH or absolute)")
     p.add_argument("--workdir", type=Path, default=None, help="working dir for runs (default: a temp dir)")
     p.add_argument("--out", type=Path, default=None, help="output PDF (default: <workdir>/straggling_report.pdf)")
@@ -120,7 +119,7 @@ def _run(cmd, cwd=None):
     if r.returncode == 0:
         return True, "", elapsed_s
     errs = [ln.strip() for ln in r.stderr.splitlines() if ln.strip()]
-    # Prefer the most informative line (e.g. "Vavilov ... not implemented").
+    # Prefer the most informative line (e.g. a "... not implemented" rejection).
     for ln in errs:
         if "not implemented" in ln.lower():
             return False, ln.split("]", 1)[-1].strip(), elapsed_s
@@ -190,12 +189,12 @@ def main() -> int:
             osh_out, osh_err, osh_s = args.workdir / "osh_out" / case, "", None
             sh_out, sh_err, sh_s = args.workdir / "sh12a_deck" / case, "", None
         else:
-            print(f"[{case}] running OpenSHIELDHIT (nstat={args.nstat}) ...", flush=True)
+            print(f"[{case}] running OpenShieldHIT (nstat={args.nstat}) ...", flush=True)
             osh_out, osh_err, osh_s = run_osh(args, case)
             if osh_err:
-                print(f"[{case}] OpenSHIELDHIT unavailable after {format_elapsed(osh_s)}: {osh_err}", flush=True)
+                print(f"[{case}] OpenShieldHIT unavailable after {format_elapsed(osh_s)}: {osh_err}", flush=True)
             else:
-                print(f"[{case}] OpenSHIELDHIT done in {format_elapsed(osh_s)}", flush=True)
+                print(f"[{case}] OpenShieldHIT done in {format_elapsed(osh_s)}", flush=True)
             print(f"[{case}] running SHIELD-HIT12A (nstat={args.nstat}) ...", flush=True)
             sh_out, sh_err, sh_s = run_sh12a(args, case)
             if sh_err:
@@ -219,17 +218,17 @@ def main() -> int:
             fig, ax = plt.subplots(2, 2, figsize=(11, 8))
             note = ""
             if osh is None:
-                note = f"\n[OpenSHIELDHIT unavailable: {d['osh_err']}]"
+                note = f"\n[OpenShieldHIT unavailable: {d['osh_err']}]"
             elif sh is None:
                 note = f"\n[SHIELD-HIT12A unavailable: {d['sh_err']}]"
-            timing = (f"\nTiming: OpenSHIELDHIT {format_elapsed(d['osh_s'])}, "
+            timing = (f"\nTiming: OpenShieldHIT {format_elapsed(d['osh_s'])}, "
                       f"SHIELD-HIT12A {format_elapsed(d['sh_s'])}")
             fig.suptitle(f"200 MeV p -> water, {MODEL[case]}   (MSCAT off, NUCRE off, "
-                         f"nstat={args.nstat})\nOpenSHIELDHIT {version} vs SHIELD-HIT12A{note}{timing}",
+                         f"nstat={args.nstat})\nOpenShieldHIT {version} vs SHIELD-HIT12A{note}{timing}",
                          fontsize=11)
 
             def overlay(a, quantity):
-                for c, style, name in ((osh, "-", "OpenSHIELDHIT"), (sh, "--", "SHIELD-HIT12A")):
+                for c, style, name in ((osh, "-", "OpenShieldHIT"), (sh, "--", "SHIELD-HIT12A")):
                     if c is None:
                         continue
                     color = "C0" if name.startswith("Open") else "C1"
@@ -290,7 +289,7 @@ def main() -> int:
             handles, _ = a.get_legend_handles_labels()
             if handles:
                 a.legend(fontsize=8)
-        fig.suptitle(f"OpenSHIELDHIT {version} (solid) vs SHIELD-HIT12A (dashed)", fontsize=11)
+        fig.suptitle(f"OpenShieldHIT {version} (solid) vs SHIELD-HIT12A (dashed)", fontsize=11)
         timing_lines = ["Wall-clock timings:"]
         for case in args.cases:
             d = data[case]
@@ -303,7 +302,7 @@ def main() -> int:
 
     print(f"\nWrote {args.out}")
     print(f"\nTiming summary (wall clock, nstat={args.nstat}; speedup = SH12A / OSH):")
-    print(f"{'case':<8}{'OpenSHIELDHIT':>16}{'SHIELD-HIT12A':>16}{'speedup':>12}")
+    print(f"{'case':<8}{'OpenShieldHIT':>16}{'SHIELD-HIT12A':>16}{'speedup':>12}")
     for case in args.cases:
         d = data[case]
         print(f"{case:<8}{format_elapsed(d['osh_s']):>16}{format_elapsed(d['sh_s']):>16}"

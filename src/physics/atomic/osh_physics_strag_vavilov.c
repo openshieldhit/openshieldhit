@@ -18,21 +18,21 @@ static double _vav_xform(double u, int kind) {
 }
 
 double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
-    int b;
-    int ub;
-    int k;
-    int i;
-    int j;
-    double kn; /* normalised ln κ in [-1,1] */
-    double bn; /* normalised β²           */
-    double xn; /* normalised transformed u */
-    double lam;
-    double tk[OSH_VAV_NKA];
-    double tb[OSH_VAV_NBE];
-    double t[OSH_VAV_NT];
-    double const *creg;
-    double const *ck;
-    double ak;
+    int b;                  /* selected κ-band index (0..NKB-1)                    */
+    int ub;                 /* selected u-band index (0..NUB-1)                    */
+    int k;                  /* polynomial power in the Horner loop                 */
+    int i;                  /* Chebyshev-product / coefficient index (0..NT-1)     */
+    int j;                  /* β Chebyshev order index (0..NBE-1)                  */
+    double kn;              /* κ mapped to [-1,1]: normalised ln κ within the band */
+    double bn;              /* β² mapped to [-1,1] over [BLO, BHI]                 */
+    double xn;              /* transformed u mapped to ~[-1,1] within the u-band   */
+    double lam;             /* result: reduced Vavilov variable λ                  */
+    double tk[OSH_VAV_NKA]; /* Chebyshev polynomials T_i(kn), i = 0..NKA-1         */
+    double tb[OSH_VAV_NBE]; /* Chebyshev polynomials T_j(bn), j = 0..NBE-1         */
+    double t[OSH_VAV_NT];   /* Chebyshev product basis, t[i*NBE + j] = T_i·T_j     */
+    double const *creg;     /* base of this (κ-band, u-band) region's coefficients */
+    double const *ck;       /* coefficient row for the current polynomial power k  */
+    double ak;              /* a_k(κ,β²) = Σ_i t[i]·c[k][i] — the k-th u-coefficient */
 
     if (u < OSH_VAV_UMIN) {
         u = OSH_VAV_UMIN;

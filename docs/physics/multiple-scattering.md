@@ -1,7 +1,7 @@
 # Multiple Coulomb scattering reference
 
 This page documents the multiple Coulomb scattering (MCS) model in
-OpenSHIELDHIT: how a charged ion's direction is changed by the many small-angle
+OpenShieldHIT: how a charged ion's direction is changed by the many small-angle
 Coulomb deflections it undergoes while traversing matter.
 
 The implementation lives in `src/physics/atomic/`:
@@ -98,7 +98,7 @@ fixes the magnitude; Molière supplies only the shape (sharp core + heavy tail).
 The payoff is internal consistency: mode 1 and mode 2 have the **same width**,
 differing only in that mode 2 has a sharper core and a Rutherford tail. Both
 match experiment. (For comparison, SH12A's mode-1 Gaussian is noticeably
-narrower than its own mode-2 Molière; OpenSHIELDHIT's two modes agree.)
+narrower than its own mode-2 Molière; OpenShieldHIT's two modes agree.)
 
 ## Performance: precomputed inverse-CDF
 
@@ -147,7 +147,7 @@ deflection — not the offset.
 This is a **clean-room** implementation built solely from the published
 references below. No source code or tabulated numbers were taken from Geant3's
 `gmolie.F`, SHIELD-HIT12A, or third-party reimplementations (Geant 3.21 is
-GPLv3; OpenSHIELDHIT is MIT). The reduced-angle functions are computed from
+GPLv3; OpenShieldHIT is MIT). The reduced-angle functions are computed from
 their integral definitions, and the sampling/interpolation routines are our own.
 
 ## Validation
@@ -157,8 +157,8 @@ RMS radius near the Bragg peak:
 
 | | lateral RMS |
 |---|---|
-| OpenSHIELDHIT Gaussian (mode 1) | 0.531 cm |
-| OpenSHIELDHIT Molière (mode 2) | 0.528 cm |
+| OpenShieldHIT Gaussian (mode 1) | 0.531 cm |
+| OpenShieldHIT Molière (mode 2) | 0.528 cm |
 | SHIELD-HIT12A Molière (mode 2) | 0.533 cm |
 | Gottschalk rule of thumb (≈2 %·range) | ~0.52 cm |
 

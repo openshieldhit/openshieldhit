@@ -714,19 +714,19 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                                            size_t slot,
                                            struct osh_material_runtime const *material_rt,
                                            struct osh_rng *rng) {
-    double residual_range;
-    double e_mid;
-    double z_eff;
-    double sigma_strag;
-    double v_in[3];
-    double delta; /* energy fluctuation added to the exit energy [MeV] */
-    double beta2;
-    double gamma;
-    double xi;
-    double e_max;
-    double kappa;
-    double lam;
-    double u;
+    double residual_range; /* CSDA range left after this step's areal density [g/cm²] */
+    double e_mid;          /* total kinetic energy at the step mid-point [MeV]        */
+    double z_eff;          /* effective projectile charge at e_mid                    */
+    double sigma_strag;    /* Bohr Gaussian straggling width σ [MeV]                  */
+    double v_in[3];        /* incident direction (for the boundary end-of-step MCS)   */
+    double delta;          /* energy fluctuation added to the exit energy [MeV]       */
+    double beta2;          /* projectile β² at the step mid-point                     */
+    double gamma;          /* Lorentz factor γ at the step mid-point                  */
+    double xi;             /* Vavilov/Landau width parameter ξ [MeV]                  */
+    double e_max;          /* maximum energy transfer to a target electron E_max [MeV] */
+    double kappa;          /* Vavilov parameter κ = ξ / E_max (regime selector)       */
+    double lam;            /* sampled reduced Vavilov/Landau variable λ               */
+    double u;              /* uniform deviate feeding the inverse-CDF sampler         */
 
     ctx->ds_gcm2 = ctx->rho * ctx->step_len;
 

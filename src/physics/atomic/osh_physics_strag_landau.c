@@ -18,11 +18,11 @@ static double _lan_xform(double u, int kind) {
 }
 
 double osh_physics_strag_landau_lambda(double u) {
-    int ub;
-    int k;
-    double xn;
-    double lam;
-    double const *c;
+    int ub;          /* selected u-band index (0..OSH_LAN_NB-1)           */
+    int k;           /* polynomial power in the Horner loop               */
+    double xn;       /* transformed u mapped to ~[-1,1] within the u-band */
+    double lam;      /* result: reduced (universal) Landau variable λ     */
+    double const *c; /* coefficient row for the selected u-band           */
 
     if (u < OSH_LAN_UMIN) {
         u = OSH_LAN_UMIN;

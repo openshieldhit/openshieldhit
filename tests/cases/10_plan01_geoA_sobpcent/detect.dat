@@ -1,4 +1,4 @@
-# OpenSHIELDHIT scorer layout aligned with the SH12A result set.
+# OpenShieldHIT scorer layout aligned with the SH12A result set.
 # Outputs are written as multi-page BDO files and can be postprocessed with
 # pymchelper/convertmc into the SH12A-style page-split ASCII files.
 

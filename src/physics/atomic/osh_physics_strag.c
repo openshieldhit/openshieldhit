@@ -13,9 +13,9 @@ double osh_physics_strag_xi(double z_eff, double z_over_a, double thickness_gcm2
 }
 
 double osh_physics_strag_emax(double t_kin_mev, double mass_mev) {
-    double gamma;
-    double beta2;
-    double ratio; /* mₑ/M */
+    double gamma; /* Lorentz factor γ = 1 + T/M                    */
+    double beta2; /* projectile β² = 1 − 1/γ²                      */
+    double ratio; /* electron-to-projectile mass ratio mₑ/M       */
 
     if (t_kin_mev <= 0.0 || mass_mev <= 0.0) {
         return 0.0;
