@@ -25,8 +25,8 @@
 #define OSH_ALPHA_FS (1.0 / 137.035999084) /* fine-structure constant α */
 
 /* Bethe / energy-loss-straggling constants */
-#define OSH_K_BETHE 0.307075                   /* 4π N_A r_e² mₑc²  [MeV·cm²/mol] */
-#define OSH_EULER_GAMMA 0.57721566490153286    /* Euler–Mascheroni constant γ */
+#define OSH_K_BETHE 0.307075                /* 4π N_A r_e² mₑc²  [MeV·cm²/mol] */
+#define OSH_EULER_GAMMA 0.57721566490153286 /* Euler–Mascheroni constant γ */
 
 #define OSH_M_PI 3.14159265358979323846       /* pi */
 #define OSH_M_1_PI 0.31830988618379067154     /* 1/pi */
