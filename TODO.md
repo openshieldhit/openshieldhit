@@ -38,26 +38,14 @@
 ## Transport
 
 - [ ] Gaussian MCS mode
-- [ ] Vavilov + Landau energy straggling (STRAGG 2) — branch
-      `190-physics-add-vavilov-and-landau-straggling`
-      (plan: `~/.claude/plans/ethereal-enchanting-petal.md`)
-  - [ ] `const.h`: add electron mass, `OSH_K_BETHE`, `OSH_EULER_GAMMA`
-  - [ ] Split straggling into dispatcher + per-model files, mirroring `scat`
-        (`osh_physics_straggling{,_gauss,_vavilov,_landau}.{c,h}`); move Bohr
-        sigma to `_gauss`; byte-identical for STRAGG 0/1
-  - [ ] Shared kinematics helpers (ξ, E_max, κ = ξ/E_max, λ̄) in dispatcher
-  - [ ] Offline `tools/vavilov_fit/`: exact Vavilov (1957) + Landau PDF/CDF
-        integrator → reference fixtures `tests/fixtures/vavilov/`
-  - [ ] Offline min-max rational + Chebyshev-in-(κ,β) fit → committed
-        `static const` coeff headers (our own numbers; init-independent)
-  - [ ] Runtime Vavilov + Landau inverse-CDF evaluators (vavinv/laninv
-        architecture, our coefficients); SoA-friendly pure `λ = f(κ,β²,u)`
-  - [ ] Wire κ-dispatch into `ion_step_energy_and_straggling`; drop the
-        STRAGG 2 rejection at `osh_transport_ion.c:561`
-  - [ ] Clean-room / MIT provenance: no GEANT3 (GPL) or Thomsen coefficients
-        shipped; cite Vavilov/Landau/Kölbig-Schorr/Rotondi-Montagna
-  - [ ] Validate vs fixtures + `strag2` benchmark vs SH12A; render
-        `plot_straggling.py` strag2 overlay
+- [x] Vavilov + Landau energy straggling (STRAGG 2) — branch
+      `190-physics-add-vavilov-and-landau-straggling`.  DONE: clean-room fit to
+      the exact Vavilov (1957) distribution + universal Landau; pole-free
+      polynomial+Chebyshev inverse-CDF evaluators; κ-dispatch (Gaussian ≥10 /
+      Vavilov / Landau <0.01) wired into ion step.  Validated vs SH12A: distal
+      80–20% fluence falloff width 0.4522 vs 0.4533 cm (0.2%); DLET at matched
+      fluence within ~2%.  STRAGG 0/1 byte-identical.  No GEANT3/Thomsen numbers.
+      Remaining nicety: render the `plot_straggling.py` strag2 overlay.
 - [ ] Urban energy-loss fluctuation (STRAGG 3, reserved) — needs δ-ray cut +
       restricted stopping power; tied to future delta-electron transport
 - [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
