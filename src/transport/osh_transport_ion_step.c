@@ -773,7 +773,7 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
             } else {
                 u = osh_rng_double(rng);
                 lam = (kappa >= OSH_STRAG_KAPPA_LANDAU) ? osh_physics_strag_vavilov_lambda(kappa, beta2, u)
-                                                             : osh_physics_strag_landau_lambda(u);
+                                                        : osh_physics_strag_landau_lambda(u);
                 /* Mean-preserving loss fluctuation; more loss lowers the exit energy. */
                 delta = -xi * (lam - osh_physics_strag_lambda_bar(kappa, beta2));
             }

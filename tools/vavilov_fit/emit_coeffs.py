@@ -116,7 +116,7 @@ def main():
         f.write(f"#define OSH_VAV_UMIN {ulo:.10e}\n#define OSH_VAV_UMAX 0.995\n\n")
 
         def arr(name, vals, typ="double", fmtf=fmt):
-            f.write(f"static const {typ} {name}[] = {{{', '.join(fmtf(v) for v in vals)}}};\n")
+            f.write(f"static {typ} const {name}[] = {{{', '.join(fmtf(v) for v in vals)}}};\n")
 
         arr("osh_vav_kdisp_hi", kdisp_hi)
         arr("osh_vav_klo", klo)
@@ -128,9 +128,9 @@ def main():
         arr("osh_vav_uhalf", uhalf)
         f.write("\n/* coef[kband][uband][power][cheb_term], flat row-major */\n")
         flat = coef.reshape(-1)
-        f.write(f"static const double osh_vav_coef[{flat.size}] = {{\n")
+        f.write(f"static double const osh_vav_coef[{flat.size}] = {{\n")
         for i in range(0, flat.size, 6):
-            f.write("  " + ", ".join(fmt(v) for v in flat[i:i + 6]) + ",\n")
+            f.write("    " + ", ".join(fmt(v) for v in flat[i:i + 6]) + ",\n")
         f.write("};\n\n#endif /* OSH_PHYSICS_STRAG_VAVILOV_COEFFS_H */\n")
     print("wrote", os.path.normpath(HDR))
 

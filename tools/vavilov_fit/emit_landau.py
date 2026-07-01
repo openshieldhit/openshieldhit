@@ -84,18 +84,18 @@ def main():
         f.write("#define OSH_PHYSICS_STRAG_LANDAU_COEFFS_H\n\n")
         f.write(f"#define OSH_LAN_NB {len(BANDS)}\n#define OSH_LAN_MAXP {MAXP}\n")
         f.write(f"#define OSH_LAN_UMIN {UMIN:.10e}\n#define OSH_LAN_UMAX {UMAX:.6f}\n\n")
-        f.write("static const double osh_lan_uhi[] = {%s};\n" %
+        f.write("static double const osh_lan_uhi[] = {%s};\n" %
                 ", ".join(fmt(h) for h, _, _ in BANDS))
-        f.write("static const int osh_lan_kind[] = {%s};\n" %
+        f.write("static int const osh_lan_kind[] = {%s};\n" %
                 ", ".join(str(KIND[k]) for _, k, _ in BANDS))
-        f.write("static const int osh_lan_deg[] = {%s};\n" %
+        f.write("static int const osh_lan_deg[] = {%s};\n" %
                 ", ".join(str(d) for _, _, d in BANDS))
-        f.write("static const double osh_lan_xmid[] = {%s};\n" % ", ".join(fmt(v) for v in xmid))
-        f.write("static const double osh_lan_xhalf[] = {%s};\n" % ", ".join(fmt(v) for v in xhalf))
+        f.write("static double const osh_lan_xmid[] = {%s};\n" % ", ".join(fmt(v) for v in xmid))
+        f.write("static double const osh_lan_xhalf[] = {%s};\n" % ", ".join(fmt(v) for v in xhalf))
         flat = coefs.reshape(-1)
-        f.write(f"static const double osh_lan_coef[{flat.size}] = {{\n")
+        f.write(f"static double const osh_lan_coef[{flat.size}] = {{\n")
         for i in range(0, flat.size, 6):
-            f.write("  " + ", ".join(fmt(v) for v in flat[i:i + 6]) + ",\n")
+            f.write("    " + ", ".join(fmt(v) for v in flat[i:i + 6]) + ",\n")
         f.write("};\n\n#endif /* OSH_PHYSICS_STRAG_LANDAU_COEFFS_H */\n")
     print("wrote", os.path.normpath(HDR))
 
