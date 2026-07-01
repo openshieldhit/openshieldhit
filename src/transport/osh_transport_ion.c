@@ -560,6 +560,9 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
     case OSH_TRANSPORT_STRAGGLING_VAVILOV:
         OSH_DIAG_ERRORF(transport_ctx->diag, "%s", "transport: Vavilov straggling is not implemented");
         return OSH_ENOTSUP;
+    case OSH_TRANSPORT_STRAGGLING_URBAN:
+        OSH_DIAG_ERRORF(transport_ctx->diag, "%s", "transport: Urban straggling (STRAGG 3) is not yet implemented");
+        return OSH_ENOTSUP;
     default:
         OSH_DIAG_ERRORF(transport_ctx->diag,
                         "transport: unsupported straggling mode value %d",

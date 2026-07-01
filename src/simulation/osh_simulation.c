@@ -315,6 +315,9 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     case OSH_BEAM_STRAGG_VAVILOV:
         sim->transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_VAVILOV;
         break;
+    case OSH_BEAM_STRAGG_URBAN:
+        sim->transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_URBAN;
+        break;
     default:
         sim->transport_ctx.params.straggling_mode = OSH_TRANSPORT_STRAGGLING_OFF;
         break;
