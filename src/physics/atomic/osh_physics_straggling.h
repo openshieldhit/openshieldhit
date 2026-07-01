@@ -32,6 +32,12 @@
 extern "C" {
 #endif
 
+/* Regime boundaries in the Vavilov parameter κ = ξ/E_max (STRAGG 2 auto-dispatch):
+ * κ ≥ GAUSS → thick absorber, Bohr Gaussian; κ < LANDAU → thin absorber, Landau;
+ * in between, Vavilov.  Matches the GEANT3 GFLUCT thresholds. */
+#define OSH_STRAGGLING_KAPPA_GAUSS 10.0
+#define OSH_STRAGGLING_KAPPA_LANDAU 0.01
+
 /** Energy-loss straggling model; integer values mirror enum
  *  osh_transport_straggling_mode. */
 enum osh_straggling_model {
