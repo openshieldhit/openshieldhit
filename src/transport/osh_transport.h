@@ -26,8 +26,9 @@ struct osh_scoring_runtime;
 
 enum osh_transport_mcs_mode {
     OSH_TRANSPORT_MCS_OFF = 0,
-    OSH_TRANSPORT_MCS_GAUSSIAN = 1,
-    OSH_TRANSPORT_MCS_MOLIERE = 2
+    OSH_TRANSPORT_MCS_GAUSSIAN = 1, /**< Highland Gaussian core (no tail). */
+    OSH_TRANSPORT_MCS_MOLIERE = 2,  /**< Full Bethe-Molière (core + Rutherford tail). */
+    OSH_TRANSPORT_MCS_WENTZEL = 3   /**< Reserved: Geant4 Wentzel-VI/Urban screened model (not implemented). */
 };
 
 enum osh_transport_straggling_mode {

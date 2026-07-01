@@ -768,6 +768,8 @@ static int _parse_maxtime(PARSE_HANDLER_ARGS) {
  *   0 — off
  *   1 — Gaussian (Rossi-Greisen, fast)
  *   2 — Molière  (more accurate, standard choice for clinical use)
+ *   3 — Wentzel-VI/Urban — reserved: accepted here but not yet implemented;
+ *       transport setup rejects it with OSH_ENOTSUP (cf. Vavilov straggling).
  *
  * @param[in,out] beam  Writes beam->scatter.
  * @param[in]     oshf  Used for error diagnostics.
@@ -782,7 +784,7 @@ static int _parse_mscat(PARSE_HANDLER_ARGS) {
         return OSH_EPARSE;
     }
     beam->scatter = (char) _i;
-    if (beam->scatter > OSH_BEAM_MSCAT_MOLIERE || beam->scatter < OSH_BEAM_MSCAT_OFF) {
+    if (beam->scatter > OSH_BEAM_MSCAT_WENTZEL || beam->scatter < OSH_BEAM_MSCAT_OFF) {
         OSH_DIAG_ERRORF(
             state->diag, "in %s line %i: invalid MSCAT mode '%i'", oshf->filename, oshf->lineno, beam->scatter);
         return OSH_EPARSE;

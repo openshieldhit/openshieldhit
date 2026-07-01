@@ -58,14 +58,18 @@ struct osh_material_runtime {
      * z_over_a    — effective Z/A [mol/g] (sum_i w_i * Z_i / A_i).
      *               Used by the Bohr straggling variance in osh_physics_straggling_sigma().
      * rad_length  — radiation length X₀ [g/cm²] (PDG approximate formula, mixture rule).
-     *               Used by the Highland MCS formula in osh_physics_moliere_theta0().
+     *               Used by the Highland MCS formula in osh_physics_highland_theta0().
      *               Zero for vacuum and blackhole (skips scattering in transport).
      */
     float *rho;        /* [nmaterials] density [g/cm^3]. */
     float *z_mean;     /* [nmaterials] effective atomic number. */
     float *z_over_a;   /* [nmaterials] Z/A [mol/g]. */
     float *rad_length; /* [nmaterials] radiation length X0 [g/cm^2]. */
-    float *hu_rho_lut; /* [2601] HU→density [g/cm³] indexed by hu+1000; NULL for non-CT runs. */
+    /* Bethe-Molière (mode 2) per-medium constants; see compute_moliere_constants(). */
+    float *moliere_chic2;    /* [nmaterials] χ_c² coefficient 0.157·Σ w_i Z_i(Z_i+1)/A_i [MeV² cm²/g];
+                                χ_c² = moliere_chic2 · z_eff² · d / (pβ)². Zero for vacuum/blackhole. */
+    float *moliere_screen_z; /* [nmaterials] effective screening Z for the Molière screening angle χ_a. */
+    float *hu_rho_lut;       /* [2601] HU→density [g/cm³] indexed by hu+1000; NULL for non-CT runs. */
 
     size_t nmaterials;
     size_t nprojectiles;

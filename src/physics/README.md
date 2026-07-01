@@ -39,19 +39,65 @@ Key references:
 - Hubert, Bimbot & Gauvin, NIMB 36, 357 (1989) — effective charge
 - Lindhard, Scharff & Schiott, Mat. Fys. Medd. 33:14 (1963) — low-energy extension
 
-### Multiple Coulomb scattering — `osh_physics_moliere`
+### Multiple Coulomb scattering — `osh_physics_scat*`
 
-Every Coulomb interaction with a target nucleus deflects the ion slightly.
-The cumulative effect over many small deflections is described by the
-**Highland formula** (a Gaussian approximation to Molière theory), giving an
-RMS projected scattering angle per step.  The transport loop uses the
-**random-hinge method** (Fippel & Soukup 2004) to apply this as a single
-angular deflection at a randomly sampled point along the step.
+Every Coulomb interaction with a target nucleus deflects the ion slightly; the
+cumulative effect over many small deflections is multiple Coulomb scattering
+(MCS).  The model is split into a dispatcher and per-model siblings so a new
+model drops in without touching the transport loop:
+
+```
+osh_physics_scat            dispatcher (enum osh_mcs_model) + osh_physics_mcs_scatter()
+osh_physics_scat_highland   Highland θ₀ (the scattering width)
+osh_physics_scat_moliere    full Bethe-Molière angular distribution (core + tail)
+```
+
+The `MSCAT` switch in `beam.dat` selects the model:
+
+| mode | name | what it does |
+|------|------|--------------|
+| 0 | off | no scattering |
+| 1 | Gaussian | Highland θ₀, two Gaussian projected angles (core only, no tail) |
+| 2 | Molière | full Bethe-Molière: Gaussian core **plus** the Rutherford single-scattering tail |
+| 3 | Wentzel | reserved for a future Geant4 Wentzel-VI/Urban model (not implemented) |
+
+**Width (magnitude) — Highland.**  The **Highland formula** gives the RMS
+projected scattering angle θ₀ and is the validated scattering *power* (it agrees
+with experiment, e.g. Gottschalk's data, across materials).  It is evaluated
+with the *substep* thickness in the leading √(d/X₀) term but the *macroscopic*
+path scale (the residual CSDA range) in the log correction, so that summing the
+per-substep variances reproduces the full-path Highland value (Lynch & Dahl).
+Both Gaussian and Molière modes use θ₀ for their width.
+
+**Shape — Molière.**  Mode 2 adds the genuine angular *distribution*: a clean-room
+implementation of Bethe's reduced-angle expansion `f(ϑ) = f⁽⁰⁾ + f⁽¹⁾/B + f⁽²⁾/B²`.
+The reduced functions f⁽ⁿ⁾ are computed at startup from their published integral
+definitions (no Geant3/SH12A tables — those are GPLv3), and an inverse-CDF support
+table ϑ(B, u) is precomputed so the hot path is a single O(1) bilinear lookup
+rather than a per-scatter CDF rebuild.  Crucially, the sampled angle is **rescaled
+so its RMS equals the Highland θ₀** (using the precomputed ⟨ϑ²⟩(B)): Highland sets
+the magnitude, Molière sets only the shape.  This keeps mode 2's width identical to
+mode 1 (and to data) while retaining the heavy Rutherford tail — without
+double-counting the tail's contribution to the overall width.
+
+Per-medium constants (the χ_c² coefficient and an effective screening Z for χ_a)
+are derived from the element composition at material-compile time and stored in the
+material runtime, so nothing is hardcoded to a particular material.
+
+The transport loop applies the chosen deflection with the **random-hinge method**
+(Fippel & Soukup 2004): a single angular kick at a randomly sampled point along the
+step, which also reproduces the correct lateral displacement.
 
 Key references:
-- Highland, NIMB 129, 497 (1975) — Gaussian approximation
-- Molière, Z. Naturforsch. 3a, 78 (1948) — full theory
+- Highland, NIMB 129, 497 (1975) — Gaussian width
+- Molière, Z. Naturforsch. 2a 133 (1947); 3a, 78 (1948) — full theory
+- Bethe, Phys. Rev. 89, 1256 (1953) — reduced-angle functions, B equation
+- Scott, Rev. Mod. Phys. 35, 231 (1963) — review
+- Lynch & Dahl, NIMB 58, 6 (1991) — χ_c, screening angle, path-scale additivity
 - Fippel & Soukup, Med. Phys. 31, 2263 (2004) — random-hinge method
+
+See [docs/physics/multiple-scattering.md](../../docs/physics/multiple-scattering.md)
+for the full strategy, the Highland-anchored-Molière rationale, and the validation.
 
 ### Energy straggling — `osh_physics_straggling`
 

@@ -301,6 +301,9 @@ enum osh_status osh_simulation_create(struct osh_beam_workspace *beam,
     case OSH_BEAM_MSCAT_MOLIERE:
         sim->transport_ctx.params.mcs_mode = OSH_TRANSPORT_MCS_MOLIERE;
         break;
+    case OSH_BEAM_MSCAT_WENTZEL:
+        sim->transport_ctx.params.mcs_mode = OSH_TRANSPORT_MCS_WENTZEL;
+        break;
     default:
         sim->transport_ctx.params.mcs_mode = OSH_TRANSPORT_MCS_OFF;
         break;
