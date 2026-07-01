@@ -367,15 +367,15 @@ compute_material_atomic(struct osh_material const *mat, float *z_mean_out, float
  */
 static void compute_moliere_constants(struct osh_material const *mat, float *chic2_out, float *screen_z_out) {
     size_t i;
-    double sum_w; /* Σ w_i Z_i(Z_i+1)/A_i  [mol/g] */
-    double sum_w_lnz23;
+    double sum_w;     /* Σ chic2_weight  [mol/g]                  */
+    double sum_w_lnz; /* Σ chic2_weight · ln Z_i  (for screen_z) */
     double z_i;
     double a_i;
-    double w_i;
-    double wi;
+    double w_i;          /* element mass fraction (as in compute_material_atomic) */
+    double chic2_weight; /* per-element χ_c² weight w_i·Z(Z+1)/A  [mol/g]         */
 
     sum_w = 0.0;
-    sum_w_lnz23 = 0.0;
+    sum_w_lnz = 0.0;
 
     if (!mat || mat->nelements == 0u) {
         *chic2_out = 0.0f;
@@ -392,9 +392,9 @@ static void compute_moliere_constants(struct osh_material const *mat, float *chi
         if (a_i <= 0.0 || z_i < 1.0) {
             continue;
         }
-        wi = w_i * z_i * (z_i + 1.0) / a_i; /* per-element χ_c² weight [mol/g] */
-        sum_w += wi;
-        sum_w_lnz23 += wi * log(pow(z_i, 2.0 / 3.0));
+        chic2_weight = w_i * z_i * (z_i + 1.0) / a_i;
+        sum_w += chic2_weight;
+        sum_w_lnz += chic2_weight * log(z_i);
     }
 
     if (sum_w <= 0.0) {
@@ -404,8 +404,9 @@ static void compute_moliere_constants(struct osh_material const *mat, float *chi
     }
 
     *chic2_out = (float) (0.157 * sum_w);
-    /* Z_scr^{2/3} = exp(weighted mean of ln Z_i^{2/3}) → Z_scr = (…)^{3/2}. */
-    *screen_z_out = (float) pow(exp(sum_w_lnz23 / sum_w), 1.5);
+    /* screen_z is the χ_c²-weighted geometric mean of Z_i: the exponents in the
+     * standard Z_scr^{2/3} = exp(Σ w·ln Z_i^{2/3} / Σ w) combination cancel. */
+    *screen_z_out = (float) exp(sum_w_lnz / sum_w);
 }
 
 /**

@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "openshieldhit/const.h"
+#include "physics/atomic/osh_physics_scat_highland.h"
 #include "physics/osh_kinematics.h"
 #include "random/osh_rng.h"
 
@@ -18,6 +19,14 @@
 #define OSH_MOLIERE_NU 1024    /* u-grid nodes (cumulative probability) */
 #define OSH_MOLIERE_B_MIN 1.6  /* ≈ solve_b threshold (ln Ω = 1.0816 ⇒ B ≈ 1.6) */
 #define OSH_MOLIERE_B_MAX 40.0 /* above this the 1/B, 1/B² corrections are negligible */
+
+/* Screening-angle χ_a² model and effective collision count Ω
+ * (Bethe, Phys. Rev. 89, 1256 (1953); Lynch & Dahl, NIM B58, 6 (1991)):
+ *   χ_a² = CHIA2_COEFF · Z_scr^{2/3} · (1 + BORN·α²) / p²
+ *   Ω    = χ_c² / (OMEGA_DENOM · χ_a²). */
+#define OSH_MOLIERE_CHIA2_COEFF 2.007e-5 /* χ_a² prefactor [MeV²]      */
+#define OSH_MOLIERE_BORN 3.34            /* Born screening correction  */
+#define OSH_MOLIERE_OMEGA_DENOM 1.167    /* Ω denominator (Bethe)      */
 
 static double osh_moliere_f0[OSH_MOLIERE_NF];
 static double osh_moliere_f1[OSH_MOLIERE_NF];
@@ -369,6 +378,9 @@ int osh_physics_moliere_scatter(double const v[3],
     w[1] = v[1];
     w[2] = v[2];
 
+    /* d_gcm2 (substep thickness) only gates/validates the call and provides the
+     * path-scale fallback: the width comes from θ₀ and the shape from B, both of
+     * which run off path_scale_gcm2 and chic2_coeff — d does not enter directly. */
     if (theta0 <= 0.0 || chic2_coeff <= 0.0 || z_eff <= 0.0 || screen_z <= 0.0 || d_gcm2 <= 0.0) {
         return 0;
     }
@@ -393,13 +405,21 @@ int osh_physics_moliere_scatter(double const v[3],
      * and the screening angle χ_a (Lynch & Dahl). */
     chic2_path = chic2_coeff * z_eff * z_eff * path_scale_gcm2 / (pv * pv);
     alpha = z_eff * screen_z * OSH_ALPHA_FS / beta;
-    chi_a2 = 2.007e-5 * pow(screen_z, 2.0 / 3.0) * (1.0 + 3.34 * alpha * alpha) / p2;
+    chi_a2 = OSH_MOLIERE_CHIA2_COEFF * pow(screen_z, 2.0 / 3.0) * (1.0 + OSH_MOLIERE_BORN * alpha * alpha) / p2;
     if (chi_a2 <= 0.0) {
         return 0;
     }
-    omega = chic2_path / (1.167 * chi_a2);
+    omega = chic2_path / (OSH_MOLIERE_OMEGA_DENOM * chi_a2);
     if (!osh_physics_moliere_solve_b(omega, &b)) {
-        return 0;
+        /* Ω below the Molière validity threshold (ln Ω ≤ 1.0816, i.e. Ω ≲ 2.95):
+         * too few effective collisions for the multiple-scattering expansion.
+         * With the path scale equal to the residual range r0 this is only reached
+         * once the ion is essentially stopped (for protons in water T ≲ ~40 eV,
+         * r0 ~ 1e-6 g/cm²), but the guard is a property of this call site, not of
+         * the model.  Fall back to the small-Ω limit — the validated Highland
+         * Gaussian of the same width θ₀ — so the two modes degrade consistently. */
+        osh_physics_highland_scatter(v, w, theta0, rng);
+        return 1;
     }
 
     /* Anchor the *magnitude* to the validated Highland width: the Molière
@@ -421,8 +441,12 @@ int osh_physics_moliere_scatter(double const v[3],
             break;
         }
     }
+    /* Exhausting all tries leaves theta == 0: every trial gave scale·ϑ ≥ π, which
+     * for physical B (hence small scale) is vanishingly rare.  Rather than drop
+     * the deflection, fall back to the Highland Gaussian of the same width θ₀. */
     if (theta <= 0.0) {
-        return 0;
+        osh_physics_highland_scatter(v, w, theta0, rng);
+        return 1;
     }
 
     st = sin(theta);

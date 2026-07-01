@@ -725,6 +725,8 @@ static int _parse_makeln(PARSE_HANDLER_ARGS) {
  *   0 — off
  *   1 — Gaussian (Rossi-Greisen, fast)
  *   2 — Molière  (more accurate, standard choice for clinical use)
+ *   3 — Wentzel-VI/Urban — reserved: accepted here but not yet implemented;
+ *       transport setup rejects it with OSH_ENOTSUP (cf. Vavilov straggling).
  *
  * @param[in,out] beam  Writes beam->scatter.
  * @param[in]     oshf  Used for error diagnostics.

@@ -12,7 +12,8 @@
  * given by the Highland formula [Hig75, PDG34.3]:
  *
  *   theta0 = (13.6 MeV / beta cp) * z_eff * sqrt(d/X0)
- *            * [1 + 0.038 ln(z_eff^2 d/X0)]
+ *            * [1 + 0.038 ln(z_eff^2 s/X0)]
+ *   (with s = path_scale_gcm2; s <= 0 falls back to d)
  *
  * The implementation can evaluate the logarithmic correction at a larger
  * macroscopic path scale while keeping the leading variance on the substep
