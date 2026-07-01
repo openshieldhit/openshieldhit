@@ -10,11 +10,13 @@ from vavilov_exact import ppf
 HERE = os.path.dirname(__file__)
 KAPPA = np.geomspace(0.01, 10.0, 22)
 BETA2 = np.linspace(0.05, 0.99, 7)
-# u grid: dense where λ varies fast (tails); vavinv range u ≤ 0.995
+# u grid: dense where λ varies fast (tails); capped at the vavinv valid range
+# u ≤ 0.995 (above that the Vavilov high-loss tail is out of the sampler's range
+# and κ < 0.01 is handled by the Landau sampler anyway).
 U = np.unique(np.concatenate([
     np.geomspace(1e-3, 0.05, 10),
     np.linspace(0.05, 0.95, 31),
-    1.0 - np.geomspace(1e-3, 0.05, 10)[::-1],  # 0.95..0.999
+    1.0 - np.geomspace(5e-3, 0.05, 8)[::-1],  # 0.95..0.995
 ]))
 
 

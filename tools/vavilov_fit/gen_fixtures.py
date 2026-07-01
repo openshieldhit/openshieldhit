@@ -15,13 +15,14 @@ from vavilov_exact import ppf, EULER
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "tests", "fixtures", "vavilov")
 
 # Vavilov regime κ ∈ [0.01, 10]; vavinv's valid random range is u ≤ ~0.995, so
-# the fixture stops at 0.999 (the far Landau tail is out of the sampler's range).
+# the fixture stops at 0.995 (the far tail is out of the sampler's range and
+# κ < 0.01 is handled by the Landau sampler).
 KAPPA = np.geomspace(0.01, 10.0, 16)
 BETA2 = np.array([0.05, 0.30, 0.55, 0.80, 0.99])
 U = np.concatenate([
     np.array([1e-3, 3e-3, 0.01, 0.03]),
     np.linspace(0.05, 0.95, 19),
-    np.array([0.97, 0.99, 0.995, 0.999]),
+    np.array([0.97, 0.99, 0.995]),
 ])
 
 

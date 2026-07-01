@@ -26,7 +26,8 @@ def cheb(kn, bn):
 
 def xform(u, kind):
     return {"nlog": -np.log(u), "u": u, "1mu": 1.0 - u,
-            "inv1mu": 1.0 / (1.0 - u)}[kind]
+            "inv1mu": 1.0 / (1.0 - u),
+            "nlog1mu": -np.log1p(-u)}[kind]  # −log(1−u): linearises the Vavilov high-loss tail
 
 
 def _norm_lnk(k, klo, khi):
@@ -81,7 +82,7 @@ def fit_region(cache, u_lo, u_hi, kind, ki, blo, bhi, mdeg, ndeg, iters=8):
             P = sum((xx ** k) * (t @ ac[k]) for k in range(mdeg + 1))
             Q = 1.0 + sum((xx ** k) * (t @ bc[k - 1]) for k in range(1, ndeg + 1))
             md = max(md, float(np.max(np.abs(P / Q - LAM[i, j, ui]))))
-    return ac, bc, md
+    return ac, bc, md, xmid, xhalf
 
 
 def kbands_by_index(nk, nbands, overlap=1):
@@ -104,6 +105,6 @@ if __name__ == "__main__":
     for ki in kbands_by_index(K.size, 3):
         for (ulo, uhi, kind) in ubands:
             m, n = degs[kind]
-            ac, bc, md = fit_region(cache, ulo, uhi, kind, ki, 0.05, 0.99, m, n)
+            ac, bc, md, _, _ = fit_region(cache, ulo, uhi, kind, ki, 0.05, 0.99, m, n)
             print(f"k[{K[ki[0]]:.3g},{K[ki[-1]]:.3g}] nk={ki.size:2d} "
                   f"u[{ulo:.3g},{uhi:.3g}]({kind:6s}) deg({m},{n}): maxdev={md:.3e}")

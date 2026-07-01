@@ -54,10 +54,17 @@ def _support(kappa, beta2):
 
 
 def cdf_table(kappa, beta2, n=400):
-    """(lam, cdf) on a λ grid spanning ~all mass up to the far high-loss tail."""
+    """(lam, cdf) on a λ grid spanning ~all mass up to the far high-loss tail.
+
+    A 3-point median filter removes the occasional isolated quadrature glitch
+    (spike up OR down) in the far small-κ tail without cascading — a plain
+    monotone clamp would propagate a single spuriously-low point downward and
+    collapse the whole tail."""
+    from scipy.signal import medfilt
     lo, hi = _support(kappa, beta2)
     lam = np.linspace(lo, hi, n)
     pdf = np.clip([vavilov_pdf(x, kappa, beta2) for x in lam], 0.0, None)
+    pdf = medfilt(pdf, 3)
     cdf = np.concatenate([[0.0], cumulative_trapezoid(pdf, lam)])
     cdf /= cdf[-1]
     return lam, cdf
