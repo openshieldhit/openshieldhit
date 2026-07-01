@@ -1,0 +1,65 @@
+#include "transport/osh_checkpoint_policy.h"
+
+void osh_checkpoint_policy_init(struct osh_checkpoint_policy *policy) {
+    if (!policy) {
+        return;
+    }
+    policy->mode = OSH_PARTIAL_NONE;
+    policy->completeness = OSH_PARTIAL_EXACT;
+    policy->every_s = 0.0;
+    policy->every_primaries = 0u;
+    policy->batch = 0u;
+    policy->write_files = 0;
+}
+
+int osh_checkpoint_policy_is_final_only(struct osh_checkpoint_policy const *policy) {
+    return (!policy || policy->mode == OSH_PARTIAL_NONE) ? 1 : 0;
+}
+
+size_t
+osh_checkpoint_next_batch_size(struct osh_checkpoint_policy const *policy, double measured_rate_pps, size_t remaining) {
+    size_t k;
+
+    if (remaining == 0u) {
+        return 0u;
+    }
+    /* FINAL-ONLY: one batch spanning the rest of the run.  This is the K = nstat
+     * fast path — a single family pass, byte-for-byte identical to today. */
+    if (osh_checkpoint_policy_is_final_only(policy)) {
+        return remaining;
+    }
+
+    /* LIVE.  Pick the batch size in priority order: an explicit override, then
+     * the deterministic count cadence, then the adaptive time cadence. */
+    if (policy->batch != 0u) {
+        k = policy->batch;
+    } else if (policy->every_primaries != 0u) {
+        k = policy->every_primaries;
+    } else if (policy->every_s > 0.0 && measured_rate_pps > 0.0) {
+        /* K ≈ rate × cadence, rounded to nearest, so a wall-time preview costs
+         * the same per wall-second on any machine.  Guard the cast: clamp to
+         * remaining before narrowing so a huge rate×time cannot wrap size_t. */
+        double target = measured_rate_pps * policy->every_s + 0.5;
+        if (target >= (double) remaining) {
+            return remaining;
+        }
+        k = (target < 1.0) ? 1u : (size_t) target;
+    } else {
+        /* LIVE requested but no cadence is usable yet (e.g. the first batch of a
+         * time cadence, before throughput is known): span the rest so the run
+         * still progresses and the result stays exact. */
+        return remaining;
+    }
+
+    /* Every branch above set k >= 1 (the cadence fields are non-zero here and the
+     * time-cadence path floors at 1), so only the upper clamp to remaining is
+     * needed to keep K within [1, remaining]. */
+    if (k > remaining) {
+        k = remaining;
+    }
+    return k;
+}
+
+char const *osh_checkpoint_completeness_label(enum osh_partial_completeness completeness) {
+    return (completeness == OSH_PARTIAL_APPROX) ? "families_pending" : "exact";
+}

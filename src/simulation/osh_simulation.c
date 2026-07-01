@@ -1,3 +1,5 @@
+#include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -17,6 +19,7 @@
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/save/osh_scoring_save.h"
+#include "transport/osh_checkpoint_policy.h"
 #include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
 #include "transport/osh_run_control.h"
@@ -47,6 +50,7 @@ struct osh_simulation {
     struct osh_neutron_pool neutron_pool;
     struct osh_transport_profile profile;
     struct osh_run_control run_control;
+    struct osh_checkpoint_policy checkpoint_policy;
 
     unsigned long long requested_nstat;
     unsigned long long completed_nstat;
@@ -385,6 +389,34 @@ enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
      * the transport pointer NULL so the hot path stays exactly as before. */
     sim->transport_ctx.run_control =
         (sim->run_control.wall_budget_s > 0.0 || sim->run_control.should_stop) ? &sim->run_control : NULL;
+    return OSH_OK;
+}
+
+enum osh_status osh_simulation_set_checkpoint_policy(struct osh_simulation *sim, unsigned long long every_primaries) {
+    if (!sim) {
+        return OSH_EINVAL;
+    }
+#if SIZE_MAX < ULLONG_MAX
+    /* The cadence is stored as size_t.  On platforms where size_t is narrower
+     * than unsigned long long (e.g. 32-bit builds), reject a value that would
+     * wrap on the narrowing cast so the requested cadence is never silently
+     * corrupted into a smaller one.  Compiled out where size_t == ULL (the usual
+     * 64-bit case), where the comparison would be trivially false. */
+    if (every_primaries > (unsigned long long) SIZE_MAX) {
+        return OSH_EINVAL;
+    }
+#endif
+    osh_checkpoint_policy_init(&sim->checkpoint_policy);
+    if (every_primaries > 0ull) {
+        sim->checkpoint_policy.mode = OSH_PARTIAL_LIVE;
+        sim->checkpoint_policy.completeness = OSH_PARTIAL_EXACT;
+        sim->checkpoint_policy.every_primaries = (size_t) every_primaries;
+    }
+    /* Wire the policy in only when it changes behaviour (LIVE batching); a
+     * final-only policy leaves the transport pointer NULL so the fast path — one
+     * batch of K = nstat — is byte-for-byte identical to not calling this. */
+    sim->transport_ctx.checkpoint_policy =
+        (sim->checkpoint_policy.mode != OSH_PARTIAL_NONE) ? &sim->checkpoint_policy : NULL;
     return OSH_OK;
 }
 
