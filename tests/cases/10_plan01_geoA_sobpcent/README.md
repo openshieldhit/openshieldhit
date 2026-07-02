@@ -7,7 +7,7 @@ external SH12A dataset `plan01_field01_geoA_SOBPcent`.
 Purpose:
 
 - keep a runnable OpenShieldHIT version of the SH12A setup in-tree
-- preserve the differential scorers used on this branch
+- preserve the differential scorers used in this case
 - provide an XZ neutron-fluence map for manual inspection of transported
   secondary neutrons
 - emit SH12A-style multi-page BDO outputs that can be postprocessed with
@@ -21,8 +21,9 @@ Notes:
 
 - `USECBEAM` is intentional here: this is a monoenergetic scanned field, not a
   single pencil spot.
-- The original SH12A setup used Vavilov straggling; OpenShieldHIT currently
-  falls back to Gaussian straggling here because Vavilov is not implemented.
+- The original SH12A setup used Vavilov straggling. This example is currently
+  configured with `STRAGG 1` (Gaussian) for reproducibility, but can now be
+  switched to `STRAGG 2` for closer SH12A parity.
 - The example defaults to `NSTAT = 100000` primaries in `beam.dat`.
 - The directory passed via `--outdir` is created automatically if it does not
   already exist.

@@ -9,7 +9,7 @@ straggling alone.
 
   strag0: STRAGG 0  (off; ideal sharp-edge baseline, validates the scorer)
   strag1: STRAGG 1  (Gaussian / Bohr)
-  strag2: STRAGG 2  (Vavilov; pending — see below)
+  strag2: STRAGG 2  (Vavilov / Landau)
 
 Scoring (detect.dat), single 1 cm^2 central depth column, 0.5 mm bins:
   - idd.dat  columns: Dose (auto-compared), Fluence Primary, DLET, TLET.
