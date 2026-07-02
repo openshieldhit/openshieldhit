@@ -180,6 +180,64 @@ parallelism rule is therefore simple: worker ranges must be disjoint and
 together cover `[0, nstat)`.  Then each history ID is generated once, and each
 history gets the same random stream no matter which worker runs it.
 
+### What "split" and "ordinal" mean
+
+When a nuclear event creates a secondary particle, the secondary also needs
+random numbers for its later transport. It must not simply draw from the
+parent's stream, because then the parent's future trajectory would depend on
+how many children happened to be created, injected, dropped, or transported
+first.
+
+The useful mental model is procedural generation. A world seed can derive a
+region seed, which can derive a room seed, while the rest of the world remains
+unchanged if one room is skipped. Here, a parent particle's current RNG state
+derives child streams:
+
+```text
+parent particle RNG state
+  -> child ordinal 0 RNG state
+  -> child ordinal 1 RNG state
+  -> child ordinal 2 RNG state
+```
+
+An **ordinal** is only the child's position within that one event: ordinal 0 is
+the first secondary, ordinal 1 the second, and so on. It is not the value stored
+by the child, and it is not a global particle ID. Its job is to give each
+sibling a stable address in the event's ordered list of secondaries.
+
+`osh_rng_split(child, parent, ordinal)` therefore does two things:
+
+1. It creates a new RNG state for that child from the parent's **current** RNG
+   state plus the child's ordinal.
+2. It leaves the real parent RNG untouched.
+
+The implementation uses a private copy of the parent RNG state, advances that
+copy to the ordinal's seed window, draws the child's `(seed, stream)` pair from
+the copy, and initializes the child with the normal engine initializer. The
+parent continues as if no split had happened.
+
+That means children do **not** take alternating numbers from the parent's
+sequence:
+
+```text
+not: parent gets a,c,e,... and child gets b,d,f,...
+```
+
+Instead, each child gets its own independent reproducible sequence:
+
+```text
+parent continues:       a b c d e ...
+child ordinal 0 draws:  x0 x1 x2 ...
+child ordinal 1 draws:  y0 y1 y2 ...
+child ordinal 2 draws:  z0 z1 z2 ...
+```
+
+This is safe across pools. If a recoil proton stays in the ion pool, a neutron
+moves to the neutron pool, or a fragment is processed later, the RNG state
+travels with that particle. A child that consumes many random numbers cannot
+shift its parent or siblings, because it consumes only from its own carried RNG
+state.
+
 ### The model
 
 Every history owns an **independent stream keyed by its global index**, carried
