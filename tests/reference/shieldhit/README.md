@@ -2,8 +2,8 @@
 
 This directory now serves two related purposes:
 
-- small mirrored SH12A-compatible decks such as `00_minimal/` and
-  `06_minimal_nucre/`
+- small mirrored SH12A-compatible decks such as `00_minimal/`
+- SH12A-syntax mirrors of the isolation benchmark families (`idd_water_200mev_*`)
 - curated SH12A gold-standard result fixtures for manual comparison against
   OpenShieldHIT
 
@@ -26,6 +26,22 @@ is the primary-proton fluence, which `compare_idd.py` reads directly) to
 cd tests/reference/shieldhit/idd_water_200mev_scat2 && shieldhit .
 cp idd.dat ../../idd_water_200mev_scat2/reference/idd_sh12a.dat
 ```
+
+## NUCRE isolation decks (issue #212)
+
+`idd_water_200mev_nucre0/` and `nucre1/` are SH12A-syntax mirrors of the matching
+`tests/reference/idd_water_200mev_nucre{0,1}` OpenShieldHIT cases: 200 MeV protons
+in water, MSCAT off + STRAGG off, differing only in the NUCRE switch (0 = off,
+1 = inelastic + pp-elastic). `detect.dat` and `Water.txt` are shared verbatim with
+the OSH decks; `beam.dat` (JPART0), `geo.dat` and `mat.dat` carry the SH12A syntax.
+
+Unlike the scat/strag mirrors, the **full-statistics results are committed** here
+as fixed reference fixtures: `idd.dat` (`Z` + 10 species-resolved Dose/Fluence
+pages) and `spectrum.dat` (the plateau dΦ/dE_kin secondary spectrum). `tools/plot_nucre.py`
+reads these directly and overlays them on a live OpenShieldHIT run, so no SH12A
+install is needed to view the comparison. They only need regenerating if the
+geometry or scoring changes. OpenShieldHIT's NUCRE extends to 2 (elastic only)
+and 3 (inelastic only); SH12A has no such modes, so there are no `nucre2/3` mirrors.
 
 The curated fixture sets currently live in:
 

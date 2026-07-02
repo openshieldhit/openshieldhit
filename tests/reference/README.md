@@ -37,6 +37,48 @@ fluence** on a **1 cm² central column** (0.5 mm bins, *not* laterally integrate
 it is sensitive to lateral escape; each case also writes a full-width laterally
 integrated `ddc_wide.dat` and a radial `rad_cyl.dat` for manual comparison.
 
+The straggling isolation set (`idd_water_200mev_strag{0,1,2}`, issue #190) follows
+the same recipe with **MSCAT off + NUCRE off**, toggling only the STRAGG switch.
+
+### NUCRE isolation set (issue #212)
+
+A family isolating the **nuclear-reaction channel** the same way: **MSCAT off +
+STRAGG off**, 200 MeV proton pencil beam on the R = 20 cm, L = 28 cm water
+phantom, NSTAT = 200000, fixed seeds, differing only in the NUCRE switch. With
+scattering and straggling off, the nuclear channel is the only source of
+secondaries, so the species decomposition and plateau spectrum isolate it.
+
+| case                      | NUCRE                       | SH12A mirror |
+|---------------------------|-----------------------------|--------------|
+| `idd_water_200mev_nucre0` | 0 (off)                     | yes          |
+| `idd_water_200mev_nucre1` | 1 (inelastic + pp-elastic)  | yes          |
+| `idd_water_200mev_nucre2` | 2 (elastic only)            | no — OSH-only |
+| `idd_water_200mev_nucre3` | 3 (inelastic only)          | no — OSH-only |
+
+OpenShieldHIT's NUCRE takes 0–3; SHIELD-HIT12A only understands 0/1, so modes 2
+and 3 (which decompose mode 1 into its elastic and inelastic parts) are
+OpenShieldHIT-only diagnostics with no mirror deck.
+
+`detect.dat` scores, on the 1 cm² × 0.5 mm central column, total `Dose` (the
+auto-compared `idd.dat` col-4 headline) plus `Dose`/`Fluence` split by species —
+primary protons, all protons, alphas, and heavy recoils (`Z > 2`; the C/O
+recoils that p+A elastic will add) — and, in a thin mid-plateau slab, a
+differential secondary spectrum dΦ/dE_kin vs E_kin (`spectrum.dat`, 0.1–300 MeV,
+150 log bins).
+
+Overlay OpenShieldHIT (run live, all four modes in parallel) against the
+committed SH12A fixtures:
+
+```bash
+python3 tools/plot_nucre.py            # writes a multi-page nucre_report.pdf
+```
+
+The SH12A `idd.dat`/`spectrum.dat` fixtures are committed under
+`shieldhit/idd_water_200mev_nucre{0,1}/` and are not re-run.  Note: OSH's
+differential output is currently counts-per-bin, not a density, so the plot tool
+divides by the log-bin width (SH12A already reports a density) — tracked as
+issue #215.
+
 ### Workflow
 
 1. Reproduce the case setup in the reference code (see the per-case README;

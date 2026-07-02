@@ -7,4 +7,4 @@ Primary fluence is constant along depth — nothing removes primaries.
 Run:
   build_rel/bin/openshieldhit -v tests/cases/00_minimal/
 
-Compare with 06_minimal_nucre to see the effect of nuclear reactions.
+Compare with the tests/reference/idd_water_200mev_nucre* set to see the effect of nuclear reactions.

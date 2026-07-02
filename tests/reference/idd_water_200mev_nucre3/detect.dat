@@ -1,0 +1,73 @@
+# NUCRE isolation benchmark (issue #212): species-resolved dose/fluence and a
+# differential secondary spectrum on a 1 cm^2 central column.  MSCAT off + STRAGG
+# off => primaries follow a clean path and the nuclear channel (NUCRE) is the
+# ONLY source of secondaries, so the species decomposition and plateau spectrum
+# isolate its contribution.  NUCRE 0/1 have SH12A mirrors; 2 (elastic only) and
+# 3 (inelastic only) are OSH-only decompositions of mode 1.
+
+Filter
+    Name Primary        # primary protons
+    GEN = 0
+    Z = 1
+    A = 1
+
+Filter
+    Name Protons        # all protons (primary + secondary)
+    Z = 1
+    A = 1
+
+Filter
+    Name Alphas         # He-4
+    Z = 2
+    A = 4
+
+Filter
+    Name HeavyRec       # heavy recoils / fragments, Z >= 3 (C, O, ...)
+    Z > 2
+
+# 1 cm^2 central column, 0.5 mm bins — matches the scat/strag decks.
+Geometry Mesh
+    Name DDCnarrow
+    X  -0.5   0.5     1
+    Y  -0.5   0.5     1
+    Z   0.0  28.0   560
+
+# Thin mid-plateau slab (z = 9.5..10.5 cm) for the secondary spectrum.
+Geometry Mesh
+    Name Plateau
+    X  -0.5   0.5     1
+    Y  -0.5   0.5     1
+    Z   9.5  10.5     1
+
+# idd.dat is the file the reference harness auto-compares (compare_idd.py reads
+# the first quantity / col 4).  Total Dose is listed FIRST — it is the headline
+# observable of issue #212 (all-particle dose/LET mismatch).  The species pages
+# that follow are consumed by tools/plot_nucre.py.
+Output
+    Filename idd.dat
+    Fileformat TEXT
+    Geo DDCnarrow
+    Quantity Dose
+    Quantity Dose Primary
+    Quantity Dose Protons
+    Quantity Dose Alphas
+    Quantity Dose HeavyRec
+    Quantity Fluence
+    Quantity Fluence Primary
+    Quantity Fluence Protons
+    Quantity Fluence Alphas
+    Quantity Fluence HeavyRec
+
+# Differential secondary spectrum in the plateau slab: kinetic energy, 0.1..300
+# MeV, 150 logarithmic bins.  The scorer accumulates Phi(bin); tools/plot_nucre.py
+# divides by the log-bin width to obtain the spectral density dPhi/dEkin.
+Output
+    Filename spectrum.dat
+    Fileformat TEXT
+    Geo Plateau
+    Quantity Fluence
+    Diff1     0.1  300.0  150  LOG
+    Diff1Type EKIN
+    Quantity Fluence Protons
+    Diff1     0.1  300.0  150  LOG
+    Diff1Type EKIN
