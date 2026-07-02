@@ -46,7 +46,8 @@ static void test_kappa(void) {
 static void test_lambda_bar(void) {
     double lb = osh_physics_strag_lambda_bar(0.055225, 0.320525);
     ASSERT_TRUE(approx(lb, 2.1529, 1.0e-3));
-    ASSERT_TRUE(osh_physics_strag_lambda_bar(0.0, 0.32) == 0.0);
+    /* invalid κ returns NAN (not 0.0, which is a legitimate λ̄). */
+    ASSERT_TRUE(isnan(osh_physics_strag_lambda_bar(0.0, 0.32)));
 }
 
 /* Bohr σ ∝ sqrt(d); guards on non-physical inputs. */

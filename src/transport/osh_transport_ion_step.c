@@ -46,12 +46,14 @@
 /*
  * Hard minimum ion kinetic energy [MeV/nucleon].
  * Particles below this threshold are killed regardless of tcut.
- * Set to the runtime SP/range table lower bound OSH_MATERIAL_RUNTIME_EMIN
- * (0.025 MeV/u): the lowest energy the tables are valid for, so the cutoff
- * floor is aligned to table validity and no energy below it is extrapolated.
+ * Set to the runtime SP/range table lower bound OSH_MATERIAL_RUNTIME_EMIN:
+ * the lowest energy the tables are valid for, so the cutoff floor is aligned
+ * to table validity and no energy below it is extrapolated.  Referenced from
+ * the macro (not a duplicated literal) so the two cannot drift apart; the
+ * _MEV_PER_U suffix signals the units the transport code applies it in.
  * TCUT0 can only raise the effective cutoff above this floor, never lower it.
  */
-#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U 0.025
+#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U OSH_MATERIAL_RUNTIME_EMIN
 
 /* ---- Per-step computation context --------------------------------------- */
 

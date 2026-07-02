@@ -1026,7 +1026,7 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
         spot->t0_per_nucleon = 1;
         if (_f[0] < OSH_BEAM_TMIN) {
             OSH_DIAG_ERRORF(state->diag,
-                            "in %s line %i: TMAX0 %.4f MeV/nucleon is below transport threshold %.4f MeV/nucleon",
+                            "in %s line %i: TMAX0 %.4f MeV/nucleon is below the minimum beam energy %.4f MeV/nucleon",
                             oshf->filename,
                             oshf->lineno,
                             (double) _f[0],

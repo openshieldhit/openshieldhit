@@ -36,7 +36,9 @@ double osh_physics_strag_kappa(double xi, double e_max) {
 
 double osh_physics_strag_lambda_bar(double kappa, double beta2) {
     if (kappa <= 0.0) {
-        return 0.0;
+        /* NAN, not 0.0: unlike ξ/E_max/κ (positive magnitudes), 0.0 is a
+         * legitimate λ̄, so a distinct sentinel is needed for invalid input. */
+        return NAN;
     }
     /* λ̄ = −β² − ln κ + (γ_Euler − 1) */
     return -beta2 - log(kappa) + (OSH_EULER_GAMMA - 1.0);
