@@ -56,9 +56,29 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/openshieldhit-matplotlib")
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
+
+# Reading aid: draw the SHIELD-HIT12A reference as a THICK, LIGHTENED underlay and
+# OpenShieldHIT as a THIN, saturated line on top of it, both as steps (bins).  So
+# the eye reads species by colour and code by weight, with OSH sitting "inside"
+# the fat reference band.
+REF_LW, OSH_LW = 3.0, 1.3
+REF_LIGHTEN = 0.6  # 0 = original colour, 1 = white
+
+
+def lighten(color, amount=REF_LIGHTEN):
+    r, g, b = mcolors.to_rgb(color)
+    return (r + (1.0 - r) * amount, g + (1.0 - g) * amount, b + (1.0 - b) * amount)
+
+
+def code_style(code, color):
+    """Line kwargs for a series: 'sh' = thick lightened underlay, 'osh' = thin saturated overlay."""
+    if code == "sh":
+        return dict(color=lighten(color), lw=REF_LW, zorder=1, drawstyle="steps-mid")
+    return dict(color=color, lw=OSH_LW, zorder=3, drawstyle="steps-mid")
 
 CASES = ["nucre0", "nucre1", "nucre2", "nucre3"]
 MODEL = {
@@ -83,7 +103,7 @@ SPEC_LO, SPEC_HI, SPEC_NBINS = 0.1, 300.0, 150
 def parse_args() -> argparse.Namespace:
     root = Path(__file__).resolve().parent.parent
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--nstat", type=int, default=20000, help="OpenShieldHIT primaries per run (default 20000)")
+    p.add_argument("--nstat", type=int, default=50000, help="OpenShieldHIT primaries per run (default 50000)")
     p.add_argument("--repo-root", type=Path, default=root, help="openshieldhit repo root")
     p.add_argument("--osh", type=Path, default=root / "build" / "bin" / "openshieldhit", help="OpenShieldHIT binary")
     p.add_argument("--workdir", type=Path, default=None, help="working dir for runs (default: a temp dir)")
@@ -171,6 +191,20 @@ def sh12a_ref_dir(args, case: str) -> Path:
     return args.repo_root / "tests" / "reference" / "shieldhit" / f"idd_water_200mev_{case}"
 
 
+def read_nstat(beam_path: Path):
+    """Return the NSTAT (number of primaries) from a beam.dat, or None."""
+    if not beam_path.exists():
+        return None
+    for line in beam_path.read_text().splitlines():
+        toks = line.split()
+        if toks and toks[0].upper() == "NSTAT":
+            try:
+                return float(toks[1])
+            except (IndexError, ValueError):
+                return None
+    return None
+
+
 def depth_quantities(out_dir: Path, code: str):
     """Return dict {z, <QUANTITIES>} for the 1D idd.dat depth file, or None."""
     path = out_dir / "idd.dat"
@@ -208,21 +242,32 @@ def osh_spectrum(out_dir: Path):
     }
 
 
-def sh12a_spectrum(path: Path):
-    """SHIELD-HIT12A committed plateau spectrum (Page Diff1bin Value; already /cm^2/MeV)."""
+def sh12a_spectrum(ref_dir: Path):
+    """SHIELD-HIT12A committed plateau spectrum -> per-primary dPhi/dEkin.
+
+    Despite the `[/cm^2/MeV]` header label, SH12A's spectrum.dat "Value" is the
+    fluence summed into each bin over ALL primaries — absolute, not per-primary
+    and not per-MeV (verified: sum over bins == NSTAT * per-primary fluence).  So
+    normalise by NSTAT (from the fixture's beam.dat) and the log-bin width to get
+    a per-primary spectral density comparable to the OSH curve.
+    """
+    path = ref_dir / "spectrum.dat"
     if not path.exists():
         return None
     d = load_numeric(path)  # page bin value
     if d.shape[1] < 3:
         return None
-    centers, _ = log_bin_centers_widths(SPEC_LO, SPEC_HI, SPEC_NBINS)
+    nstat = read_nstat(ref_dir / "beam.dat")
+    if not nstat:
+        return None
+    centers, widths = log_bin_centers_widths(SPEC_LO, SPEC_HI, SPEC_NBINS)
     out = {"ekin": centers}
     for page, key in ((0, "dphi_all"), (1, "dphi_prot")):
         rows = d[d[:, 0].astype(int) == page]
         rows = rows[np.argsort(rows[:, 1])]  # order by bin index
         vals = rows[:, 2]
         n = min(len(centers), len(vals))
-        out[key] = vals[:n]
+        out[key] = vals[:n] / (nstat * widths[:n])
     return out
 
 
@@ -270,7 +315,7 @@ def main() -> int:
         if case in SH12A_CASES:
             ref = sh12a_ref_dir(args, case)
             sh = depth_quantities(ref, "sh12a")
-            sh_spec = sh12a_spectrum(ref / "spectrum.dat")
+            sh_spec = sh12a_spectrum(ref)
         data[case] = {"osh": osh, "osh_err": osh_err, "osh_s": osh_s, "osh_spec": osh_spec,
                       "sh": sh, "sh_spec": sh_spec}
 
@@ -303,16 +348,16 @@ def main() -> int:
             elif sh is None:
                 note = "\n[SHIELD-HIT12A fixture missing]"
             fig.suptitle(f"200 MeV p -> water, {MODEL[case]}   (MSCAT off, STRAGG off; "
-                         f"OSH nstat={args.nstat})\nOpenShieldHIT {version} (solid) vs "
-                         f"SHIELD-HIT12A committed fixture (dashed){note}", fontsize=11)
+                         f"OSH nstat={args.nstat})\nOpenShieldHIT {version} (thin, saturated) vs "
+                         f"SHIELD-HIT12A committed fixture (thick, light){note}", fontsize=11)
 
             def overlay_species(a, families):
-                for c, style, tag in ((osh, "-", "OSH"), (sh, "--", "SH12A")):
+                # Reference (SH12A) underneath, thick+light; OSH on top, thin+saturated.
+                for c, code, tag in ((sh, "sh", "SH12A"), (osh, "osh", "OSH")):
                     if c is None:
                         continue
                     for key, label, color in families:
-                        a.plot(c["z"], c[key], style, color=color,
-                               label=f"{tag} {label}", drawstyle="steps-mid")
+                        a.plot(c["z"], c[key], label=f"{tag} {label}", **code_style(code, color))
                 a.set_xlim(0.0, zend)
 
             a = ax[0, 0]
@@ -322,30 +367,33 @@ def main() -> int:
             a.legend(fontsize=7, ncol=2)
 
             a = ax[0, 1]
-            for c, style, tag in ((osh, "-", "OSH"), (sh, "--", "SH12A")):
+            for c, code, tag in ((sh, "sh", "SH12A"), (osh, "osh", "OSH")):
                 if c is None:
                     continue
-                a.plot(c["z"], c["dose"] - c["dose_prim"], style, color="C0",
-                       label=f"{tag} all-primary", drawstyle="steps-mid")
-                a.plot(c["z"], c["dose_alpha"], style, color="C3", label=f"{tag} alphas", drawstyle="steps-mid")
-                a.plot(c["z"], c["dose_heavy"], style, color="C4", label=f"{tag} heavy rec", drawstyle="steps-mid")
-            a.set(title="Secondary dose (nuclear-added)", xlabel="Depth (cm)", ylabel="Dose per primary (MeV/g)")
+                # nuclear-added dose, decomposed by secondary species
+                a.plot(c["z"], c["dose_prot"] - c["dose_prim"], label=f"{tag} secondary p", **code_style(code, "C0"))
+                a.plot(c["z"], c["dose_alpha"], label=f"{tag} alphas", **code_style(code, "C3"))
+                a.plot(c["z"], c["dose_heavy"], label=f"{tag} heavy rec", **code_style(code, "C4"))
+            a.set(title="Secondary dose by species (nuclear-added)", xlabel="Depth (cm)", ylabel="Dose per primary (MeV/g)")
             a.set_xlim(0.0, zend)
-            a.grid(True)
+            a.set_yscale("log")
+            a.grid(True, which="both", alpha=0.3)
             a.legend(fontsize=7)
 
             a = ax[1, 0]
             overlay_species(a, FLU_SPECIES)
             a.set(title="Depth fluence by species, 1 cm^2 column", xlabel="Depth (cm)", ylabel="Fluence per primary (1/cm^2)")
-            a.grid(True)
+            a.set_yscale("log")
+            a.set_ylim(0.5, None)  # focus on the proton-family curves; secondaries live on the dose panel
+            a.grid(True, which="both", alpha=0.3)
             a.legend(fontsize=7, ncol=2)
 
             a = ax[1, 1]
-            for spec, style, tag in ((d["osh_spec"], "-", "OSH"), (d["sh_spec"], "--", "SH12A")):
+            for spec, code, tag in ((d["sh_spec"], "sh", "SH12A"), (d["osh_spec"], "osh", "OSH")):
                 if spec is None:
                     continue
-                a.plot(spec["ekin"], spec["dphi_all"], style, color="C0", label=f"{tag} all")
-                a.plot(spec["ekin"], spec["dphi_prot"], style, color="C2", label=f"{tag} protons")
+                a.plot(spec["ekin"], spec["dphi_all"], label=f"{tag} all", **code_style(code, "C0"))
+                a.plot(spec["ekin"], spec["dphi_prot"], label=f"{tag} protons", **code_style(code, "C2"))
             a.set(title="Plateau secondary spectrum (z=9.5-10.5 cm)",
                   xlabel="Ekin (MeV)", ylabel="dPhi/dEkin per primary (1/cm^2/MeV)")
             a.set_xscale("log")
@@ -362,20 +410,19 @@ def main() -> int:
         # Summary: all-particle dose and plateau proton spectrum across NUCRE modes.
         fig, ax = plt.subplots(1, 2, figsize=(13, 6))
         for i, case in enumerate(args.cases):
-            for c, style, alpha, tag in ((data[case]["osh"], "-", 1.0, "OSH"),
-                                         (data[case]["sh"], "--", 0.7, "SH12A")):
+            # SH12A first (thick light underlay), OSH second (thin saturated overlay).
+            for c, code, tag in ((data[case]["sh"], "sh", "SH12A"), (data[case]["osh"], "osh", "OSH")):
                 if c is None:
                     continue
-                ax[0].plot(c["z"], c["dose"], style, color=f"C{i}", alpha=alpha,
-                           label=f"{tag} {MODEL[case]}", drawstyle="steps-mid")
-            for spec, style, alpha, tag in ((data[case]["osh_spec"], "-", 1.0, "OSH"),
-                                            (data[case]["sh_spec"], "--", 0.7, "SH12A")):
+                ax[0].plot(c["z"], c["dose"], label=f"{tag} {MODEL[case]}", **code_style(code, f"C{i}"))
+            for spec, code, tag in ((data[case]["sh_spec"], "sh", "SH12A"), (data[case]["osh_spec"], "osh", "OSH")):
                 if spec is None:
                     continue
-                ax[1].plot(spec["ekin"], spec["dphi_prot"], style, color=f"C{i}", alpha=alpha,
-                           label=f"{tag} {MODEL[case]}")
+                ax[1].plot(spec["ekin"], spec["dphi_prot"], label=f"{tag} {MODEL[case]}", **code_style(code, f"C{i}"))
         ax[0].set(title="All-particle depth dose vs NUCRE mode", xlabel="Depth (cm)", ylabel="Dose per primary (MeV/g)")
-        ax[0].grid(True)
+        ax[0].set_yscale("log")
+        ax[0].set_ylim(1.0, None)
+        ax[0].grid(True, which="both", alpha=0.3)
         ax[1].set(title="Plateau proton spectrum vs NUCRE mode", xlabel="Ekin (MeV)",
                   ylabel="dPhi/dEkin per primary (1/cm^2/MeV)")
         ax[1].set_xscale("log")
@@ -385,7 +432,8 @@ def main() -> int:
             handles, _ = a.get_legend_handles_labels()
             if handles:
                 a.legend(fontsize=8)
-        fig.suptitle(f"OpenShieldHIT {version} (solid) vs SHIELD-HIT12A committed fixtures (dashed)", fontsize=11)
+        fig.suptitle(f"OpenShieldHIT {version} (thin, saturated) vs "
+                     f"SHIELD-HIT12A committed fixtures (thick, light)", fontsize=11)
         fig.tight_layout(rect=(0, 0, 1, 0.95))
         pdf.savefig(fig)
         plt.close(fig)
