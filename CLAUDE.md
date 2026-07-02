@@ -12,7 +12,7 @@ For *what the project is* and where things live, read [`llms.txt`](llms.txt) fir
 
 | Document | What it is the source of truth for |
 |---|---|
-| [`DEVELOPER.md`](DEVELOPER.md) | Coding style, struct layout, C11 rules, module/dependency layering, presets — **the** style authority |
+| [`DEVELOPER.md`](DEVELOPER.md) | Coding style, struct layout, C11 rules, module/dependency layering, presets — **the** style authority. Organised as numbered rules (§1–§15); cite them (e.g. "violates §1"), don't paraphrase |
 | [`llms.txt`](llms.txt) | Project overview, source-tree map, unit conventions, SH12A/DICOM notes |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build prerequisites, formatting, how to submit a patch |
 | [`docs/dev/`](docs/dev/) | Architecture, testing, scoring, coordinates, RNG deep-dives |
@@ -55,21 +55,24 @@ Format C/H before committing — clang-format (18+) and clang-tidy are enforced 
 
 Python helpers under `tools/` are formatted with `ruff` (see `.pre-commit-config.yaml`).
 
-## Hard rules (agents break these most — see DEVELOPER.md for the full set)
+## Hard rules (agents break these most)
 
-- **C11**, but declare all variables at the **top of the block** (K&R); no declarations inside `for`/`if`.
-- **No `typedef struct`** — write `struct foo` explicitly everywhere.
-- **No `//` comments** in production code — block `/* */` only; `//` is reserved for temporary/WIP notes.
-- `double const *p`, **not** `const double *p`.
-- **No non-portable APIs** — Windows is a target. Avoid POSIX-only APIs (`strcasecmp`/`<strings.h>`, `mkdtemp`, `getpid`, `<unistd.h>`, `<sys/stat.h>`) and also `<threads.h>` (C11 threads; not implemented in MSVC). See the banned-API table in DEVELOPER.md.
-- **No heap allocation on the hot path** — nothing under `osh_scoring_score_step()` / `osh_transport_step()` may `malloc`/`calloc`/`realloc`/`free`. Pre-allocate at setup; scratch/counters are caller-owned (per-worker).
-- **Return conventions don't mix:** predicates return `int` (1 = yes); operations return `enum osh_status` (`OSH_OK = 0` = success). Do not confuse the two.
-- Follow DEVELOPER.md naming rules: public functions use the `osh_` prefix; file-local helpers are `static` and unprefixed; `static inline` helpers use a leading `_`.
-- Case-insensitive keywords: lowercase once at parse time with `osh_lower_inplace()`, then `strcmp` — never `strcasecmp`.
+These are the repo-specific traps, each tagged with the DEVELOPER.md section that
+owns it. The § is the authority — read it before relying on the one-liner here.
+
+- **C11**, but declare all variables at the **top of the block** (K&R); no declarations inside `for`/`if`. — §1
+- **No `typedef struct`** — write `struct foo` explicitly everywhere. — §2.1
+- **No `//` comments** in production code — block `/* */` only; `//` is reserved for temporary/WIP notes. — §4.1
+- `double const *p`, **not** `const double *p`. — §2.2
+- **No non-portable APIs** — Windows is a target. Avoid POSIX-only APIs (`strcasecmp`/`<strings.h>`, `mkdtemp`, `getpid`, `<unistd.h>`, `<sys/stat.h>`) and also `<threads.h>` (C11 threads; not implemented in MSVC). See the banned-API table, §11.1.
+- **No heap allocation on the hot path** — nothing under `osh_scoring_score_step()` / `osh_transport_step()` may `malloc`/`calloc`/`realloc`/`free`. Pre-allocate at setup; scratch/counters are caller-owned (per-worker). — §10
+- **Return conventions don't mix:** predicates return `int` (1 = yes); operations return `enum osh_status` (`OSH_OK = 0` = success). Do not confuse the two. — §5
+- Naming: public functions use the `osh_` prefix; file-local helpers are `static` and unprefixed; `static inline` helpers use a leading `_`. — §6.1
+- Case-insensitive keywords: lowercase once at parse time with `osh_lower_inplace()`, then `strcmp` — never `strcasecmp`. — §11.2
 
 ## Where things go
 
-- Module layout: `src/<module>/` (API + domain types), optional `src/<module>/parse/` (input parsing) and `src/<module>/runtime/` (simulation-ready state). Add these layers only when the module actually has those phases. `runtime/` must not depend on `transport/`. Details in DEVELOPER.md → *Layout*.
+- Module layout: `src/<module>/` (API + domain types), optional `src/<module>/parse/` (input parsing) and `src/<module>/runtime/` (simulation-ready state). Add these layers only when the module actually has those phases. `runtime/` must not depend on `transport/`. Details in DEVELOPER.md §9.
 - Internal headers sit next to their `.c`; `include/openshieldhit/` is public headers only.
 - **Adding a unit test:** drop `tests/unit/test_<thing>.c` — it is auto-discovered by glob and registered as `unit::<file>`. Tests can read fixtures from `tests/fixtures/` via the `OSH_TEST_FIXTURES_DIR` macro (see `tests/unit/CMakeLists.txt` / `tests/unit/README.md`).
 
