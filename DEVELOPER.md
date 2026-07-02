@@ -21,6 +21,11 @@ Each numbered section is a rule group. A group may contain:
 The rules are grouped by topic rather than by severity. A later section is not
 less important than an earlier one.
 
+Unless a rule explicitly says otherwise, apply these rules to new and touched
+code. Prefer focused fixes over mechanical tree-wide churn: cleanup is welcome
+when it is near the change being made or removes real confusion, but style-only
+sweeps should be deliberate PRs.
+
 ## §1 C Dialect, Declarations, and Initialization
 
 ### §1.1 C Dialect and Declaration Placement
@@ -34,7 +39,8 @@ variables at the beginning of the block. Do not declare variables inside `for`,
 Prefer **declare early, define late**:
 
 - Put declarations at the top of the block.
-- Assign a value only when the value is logically known.
+- Assign a value only when the value is logically known; do not initialize
+  merely to make an uninitialized-use warning disappear.
 - Avoid placeholder initializers such as `0` or `NULL` merely to silence warnings.
 - Assign loop counters and temporary variables close to the loop or computation
   that uses them.
@@ -45,9 +51,10 @@ visually consistent with the plain-C style used throughout the codebase. This is
 not a claim that modern C cannot support mixed declarations; it is a deliberate
 project convention.
 
-Avoiding unnecessary initialization also helps reviewers and compilers catch
-logic errors. A variable that is accidentally used before it is assigned should
-look suspicious, not silently contain a placeholder value.
+Avoiding unnecessary initialization is a bug-finding tool, not just style. A
+variable that is accidentally used before it is assigned should look suspicious
+to reviewers and should remain visible to compiler diagnostics; it must not
+silently contain a placeholder value that lets the bug pass through review.
 
 ### §1.3 Initialization Exceptions
 
@@ -320,14 +327,17 @@ and readable rather than pretending to be public API.
 
 - In public headers, place forward declarations and public API near the top so
   opening the file gives an immediate module overview.
-- In `.c` files, place exported or top-level functions before lower-level
-  helpers. Use `static` prototypes, handler typedefs, and dispatch-table
-  declarations near the top when needed.
+- In `.c` files, place the exported or top-level entry points near the top, in
+  the order a reader should understand the module. Put lower-level auxiliary
+  helpers closer to the bottom. Avoid bottom-up files where the main behavior is
+  hidden after pages of support code.
+- Use `static` prototypes, handler typedefs, and dispatch-table declarations
+  near the top when needed to make top-down function order compile cleanly.
 - Order public data structures from high-level concepts to supporting detail
   where type dependencies allow it.
 
 **Reason:** Top-down layout lets a reader understand the module's public shape
-before diving into local mechanics.
+and main behavior before diving into local mechanics.
 
 ## §7 Helpers, Constants, and Magic Numbers
 
@@ -358,7 +368,28 @@ concept can make the call graph harder to understand. Reusing the existing
 utility functions also keeps numerics and edge-case behavior consistent across
 modules.
 
-### §7.2 Numbered Lists and Constants
+### §7.2 Conditional Operator
+
+**Rule:** Do not introduce new conditional operators (`?:`) in production C.
+Prefer explicit `if` / `else` control flow.
+
+**Exception:** A `?:` may be acceptable inside a macro definition when the macro
+genuinely must expand to a single expression, such as a local MIN/MAX-style
+helper. Keep both arms simple, parenthesize macro arguments correctly, and avoid
+side effects in the condition or either arm. Do not use nested conditional
+operators.
+
+Existing ternaries do not need a mechanical tree-wide cleanup. When touching
+nearby code, replace them opportunistically, and treat new non-macro ternaries
+or nested ternaries as review findings.
+
+**Reason:** Readability comes first: explicit `if` / `else` blocks are easier to
+scan, review, and debug than compact conditional expressions. Ternaries are also
+easy to pack into larger expressions where evaluation order, units, casts, or
+ownership become harder to see. OpenShieldHIT favors plain control flow for
+maintainability and review.
+
+### §7.3 Numbered Lists and Constants
 
 **Rule:** Prefer `enum` instead of `#define` for numbered lists.
 
