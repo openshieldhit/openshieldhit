@@ -491,6 +491,40 @@ worker a private profile and folds them afterwards with
 aggregate work; `total_s` combines by maximum because concurrent workers overlap
 in wall-clock time.
 
+### §10.3 Expensive Math on Hot Paths
+
+**Rule:** Avoid repeated calls to expensive transcendental functions such as
+`sin()`, `cos()`, `tan()`, `acos()`, `asin()`, `atan2()`, `log()`, `exp()`, and
+`pow()` on hot paths when the value can be precomputed, tabulated, cached, or
+rewritten with simpler arithmetic.
+
+**Reason:** These functions are often much more expensive than additions,
+multiplications, fused multiply-adds, or table lookups. In per-step transport,
+geometry, scoring, or inner physics loops, even a single avoidable
+transcendental call can become visible in profiles.
+
+**Exceptions:** Use the mathematically correct function when the physics or
+geometry requires it. The rule is to avoid unnecessary repeated evaluation, not
+to replace clear and correct physics with fragile approximations. Good patterns
+include computing `sin`/`cos` once at parse/setup time for fixed angles, carrying
+both `cos_phi` and `sin_phi` from a sampling helper, using squared lengths when
+only comparisons are needed, and documenting any approximation used in hot code.
+
+**Example:** Avoid generic `pow()` for simple fixed exponents in hot code.
+
+```c
+y = x * sqrt(x); /* preferred for x^(3/2) */
+```
+
+instead of:
+
+```c
+y = pow(x, 1.5);
+```
+
+The `pow()` form is general and may cost substantially more CPU cycles than the
+specialized expression.
+
 ## §11 Portability and Banned APIs
 
 ### §11.1 Banned APIs
