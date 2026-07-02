@@ -58,11 +58,17 @@ double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
      * precomputed constants in the header, so this costs a single log per call
      * (logf: single precision suffices — see _vav_xform) instead of three. */
     kn = (2.0 * logf((float) kappa) - osh_vav_klog[b] - osh_vav_khlog[b]) * osh_vav_kspan_inv[b];
+    /* Fold a non-positive κ to the LOW fitted edge (κ→0 is the Landau limit):
+     * logf(κ<0) is NaN, and the fmin/fmax clamp below would otherwise drop the
+     * NaN and land on the high edge (logf(0)=-inf already clamps low correctly,
+     * but κ<0 must be handled explicitly). */
+    if (isnan(kn)) {
+        kn = -1.0;
+    }
     /* Clamp the Chebyshev abscissa to [-1,1]: a no-op for in-band κ, but for any
      * out-of-domain κ (the transport dispatcher only calls this for κ∈[0.01,10),
      * but keep the evaluator self-safe) it evaluates at the nearest fitted band
-     * edge instead of extrapolating the polynomial — and neutralises a non-finite
-     * logf(κ≤0), since fmin/fmax with NaN yield the finite bound. */
+     * edge instead of extrapolating the polynomial. */
     kn = fmax(-1.0, fmin(1.0, kn));
 
     /* u-band dispatch. */
