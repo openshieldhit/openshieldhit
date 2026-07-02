@@ -647,18 +647,40 @@ Build one target:
 cmake --build --preset release --parallel --target gemca_raycast_bench
 ```
 
-### §14.3 CTest
+## §15 Hot-Path Data Layout, SIMD, and Offload Readiness
 
-**Reason:** There are no CTest presets in `CMakePresets.json`; `ctest --preset
-debug` is not valid for this repository. Point CTest at the binary directory with
-`ctest --test-dir build_debug`. On Windows or other multi-config generators, add
-`-C Debug` if needed.
+### §15.1 SoA-Ready Hot Paths
 
-## §15 AVX2 and SIMD Acceleration
+**Rule:** Design simulation hot paths so they remain friendly to
+structure-of-arrays (SoA) storage, vectorization, SIMD kernels, and future
+offload backends where applicable.
 
-**Rule:** Do not add a separate preset just for AVX2. AVX2+FMA support is
-detected automatically at configure time for every preset via
-`check_c_compiler_flag`.
+Prefer APIs and data flow that operate on contiguous arrays or explicit batches
+of the same field, rather than interleaving unrelated per-history state in a
+single large object. Keep cold metadata separate from per-step mutable state.
+When adding hot-path state, ask whether a future worker, SIMD lane, or GPU kernel
+could consume it without unpacking an array-of-structs layout first.
+
+**Reason:** The current serial code should not block future performance work.
+OpenShieldHIT already uses pool-style transport state and batched geometry/scoring
+operations; new hot code should preserve that direction. SoA-friendly design
+makes cache behavior easier to reason about, enables explicit SIMD kernels, and
+keeps a path open for thread, accelerator, or GPU offload work if a module later
+justifies it.
+
+**Examples:**
+
+- Prefer separate arrays such as `x[]`, `y[]`, `z[]`, `ux[]`, `uy[]`, `uz[]`,
+  `e[]` for live particle state over an array of large per-particle structs.
+- Pass caller-owned scratch arrays into hot kernels instead of allocating or
+  hiding scratch inside the callee.
+- Keep immutable species/material metadata shared and separate from per-history
+  mutable state.
+
+### §15.2 Current AVX2 Dispatch
+
+**Rule:** Do not add a separate preset just for AVX2. AVX2+FMA support is detected
+automatically at configure time for every preset via `check_c_compiler_flag`.
 
 When the compiler supports `-mavx2 -mfma`,
 `src/gemca/runtime/osh_gemca_runtime_avx2.c` is compiled with those flags and
