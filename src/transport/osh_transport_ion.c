@@ -330,8 +330,18 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
         unsigned int const ts = (unsigned int) (total_s - th * 3600.0 - tm * 60.0);
 
         if (prof) {
-            prof->total_s = total_s;
-            prof->steps = (unsigned long long) steps_taken;
+            /* Accumulate, never assign: the outer batch loop (osh_transport.c) calls
+             * this range once per checkpoint batch against the same run master, so
+             * wall time and step count must sum across sequential batches exactly as
+             * the per-phase timers and iteration counters above already do.  A bare
+             * assignment would leave total_s/steps reflecting only the last batch —
+             * internally contradictory (e.g. step_s > total_s) and wrong for the
+             * benchmark accounting.  For the default single batch the master is zeroed
+             * once at profiling-enable, so 0 + x is byte-identical to the old path.
+             * This is a distinct axis from osh_transport_profile_merge(), which folds
+             * *concurrent* workers and so combines total_s by max, not sum. */
+            prof->total_s += total_s;
+            prof->steps += (unsigned long long) steps_taken;
         }
 
         if (last_report_completed < completed) {

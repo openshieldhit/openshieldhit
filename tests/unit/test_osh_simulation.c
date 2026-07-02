@@ -482,14 +482,20 @@ static double sum_last_column(char const *path) {
 }
 
 /*
- * Drive one 00_minimal run at a given checkpoint cadence and return both the
- * completed-primary count and the total scored energy.  every_primaries == 0 is
- * FINAL-ONLY (one batch); > 0 runs family-complete batches of that size.
+ * Drive one run of test case @p case_name at a given checkpoint cadence and
+ * return the completed-primary count and total scored energy.  every_primaries
+ * == 0 is FINAL-ONLY (one batch); > 0 runs family-complete batches of that size.
+ * When @p profile_out is non-NULL, profiling is enabled and the run profile is
+ * copied out so callers can assert its counters accumulate across batches.  All
+ * bundled cases used here are water cylinders spanning z ∈ [0, 20], so the same
+ * single-quantity Energy mesh reads back the deposited energy for each.
  */
-static void run_checkpoint_case(unsigned long long nstat,
+static void run_checkpoint_case(char const *case_name,
+                                unsigned long long nstat,
                                 unsigned long long every_primaries,
                                 unsigned long long *completed_out,
-                                double *energy_sum_out) {
+                                double *energy_sum_out,
+                                struct osh_simulation_profile *profile_out) {
     char geo_path[512];
     char beam_path[512];
     char mat_path[512];
@@ -503,9 +509,9 @@ static void run_checkpoint_case(unsigned long long nstat,
     struct osh_simulation *sim = NULL;
     struct osh_results const *results = NULL;
 
-    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/00_minimal/geo.dat", OSH_PROJECT_SOURCE_DIR);
-    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/00_minimal/beam.dat", OSH_PROJECT_SOURCE_DIR);
-    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/00_minimal/mat.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/%s/geo.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/%s/beam.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/%s/mat.dat", OSH_PROJECT_SOURCE_DIR, case_name);
 
     /* One single-quantity TEXT mesh to a unique file, so the last column is the
      * scored energy and there is exactly one ASCII artifact to read back. */
@@ -534,10 +540,17 @@ static void run_checkpoint_case(unsigned long long nstat,
 
     ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
     ASSERT_TRUE(osh_simulation_set_checkpoint_policy(sim, every_primaries) == OSH_OK);
+    if (profile_out) {
+        ASSERT_TRUE(osh_simulation_set_profiling(sim, 1) == OSH_OK);
+    }
     ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
 
     ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
     *completed_out = osh_results_completed_nstat(results);
+
+    if (profile_out) {
+        ASSERT_TRUE(osh_simulation_get_profile(sim, profile_out) == OSH_OK);
+    }
 
     ASSERT_TRUE(osh_simulation_save(sim) == OSH_OK);
     *energy_sum_out = sum_last_column(out_path);
@@ -562,7 +575,7 @@ static void test_checkpoint_final_only_default_completes(void) {
 
     ASSERT_TRUE(osh_simulation_set_checkpoint_policy(NULL, 0ull) == OSH_EINVAL);
 
-    run_checkpoint_case(200ull, 0ull, &completed, &energy);
+    run_checkpoint_case("00_minimal", 200ull, 0ull, &completed, &energy, NULL);
     ASSERT_TRUE(completed == 200ull);
     ASSERT_TRUE(energy > 0.0);
 }
@@ -583,8 +596,8 @@ static void test_checkpoint_live_batches_match_final_only(void) {
     double energy_live = 0.0;
     double rel_diff;
 
-    run_checkpoint_case(200ull, 0ull, &completed_final, &energy_final); /* one batch */
-    run_checkpoint_case(200ull, 64ull, &completed_live, &energy_live);  /* 64,64,64,8 */
+    run_checkpoint_case("00_minimal", 200ull, 0ull, &completed_final, &energy_final, NULL); /* one batch */
+    run_checkpoint_case("00_minimal", 200ull, 64ull, &completed_live, &energy_live, NULL);  /* 64,64,64,8 */
 
     ASSERT_TRUE(completed_final == 200ull);
     ASSERT_TRUE(completed_live == 200ull);
@@ -592,6 +605,120 @@ static void test_checkpoint_live_batches_match_final_only(void) {
 
     rel_diff = fabs(energy_live - energy_final) / energy_final;
     ASSERT_TRUE(rel_diff < 1.0e-6);
+}
+
+/*
+ * Checkpoint policy (issue #195), LIVE batching WITH secondaries in flight.
+ * 00_minimal has NUCRE off, so its equivalence test never actually drains a
+ * neutron family across a checkpoint.  06_minimal_nucre enables nuclear reactions,
+ * so each batch's ion pass banks neutrons that the family scheduler must fully
+ * drain into scoring before the checkpoint boundary.  The profile counters below
+ * assert that neutrons really were produced and drained (nuclear_events and
+ * neutrons_banked > 0), so this test genuinely exercises the "family-complete,
+ * quiescent checkpoint" path rather than a degenerate no-secondary run.
+ *
+ * What this guards (the contract that holds):
+ *   - COMPLETENESS: every primary finishes under both final-only and LIVE
+ *     batching even though a batch banks neutrons that must be drained before it
+ *     may advance — no primary is stranded at a checkpoint.
+ *   - REPRODUCIBILITY within a batching: a given cadence is deterministic, so
+ *     re-running the same LIVE policy reproduces the scored energy bit-for-bit.
+ *
+ * What this deliberately does NOT assert (documented limitation, see below):
+ *   Single-pass (final-only) and multi-batch LIVE runs are NOT bit-identical once
+ *   secondaries are in flight — on this fixture they differ by ~2.6% in scored
+ *   energy.  The RNG stream of every history is a pure function of its global
+ *   index (all but one neutron-producing primary are bit-identical across
+ *   batchings), so this is not a seeding defect and not neutron-pool overflow
+ *   (zero drops in both).  Rather, one primary's ion history reaches its nuclear
+ *   vertex at a fractionally different point depending on whether the run is
+ *   transported as one pass or split into batches, which flips a single stochastic
+ *   reaction and cascades.  That is a transport-kernel batch-reproducibility
+ *   limitation tracked separately from this scheduling seam; asserting exact
+ *   final-vs-LIVE equivalence here would encode a guarantee the kernel does not
+ *   yet provide.
+ */
+static void test_checkpoint_live_batches_drain_families_with_nuclear(void) {
+    unsigned long long completed_final = 0ull;
+    unsigned long long completed_live_a = 0ull;
+    unsigned long long completed_live_b = 0ull;
+    double energy_final = 0.0;
+    double energy_live_a = 0.0;
+    double energy_live_b = 0.0;
+    struct osh_simulation_profile prof_final;
+    struct osh_simulation_profile prof_live;
+
+    /* Final-only baseline, with profiling so we can prove secondaries were in
+     * flight (otherwise the fixture could silently regress to a no-nuclear run
+     * and this test would prove nothing). */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, &completed_final, &energy_final, &prof_final);
+    ASSERT_TRUE(completed_final == 200ull);
+    ASSERT_TRUE(energy_final > 0.0);
+    ASSERT_TRUE(prof_final.nuclear_events > 0ull);
+    ASSERT_TRUE(prof_final.neutrons_banked > 0ull);
+
+    /* LIVE batching drains a neutron family at every checkpoint, yet still
+     * finishes every primary and still produces (and drains) neutrons. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, &completed_live_a, &energy_live_a, &prof_live);
+    ASSERT_TRUE(completed_live_a == 200ull);
+    ASSERT_TRUE(energy_live_a > 0.0);
+    ASSERT_TRUE(prof_live.neutrons_banked > 0ull);
+
+    /* Reproducibility of a fixed cadence: the same LIVE policy re-run reproduces
+     * the scored energy exactly (bit-for-bit), the determinism guarantee the
+     * count cadence is meant to provide. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, &completed_live_b, &energy_live_b, NULL);
+    ASSERT_TRUE(completed_live_b == 200ull);
+    ASSERT_TRUE(energy_live_b == energy_live_a);
+}
+
+/*
+ * Checkpoint policy (issue #195), profiling accounting across batches.  The run
+ * profile is a single master zeroed once at profiling-enable, and the batch loop
+ * transports each checkpoint batch into it in turn.  Every counter must therefore
+ * accumulate across batches: a regression that *assigns* (rather than sums) wall
+ * time or step count would leave those two reflecting only the last batch, which
+ * both undercounts the run and breaks the phase decomposition (phase_step_s could
+ * exceed transport_s).  Because a count cadence is order-independent, the total
+ * step count is a pure function of the primaries transported, so LIVE batching
+ * must reproduce the single-batch step count exactly.
+ */
+static void test_checkpoint_profiling_accumulates_across_batches(void) {
+    unsigned long long completed_final = 0ull;
+    unsigned long long completed_live = 0ull;
+    double energy_final = 0.0;
+    double energy_live = 0.0;
+    struct osh_simulation_profile prof_final;
+    struct osh_simulation_profile prof_live;
+    double phase_sum_s;
+
+    run_checkpoint_case("00_minimal", 200ull, 0ull, &completed_final, &energy_final, &prof_final);
+    run_checkpoint_case("00_minimal", 200ull, 64ull, &completed_live, &energy_live, &prof_live);
+
+    ASSERT_TRUE(completed_final == 200ull);
+    ASSERT_TRUE(completed_live == 200ull);
+
+    /* Steps are order-independent under a count cadence: LIVE batching transports
+     * exactly the same histories as the single batch, so the accumulated step
+     * count must match to the last unit — the sharp check the old assignment bug
+     * would fail (it reported only the final 8-primary batch).  (iterations is a
+     * per-wavefront-pass counter, not per-history, so it legitimately differs
+     * across batchings — each batch re-runs its own wavefront — and is not
+     * compared here.) */
+    ASSERT_TRUE(prof_final.steps > 0ull);
+    ASSERT_TRUE(prof_live.steps == prof_final.steps);
+    ASSERT_TRUE(prof_live.iterations > 0ull);
+
+    /* Wall time and phase timers must stay a consistent decomposition after
+     * accumulation: the summed phases cannot exceed the summed transport wall
+     * time (small slack for clock granularity).  Under the old bug transport_s
+     * carried only the last batch while phase_step_s summed all four, so this
+     * would fail. */
+    ASSERT_TRUE(prof_live.transport_s > 0.0);
+    ASSERT_TRUE(prof_live.phase_step_s > 0.0);
+    phase_sum_s = prof_live.phase_fill_s + prof_live.phase_zone_ref_s + prof_live.phase_distance_s
+                  + prof_live.phase_step_s + prof_live.phase_compact_s;
+    ASSERT_TRUE(phase_sum_s <= prof_live.transport_s * 1.02 + 1.0e-6);
 }
 
 /* ---- Entry point --------------------------------------------------------- */
@@ -607,5 +734,7 @@ int main(void) {
     test_no_run_control_runs_to_completion();
     test_checkpoint_final_only_default_completes();
     test_checkpoint_live_batches_match_final_only();
+    test_checkpoint_live_batches_drain_families_with_nuclear();
+    test_checkpoint_profiling_accumulates_across_batches();
     return 0;
 }
