@@ -647,6 +647,22 @@ Build one target:
 cmake --build --preset release --parallel --target gemca_raycast_bench
 ```
 
+### §14.3 Formatting and Static Analysis
+
+**Rule:** Respect the repository's local formatting and static-analysis
+configuration. Use the checked-in clang-format and clang-tidy settings; do not
+apply a personal formatter style or editor defaults that disagree with the repo.
+
+Run formatting before submitting C or header changes:
+
+```bash
+./tools/clang-format-all.sh
+```
+
+**Reason:** Formatting and static-analysis settings are part of the project
+contract. Keeping them local and version-controlled avoids style drift between
+contributors, editors, operating systems, and LLM-generated patches.
+
 ## §15 Hot-Path Data Layout, SIMD, and Offload Readiness
 
 ### §15.1 SoA-Ready Hot Paths
