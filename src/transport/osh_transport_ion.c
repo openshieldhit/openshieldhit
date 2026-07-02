@@ -100,6 +100,7 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     size_t primaries_completed;
     size_t n_fill;
     size_t n_wavefront;
+    size_t width; /* primaries injected this fill: wavefront cap, headroom left for secondaries */
     size_t i;
     size_t step_budget;
     size_t steps_taken;
@@ -177,7 +178,7 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
          * context built without a simulation) falls back to the full capacity —
          * the pre-#213 behaviour. */
         if (!stop && pool->n == 0u && primaries_done < nstat) {
-            size_t width = transport_ctx->ion_wavefront_width;
+            width = transport_ctx->ion_wavefront_width;
             if (width == 0u || width > pool->capacity) {
                 width = pool->capacity;
             }

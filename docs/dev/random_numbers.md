@@ -236,25 +236,30 @@ These depend only on `(seed, index)`. Whether history 1 runs first, last, on
 thread 0 or 47, in a pool of 1 or 65536, its sequence is the same — the
 order-independence guarantee, locked by `test_seed_history_order_independence`.
 
-### Worked example — a secondary via `split` (verified output)
+### Worked example — a secondary via `split` (verified output, `seed = 2025`)
 
 Primary history 7 takes two physics draws, then a nuclear event spawns a
-secondary, seeded by splitting the parent:
+secondary, seeded by splitting the parent at ordinal 0. The split reads the
+parent's state but **never advances it**, so the parent draws the same next
+value whether or not the secondary was ever created:
 
 ```
-parent (hist 7) draws #1,#2:  0.223872  0.725151
-child  first 2 draws:         0.252732  0.955397
-parent next draw (split advanced it by two): 0.609548
+parent (hist 7) draws #1,#2:      0.223872  0.725151
+child (ordinal 0) first 2 draws:  0.955397  0.252732
+parent's next draw, split done:   0.632358
+parent's next draw, no split:     0.632358   (identical)
 ```
 
-Re-run with any pool capacity / thread / rank and the child is identical:
+Re-run with any pool capacity / thread / rank — or drop the secondary
+altogether — and both streams are unchanged:
 
 ```
-child  first 2 draws again:   0.252732  0.955397   (identical)
+child (ordinal 0) first 2 draws again:  0.955397  0.252732   (identical)
 ```
 
-The child is independent of the parent's continuation yet fully determined by
-the parent's lineage — see `test_split_deterministic`.
+The child stream is a pure function of the parent's lineage and its ordinal,
+and the parent is independent of whether the child was ever split — see
+`test_split_deterministic` and `test_split_nonconsuming_and_drop_independent`.
 
 ### What is and isn't guaranteed
 

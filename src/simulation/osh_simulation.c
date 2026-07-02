@@ -95,10 +95,11 @@ static size_t simulation_ion_wavefront_width(struct osh_transport_params const *
  * the checkpoint batch schedule, scored results depended on the batch size
  * (issue #213).  Doubling the width gives 100 % headroom: secondaries drain each
  * wavefront pass, so peak occupancy stays far below capacity in practice and the
- * default configuration drops nothing.  Any residual overflow on an aggressively
- * small capacity is counted (osh_particle_pool::n_dropped) and cannot perturb the
- * parent stream (osh_rng_split is lineage+ordinal-keyed), so scored output stays
- * batch- and capacity-invariant regardless. */
+ * default configuration drops nothing, so scored output is batch- and
+ * capacity-invariant.  Any residual overflow on an aggressively small capacity is
+ * counted (osh_particle_pool::n_dropped) and WARNed; it cannot perturb a surviving
+ * history's stream (osh_rng_split is lineage+ordinal-keyed), so the only cost is
+ * the dropped secondaries' own deposited energy. */
 static size_t simulation_ion_pool_capacity(struct osh_transport_params const *p) {
     size_t const width = simulation_ion_wavefront_width(p);
     size_t const headroom = width;

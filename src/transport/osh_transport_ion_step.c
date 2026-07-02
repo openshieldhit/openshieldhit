@@ -276,10 +276,13 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
      * aggressively small capacity), the ion drop is *counted* (pool->n_dropped),
      * not silent, and — because each child stream is seeded by lineage+ordinal,
      * not by drawing from the parent (osh_rng_split) — a dropped secondary
-     * cannot perturb its parent's or siblings' streams, so scored output stays
-     * batch- and capacity-invariant regardless.  The secondary ordinal `si` is
-     * passed straight to the split so the seeding does not depend on which
-     * siblings were injected. */
+     * cannot perturb its parent's or siblings' streams: the only cost is that
+     * secondary's own deposited energy, never an RNG desync of a surviving
+     * history.  (Scored output is batch- and capacity-invariant in the default,
+     * drop-free configuration; a pool small enough to overflow instead trades
+     * that invariance for the counted, WARNed energy loss.)  The secondary
+     * ordinal `si` is passed straight to the split so the seeding does not depend
+     * on which siblings were injected. */
     if (ctx.nuclear_event.n_secondaries > 0u) {
         size_t si;
         struct osh_nuclear_event const *ev = &ctx.nuclear_event;

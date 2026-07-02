@@ -739,10 +739,67 @@ static void test_checkpoint_nuclear_invariant_across_batches_and_capacity(void) 
             energy_ref = energy;
             ASSERT_TRUE(prof.nuclear_events > 0ull); /* the fixture really is nuclear */
         } else {
-            double const rel_diff = fabs(energy - energy_ref) / energy_ref;
-            ASSERT_TRUE(rel_diff < 1.0e-9);
+            ASSERT_TRUE(fabs(energy - energy_ref) / energy_ref < 1.0e-9);
         }
     }
+}
+
+/*
+ * Overflow accounting (issue #213), the positive counterpart to the
+ * ion_secondaries_dropped == 0 assertions above.  Those prove the default
+ * configuration reserves enough headroom to drop nothing; this deliberately
+ * starves the ion pool so a full wavefront's secondaries cannot all fit, and
+ * asserts the overflow is COUNTED rather than silently discarded (the exact bug
+ * #213 fixes).  It further checks that a drop never strands a primary (all
+ * histories still complete), that the lost secondaries lower the scored energy
+ * (their deposits are gone, not merely reordered), and that the starved run is
+ * still bit-for-bit deterministic on re-run.  Guards the drop counter in
+ * osh_transport_ion_step and the WARN in osh_simulation_run that surfaces it.
+ *
+ * Note this does NOT assert cross-batch invariance: once the pool overflows,
+ * which secondaries are dropped depends on pool occupancy (and thus on the
+ * checkpoint cadence), so the overflow regime trades exact invariance for a
+ * counted, warned energy loss.  Batch/capacity invariance is a property of the
+ * default, drop-free configuration and is locked by the test above.
+ */
+static void test_checkpoint_nuclear_overflow_is_counted_not_silent(void) {
+    unsigned long long completed_ref = 0ull;
+    unsigned long long completed_small = 0ull;
+    unsigned long long completed_rerun = 0ull;
+    double energy_ref = 0.0;
+    double energy_small = 0.0;
+    double energy_rerun = 0.0;
+    struct osh_simulation_profile prof_ref;
+    struct osh_simulation_profile prof_small;
+    struct osh_simulation_profile prof_rerun;
+
+    /* Reference: the default capacity has full secondary headroom, so nothing is
+     * dropped and every nuclear deposit is scored. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 0ull, &completed_ref, &energy_ref, &prof_ref);
+    ASSERT_TRUE(completed_ref == 200ull);
+    ASSERT_TRUE(prof_ref.nuclear_events > 0ull); /* the fixture really is nuclear */
+    ASSERT_TRUE(prof_ref.ion_secondaries_dropped == 0ull);
+
+    /* Starve the pool: capacity 2 leaves a full primary wavefront almost no room
+     * for its recoils/abrasion nucleons/break-up fragments, so they overflow.
+     * The overflow is counted in ion_secondaries_dropped, never a bare drop. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 2ull, &completed_small, &energy_small, &prof_small);
+    ASSERT_TRUE(prof_small.ion_secondaries_dropped > 0ull);
+    /* A drop must never strand a primary: every history still completes. */
+    ASSERT_TRUE(completed_small == 200ull);
+    /* The dropped secondaries carried deposited energy that is now simply gone,
+     * so the starved run scores strictly less than the headroom reference. */
+    ASSERT_TRUE(energy_small > 0.0);
+    ASSERT_TRUE(energy_small < energy_ref);
+
+    /* Determinism survives overflow: re-running the identical (cadence, capacity)
+     * reproduces the scored energy and the drop count exactly, because the drop
+     * pattern is a pure function of the lineage-keyed histories and the fixed
+     * pool occupancy — not of run-to-run chance. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 2ull, &completed_rerun, &energy_rerun, &prof_rerun);
+    ASSERT_TRUE(completed_rerun == 200ull);
+    ASSERT_TRUE(energy_rerun == energy_small);
+    ASSERT_TRUE(prof_rerun.ion_secondaries_dropped == prof_small.ion_secondaries_dropped);
 }
 
 /*
@@ -809,6 +866,7 @@ int main(void) {
     test_checkpoint_live_batches_match_final_only();
     test_checkpoint_live_batches_drain_families_with_nuclear();
     test_checkpoint_nuclear_invariant_across_batches_and_capacity();
+    test_checkpoint_nuclear_overflow_is_counted_not_silent();
     test_checkpoint_profiling_accumulates_across_batches();
     return 0;
 }
