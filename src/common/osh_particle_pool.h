@@ -102,8 +102,12 @@ struct osh_particle_pool {
     struct particle const **species; /* one pointer per entry into the particle registry */
 
     /* ---- Bookkeeping ---- */
-    size_t n;        /* number of live entries in [0, n)   */
-    size_t capacity; /* total allocated slots               */
+    size_t n;         /* number of live entries in [0, n)   */
+    size_t capacity;  /* total allocated slots               */
+    size_t n_dropped; /* secondaries lost to overflow (diag); mirrors the
+                       * neutron pool's n_dropped.  Never reset by compaction,
+                       * so it accumulates across wavefront passes and
+                       * checkpoint batches for the run-level diagnostic. */
 };
 
 /* ---- Lifecycle ----------------------------------------------------------- */

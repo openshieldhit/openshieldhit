@@ -1,6 +1,7 @@
 #include "transport/osh_transport.h"
 
 #include "common/osh_diag.h"
+#include "common/osh_particle_pool.h"
 #include "transport/osh_checkpoint_policy.h"
 #include "transport/osh_neutron_pool.h"
 #include "transport/osh_transport_ion.h"
@@ -90,6 +91,15 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
         } else {
             osh_neutron_pool_reset(transport_ctx->neutron_pool);
         }
+    }
+
+    /* Reset the ion-secondary drop counter for this run (mirrors the neutron
+     * pool reset above), so a re-run reports drops for the current run only.
+     * It then accumulates across all checkpoint batches, since the per-batch
+     * osh_transport_ion_run_range resets only the pool's live count, never
+     * n_dropped. */
+    if (transport_ctx->ion_pool != NULL) {
+        transport_ctx->ion_pool->n_dropped = 0u;
     }
 
     /* ---- Outer checkpoint batch loop ------------------------------------- */

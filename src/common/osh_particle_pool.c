@@ -103,6 +103,7 @@ static enum osh_status particle_pool_alloc_slab(struct osh_particle_pool *pool, 
 
     pool->n = 0u;
     pool->capacity = capacity;
+    pool->n_dropped = 0u;
     return OSH_OK;
 }
 

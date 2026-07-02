@@ -119,10 +119,15 @@ static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
 /*
  * Push a neutron secondary from a compound/FBU event back into the pool.
  * Position is inherited from the parent slot; direction and energy come from
- * the secondary descriptor.  RNG stream is split from the parent so the child
- * history is independent from all sibling histories.
+ * the secondary descriptor.  The RNG stream is seeded from the parent keyed by
+ * @p ordinal (this secondary's index within the event) without advancing the
+ * parent, so a dropped sibling cannot perturb the parent's or other siblings'
+ * streams (issue #213).
  */
-static void push_neutron_secondary(struct osh_neutron_pool *pool, size_t k, struct osh_nuclear_secondary const *sec) {
+static void push_neutron_secondary(struct osh_neutron_pool *pool,
+                                   size_t k,
+                                   struct osh_nuclear_secondary const *sec,
+                                   size_t ordinal) {
     size_t slot; /* index of the new entry */
 
     pool->n_created++;
@@ -141,7 +146,7 @@ static void push_neutron_secondary(struct osh_neutron_pool *pool, size_t k, stru
     pool->wt[slot] = pool->wt[k];
     pool->prim_idx[slot] = pool->prim_idx[k];
     pool->gen[slot] = (pool->gen[k] < 255u) ? (uint8_t) (pool->gen[k] + 1u) : 255u;
-    osh_rng_split(&pool->rng[slot], &pool->rng[k]);
+    osh_rng_split(&pool->rng[slot], &pool->rng[k], (uint64_t) ordinal);
 }
 
 /*
@@ -178,7 +183,7 @@ static void apply_event(struct osh_neutron_pool *pool, size_t k, struct osh_neut
         for (i = 0u; i < ev->n_secondaries; ++i) {
             sec = &ev->secondaries[i];
             if (sec->species != NULL && sec->species->pdg == OSH_PART_PDG_NEUTRON) {
-                push_neutron_secondary(pool, k, sec);
+                push_neutron_secondary(pool, k, sec, i);
             }
         }
         pool->e[k] = 0.0;
