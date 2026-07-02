@@ -239,6 +239,20 @@ Use this structure:
 help readers understand not only what a function does, but why the implementation
 chooses a particular convention, algorithm, unit, or ownership model.
 
+### §4.4 Long-Form Documentation Drift
+
+**Rule:** Before merging a PR to `main`, update applicable long-form
+documentation when the change affects invariants, user-visible behavior, module
+ownership, file formats, workflows, or non-obvious design decisions.
+
+Check `docs/`, `src/<module>/README.md`, and other subdirectory READMEs that
+own the changed area. If none of them are affected, no documentation edit is
+needed, but the review should make that choice deliberately.
+
+**Reason:** Code comments explain local implementation choices; long-form docs
+explain the model future contributors rely on. Keeping them current at merge
+time prevents `docs/` and module READMEs from drifting into historical notes.
+
 ## §5 Return Value Conventions
 
 ### §5.1 Predicates
