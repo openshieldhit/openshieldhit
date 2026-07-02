@@ -53,21 +53,16 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  * @brief Transport every history in a worker's assigned range to termination.
  *
  * @details
- * The wavefront (BFS) CSDA loop, factored out of osh_transport_ion_run_minimal()
- * so it can be driven over an explicit history range instead of always the whole
- * run.  The worker context isolates the *transport-local* mutable state — the
- * particle pool and per-step batch scratch — for one slice [hist_lo, hist_hi).
- * Primary generation is already partition-safe: this loop fills the pool through
- * osh_beam_runtime_fill_pool_at() with an explicit global base derived from the
- * worker's own range, never the shared beam cursor.  Profile counters are
- * per-worker too: this loop accumulates into @c wctx->profile, never a shared
- * profile, so workers do not race on them; the driver folds them into the run's
- * master with osh_transport_profile_merge().  One piece of shared state still
- * stands between this and concurrent execution: @p score_rt's accumulators
- * (deposits land in the shared master); per-worker copies merged at the end are
- * the plan, see the @c accumulators field on @ref osh_worker_context.  Today a
- * single worker covers [0, nstat) and points its profile straight at the master,
- * so none of that sharing is yet exercised.
+ * The wavefront (BFS) CSDA loop, driven by osh_transport_ion_run_range() over an
+ * explicit history range rather than always the whole run.  The worker context isolates the *transport-local* mutable
+ * state — the particle pool and per-step batch scratch — for one slice [hist_lo, hist_hi). Primary generation is
+ * already partition-safe: this loop fills the pool through osh_beam_runtime_fill_pool_at() with an explicit global base
+ * derived from the worker's own range, never the shared beam cursor.  Profile counters are per-worker too: this loop
+ * accumulates into @c wctx->profile, never a shared profile, so workers do not race on them; the driver folds them into
+ * the run's master with osh_transport_profile_merge().  One piece of shared state still stands between this and
+ * concurrent execution: @p score_rt's accumulators (deposits land in the shared master); per-worker copies merged at
+ * the end are the plan, see the @c accumulators field on @ref osh_worker_context.  Today a single worker covers [0,
+ * nstat) and points its profile straight at the master, so none of that sharing is yet exercised.
  *
  *   1. When the pool is empty and primaries remain, fill it from beam_runtime
  *      (up to the worker's pool capacity).
@@ -335,8 +330,18 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
         unsigned int const ts = (unsigned int) (total_s - th * 3600.0 - tm * 60.0);
 
         if (prof) {
-            prof->total_s = total_s;
-            prof->steps = (unsigned long long) steps_taken;
+            /* Accumulate, never assign: the outer batch loop (osh_transport.c) calls
+             * this range once per checkpoint batch against the same run master, so
+             * wall time and step count must sum across sequential batches exactly as
+             * the per-phase timers and iteration counters above already do.  A bare
+             * assignment would leave total_s/steps reflecting only the last batch —
+             * internally contradictory (e.g. step_s > total_s) and wrong for the
+             * benchmark accounting.  For the default single batch the master is zeroed
+             * once at profiling-enable, so 0 + x is byte-identical to the old path.
+             * This is a distinct axis from osh_transport_profile_merge(), which folds
+             * *concurrent* workers and so combines total_s by max, not sum. */
+            prof->total_s += total_s;
+            prof->steps += (unsigned long long) steps_taken;
         }
 
         if (last_report_completed < completed) {
@@ -405,37 +410,45 @@ void osh_transport_profile_merge(struct osh_transport_profile *dst, struct osh_t
     }
 }
 
-/* ---- Public entry: single-worker run over the whole history range -------- */
+/* ---- Public entry: single-worker run over an explicit history range ------ */
 
 /**
- * @brief Transport all primaries for a run (single worker over [0, nstat)).
+ * @brief Transport the ion primaries of one history range [hist_lo, hist_hi).
  *
  * @details
- * Validates the run parameters and transports the whole history range [0, nstat)
- * in one worker.  That worker borrows the simulation's pre-allocated ion pool and
- * geometry scratch (transport_ctx->ion_pool / zone_refs / dist_batch, sized at
- * simulation-create time and reused across the ion and neutron passes) through
- * osh_worker_context_attach() — it does not allocate its own.  Partitioning the
- * run across several workers (threads/ranks/profiling replicas) is a matter of
- * giving each a context over a disjoint sub-range with its own private pool and
- * merging their scoring accumulators; run_history_range() itself does not change.
- *
- * The pool capacity is a pure performance knob: per-history RNG streams keep
- * scored results invariant (up to summation order) at any capacity.
+ * Validates the run parameters, borrows the simulation's pre-allocated ion pool
+ * and geometry scratch (transport_ctx->ion_pool / zone_refs / dist_batch, sized
+ * at simulation-create time and reused across families and batches) through
+ * osh_worker_context_attach(), and transports exactly [hist_lo, hist_hi).  The
+ * borrowed pool is reset to empty on entry; the wavefront loop drains it back to
+ * empty before returning, so consecutive batches never carry live histories
+ * across a checkpoint.  Partitioning across several workers (threads/ranks) is a
+ * matter of giving each a context over a disjoint sub-range with its own private
+ * pool and merging their scoring accumulators; run_history_range() does not
+ * change.
  */
-enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *transport_ctx,
-                                              struct osh_beam_runtime *beam_rt,
-                                              struct osh_gemca_runtime const *geom_rt,
-                                              struct osh_material_runtime const *material_rt,
-                                              struct osh_scoring_runtime *score_rt) {
+enum osh_status osh_transport_ion_run_range(struct osh_transport_context *transport_ctx,
+                                            struct osh_beam_runtime *beam_rt,
+                                            struct osh_gemca_runtime const *geom_rt,
+                                            struct osh_material_runtime const *material_rt,
+                                            struct osh_scoring_runtime *score_rt,
+                                            size_t hist_lo,
+                                            size_t hist_hi,
+                                            size_t *completed_out) {
     struct osh_worker_context wctx;
     struct osh_transport_params const *params;
     enum osh_status rc;
 
+    if (completed_out) {
+        *completed_out = 0u;
+    }
     if (!transport_ctx || !beam_rt || !geom_rt || !material_rt || !score_rt) {
         return OSH_EINVAL;
     }
     if (!transport_ctx->ion_pool || !transport_ctx->zone_refs || !transport_ctx->dist_batch) {
+        return OSH_EINVAL;
+    }
+    if (hist_hi <= hist_lo) {
         return OSH_EINVAL;
     }
     params = &transport_ctx->params;
@@ -450,26 +463,21 @@ enum osh_status osh_transport_ion_run_minimal(struct osh_transport_context *tran
         return rc;
     }
 
-    /* Single-worker baseline: borrow the simulation's pre-allocated ion pool and
-     * geometry scratch instead of allocating a private set, and reset the reused
-     * pool to empty before transporting this run's [0, nstat). */
+    /* Borrow the simulation's pre-allocated ion pool and geometry scratch instead
+     * of allocating a private set, and reset the reused pool to empty before
+     * transporting this range. */
     transport_ctx->ion_pool->n = 0u;
     osh_worker_context_attach(
-        &wctx, 0u, params->nstat, transport_ctx->ion_pool, transport_ctx->zone_refs, transport_ctx->dist_batch);
+        &wctx, hist_lo, hist_hi, transport_ctx->ion_pool, transport_ctx->zone_refs, transport_ctx->dist_batch);
 
     /* Single worker: point its profile straight at the run's master so counters
      * land there directly — bit-identical to the un-parallelised path, no merge.
-     * A parallel driver would instead give each worker a private profile and fold
-     * them into transport_ctx->profile with osh_transport_profile_merge(). */
+     * Batches accumulate into the same master, so per-run totals are unaffected
+     * by how the range is sliced.  A parallel driver would instead give each
+     * worker a private profile and fold them in with osh_transport_profile_merge(). */
     wctx.profile = transport_ctx->profile;
 
-    /* Single worker covers [0, nstat); its completed count is the run's count.
-     * A future parallel driver sums per-worker counts into completed_primaries. */
-    transport_ctx->completed_primaries = 0u;
-    rc = run_history_range(
-        &wctx, transport_ctx, beam_rt, geom_rt, material_rt, score_rt, &transport_ctx->completed_primaries);
-
-    return rc;
+    return run_history_range(&wctx, transport_ctx, beam_rt, geom_rt, material_rt, score_rt, completed_out);
 }
 
 /* ---- Progress helpers ---------------------------------------------------- */

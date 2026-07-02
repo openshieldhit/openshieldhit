@@ -172,31 +172,38 @@ struct osh_fragment_pool;
 struct osh_neutron_pool;
 struct osh_particle_pool;
 struct osh_run_control;
+struct osh_checkpoint_policy;
 
 struct osh_transport_context {
     struct osh_transport_params params;
-    struct osh_diag_sink const *diag;                  /**< Borrowed; NULL silences transport diagnostics. */
-    struct osh_nuclear_handler const *nuclear_handler; /**< Borrowed; NULL disables handler. */
-    struct osh_fragment_pool *fragment_pool;           /**< Borrowed; residual fragments for future breakup. */
-    struct osh_neutron_pool *neutron_pool;             /**< Borrowed; neutrons routed here instead of CSDA pool. */
-    struct osh_particle_pool *ion_pool;                /**< Borrowed; pre-allocated ion wavefront pool. */
-    struct osh_zone_ref *zone_refs;                    /**< Transport scratch: zone/material per slot. */
-    double *dist_batch;                                /**< Transport scratch: boundary distance per slot. */
-    size_t scratch_capacity;                           /**< Number of entries in zone_refs and dist_batch. */
-    struct osh_transport_profile *profile;             /**< Borrowed master/destination profile; NULL disables
-                                                            phase timers/counters.  Written by a worker (the lone
-                                                            serial worker points its own profile here) or by the
-                                                            driver merging per-worker profiles — not on the hot
-                                                            path through this pointer. */
-    struct osh_run_control const *run_control;         /**< Borrowed; clean-stop / wall-budget policy (issue #192).
-                                                            NULL = run to completion, no early stop.  Consulted only
-                                                            by the primary (ion) loop to halt new-primary injection;
-                                                            the family scheduler still drains every banked secondary
-                                                            so a partial result stays family-exact (issue #195). */
-    size_t completed_primaries;                        /**< Out: primaries fully transported by the last run.  Equals
-                                                            params.nstat unless a clean stop drained the run early; the
-                                                            driver copies it into completed_nstat so output normalises
-                                                            by the true count. */
+    struct osh_diag_sink const *diag;                      /**< Borrowed; NULL silences transport diagnostics. */
+    struct osh_nuclear_handler const *nuclear_handler;     /**< Borrowed; NULL disables handler. */
+    struct osh_fragment_pool *fragment_pool;               /**< Borrowed; residual fragments for future breakup. */
+    struct osh_neutron_pool *neutron_pool;                 /**< Borrowed; neutrons routed here instead of CSDA pool. */
+    struct osh_particle_pool *ion_pool;                    /**< Borrowed; pre-allocated ion wavefront pool. */
+    struct osh_zone_ref *zone_refs;                        /**< Transport scratch: zone/material per slot. */
+    double *dist_batch;                                    /**< Transport scratch: boundary distance per slot. */
+    size_t scratch_capacity;                               /**< Number of entries in zone_refs and dist_batch. */
+    struct osh_transport_profile *profile;                 /**< Borrowed master/destination profile; NULL disables
+                                                                phase timers/counters.  Written by a worker (the lone
+                                                                serial worker points its own profile here) or by the
+                                                                driver merging per-worker profiles — not on the hot
+                                                                path through this pointer. */
+    struct osh_run_control const *run_control;             /**< Borrowed; clean-stop / wall-budget policy (issue #192).
+                                                                NULL = run to completion, no early stop.  Consulted only
+                                                                by the primary (ion) loop to halt new-primary injection;
+                                                                the family scheduler still drains every banked secondary
+                                                                so a partial result stays family-exact (issue #195). */
+    struct osh_checkpoint_policy const *checkpoint_policy; /**< Borrowed; batch/quiescence cadence (issue #195).
+                                                            NULL = FINAL-ONLY: one batch of K = nstat, the fastest
+                                                            path, byte-for-byte identical to today.  When set to a
+                                                            LIVE policy the family scheduler runs in family-complete
+                                                            batches at the configured cadence, reaching a quiescent
+                                                            checkpoint at each boundary. */
+    size_t completed_primaries; /**< Out: primaries fully transported by the last run.  Equals
+                                     params.nstat unless a clean stop drained the run early; the
+                                     driver copies it into completed_nstat so output normalises
+                                     by the true count. */
     char warned_boundary_demin_override;
 };
 

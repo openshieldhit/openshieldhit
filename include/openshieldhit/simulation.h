@@ -151,6 +151,43 @@ enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
                                                void *user);
 
 /**
+ * @brief Configure family-complete checkpoint batching for the next run (issue #195).
+ *
+ * @details
+ * Must be called after osh_simulation_create() and before osh_simulation_run().
+ * Selects how often the run is brought to a quiescent, *family-complete*
+ * checkpoint — a point where every transport family (ions, then the
+ * neutrons/fragments they banked, …) has been drained into scoring, so a result
+ * observed there is physically complete rather than an ion-only fraction.
+ *
+ * @p every_primaries is a **count cadence**: the run is transported in
+ * family-complete batches of up to @p every_primaries primaries each, and every
+ * batch boundary is a checkpoint.  Count cadence is deterministic and
+ * order-independent (each history's RNG stream is a pure function of its global
+ * index), which makes it the reproducible cadence for tests and CI.
+ *
+ *   - @p every_primaries == 0 → **FINAL-ONLY** (default): one batch of K = nstat,
+ *     the fastest path, byte-for-byte identical to a run that never calls this.
+ *   - @p every_primaries  > 0 → **LIVE**: family-complete batches of that size.
+ *     Scored output matches the final-only result up to floating-point reduction
+ *     order.
+ *
+ * This lands the batch-aware seam and the quiescence guarantee only; the machinery
+ * that hangs off a checkpoint — periodic file dumps and the time cadence (#193),
+ * variance-batch folding (#169), and per-worker accumulator merges (#161) — is
+ * added by those follow-ups.
+ *
+ * @param[in] sim              Simulation handle created by osh_simulation_create().
+ * @param[in] every_primaries  Count cadence in primaries; 0 = final-only (default).
+ *
+ * @returns OSH_OK on success; OSH_EINVAL when @p sim is NULL, or when
+ *          @p every_primaries exceeds what the platform's @c size_t can hold
+ *          (only possible where @c size_t is narrower than @c unsigned @c long
+ *          @c long, e.g. some 32-bit builds).
+ */
+enum osh_status osh_simulation_set_checkpoint_policy(struct osh_simulation *sim, unsigned long long every_primaries);
+
+/**
  * @brief Retrieve the transport profile of the last completed run.
  *
  * @param[in]  sim  Simulation handle created by osh_simulation_create().

@@ -29,6 +29,66 @@ Library (simulation)
   osh_simulation_save()     — write scored output
 ```
 
+## Checkpoints, batches, and partial results
+
+`osh_simulation_run()` drives transport as an **outer batch loop** around the
+**inner family scheduler** (`src/transport/osh_transport.c`).  The family
+scheduler transports a range of ion primaries, then drains every secondary family
+(neutrons, and in future fragments/electrons) those primaries banked.  The outer
+loop slices the run `[0, nstat)` into batches `[b, b+K)` and runs the family
+scheduler once per batch.
+
+A **checkpoint** is the boundary between two batches.  It is the single point
+where the whole simulation is *quiescent* and *family-complete*: every family
+spawned by the completed primaries has been drained into scoring, so a result
+observed there is physically complete — not an ion-only fraction.  This matters
+because ratio quantities such as `DLET = Σ(LET·dose)/Σdose` are **biased**, not
+merely noisier, if the neutron/fragment contribution is missing from one
+`completed_nstat`.  A checkpoint is therefore the correct — and only — place to
+observe or dump a partial result.  It is also the natural sync point for the
+parallel work to come: per-worker accumulator merges, a variance-batch fold, and
+optional periodic dumps all hang off this one boundary.
+
+### The one dial
+
+How often the run checkpoints is the only knob, expressed by
+`struct osh_checkpoint_policy` (`src/transport/osh_checkpoint_policy.h`):
+
+| Mode | Cadence | Behaviour |
+|------|---------|-----------|
+| **Final-only** (default) | — | One batch, `K = nstat`. Fastest; byte-for-byte identical to an unbatched run. |
+| **Live** | count (`every_primaries`) | Family-complete batches of a fixed primary count. **Deterministic** and order-independent — the reproducible cadence for tests/CI. |
+| **Live** | time (`every_s`) | Family-complete batches sized `≈ rate × cadence`. **Self-bounds overhead** independent of core count — the cadence for production/parallel runs. |
+
+A count cadence is reproducible because each history's RNG stream is a pure
+function of its global index, so splitting `[0, nstat)` into fixed sub-ranges and
+replaying them in any order reproduces the canonical per-history streams (see
+[random numbers](random_numbers.md)).  Scored output then matches the final-only
+result up to floating-point reduction order.  A time cadence is **not**
+reproducible (batch boundaries fall at wall-clock instants), so a time cadence is
+never used where determinism is required.
+
+The speed↔visibility trade is explicit: each checkpoint costs a family drain plus
+(later) a barrier + merge, so overhead is `≈ C / T` where `T` is the wall time
+between checkpoints.  Final-only pays it once; a time cadence pays it a fixed
+number of times per wall-hour on any machine; a count cadence pays it *more often
+as the machine gets faster*, which is why it is reserved for deterministic tests.
+
+### Completeness labelling
+
+A checkpoint dump is **exact** (all families drained).  A future escape hatch may
+dump at the inner ion safe point without draining secondaries — an **approx**
+result — which must be stamped honestly so it is never mistaken for a complete
+one (`osh_checkpoint_completeness_label()` → `exact` / `families_pending`).  The
+graceful wall-time stop (issue #192) routes its early stop through the family
+scheduler, so its partial save is always family-exact for the primaries that
+finished.
+
+This module lands the batch-aware seam and the quiescence guarantee only.  The
+CLI surface, periodic file dumps and the time cadence (#193), variance-batch
+folding (#169), and per-worker accumulator merges (#161) grow into the stable
+`osh_checkpoint_policy` shape in their own follow-ups.
+
 ## Module map
 
 | Directory | Responsibility |
