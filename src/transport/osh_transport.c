@@ -2,8 +2,11 @@
 
 #include "common/osh_diag.h"
 #include "common/osh_particle_pool.h"
+#include "common/osh_time.h"
+#include "scoring/runtime/osh_scoring_snapshot.h"
 #include "transport/osh_checkpoint_policy.h"
 #include "transport/osh_neutron_pool.h"
+#include "transport/osh_run_control.h"
 #include "transport/osh_transport_ion.h"
 #include "transport/osh_transport_neutron.h"
 #include "transport/osh_transport_photon.h"
@@ -61,10 +64,13 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
                                           struct osh_material_runtime const *material_rt,
                                           struct osh_scoring_runtime *score_rt) {
     struct osh_checkpoint_policy const *policy;
+    struct osh_run_control *ctl; /* clean-stop / wall-budget + periodic-dump policy, or NULL */
     size_t neutron_capacity;
     size_t nstat;
     size_t done;
-    int neutron_enabled; /* cache: neutron pool is present for this run */
+    double t_run_start;   /* monotonic baseline for the dump time cadence */
+    double measured_rate; /* primaries/s from the last batch; seeds the adaptive time cadence */
+    int neutron_enabled;  /* cache: neutron pool is present for this run */
     enum osh_status rc;
 
     if (!transport_ctx) {
@@ -75,6 +81,7 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
         return OSH_EINVAL;
     }
     policy = transport_ctx->checkpoint_policy;
+    ctl = transport_ctx->run_control;
 
     /* Neutron family: initialise the pool once per run (not per batch, so its
      * cumulative n_created diagnostic and its allocation survive across batches;
@@ -104,13 +111,17 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
 
     /* ---- Outer checkpoint batch loop ------------------------------------- */
     done = 0u; /* primaries whose histories have finished; the true completed count */
+    t_run_start = osh_monotonic_seconds();
+    measured_rate = 0.0;
     while (done < nstat) {
         size_t batch_completed = 0u;
         size_t const remaining = nstat - done;
-        /* Measured throughput is not plumbed to the scheduler yet, so a bare
-         * time cadence falls back to a single batch (see osh_checkpoint_policy);
-         * the count cadence and final-only mode do not need it. */
-        size_t const k = osh_checkpoint_next_batch_size(policy, 0.0, remaining);
+        /* Size the batch from the policy.  The measured rate feeds only the
+         * adaptive time cadence; count cadence, explicit batch, and final-only
+         * ignore it (final-only returns the whole remainder → one pass, unchanged). */
+        size_t const k = osh_checkpoint_next_batch_size(policy, measured_rate, remaining);
+        double t_batch_start = osh_monotonic_seconds();
+        double batch_s;
 
         rc = run_families_over_range(
             transport_ctx, beam_rt, geom_rt, material_rt, score_rt, done, done + k, neutron_enabled, &batch_completed);
@@ -121,12 +132,41 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
         /* Advance by the primaries that actually finished, never the requested
          * batch size: on a clean stop the batch drains fewer than k, and `done`
          * must stay the exact completed count so the checkpoint boundary (and any
-         * future dump/merge/variance hook) never over-reports. */
+         * dump/merge/variance hook) never over-reports. */
         done += batch_completed;
 
-        /* CHECKPOINT: the simulation is family-quiescent here.  Future work folds
-         * a variance batch (#169), merges per-worker accumulators (#161), and
-         * fires an optional dump (#193) at this exact point. */
+        /* Refresh the throughput estimate for the next batch's time-cadence
+         * sizing.  Guard against a zero-length interval (coarse clock / tiny
+         * batch): keep the previous estimate rather than dividing by ~0. */
+        batch_s = osh_monotonic_seconds() - t_batch_start;
+        if (batch_s > 0.0 && batch_completed > 0u) {
+            measured_rate = (double) batch_completed / batch_s;
+        }
+
+        /* CHECKPOINT: the simulation is family-quiescent here, so a dump taken now
+         * is physically EXACT (every secondary family the completed primaries
+         * banked has been drained into scoring — issue #195).  Fire a periodic /
+         * on-demand snapshot when one is due, but never at the final boundary
+         * (done == nstat): the run's own end-of-run save already writes the
+         * complete result, so a dump there would be redundant work.  Future work
+         * also folds a variance batch (#169) and merges per-worker accumulators
+         * (#161) at this exact point. */
+        if (done < nstat && ctl && ctl->dump_sink && ctl->dump_shadow) {
+            double const elapsed = osh_monotonic_seconds() - t_run_start;
+            if (run_ctl_should_dump(ctl, elapsed, done)) {
+                enum osh_status const drc = osh_scoring_snapshot_save(
+                    ctl->dump_sink, ctl->dump_shadow, (unsigned long long) done, ctl->dump_outputs, ctl->dump_noutputs);
+                if (drc != OSH_OK) {
+                    /* Fail-soft: a dump is a preview, never the run's product, so a
+                     * write/alloc failure warns and the run keeps going to its
+                     * exact final save rather than aborting. */
+                    OSH_DIAG_WARNF(transport_ctx->diag,
+                                   "transport: partial-result dump failed (rc=%d) after %zu primaries; run continues",
+                                   (int) drc,
+                                   done);
+                }
+            }
+        }
 
         /* A short batch means the inner loop hit a clean stop and drained early;
          * do not begin another batch. */

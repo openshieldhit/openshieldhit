@@ -18,7 +18,9 @@
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
+#include "scoring/runtime/osh_scoring_shadow.h"
 #include "scoring/save/osh_scoring_save.h"
+#include "scoring/save/osh_scoring_sink.h"
 #include "transport/osh_checkpoint_policy.h"
 #include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
@@ -52,10 +54,30 @@ struct osh_simulation {
     struct osh_run_control run_control;
     struct osh_checkpoint_policy checkpoint_policy;
 
+    /* Partial-result dump plumbing (issue #193).  The shadow is the reusable
+     * out-of-place postprocess scratch (bound to scoring_runtime); the file sink
+     * writes selected outputs to the workspace's resolved paths.  Bound once on
+     * the first run that has dumping armed; freed with the simulation. */
+    struct osh_scoring_shadow dump_shadow;
+    struct osh_scoring_file_sink dump_file_sink;
+    struct osh_scoring_sink dump_sink;
+    int dump_bound; /* non-zero once dump_shadow + dump_sink are initialised */
+
     unsigned long long requested_nstat;
     unsigned long long completed_nstat;
     struct osh_results results;
 };
+
+/* True when any early-stop or dump trigger is armed, i.e. the transport should
+ * be handed the run-control block at all.  Keeps the "is a policy active?"
+ * decision in one place so the two independent setters cannot disagree. */
+static int simulation_run_control_active(struct osh_simulation const *sim) {
+    struct osh_run_control const *rc = &sim->run_control;
+    return (rc->wall_budget_s > 0.0) || (rc->should_stop != NULL) || (rc->dump_every_s > 0.0)
+                   || (rc->dump_every_primaries != 0u) || (rc->should_dump != NULL)
+               ? 1
+               : 0;
+}
 
 static int prepared_has_voxel_body(struct osh_gemca_prepared const *gemca) {
     size_t ib;
@@ -414,14 +436,55 @@ enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
     if (!sim) {
         return OSH_EINVAL;
     }
-    osh_run_control_init(&sim->run_control);
+    /* Set only the stop/budget fields — never a full osh_run_control_init(), which
+     * would also wipe any dump policy configured by osh_simulation_set_dump_control().
+     * The block starts calloc-zeroed with the simulation, so unset fields are
+     * already at their "off" defaults.  The two setters are order-independent. */
     sim->run_control.wall_budget_s = (wall_budget_s > 0.0) ? wall_budget_s : 0.0;
     sim->run_control.should_stop = should_stop;
     sim->run_control.should_stop_user = user;
-    /* Wire the policy in only when it can actually stop the run; otherwise leave
-     * the transport pointer NULL so the hot path stays exactly as before. */
-    sim->transport_ctx.run_control =
-        (sim->run_control.wall_budget_s > 0.0 || sim->run_control.should_stop) ? &sim->run_control : NULL;
+    /* Hand the block to transport only when some policy (stop or dump) is armed;
+     * otherwise leave the pointer NULL so the hot path stays exactly as before. */
+    sim->transport_ctx.run_control = simulation_run_control_active(sim) ? &sim->run_control : NULL;
+    return OSH_OK;
+}
+
+enum osh_status osh_simulation_set_dump_control(struct osh_simulation *sim,
+                                                double dump_every_s,
+                                                unsigned long long dump_every_primaries,
+                                                int (*should_dump)(void *user),
+                                                void *user) {
+    if (!sim) {
+        return OSH_EINVAL;
+    }
+#if SIZE_MAX < ULLONG_MAX
+    /* The count cadence is stored as size_t; reject a value that would wrap on the
+     * narrowing cast (only reachable where size_t is narrower than ULL). */
+    if (dump_every_primaries > (unsigned long long) SIZE_MAX) {
+        return OSH_EINVAL;
+    }
+#endif
+    sim->run_control.dump_every_s = (dump_every_s > 0.0) ? dump_every_s : 0.0;
+    sim->run_control.dump_every_primaries = (size_t) dump_every_primaries;
+    sim->run_control.should_dump = should_dump;
+    sim->run_control.should_dump_user = user;
+
+    /* The dump cadence *is* the checkpoint cadence: a scheduled dump needs
+     * intermediate family-complete checkpoints to fire at, so put the run in LIVE
+     * batching whenever a cadence is set (overriding any prior
+     * osh_simulation_set_checkpoint_policy()).  An on-demand-only trigger adds no
+     * cadence, so the run stays final-only and the request lands at the end. */
+    osh_checkpoint_policy_init(&sim->checkpoint_policy);
+    if (sim->run_control.dump_every_s > 0.0 || sim->run_control.dump_every_primaries > 0u) {
+        sim->checkpoint_policy.mode = OSH_PARTIAL_LIVE;
+        sim->checkpoint_policy.completeness = OSH_PARTIAL_EXACT;
+        sim->checkpoint_policy.every_s = sim->run_control.dump_every_s;
+        sim->checkpoint_policy.every_primaries = sim->run_control.dump_every_primaries;
+    }
+    sim->transport_ctx.checkpoint_policy =
+        (sim->checkpoint_policy.mode != OSH_PARTIAL_NONE) ? &sim->checkpoint_policy : NULL;
+
+    sim->transport_ctx.run_control = simulation_run_control_active(sim) ? &sim->run_control : NULL;
     return OSH_OK;
 }
 
@@ -489,6 +552,35 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
 
     if (!sim) {
         return OSH_EINVAL;
+    }
+
+    /* Bind the dump destination when any dump trigger is armed.  Done here, not in
+     * the setter, because the shadow aliases the compiled scoring runtime and the
+     * file sink needs the workspace's resolved output paths — both stable across
+     * runs, so bind once and reuse.  Fail-soft: if setup fails, warn and run
+     * without dumps rather than abort (a dump is a preview, not the product). */
+    if (sim->transport_ctx.run_control
+        && (sim->run_control.dump_every_s > 0.0 || sim->run_control.dump_every_primaries > 0u
+            || sim->run_control.should_dump)) {
+        if (!sim->dump_bound) {
+            rc = osh_scoring_shadow_init(&sim->dump_shadow, &sim->scoring_runtime);
+            if (rc == OSH_OK) {
+                rc = osh_scoring_file_sink_init(&sim->dump_file_sink, sim->scoring, &sim->dump_sink);
+            }
+            if (rc == OSH_OK) {
+                sim->dump_bound = 1;
+            } else {
+                OSH_DIAG_WARNF(
+                    sim->diag, "%s", "simulation: could not initialise partial-result dumps; continuing without them");
+                osh_scoring_shadow_free(&sim->dump_shadow);
+            }
+        }
+        if (sim->dump_bound) {
+            sim->run_control.dump_sink = &sim->dump_sink;
+            sim->run_control.dump_shadow = &sim->dump_shadow;
+            sim->run_control.dump_outputs = NULL; /* all outputs; G2 selector reserved for the web target */
+            sim->run_control.dump_noutputs = 0u;
+        }
     }
 
     /* Arm the wall-time budget from the run's start instant, so "elapsed" in the
@@ -605,6 +697,7 @@ enum osh_status osh_simulation_free(struct osh_simulation *sim) {
     if (!sim) {
         return OSH_OK;
     }
+    osh_scoring_shadow_free(&sim->dump_shadow); /* no-op when dumps were never armed (calloc-zeroed) */
     osh_nuclear_handler_free(&sim->nuclear_handler);
     osh_scoring_runtime_free(&sim->scoring_runtime);
     osh_gemca_runtime_free(&sim->geom_rt);

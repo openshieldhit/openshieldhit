@@ -43,6 +43,10 @@ struct osh_cli_options {
     char const *profile_path;         /**< Profile JSON output path; NULL disables profiling. */
     double max_time_s;                /**< Wall-time budget [s] parsed from --max-time; valid when has_max_time. */
     int has_max_time;                 /**< Non-zero if --max-time was explicitly given. */
+    double dump_every_s; /**< Periodic dump time cadence [s] from --dump-every; valid when has_dump_every. */
+    int has_dump_every;  /**< Non-zero if --dump-every was explicitly given. */
+    unsigned long long dump_every_primaries; /**< Periodic dump count cadence from --dump-every-primaries. */
+    int has_dump_every_primaries;            /**< Non-zero if --dump-every-primaries was explicitly given. */
 };
 
 /**

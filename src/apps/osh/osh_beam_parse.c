@@ -74,6 +74,7 @@ static int _parse_demin(PARSE_HANDLER_ARGS);
 static int _parse_emtrans(PARSE_HANDLER_ARGS);
 static int _parse_extspec(PARSE_HANDLER_ARGS);
 static int _parse_makeln(PARSE_HANDLER_ARGS);
+static int _parse_dumpevery(PARSE_HANDLER_ARGS);
 static int _parse_maxtime(PARSE_HANDLER_ARGS);
 static int _parse_mscat(PARSE_HANDLER_ARGS);
 static int _parse_neutrfast(PARSE_HANDLER_ARGS);
@@ -111,6 +112,7 @@ static struct _beam_dispatch_entry _dispatch_table[] = {
     {OSH_BEAM_KEY_BMODTRANS, _parse_bmodtrans},
     {OSH_BEAM_KEY_DELTAE, _parse_deltae},
     {OSH_BEAM_KEY_DEMIN, _parse_demin},
+    {OSH_BEAM_KEY_DUMPEVERY, _parse_dumpevery},
     {OSH_BEAM_KEY_EMTRANS, _parse_emtrans},
     {OSH_BEAM_KEY_EXTSPEC, _parse_extspec},
     {OSH_BEAM_KEY_MAKELN, _parse_makeln},
@@ -756,6 +758,42 @@ static int _parse_maxtime(PARSE_HANDLER_ARGS) {
         return OSH_EPARSE;
     }
     beam->wall_budget_s = seconds;
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse DUMPEVERY: wall-time cadence for periodic partial-result dumps.
+ *
+ * @details
+ * Syntax: DUMPEVERY \<duration\>
+ *
+ * The argument is a duration token accepted by @ref osh_parse_duration (a
+ * non-negative number with an optional `s`/`m`/`h` suffix; bare number = seconds).
+ * Every such interval of wall time the run overwrites its output files with the
+ * current partial result, taken at a family-complete checkpoint so the snapshot is
+ * physically exact.  0 disables periodic dumps.  A CLI `--dump-every` overrides
+ * this card; the count-cadence equivalent is the NSTAT save step (@ref nsave) /
+ * `--dump-every-primaries`.
+ *
+ * @param[in,out] beam  Writes beam->dump_every_s [s].
+ * @param[in]     oshf  Used for error diagnostics.
+ * @param[in]     args  A single duration token, e.g. "10m" or "600".
+ *
+ * @returns OSH_OK on success, OSH_EPARSE on a malformed duration.
+ */
+static int _parse_dumpevery(PARSE_HANDLER_ARGS) {
+    char tok[64];
+    double seconds;
+
+    if (sscanf(args, "%63s", tok) != 1 || !osh_parse_duration(tok, &seconds)) {
+        OSH_DIAG_ERRORF(state->diag,
+                        "in %s line %i: invalid DUMPEVERY duration '%s' (use e.g. 30s, 10m, 1h, or 600)",
+                        oshf->filename,
+                        oshf->lineno,
+                        args);
+        return OSH_EPARSE;
+    }
+    beam->dump_every_s = seconds;
     return OSH_OK;
 }
 

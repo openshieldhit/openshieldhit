@@ -261,6 +261,79 @@ static void test_max_time_option(void) {
     ASSERT_TRUE(strstr(err, "requires a value") != NULL);
 }
 
+static void test_dump_every_option(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--dump-every", "10m", "run_17", NULL};
+    char *argv_eq[] = {"openshieldhit", "--dump-every=30s", NULL};
+    char *argv_plain[] = {"openshieldhit", "run_17", NULL};
+    char *argv_bad[] = {"openshieldhit", "--dump-every=nope", NULL};
+    char *argv_missing[] = {"openshieldhit", "--dump-every", NULL};
+
+    int rc = osh_cli_parse(4, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_dump_every == 1);
+    ASSERT_TRUE(opt.dump_every_s == 600.0);
+    ASSERT_TRUE(opt.workdir != NULL && strcmp(opt.workdir, "run_17") == 0);
+
+    rc = osh_cli_parse(2, argv_eq, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_dump_every == 1);
+    ASSERT_TRUE(opt.dump_every_s == 30.0);
+
+    /* Absent flag leaves the override off. */
+    rc = osh_cli_parse(2, argv_plain, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_dump_every == 0);
+
+    rc = osh_cli_parse(2, argv_bad, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "invalid duration value") != NULL);
+
+    rc = osh_cli_parse(2, argv_missing, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "requires a value") != NULL);
+}
+
+static void test_dump_every_primaries_option(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--dump-every-primaries", "100000", "run_17", NULL};
+    char *argv_eq[] = {"openshieldhit", "--dump-every-primaries=5000", NULL};
+    char *argv_plain[] = {"openshieldhit", "run_17", NULL};
+    char *argv_zero[] = {"openshieldhit", "--dump-every-primaries=0", NULL};
+    char *argv_bad[] = {"openshieldhit", "--dump-every-primaries=abc", NULL};
+    char *argv_missing[] = {"openshieldhit", "--dump-every-primaries", NULL};
+
+    int rc = osh_cli_parse(4, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_dump_every_primaries == 1);
+    ASSERT_TRUE(opt.dump_every_primaries == 100000ULL);
+    ASSERT_TRUE(opt.workdir != NULL && strcmp(opt.workdir, "run_17") == 0);
+
+    rc = osh_cli_parse(2, argv_eq, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_dump_every_primaries == 1);
+    ASSERT_TRUE(opt.dump_every_primaries == 5000ULL);
+
+    /* Absent flag leaves the override off; it must not collide with --dump-every. */
+    rc = osh_cli_parse(2, argv_plain, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_dump_every_primaries == 0);
+    ASSERT_TRUE(opt.has_dump_every == 0);
+
+    /* 0 is meaningless for a cadence and is rejected (unlike --pool-capacity). */
+    rc = osh_cli_parse(2, argv_zero, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+
+    rc = osh_cli_parse(2, argv_bad, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+
+    rc = osh_cli_parse(2, argv_missing, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "requires a value") != NULL);
+}
+
 static int run_named_test(char const *name) {
     if (strcmp(name, "parse_duration_good") == 0) {
         test_parse_duration_good();
@@ -318,6 +391,14 @@ static int run_named_test(char const *name) {
         test_pool_capacity_option();
         return 0;
     }
+    if (strcmp(name, "dump_every_option") == 0) {
+        test_dump_every_option();
+        return 0;
+    }
+    if (strcmp(name, "dump_every_primaries_option") == 0) {
+        test_dump_every_primaries_option();
+        return 0;
+    }
     return 1;
 }
 
@@ -340,5 +421,7 @@ int main(int argc, char *argv[]) {
     test_parse_duration_good();
     test_parse_duration_bad();
     test_max_time_option();
+    test_dump_every_option();
+    test_dump_every_primaries_option();
     return 0;
 }

@@ -423,6 +423,29 @@ static void test_setup_nstat_single_value_defaults_nsave_to_zero(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+static void test_setup_nstat_positive_save_sets_nsave(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    /* NSTAT <n> <step>: the second field is the count-cadence dump interval,
+     * surfaced as nsave and used as the default --dump-every-primaries. */
+    snprintf(
+        beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 100000 5000\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->nstat == 100000u);
+    ASSERT_TRUE(wb->nsave == 5000u);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 static void test_setup_nstat_negative_save_disables_nsave(void) {
     char beam_path[512];
     char beam_text[512];
@@ -553,6 +576,65 @@ static void test_setup_maxtime_invalid_returns_eparse(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+static void test_setup_dumpevery_sets_dump_cadence(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    /* DUMPEVERY shares the duration grammar of MAXTIME; "10m" → 600 s. */
+    snprintf(beam_text,
+             sizeof beam_text,
+             "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1000\nDUMPEVERY 10m\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->dump_every_s == 600.0);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_no_dumpevery_defaults_off(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1000\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->dump_every_s == 0.0); /* 0 = no periodic dumps */
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_dumpevery_invalid_returns_eparse(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text,
+             sizeof beam_text,
+             "PRIMARY proton\nTMAX0 120.0 0.0\nBEAMPOS 0.0 0.0 -10.0\nNSTAT 1000\nDUMPEVERY notaduration\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 int main(void) {
     test_beam_spots_set_replace_and_validate();
     test_setup_single_spot_from_beamdat();
@@ -567,11 +649,15 @@ int main(void) {
     test_setup_unknown_key_returns_eparse();
     test_setup_beamsigma_single_value_sets_symmetric_xy();
     test_setup_nstat_single_value_defaults_nsave_to_zero();
+    test_setup_nstat_positive_save_sets_nsave();
     test_setup_nstat_negative_save_disables_nsave();
     test_setup_nucre_modes_set_independent_flags();
     test_setup_maxtime_sets_wall_budget();
     test_setup_maxtime_bare_seconds();
     test_setup_no_maxtime_defaults_to_unlimited();
     test_setup_maxtime_invalid_returns_eparse();
+    test_setup_dumpevery_sets_dump_cadence();
+    test_setup_no_dumpevery_defaults_off();
+    test_setup_dumpevery_invalid_returns_eparse();
     return 0;
 }

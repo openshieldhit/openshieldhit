@@ -45,8 +45,11 @@ static enum osh_status run_setup_voxel_scoring(struct osh_geometry_workspace con
                                                char const *detect_path,
                                                struct osh_diag_sink const *diag);
 static int run_file_exists(char const *path);
-static enum osh_status
-run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_budget_override, FILE *out, FILE *err);
+static enum osh_status run_check_memory(struct osh_scoring_workspace const *scoring,
+                                        char const *mem_budget_override,
+                                        int reserve_shadow,
+                                        FILE *out,
+                                        FILE *err);
 static enum osh_status run_write_profile_json(char const *path,
                                               struct osh_simulation_profile const *prof,
                                               size_t nstat,
@@ -97,6 +100,9 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     double compile_s = 0.0;
     double run_s = 0.0;
     double save_s = 0.0;
+    double eff_dump_every_s = 0.0;                      /* CLI --dump-every over beam.dat DUMPEVERY */
+    unsigned long long eff_dump_every_primaries = 0ull; /* CLI --dump-every-primaries over NSTAT nsave */
+    int scheduled_dump = 0;                             /* a periodic dump cadence is active → reserve shadow */
     enum osh_status rc = OSH_OK;
 
     if (!opt) {
@@ -267,10 +273,21 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
+    /* Resolve the effective dump cadences (CLI overrides the beam.dat card) so the
+     * memory check can reserve the snapshot shadow when a periodic dump *will*
+     * happen, and osh_simulation_set_dump_control() below can apply the same
+     * values.  The count cadence falls back to the NSTAT save step (nsave). */
+    eff_dump_every_s = opt->has_dump_every ? opt->dump_every_s : beam->dump_every_s;
+    eff_dump_every_primaries =
+        opt->has_dump_every_primaries ? opt->dump_every_primaries : (unsigned long long) beam->nsave;
+    scheduled_dump = (eff_dump_every_s > 0.0 || eff_dump_every_primaries > 0ull) ? 1 : 0;
+
     /* Detect host resources, report the scoring memory footprint, and refuse
      * the run up front if it would exceed the memory budget — before
-     * osh_simulation_create() allocates any scoring buffers. */
-    rc = run_check_memory(scoring, opt->mem_budget, out, err);
+     * osh_simulation_create() allocates any scoring buffers.  When a periodic dump
+     * is scheduled, the snapshot shadow is reserved here too so a scheduled dump
+     * can never OOM mid-run (issue #193 budget-reservation rule). */
+    rc = run_check_memory(scoring, opt->mem_budget, scheduled_dump, out, err);
     if (rc != OSH_OK) {
         goto cleanup;
     }
@@ -309,6 +326,36 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
                     "Wall-time budget : %g s%s (stop cleanly, save partial result)\n",
                     wall_budget_s,
                     opt->has_max_time ? " (--max-time)" : " (beam.dat MAXTIME)");
+        }
+    }
+
+    /* Periodic / on-demand partial-result dumps (issue #193).  Activated only when
+     * a cadence is set: the run then checkpoints at that cadence and overwrites the
+     * output files with the exact partial result each time.  The on-demand SIGUSR1
+     * callback is passed through so it can trigger an extra dump at the next
+     * checkpoint within a cadenced run. */
+    if (scheduled_dump) {
+        rc = osh_simulation_set_dump_control(
+            sim, eff_dump_every_s, eff_dump_every_primaries, opt->should_dump, opt->should_dump_user);
+        if (rc != OSH_OK) {
+            if (err) {
+                fprintf(err, "Error: failed to configure partial-result dumps\n");
+            }
+            goto cleanup;
+        }
+        if (out) {
+            if (eff_dump_every_primaries > 0ull) {
+                fprintf(out,
+                        "Periodic dumps   : every %llu primaries%s (exact partial result)\n",
+                        eff_dump_every_primaries,
+                        opt->has_dump_every_primaries ? " (--dump-every-primaries)" : " (beam.dat NSTAT step)");
+            }
+            if (eff_dump_every_s > 0.0) {
+                fprintf(out,
+                        "Periodic dumps   : every %g s%s (exact partial result)\n",
+                        eff_dump_every_s,
+                        opt->has_dump_every ? " (--dump-every)" : " (beam.dat DUMPEVERY)");
+            }
         }
     }
 
@@ -416,18 +463,27 @@ cleanup:
  *
  * @param[in] scoring             Parsed scoring workspace (fully populated).
  * @param[in] mem_budget_override Budget string (e.g. "8GB", "80%") or NULL.
+ * @param[in] reserve_shadow      Non-zero when a periodic dump is scheduled: add
+ *                                the snapshot shadow (est.shadow_bytes) to the
+ *                                footprint so a scheduled dump can never OOM
+ *                                mid-run (issue #193).  On-demand-only dumps do
+ *                                not reserve — they allocate lazily and fail-soft.
  * @param[in] out                 Human-readable report stream, or NULL.
  * @param[in] err                 Error stream for the refusal message, or NULL.
  *
  * @returns OSH_OK to proceed, OSH_ENOMEM if over budget, OSH_EINVAL on a
  *          malformed override string.
  */
-static enum osh_status
-run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_budget_override, FILE *out, FILE *err) {
+static enum osh_status run_check_memory(struct osh_scoring_workspace const *scoring,
+                                        char const *mem_budget_override,
+                                        int reserve_shadow,
+                                        FILE *out,
+                                        FILE *err) {
     struct osh_sysinfo info;
     struct osh_scoring_mem_estimate est;
     uint64_t base;
     uint64_t budget = 0u;
+    uint64_t footprint; /* accumulators + (reserved) snapshot shadow */
     char b_total[32];
     char b_avail[32];
     char b_scoring[32];
@@ -461,9 +517,18 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
         return OSH_OK; /* estimate unavailable: do not block the run */
     }
 
+    /* Footprint gated against the budget: the accumulators, plus the snapshot
+     * shadow when a periodic dump is scheduled (it will be allocated on the first
+     * dump, so reserving it up front means a scheduled dump never OOMs mid-run).
+     * Saturate rather than wrap on the (practically impossible) overflow. */
+    footprint = est.accum_bytes;
+    if (reserve_shadow && est.shadow_bytes > 0u) {
+        footprint = (footprint <= UINT64_MAX - est.shadow_bytes) ? (footprint + est.shadow_bytes) : UINT64_MAX;
+    }
+
     osh_sysinfo_format_bytes(info.ram_total_bytes, b_total, sizeof(b_total));
     osh_sysinfo_format_bytes(info.ram_available_bytes, b_avail, sizeof(b_avail));
-    osh_sysinfo_format_bytes(est.accum_bytes, b_scoring, sizeof(b_scoring));
+    osh_sysinfo_format_bytes(footprint, b_scoring, sizeof(b_scoring));
 
     if (out) {
         if (info.logical_cores > 0u) {
@@ -478,7 +543,17 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
                     info.ram_total_bytes > 0u ? b_total : "unknown",
                     info.ram_available_bytes > 0u ? b_avail : "unknown");
         }
-        fprintf(out, "Scoring memory: %s across %zu page(s)\n", b_scoring, est.npages);
+        if (reserve_shadow && est.shadow_bytes > 0u) {
+            char b_shadow[32];
+            osh_sysinfo_format_bytes(est.shadow_bytes, b_shadow, sizeof(b_shadow));
+            fprintf(out,
+                    "Scoring memory: %s across %zu page(s) (includes %s reserved for periodic-dump snapshot)\n",
+                    b_scoring,
+                    est.npages,
+                    b_shadow);
+        } else {
+            fprintf(out, "Scoring memory: %s across %zu page(s)\n", b_scoring, est.npages);
+        }
         if (budget > 0u) {
             osh_sysinfo_format_bytes(budget, b_budget, sizeof(b_budget));
             fprintf(
@@ -486,7 +561,7 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
         }
     }
 
-    if (budget > 0u && est.accum_bytes > budget) {
+    if (budget > 0u && footprint > budget) {
         if (err) {
             osh_sysinfo_format_bytes(budget, b_budget, sizeof(b_budget));
             osh_sysinfo_format_bytes(est.largest_page_bytes, b_largest, sizeof(b_largest));
@@ -494,7 +569,7 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
                     "Error: scoring would allocate %s, exceeding the memory budget of %s.\n"
                     "  Largest scorer: geometry '%s' (%s).\n"
                     "  Detected RAM: %s total, %s available.\n"
-                    "  To proceed, reduce the scoring mesh/bin counts, or raise the limit with\n"
+                    "  To proceed, reduce the scoring mesh/bin counts%s, or raise the limit with\n"
                     "  --mem-budget (e.g. --mem-budget %s). Aborting before allocating memory.\n",
                     b_scoring,
                     b_budget,
@@ -502,6 +577,7 @@ run_check_memory(struct osh_scoring_workspace const *scoring, char const *mem_bu
                     b_largest,
                     info.ram_total_bytes > 0u ? b_total : "unknown",
                     info.ram_available_bytes > 0u ? b_avail : "unknown",
+                    (reserve_shadow && est.shadow_bytes > 0u) ? ", drop periodic dumps" : "",
                     b_scoring);
         }
         return OSH_ENOMEM;

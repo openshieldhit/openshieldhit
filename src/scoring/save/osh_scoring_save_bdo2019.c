@@ -120,6 +120,13 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         rc = osh_scoring_bdo2019_write_token_llint(fp, OSHBDO_RT_NSTAT, &nstat_ll, 1u);
     }
     if (rc == OSH_OK) {
+        /* Partial-result honesty label (issue #193/#195): "exact" for the final,
+         * family-complete save; a mid-run dump of a family-incomplete snapshot
+         * carries "families_pending=…" via rt->completeness. */
+        rc =
+            osh_scoring_bdo2019_write_token_str(fp, OSHBDO_RT_COMPLETENESS, osh_scoring_runtime_completeness_label(rt));
+    }
+    if (rc == OSH_OK) {
         rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_GEO_TYPE, geometry_type_name(geo));
     }
     if (rc == OSH_OK) {

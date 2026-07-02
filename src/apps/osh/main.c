@@ -97,6 +97,10 @@ int main(int argc, char *argv[]) {
     run_opt.profile_path = opt.profile_path;
     run_opt.max_time_s = opt.max_time_s;
     run_opt.has_max_time = opt.has_max_time;
+    run_opt.dump_every_s = opt.dump_every_s;
+    run_opt.has_dump_every = opt.has_dump_every;
+    run_opt.dump_every_primaries = opt.dump_every_primaries;
+    run_opt.has_dump_every_primaries = opt.has_dump_every_primaries;
 
     /* Install the graceful-stop handler before running so an interactive Ctrl-C
      * (or a --max-time budget) ends the run cleanly with a saved partial result
@@ -105,6 +109,12 @@ int main(int argc, char *argv[]) {
     osh_signals_install_stop();
     run_opt.should_stop = osh_signals_should_stop;
     run_opt.should_stop_user = NULL;
+    /* Likewise install the on-demand dump handler (POSIX SIGUSR1); on-demand dumps
+     * take effect at the next checkpoint, so they matter only alongside a dump
+     * cadence.  No-op where SIGUSR1 is unavailable (e.g. Windows). */
+    osh_signals_install_dump();
+    run_opt.should_dump = osh_signals_should_dump;
+    run_opt.should_dump_user = NULL;
     run_opt.diag = &diag;
 
     rc = osh_run(&run_opt, stdout, stderr);

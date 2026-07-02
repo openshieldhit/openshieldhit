@@ -1,5 +1,16 @@
 #include "transport/osh_checkpoint_policy.h"
 
+/* Bootstrap probe for a time cadence before any throughput has been measured
+ * (the very first batch): run 1/OSH_CHECKPOINT_TIME_PROBE_FRACTION of what
+ * remains rather than the whole run, so we both measure a rate AND reach an
+ * early checkpoint at which the first timed dump can fire.  From the second
+ * batch on, the measured rate drives K ≈ rate × cadence and this is unused.
+ * The fraction scales the probe with the run (small nstat → small probe) and is
+ * floored at 1; the exact value only shifts *where* dumps land, never the scored
+ * result (batching is RNG-invariant), and a time cadence is non-deterministic by
+ * design (issue #195), so no test pins it. */
+#define OSH_CHECKPOINT_TIME_PROBE_FRACTION 100u
+
 void osh_checkpoint_policy_init(struct osh_checkpoint_policy *policy) {
     if (!policy) {
         return;
@@ -35,19 +46,29 @@ osh_checkpoint_next_batch_size(struct osh_checkpoint_policy const *policy, doubl
         k = policy->batch;
     } else if (policy->every_primaries != 0u) {
         k = policy->every_primaries;
-    } else if (policy->every_s > 0.0 && measured_rate_pps > 0.0) {
-        /* K ≈ rate × cadence, rounded to nearest, so a wall-time preview costs
-         * the same per wall-second on any machine.  Guard the cast: clamp to
-         * remaining before narrowing so a huge rate×time cannot wrap size_t. */
-        double target = measured_rate_pps * policy->every_s + 0.5;
-        if (target >= (double) remaining) {
-            return remaining;
+    } else if (policy->every_s > 0.0) {
+        if (measured_rate_pps > 0.0) {
+            /* K ≈ rate × cadence, rounded to nearest, so a wall-time preview costs
+             * the same per wall-second on any machine.  Guard the cast: clamp to
+             * remaining before narrowing so a huge rate×time cannot wrap size_t. */
+            double target = measured_rate_pps * policy->every_s + 0.5;
+            if (target >= (double) remaining) {
+                return remaining;
+            }
+            k = (target < 1.0) ? 1u : (size_t) target;
+        } else {
+            /* Time cadence, but throughput is not known yet (the first batch):
+             * run a small bootstrap probe rather than the whole run, so we both
+             * measure a rate and reach an early checkpoint for the first dump. */
+            k = remaining / OSH_CHECKPOINT_TIME_PROBE_FRACTION;
+            if (k == 0u) {
+                k = 1u;
+            }
         }
-        k = (target < 1.0) ? 1u : (size_t) target;
     } else {
-        /* LIVE requested but no cadence is usable yet (e.g. the first batch of a
-         * time cadence, before throughput is known): span the rest so the run
-         * still progresses and the result stays exact. */
+        /* LIVE requested but no cadence is usable at all (mode set without a
+         * cadence or an explicit batch): span the rest so the run still
+         * progresses and the result stays exact. */
         return remaining;
     }
 

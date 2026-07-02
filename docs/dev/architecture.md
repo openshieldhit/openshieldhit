@@ -74,20 +74,44 @@ between checkpoints.  Final-only pays it once; a time cadence pays it a fixed
 number of times per wall-hour on any machine; a count cadence pays it *more often
 as the machine gets faster*, which is why it is reserved for deterministic tests.
 
+### Periodic and on-demand dumps (issue #193)
+
+Periodic dumps hang directly off the checkpoint boundary. `osh_run_control`
+(`src/transport/osh_run_control.h`) carries the dump cadence
+(`dump_every_s` / `dump_every_primaries`), an on-demand trigger callback
+(`should_dump`, e.g. POSIX `SIGUSR1`), and the dump destination (a pluggable
+`osh_scoring_sink` plus a reusable `osh_scoring_shadow`).  At each checkpoint the
+outer loop asks `run_ctl_should_dump()` and, when a dump is due, calls
+`osh_scoring_snapshot_save()` — a non-destructive out-of-place postprocess of a
+shadow copy, so the live accumulators are byte-identical afterwards and the run
+continues unperturbed.  The dump cadence *is* the checkpoint cadence: setting one
+via `osh_simulation_set_dump_control()` puts the run in the matching LIVE mode.
+The CLI wires `--dump-every` / `--dump-every-primaries` (over the `DUMPEVERY`
+card / `NSTAT` save step); the app builds the file sink from the scoring
+workspace so a dump refines the normal output files on disk.
+
+The time cadence is now live end to end: the outer loop measures per-batch
+throughput and feeds it to `osh_checkpoint_next_batch_size()`, which sizes each
+batch `≈ rate × cadence` (with a small bootstrap probe on the first batch, before
+any rate is known).
+
 ### Completeness labelling
 
-A checkpoint dump is **exact** (all families drained).  A future escape hatch may
-dump at the inner ion safe point without draining secondaries — an **approx**
-result — which must be stamped honestly so it is never mistaken for a complete
-one (`osh_checkpoint_completeness_label()` → `exact` / `families_pending`).  The
-graceful wall-time stop (issue #192) routes its early stop through the family
-scheduler, so its partial save is always family-exact for the primaries that
-finished.
+A checkpoint dump is **exact** (all families drained), and every saved output —
+dump or final — records this: an ASCII `# COMPLETENESS: exact` header and a BDO
+`OSHBDO_RT_COMPLETENESS` token, read from `osh_scoring_runtime::completeness`
+(NULL ⇒ `exact`) via `osh_scoring_runtime_completeness_label()`.  A future escape
+hatch may dump at the inner ion safe point without draining secondaries — an
+**approx** result stamped `families_pending` so it is never mistaken for a
+complete one (`osh_checkpoint_completeness_label()`).  The graceful wall-time stop
+(issue #192) routes its early stop through the family scheduler, so its partial
+save is always family-exact for the primaries that finished.
 
-This module lands the batch-aware seam and the quiescence guarantee only.  The
-CLI surface, periodic file dumps and the time cadence (#193), variance-batch
-folding (#169), and per-worker accumulator merges (#161) grow into the stable
-`osh_checkpoint_policy` shape in their own follow-ups.
+Scheduled dumps also reserve their snapshot buffer against the memory budget up
+front (`osh_scoring_mem_estimate::shadow_bytes`), so a periodic dump can never run
+the process out of memory mid-run.  Still growing into the stable
+`osh_checkpoint_policy` shape in their own follow-ups: variance-batch folding
+(#169) and per-worker accumulator merges (#161).
 
 ## Module map
 

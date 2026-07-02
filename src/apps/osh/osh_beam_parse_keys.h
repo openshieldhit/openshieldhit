@@ -12,6 +12,7 @@
 #define OSH_BEAM_KEY_BMODTRANS   "bmodtrans"
 #define OSH_BEAM_KEY_DELTAE      "deltae"
 #define OSH_BEAM_KEY_DEMIN       "demin"
+#define OSH_BEAM_KEY_DUMPEVERY   "dumpevery"
 #define OSH_BEAM_KEY_EMTRANS     "emtrans"
 #define OSH_BEAM_KEY_EXTSPEC     "extspec"
 #define OSH_BEAM_KEY_MAKELN      "makeln"

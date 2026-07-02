@@ -70,6 +70,14 @@ struct osh_scoring_runtime {
      * parallel worker passes its own and this stays the serial driver's private copy. */
     struct osh_scoring_scratch master_scratch;
     struct osh_material_runtime const *mat_tables; /* SP tables; NULL until wired by simulation */
+    /* Partial-result completeness label for the save layer (issue #193 / #195).
+     * NULL (the default after compile) means a physically complete, family-drained
+     * result — the writers stamp "exact".  A mid-run dump of an ion-only or
+     * otherwise family-incomplete snapshot sets this on its shadow view (never on
+     * the live runtime) to e.g. "families_pending=neutron" so the honesty label
+     * on disk (BDO OSHBDO_RT_COMPLETENESS / ASCII "# COMPLETENESS:") reflects it.
+     * Borrowed: points at a static string, never owned/freed by the runtime. */
+    char const *completeness;
     /* Master accumulator view: an npages-long array whose element i shallow-aliases
      * pages[i].acc (same data pointers).  Built once by osh_scoring_compile() so the
      * single-worker serial driver can hand osh_scoring_score_step() a deposit target
@@ -104,6 +112,19 @@ static inline struct osh_scoring_accumulator *osh_scoring_runtime_master_accumul
  */
 static inline struct osh_scoring_scratch *osh_scoring_runtime_master_scratch(struct osh_scoring_runtime *rt) {
     return rt ? &rt->master_scratch : NULL;
+}
+
+/**
+ * @brief Completeness label to stamp on a saved result — never NULL.
+ *
+ * @details
+ * Resolves @ref osh_scoring_runtime::completeness to a printable token for the
+ * save layer, collapsing the NULL default (a fully family-drained result) to the
+ * literal "exact".  Used by the ASCII and BDO writers so the on-disk honesty
+ * label is well-defined for every output, dump or final.
+ */
+static inline char const *osh_scoring_runtime_completeness_label(struct osh_scoring_runtime const *rt) {
+    return (rt && rt->completeness) ? rt->completeness : "exact";
 }
 
 #ifdef __cplusplus

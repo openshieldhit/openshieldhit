@@ -4,8 +4,10 @@
   (`wdir`, `fname`, and similar fields should disappear as app-owned path
   handling is cleaned up)
 - [ ] Add result merge API for embarrassingly parallel runs
-- [ ] Add chunked / partial run control (run in batches, inspect partial
-  results, merge, save explicitly)
+- [x] Add chunked / partial run control (run in batches, inspect partial
+  results, save explicitly) — batch-aware checkpoint scheduler (#195/#207) plus
+  periodic/on-demand family-exact dumps (#193). The per-worker *merge* step is
+  still open (tracked in #161).
 - [ ] Finish naming consistency: remaining stale "prepare" wording in
   messages/comments
 

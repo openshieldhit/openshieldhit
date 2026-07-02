@@ -197,11 +197,14 @@ struct osh_transport_context {
                                                                 serial worker points its own profile here) or by the
                                                                 driver merging per-worker profiles — not on the hot
                                                                 path through this pointer. */
-    struct osh_run_control const *run_control;             /**< Borrowed; clean-stop / wall-budget policy (issue #192).
-                                                                NULL = run to completion, no early stop.  Consulted only
-                                                                by the primary (ion) loop to halt new-primary injection;
-                                                                the family scheduler still drains every banked secondary
-                                                                so a partial result stays family-exact (issue #195). */
+    struct osh_run_control *run_control;                   /**< Borrowed; clean-stop / wall-budget + dump policy
+                                                                (issues #192 / #193).  NULL = run to completion, no early
+                                                                stop and no periodic dumps.  The inner ion loop reads it
+                                                                (const) to halt new-primary injection; the outer batch
+                                                                loop mutates its dump bookkeeping at each family-complete
+                                                                checkpoint (run_ctl_should_dump) and fires a snapshot
+                                                                through dump_sink.  Non-const because that bookkeeping is
+                                                                updated in place; only the serial outer loop writes it. */
     struct osh_checkpoint_policy const *checkpoint_policy; /**< Borrowed; batch/quiescence cadence (issue #195).
                                                             NULL = FINAL-ONLY: one batch of K = nstat, the fastest
                                                             path, byte-for-byte identical to today.  When set to a

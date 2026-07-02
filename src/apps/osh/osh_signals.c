@@ -50,6 +50,21 @@ void osh_signals_reset_stop(void) {
     InterlockedExchange(&g_stop, 0);
 }
 
+/* Windows has no SIGUSR1 equivalent, so on-demand dumps are unavailable here.
+ * Keep the symbols so main.c and tests link identically on every platform: the
+ * install is a no-op and the poll always reports "no dump requested".  Scheduled
+ * --dump-every[-primaries] dumps are unaffected — they never use these. */
+void osh_signals_install_dump(void) {
+}
+
+int osh_signals_should_dump(void *user) {
+    (void) user;
+    return 0;
+}
+
+void osh_signals_reset_dump(void) {
+}
+
 #else /* POSIX */
 
 #include <signal.h>
@@ -61,9 +76,20 @@ void osh_signals_reset_stop(void) {
  * flow — is exactly right, and writing the flag is async-signal-safe. */
 static sig_atomic_t volatile g_stop = 0;
 
+/* On-demand dump flag, raised by SIGUSR1 and consumed (read-and-cleared) by the
+ * run loop.  Same concurrency model as g_stop: the handler runs in the
+ * interrupted thread, so volatile sig_atomic_t is the right, async-signal-safe
+ * type.  Edge-triggered, unlike g_stop, so one signal yields exactly one dump. */
+static sig_atomic_t volatile g_dump = 0;
+
 static void on_sigint(int sig) {
     (void) sig;
     g_stop = 1; /* async-signal-safe: flag only */
+}
+
+static void on_sigusr1(int sig) {
+    (void) sig;
+    g_dump = 1; /* async-signal-safe: flag only; dump happens at the next checkpoint */
 }
 
 void osh_signals_install_stop(void) {
@@ -85,6 +111,34 @@ int osh_signals_should_stop(void *user) {
 
 void osh_signals_reset_stop(void) {
     g_stop = 0;
+}
+
+void osh_signals_install_dump(void) {
+    struct sigaction sa;
+    /* Zero every field first (see osh_signals_install_stop for why), then set the
+     * handler explicitly.  SIGUSR1 is the conventional user-defined signal for a
+     * dump-and-continue request. */
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = on_sigusr1;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0; /* no SA_RESTART: let a blocking call return so the flag is seen promptly */
+    (void) sigaction(SIGUSR1, &sa, NULL);
+}
+
+int osh_signals_should_dump(void *user) {
+    (void) user; /* the flag is a process singleton; no per-call context needed */
+    /* Edge-triggered: read and clear so each SIGUSR1 fires exactly one dump.  The
+     * clear races only with the handler *setting* it; a signal landing between the
+     * read and the clear is simply serviced by the next poll, never lost for good. */
+    if (g_dump) {
+        g_dump = 0;
+        return 1;
+    }
+    return 0;
+}
+
+void osh_signals_reset_dump(void) {
+    g_dump = 0;
 }
 
 #endif
