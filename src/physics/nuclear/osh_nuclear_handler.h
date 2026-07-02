@@ -114,6 +114,10 @@ struct osh_nuclear_handler {
     size_t *elem_offset;                  /**< elem_offset[i]: start of material i.    */
     size_t *elem_count;                   /**< elem_count[i]:  element count.          */
     size_t nmaterials;
+    /** Persistent (Z,A) ion species for recoil / fragment transport and scoring,
+     *  indexed by z*(OSH_FERMI_BREAKUP_AMAX+1)+a.  Entries for absent isotopes have
+     *  a==0.  Built once in compile; const during stepping (thread-safe). */
+    struct particle *recoil_species;
 };
 
 /**
@@ -135,6 +139,20 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
  * @param h  Handler to free.  May be NULL.  Fields are zeroed after free.
  */
 void osh_nuclear_handler_free(struct osh_nuclear_handler *h);
+
+/**
+ * @brief Borrowed (Z,A) ion species for a transported/scored recoil or fragment.
+ *
+ * @details
+ * Returns a stable pointer into the handler's persistent species table, suitable
+ * for a particle-pool species slot or a scoring attribution.  Covers Z in
+ * [1, OSH_FERMI_BREAKUP_ZMAX] and A in [Z, OSH_FERMI_BREAKUP_AMAX].
+ *
+ * @returns Pointer to the species, or NULL if (Z,A) is out of range or is not a
+ *          known isotope.
+ */
+struct particle const *
+osh_nuclear_handler_recoil_species(struct osh_nuclear_handler const *h, unsigned int z, unsigned int a);
 
 /**
  * @brief Sample nuclear interactions over one transport step.

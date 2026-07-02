@@ -40,14 +40,8 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
                                        struct particle const *part,
                                        struct step const *st);
 
-/**
- * @brief Score one point event into the compiled scoring runtime.
- *
- * @details
- * Point scoring is not implemented yet.
- */
-enum osh_status
-osh_scoring_score_point(struct osh_scoring_runtime *rt, struct particle const *part, struct position const *pos);
+/* Point (zero-track-length) energy deposits are scored via
+ * osh_scoring_score_point() in osh_scoring_point.h. */
 
 #ifdef __cplusplus
 }

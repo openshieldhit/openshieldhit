@@ -7,6 +7,7 @@ add_library(osh_scoring
     runtime/osh_scoring_shadow.c
     runtime/osh_scoring_snapshot.c
     runtime/osh_scoring_step.c
+    runtime/osh_scoring_point.c
     save/osh_scoring_save.c
     save/osh_scoring_sink.c
     save/osh_scoring_save_ascii.c

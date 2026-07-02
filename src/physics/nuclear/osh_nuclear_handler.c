@@ -141,6 +141,35 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         return rc;
     }
 
+    /* Persistent (Z,A) ion species table for recoil / fragment transport and
+     * scoring.  Built once here (const during stepping): a heavy recoil or FBU
+     * fragment needs a stable species pointer to be injected into the ion pool
+     * or attributed in a point deposit. */
+    {
+        size_t const ndense = (size_t) (OSH_FERMI_BREAKUP_ZMAX + 1) * (size_t) (OSH_FERMI_BREAKUP_AMAX + 1);
+        unsigned int z;
+        unsigned int a;
+
+        out->recoil_species = (struct particle *) calloc(ndense, sizeof(struct particle));
+        if (!out->recoil_species) {
+            osh_nuclear_handler_free(out);
+            return OSH_ENOMEM;
+        }
+        for (z = 1u; z <= OSH_FERMI_BREAKUP_ZMAX; ++z) {
+            for (a = z; a <= OSH_FERMI_BREAKUP_AMAX; ++a) {
+                size_t widx = (size_t) z * (size_t) (OSH_FERMI_BREAKUP_AMAX + 1) + (size_t) a;
+                int pdg = OSH_PART_PDG_HIBASE + (int) z * 10000 + (int) a * 10;
+                struct particle p;
+                /* osh_particle_from_pdg fills mass from the isotope DB; it fails
+                 * for (Z,A) that are not real isotopes, which we leave zeroed
+                 * (a==0) to mark absent. */
+                if (osh_particle_from_pdg(&p, pdg)) {
+                    out->recoil_species[widx] = p;
+                }
+            }
+        }
+    }
+
     return OSH_OK;
 }
 
@@ -152,7 +181,25 @@ void osh_nuclear_handler_free(struct osh_nuclear_handler *h) {
     free(h->elem_pool);
     free(h->elem_offset);
     free(h->elem_count);
+    free(h->recoil_species);
     memset(h, 0, sizeof(*h));
+}
+
+struct particle const *
+osh_nuclear_handler_recoil_species(struct osh_nuclear_handler const *h, unsigned int z, unsigned int a) {
+    size_t widx;
+
+    if (!h || !h->recoil_species) {
+        return NULL;
+    }
+    if (z == 0u || a == 0u || z > (unsigned int) OSH_FERMI_BREAKUP_ZMAX || a > (unsigned int) OSH_FERMI_BREAKUP_AMAX) {
+        return NULL;
+    }
+    widx = (size_t) z * (size_t) (OSH_FERMI_BREAKUP_AMAX + 1) + (size_t) a;
+    if (h->recoil_species[widx].a == 0u) {
+        return NULL; /* absent isotope */
+    }
+    return &h->recoil_species[widx];
 }
 
 /* ---- Handler step -------------------------------------------------------- */

@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "common/osh_coord.h"
 #include "common/osh_diag.h"
@@ -23,6 +24,7 @@
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "random/osh_rng.h"
+#include "scoring/runtime/osh_scoring_point.h"
 #include "scoring/runtime/osh_scoring_step.h"
 #include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
@@ -353,6 +355,109 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             fp->n_sent_breakup++;
         }
         fp->n_created += ctx.nuclear_event.n_fragments;
+    }
+
+    /* Transport or locally deposit the residual nuclear fragments (heavy recoils,
+     * break-up residues).  A fragment above the ion transport threshold is
+     * injected into the ion pool for a proper track next pass; one below it has
+     * no valid transportable range, so its kinetic energy is dumped at the
+     * reaction site via a point deposit (issue #179), attributed to the recoil
+     * (Z,A) so it lands in the right species scorers.  Excitation energy is not
+     * yet disposed of here — that follows with the Fermi break-up recursion. */
+    if (ctx.nuclear_event.n_fragments > 0u && transport_ctx->nuclear_handler != NULL) {
+        struct osh_nuclear_event const *ev = &ctx.nuclear_event;
+        size_t fi;
+        for (fi = 0u; fi < ev->n_fragments; ++fi) {
+            struct osh_nuclear_fragment const *frag = &ev->fragments[fi];
+            struct particle const *species =
+                osh_nuclear_handler_recoil_species(transport_ctx->nuclear_handler, frag->z, frag->a);
+            double m;
+            double psq;
+            double pmag;
+            double ke;
+            double dir[3];
+
+            if (species == NULL) {
+                continue; /* (Z,A) outside the recoil species table (heavy target) */
+            }
+            m = species->mass;
+            psq = (frag->p[0] * frag->p[0]) + (frag->p[1] * frag->p[1]) + (frag->p[2] * frag->p[2]);
+            pmag = sqrt(psq);
+            ke = sqrt(psq + (m * m)) - m;
+            if (!(ke > 0.0)) {
+                continue;
+            }
+            if (pmag > 0.0) {
+                dir[0] = frag->p[0] / pmag;
+                dir[1] = frag->p[1] / pmag;
+                dir[2] = frag->p[2] / pmag;
+            } else {
+                dir[0] = pool->ux[slot];
+                dir[1] = pool->uy[slot];
+                dir[2] = pool->uz[slot];
+            }
+
+            if (ke / (double) frag->a < OSH_TRANSPORT_ION_EMIN_MEV_PER_U) {
+                /* Sub-threshold: no transportable range — point deposit here. */
+                struct step pt;
+                memset(&pt, 0, sizeof(pt));
+                pt.p[0] = pool->x[slot];
+                pt.p[1] = pool->y[slot];
+                pt.p[2] = pool->z[slot];
+                pt.p[3] = ke;
+                pt.q[0] = pt.p[0];
+                pt.q[1] = pt.p[1];
+                pt.q[2] = pt.p[2];
+                pt.q[3] = ke;
+                pt.v[0] = dir[0];
+                pt.v[1] = dir[1];
+                pt.v[2] = dir[2];
+                pt.w[0] = dir[0];
+                pt.w[1] = dir[1];
+                pt.w[2] = dir[2];
+                pt.ds = 0.0;
+                pt.de = ke;
+                pt.rho = ctx.rho;
+                pt.wt = pool->wt[slot];
+                pt.voxel_idx = ctx.voxel_idx;
+                pt.medium = (int) ctx.zone_material_idx;
+                pt.zone = (int) ctx.zone_idx;
+                pt.system = OSH_COORD_UNIVERSE;
+                pt.prim_idx = pool->prim_idx[slot];
+                pt.gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+                pt.has_voxel = ctx.has_voxel;
+                if (score_rt != NULL) {
+                    osh_scoring_score_point(score_rt,
+                                            osh_scoring_runtime_master_accumulators(score_rt),
+                                            osh_scoring_runtime_master_scratch(score_rt),
+                                            species,
+                                            &pt);
+                }
+            } else {
+                /* Above threshold: inject as an ion for transport next pass. */
+                size_t s;
+                if (pool->n >= pool->capacity) {
+                    pool->n_dropped++; /* counted, never silent (issue #213) */
+                    continue;
+                }
+                s = pool->n;
+                pool->x[s] = pool->x[slot];
+                pool->y[s] = pool->y[slot];
+                pool->z[s] = pool->z[slot];
+                pool->ux[s] = dir[0];
+                pool->uy[s] = dir[1];
+                pool->uz[s] = dir[2];
+                pool->e[s] = ke;
+                pool->wt[s] = pool->wt[slot];
+                pool->prim_idx[s] = pool->prim_idx[slot];
+                pool->gen[s] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+                pool->species[s] = species;
+                /* Distinct child stream from the secondaries (which used ordinals
+                 * [0, n_secondaries)); offset the fragment ordinals past them. */
+                osh_rng_split(&pool->rng[s], rng, (uint64_t) (ev->n_secondaries + fi));
+                pool->n++;
+            }
+        }
     }
 
     return OSH_OK;

@@ -8,25 +8,17 @@
 #include "common/raytrace/osh_raytrace.h"
 #include "common/raytrace/osh_raytrace_cyl.h"
 #include "material/runtime/osh_material_runtime.h"
+#include "scoring/runtime/osh_scoring_step_internal.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
 static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out);
 static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out);
 static double
 compute_step_let(struct osh_scoring_runtime const *rt, struct particle const *part, struct step const *st);
-static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
-                                             struct osh_raytrace_grid *grid,
-                                             double *voxel_volume_inv_out);
+/* mesh_geometry_to_grid, score_group_energy, score_group_dose are declared in
+ * osh_scoring_step_internal.h (shared with osh_scoring_point.c). */
 static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
                                             struct osh_raytrace_grid *grid);
-static enum osh_status score_group_energy(struct osh_scoring_runtime const *rt,
-                                          struct osh_scoring_accumulator *acc_set,
-                                          struct osh_scoring_geometry_score_group const *group,
-                                          struct osh_voxel_crossing const *crossings,
-                                          size_t ncross,
-                                          struct particle const *part,
-                                          struct step const *st,
-                                          double score_len);
 static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
                                            struct osh_scoring_accumulator *acc_set,
                                            struct osh_scoring_geometry_score_group const *group,
@@ -35,14 +27,6 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
                                            struct particle const *part,
                                            struct step const *st,
                                            double score_len);
-static enum osh_status score_group_dose(struct osh_scoring_runtime const *rt,
-                                        struct osh_scoring_accumulator *acc_set,
-                                        struct osh_scoring_geometry_score_group const *group,
-                                        struct osh_voxel_crossing const *crossings,
-                                        size_t ncross,
-                                        struct particle const *part,
-                                        struct step const *st,
-                                        double score_len);
 static enum osh_status score_group_dlet(struct osh_scoring_runtime const *rt,
                                         struct osh_scoring_accumulator *acc_set,
                                         struct osh_scoring_geometry_score_group const *group,
@@ -221,14 +205,6 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
     return OSH_OK;
 }
 
-enum osh_status
-osh_scoring_score_point(struct osh_scoring_runtime *rt, struct particle const *part, struct position const *pos) {
-    (void) rt;
-    (void) part;
-    (void) pos;
-    return OSH_ENOTSUP;
-}
-
 /**
  * @brief Compute the chord direction and length for the scoring raytrace.
  *
@@ -322,9 +298,9 @@ static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const
  *
  * Requires exactly three axes labelled "X", "Y", "Z" with positive bin sizes.
  */
-static enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
-                                             struct osh_raytrace_grid *grid,
-                                             double *voxel_volume_inv_out) {
+enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
+                                      struct osh_raytrace_grid *grid,
+                                      double *voxel_volume_inv_out) {
     int ix;
     int iy;
     int iz;
@@ -676,14 +652,14 @@ static double diff2_step_val(struct osh_scoring_page_runtime const *page,
  *
  * Distributes st->de proportionally to path length in each crossed voxel.
  */
-static enum osh_status score_group_energy(struct osh_scoring_runtime const *rt,
-                                          struct osh_scoring_accumulator *acc_set,
-                                          struct osh_scoring_geometry_score_group const *group,
-                                          struct osh_voxel_crossing const *crossings,
-                                          size_t ncross,
-                                          struct particle const *part,
-                                          struct step const *st,
-                                          double score_len) {
+enum osh_status score_group_energy(struct osh_scoring_runtime const *rt,
+                                   struct osh_scoring_accumulator *acc_set,
+                                   struct osh_scoring_geometry_score_group const *group,
+                                   struct osh_voxel_crossing const *crossings,
+                                   size_t ncross,
+                                   struct particle const *part,
+                                   struct step const *st,
+                                   double score_len) {
     size_t i;
     size_t j;
     size_t db;
@@ -821,14 +797,14 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
  * dose-to-medium scoring.  Pure density overrides do not change the dose
  * (Fano theorem).
  */
-static enum osh_status score_group_dose(struct osh_scoring_runtime const *rt,
-                                        struct osh_scoring_accumulator *acc_set,
-                                        struct osh_scoring_geometry_score_group const *group,
-                                        struct osh_voxel_crossing const *crossings,
-                                        size_t ncross,
-                                        struct particle const *part,
-                                        struct step const *st,
-                                        double score_len) {
+enum osh_status score_group_dose(struct osh_scoring_runtime const *rt,
+                                 struct osh_scoring_accumulator *acc_set,
+                                 struct osh_scoring_geometry_score_group const *group,
+                                 struct osh_voxel_crossing const *crossings,
+                                 size_t ncross,
+                                 struct particle const *part,
+                                 struct step const *st,
+                                 double score_len) {
     size_t i;
     size_t j;
     size_t db;  /* diff1 bin index for current page (0 when no diff axis) */
