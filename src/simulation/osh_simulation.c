@@ -75,13 +75,38 @@ static int prepared_has_voxel_body(struct osh_gemca_prepared const *gemca) {
 
 /* ---- Transport pool + scratch helpers ------------------------------------ */
 
-/* Ion wavefront batch size: user override or compiled default, clamped to nstat. */
-static size_t simulation_ion_pool_capacity(struct osh_transport_params const *p) {
-    size_t cap = (p->pool_capacity != 0u) ? p->pool_capacity : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
-    if (p->nstat > 0u && cap > p->nstat) {
-        cap = p->nstat;
+/* Ion wavefront width: primaries injected per pool fill — the user override or
+ * compiled default, never more than nstat.  This is the cache/parallelism perf
+ * knob ("primaries in flight"); it does NOT bound the pool allocation. */
+static size_t simulation_ion_wavefront_width(struct osh_transport_params const *p) {
+    size_t width = (p->pool_capacity != 0u) ? p->pool_capacity : (size_t) OSH_TRANSPORT_POOL_CAPACITY;
+    if (p->nstat > 0u && width > p->nstat) {
+        width = p->nstat;
     }
-    return cap;
+    return width;
+}
+
+/* Allocated ion-pool capacity: the wavefront width PLUS headroom for the nuclear
+ * secondaries a full wavefront can inject before the next compaction.
+ *
+ * Clamping capacity to the wavefront width (the pre-#213 behaviour) left a full
+ * primary wavefront with zero room for its recoils/abrasion nucleons/break-up
+ * fragments, so they were silently dropped — and, because the drop count tracked
+ * the checkpoint batch schedule, scored results depended on the batch size
+ * (issue #213).  Doubling the width gives 100 % headroom: secondaries drain each
+ * wavefront pass, so peak occupancy stays far below capacity in practice and the
+ * default configuration drops nothing, so scored output is batch- and
+ * capacity-invariant.  Any residual overflow on an aggressively small capacity is
+ * counted (osh_particle_pool::n_dropped) and WARNed; it cannot perturb a surviving
+ * history's stream (osh_rng_split is lineage+ordinal-keyed), so the only cost is
+ * the dropped secondaries' own deposited energy. */
+static size_t simulation_ion_pool_capacity(struct osh_transport_params const *p) {
+    size_t const width = simulation_ion_wavefront_width(p);
+    size_t const headroom = width;
+    if (width > ((size_t) -1) - headroom) {
+        return (size_t) -1; /* saturate rather than overflow the sum */
+    }
+    return width + headroom;
 }
 
 /* Neutron accumulation buffer size: must span the full ion run (all nstat batches),
@@ -130,6 +155,11 @@ static enum osh_status simulation_alloc_pools(struct osh_simulation *sim) {
     sim->transport_ctx.zone_refs = zr;
     sim->transport_ctx.dist_batch = db;
     sim->transport_ctx.scratch_capacity = ion_cap;
+
+    /* Fill injects only a wavefront's worth of primaries; the remaining capacity
+     * (ion_cap - width) is the secondary headroom that keeps issue #213's drop
+     * from happening in the default configuration. */
+    sim->transport_ctx.ion_wavefront_width = simulation_ion_wavefront_width(&sim->transport_ctx.params);
 
     sim->transport_ctx.ion_pool = &sim->ion_pool;
     sim->transport_ctx.neutron_pool = &sim->neutron_pool;
@@ -450,6 +480,7 @@ enum osh_status osh_simulation_get_profile(struct osh_simulation const *sim, str
     out->secondaries = sim->profile.secondaries;
     out->neutrons_banked = (unsigned long long) sim->neutron_pool.n_created;
     out->fragments_banked = (unsigned long long) sim->fragment_pool.n_created;
+    out->ion_secondaries_dropped = (unsigned long long) sim->ion_pool.n_dropped;
     return OSH_OK;
 }
 
@@ -485,6 +516,15 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
                        "simulation: %zu neutron(s) created, %zu dropped (pool overflow)",
                        sim->neutron_pool.n_created,
                        sim->neutron_pool.n_dropped);
+    }
+    if (sim->ion_pool.n_dropped > 0u) {
+        /* A drop means deposited energy was lost; the default configuration
+         * reserves secondary headroom so this never fires (issue #213).  Warn
+         * (not info) and point at the fix so it can never pass unnoticed. */
+        OSH_DIAG_WARNF(sim->diag,
+                       "simulation: %zu ion secondary/secondaries dropped (pool overflow); "
+                       "raise the pool capacity to avoid losing their deposited energy",
+                       sim->ion_pool.n_dropped);
     }
     if (sim->fragment_pool.n_sent_breakup > 0u) {
         OSH_DIAG_INFOF(sim->diag,

@@ -165,8 +165,9 @@ static void test_seed_history_disjoint_ranges(void) {
 }
 
 /* osh_rng_split is deterministic along a lineage: identical parents at the
- * same draw position produce identical, reproducible child streams.  This is
- * what makes nuclear secondaries reproducible irrespective of scheduling. */
+ * same draw position produce identical, reproducible child streams for a given
+ * ordinal.  This is what makes nuclear secondaries reproducible irrespective of
+ * scheduling. */
 static void test_split_deterministic(void) {
     struct osh_rng pa;
     struct osh_rng pb;
@@ -177,30 +178,96 @@ static void test_split_deterministic(void) {
     osh_rng_seed_history(&pa, OSH_RNG_TYPE_PCG32, 55u, 7u, OSH_RNG_PURPOSE_PHYSICS);
     osh_rng_seed_history(&pb, OSH_RNG_TYPE_PCG32, 55u, 7u, OSH_RNG_PURPOSE_PHYSICS);
 
-    /* Advance both parents identically, then split at the same lineage point. */
+    /* Advance both parents identically, then split at the same lineage point
+     * and ordinal. */
     for (k = 0; k < 5; ++k) {
         (void) osh_rng_u64(&pa);
         (void) osh_rng_u64(&pb);
     }
-    osh_rng_split(&ca, &pa);
-    osh_rng_split(&cb, &pb);
+    osh_rng_split(&ca, &pa, 0u);
+    osh_rng_split(&cb, &pb, 0u);
 
     for (k = 0; k < 8; ++k) {
         ASSERT_TRUE(osh_rng_u64(&ca) == osh_rng_u64(&cb));
     }
 
-    /* The child stream is distinct from the parent's continuation. */
+    /* The child stream is distinct from the parent's own continuation. */
     {
         struct osh_rng cc;
         int differ = 0;
         osh_rng_seed_history(&pa, OSH_RNG_TYPE_PCG32, 55u, 7u, OSH_RNG_PURPOSE_PHYSICS);
-        osh_rng_split(&cc, &pa);
+        osh_rng_split(&cc, &pa, 0u);
         for (k = 0; k < 8; ++k) {
             if (osh_rng_u64(&cc) != osh_rng_u64(&pa)) {
                 differ = 1;
             }
         }
         ASSERT_TRUE(differ);
+    }
+}
+
+/*
+ * Splitting must not consume from the parent, and each ordinal must key an
+ * independent child.  Together these make secondary seeding drop-, reorder-,
+ * and overflow-proof (issue #213): whether a sibling secondary is injected or
+ * silently dropped cannot shift the parent's stream or any other sibling's.
+ */
+static void test_split_nonconsuming_and_drop_independent(void) {
+    struct osh_rng parent;
+    struct osh_rng snapshot;
+    struct osh_rng pristine;
+    struct osh_rng c0;
+    struct osh_rng c1;
+    struct osh_rng c2;
+    int k;
+
+    osh_rng_seed_history(&parent, OSH_RNG_TYPE_PCG32, 55u, 7u, OSH_RNG_PURPOSE_PHYSICS);
+    for (k = 0; k < 5; ++k) {
+        (void) osh_rng_u64(&parent);
+    }
+    snapshot = parent; /* consumed by step 1's lockstep comparison  */
+    pristine = parent; /* untouched copy of the pre-split state for step 3 */
+
+    osh_rng_split(&c0, &parent, 0u);
+    osh_rng_split(&c1, &parent, 1u);
+    osh_rng_split(&c2, &parent, 2u);
+
+    /* (1) Non-consuming: the parent's own draws are exactly what they would have
+     *     been had it never been split. */
+    for (k = 0; k < 16; ++k) {
+        ASSERT_TRUE(osh_rng_u64(&parent) == osh_rng_u64(&snapshot));
+    }
+
+    /* (2) Distinct ordinals key distinct streams (c0 and c2 are preserved for
+     *     step 3 by drawing from copies here). */
+    {
+        struct osh_rng a = c0;
+        struct osh_rng b = c1;
+        struct osh_rng bb = c1;
+        struct osh_rng cc = c2;
+        int differ01 = 0;
+        int differ12 = 0;
+        for (k = 0; k < 8; ++k) {
+            if (osh_rng_u64(&a) != osh_rng_u64(&b)) {
+                differ01 = 1;
+            }
+            if (osh_rng_u64(&bb) != osh_rng_u64(&cc)) {
+                differ12 = 1;
+            }
+        }
+        ASSERT_TRUE(differ01);
+        ASSERT_TRUE(differ12);
+    }
+
+    /* (3) Drop-independence: the ordinal-2 child is identical whether or not
+     *     ordinals 0 and 1 were ever split.  A dropped/absent sibling cannot
+     *     change another secondary's stream. */
+    {
+        struct osh_rng c2_alone;
+        osh_rng_split(&c2_alone, &pristine, 2u);
+        for (k = 0; k < 8; ++k) {
+            ASSERT_TRUE(osh_rng_u64(&c2_alone) == osh_rng_u64(&c2));
+        }
     }
 }
 
@@ -320,6 +387,7 @@ int main(void) {
     test_seed_history_purpose_independence();
     test_seed_history_disjoint_ranges();
     test_split_deterministic();
+    test_split_nonconsuming_and_drop_independent();
     test_double_vec_matches_scalar();
     test_float_vec_matches_scalar();
     test_u32_vec_matches_scalar();

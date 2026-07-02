@@ -87,12 +87,38 @@ void osh_rng_seed_history(
     osh_rng_init(rng, type, seed, stream);
 }
 
-void osh_rng_split(struct osh_rng *child, struct osh_rng *parent) {
-    /* Two draws from the parent supply independent seed and stream entropy.
-     * Deterministic along the parent's lineage, hence reproducible regardless
-     * of how the wavefront schedules sibling histories. */
-    uint64_t const child_seed = osh_rng_u64(parent);
-    uint64_t const child_stream = osh_rng_u64(parent);
+void osh_rng_split(struct osh_rng *child, struct osh_rng const *parent, uint64_t ordinal) {
+    /*
+     * Seed the child from a *private copy* of the parent advanced to the
+     * child's ordinal slot.  The parent's own stream is deliberately never
+     * consumed: splitting reads parent state but does not advance it.
+     *
+     * This is what makes secondary seeding drop-, reorder-, and overflow-proof
+     * (issue #213; design in #148).  Because splitting no longer draws from the
+     * parent, whether a sibling secondary is injected, reordered, or silently
+     * dropped when a pool is full can never shift the parent's — or any other
+     * sibling's — subsequent draws.  Each child stream is a pure function of
+     * its lineage key (the parent's current state, itself a pure function of
+     * the parent's own draws) and its ordinal, so reproducibility no longer
+     * depends on pool occupancy or wavefront scheduling.
+     *
+     * Ordinal k owns the disjoint two-draw window [2k, 2k+1] of the copied
+     * stream — the exact layout the old sequential split produced — so an
+     * injected child keeps the identical stream it had before, while the parent
+     * is left untouched.  The scan cost is O(ordinal); secondary counts per
+     * event are bounded (OSH_NUCLEAR_MAX_SECONDARIES), so this is negligible.
+     */
+    struct osh_rng scan = *parent; /* copy: parent is const and stays put */
+    uint64_t child_seed;
+    uint64_t child_stream;
+    uint64_t i;
+
+    for (i = 0u; i < ordinal; ++i) {
+        (void) osh_rng_u64(&scan);
+        (void) osh_rng_u64(&scan);
+    }
+    child_seed = osh_rng_u64(&scan);
+    child_stream = osh_rng_u64(&scan);
 
     osh_rng_init(child, parent->type, child_seed, child_stream);
 }

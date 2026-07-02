@@ -269,7 +269,20 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
     /* Inject secondaries produced by a nuclear event (pp elastic recoil,
      * abrasion nucleons, Fermi break-up products).  Secondaries are appended
      * past the current wavefront and are processed on the next pass.
-     * Silently skip if the pool is full. */
+     *
+     * The pool is sized with headroom beyond the primary wavefront so a full
+     * wavefront's secondaries fit without overflow (issue #213); the default
+     * configuration therefore drops nothing.  Should the pool still fill (an
+     * aggressively small capacity), the ion drop is *counted* (pool->n_dropped),
+     * not silent, and — because each child stream is seeded by lineage+ordinal,
+     * not by drawing from the parent (osh_rng_split) — a dropped secondary
+     * cannot perturb its parent's or siblings' streams: the only cost is that
+     * secondary's own deposited energy, never an RNG desync of a surviving
+     * history.  (Scored output is batch- and capacity-invariant in the default,
+     * drop-free configuration; a pool small enough to overflow instead trades
+     * that invariance for the counted, WARNed energy loss.)  The secondary
+     * ordinal `si` is passed straight to the split so the seeding does not depend
+     * on which siblings were injected. */
     if (ctx.nuclear_event.n_secondaries > 0u) {
         size_t si;
         struct osh_nuclear_event const *ev = &ctx.nuclear_event;
@@ -295,7 +308,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                     np->wt[k] = pool->wt[slot];
                     np->prim_idx[k] = pool->prim_idx[slot];
                     np->gen[k] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
-                    osh_rng_split(&np->rng[k], rng); /* seed child stream from parent */
+                    osh_rng_split(&np->rng[k], rng, (uint64_t) si); /* lineage+ordinal-keyed child stream */
                 } else {
                     np->n_dropped++;
                 }
@@ -303,6 +316,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             }
             /* -- ion push ---------------------------------------------------- */
             if (pool->n >= pool->capacity) {
+                pool->n_dropped++; /* count the loss — never a silent discard (issue #213) */
                 continue;
             }
             s = pool->n;
@@ -317,10 +331,12 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             pool->prim_idx[s] = pool->prim_idx[slot];
             pool->gen[s] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
             pool->species[s] = ev->secondaries[si].species;
-            /* Give the secondary its own stream, split from the parent's.  The
-             * parent's draw sequence is deterministic along its lineage, so the
-             * child stream is reproducible and independent of wavefront order. */
-            osh_rng_split(&pool->rng[s], rng);
+            /* Give the secondary its own stream, keyed by the parent's lineage
+             * and this secondary's ordinal `si`.  Splitting reads but does not
+             * advance the parent, so the child stream is reproducible and
+             * independent of wavefront order, pool capacity, and whether any
+             * sibling was dropped (issue #213). */
+            osh_rng_split(&pool->rng[s], rng, (uint64_t) si);
             pool->n++;
         }
     }

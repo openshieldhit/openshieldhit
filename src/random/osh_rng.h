@@ -167,19 +167,27 @@ void osh_rng_seed_history(
     struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t hist_index, enum osh_rng_purpose purpose);
 
 /**
- * @brief Derive an independent child stream from a parent (splittable RNG).
+ * @brief Derive an independent child stream from a parent, keyed by ordinal.
  *
  * @details
- * Consumes two draws from @p parent to seed @p child on a fresh, independent
- * stream.  Because the parent's own draw sequence is deterministic along its
- * lineage, the child stream is reproducible and independent of how histories
- * are scheduled — the seeding primitive for nuclear secondaries, whose count
- * and order are fixed by the parent's physics, not by the pool layout.
+ * Seeds @p child from a private copy of @p parent advanced to the child's
+ * @p ordinal slot.  Crucially it does **not** consume a draw from @p parent:
+ * splitting reads the parent's state but never advances it.  A secondary that
+ * is later dropped, reordered, or lost to pool overflow therefore cannot shift
+ * its parent's or its siblings' streams, so reproducibility is independent of
+ * pool occupancy and wavefront scheduling (issue #213; design in #148).
  *
- * @param child  RNG state to initialise (engine type inherited from parent).
- * @param parent Parent RNG; advanced by two draws.
+ * The child stream is a pure function of the parent's current state (itself a
+ * pure function of the parent's lineage) and @p ordinal.  Siblings produced by
+ * one event are separated by giving each a distinct @p ordinal (its index in
+ * the event's secondary list); ordinal @c k reproduces exactly the stream the
+ * old sequential split assigned to the k-th secondary.
+ *
+ * @param child   RNG state to initialise (engine type inherited from parent).
+ * @param parent  Parent RNG; read only, never advanced.
+ * @param ordinal Zero-based index of this child among its siblings.
  */
-void osh_rng_split(struct osh_rng *child, struct osh_rng *parent);
+void osh_rng_split(struct osh_rng *child, struct osh_rng const *parent, uint64_t ordinal);
 
 /**
  * @brief Generate a 32-bit unsigned integer.

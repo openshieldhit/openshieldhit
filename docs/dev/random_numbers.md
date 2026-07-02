@@ -90,7 +90,8 @@ int      osh_rng_poisson(struct osh_rng *r, double lambda);
 /* Per-history seeding (see §6) */
 void     osh_rng_seed_history(struct osh_rng *r, enum osh_rng_type t,
                               uint64_t seed, uint64_t hist_index, enum osh_rng_purpose p);
-void     osh_rng_split(struct osh_rng *child, struct osh_rng *parent);
+void     osh_rng_split(struct osh_rng *child, struct osh_rng const *parent,
+                       uint64_t ordinal);
 ```
 
 **Uniform reals.** `osh_rng_double` takes the top 53 bits of a 64-bit draw and
@@ -190,19 +191,32 @@ particle, not the schedule:
   purpose seeds a transient generator for source sampling, so the source phase
   space is identical regardless of which physics options are enabled.
 - **Secondaries** (nuclear recoils, abrasion nucleons, Fermi break-up fragments)
-  get their stream by **splitting from the parent** with `osh_rng_split`, which
-  draws two values from the parent to seed the child. The parent's draw sequence
-  is deterministic along its own lineage, so the child stream is reproducible no
-  matter when the secondary is created.
+  get their stream by **splitting from the parent** with `osh_rng_split(child,
+  parent, ordinal)`. The split seeds the child from a *private copy* of the
+  parent advanced to the child's `ordinal` slot; it **does not consume a draw
+  from the parent**. The child stream is therefore a pure function of the
+  parent's state (itself a pure function of the parent's lineage) and the
+  ordinal — reproducible no matter when the secondary is created, and, crucially,
+  independent of whether any sibling was injected or dropped (see the note below).
 
 ```
 primary 0   stream = mix(seed, base+0, PHYSICS)
 primary 1   stream = mix(seed, base+1, PHYSICS)
   │  ... transports, draws, then a nuclear event fires ...
-  ├─ secondary 1a   stream = split(parent₁)   ← consumes parent draws #k, #k+1
-  └─ secondary 1b   stream = split(parent₁)   ← consumes parent draws #k+2, #k+3
+  ├─ secondary 1a   stream = split(parent₁, ordinal 0)   ← parent unchanged
+  └─ secondary 1b   stream = split(parent₁, ordinal 1)   ← parent unchanged
 primary 2   stream = mix(seed, base+2, PHYSICS)
 ```
+
+!!! note "Splitting is drop-independent (issue #213)"
+    Because the split reads but never advances the parent, and each sibling is
+    keyed by its ordinal rather than by the *order* it consumes parent draws, a
+    secondary that is reordered or silently dropped (e.g. when a pool overflows)
+    cannot shift its parent's or its siblings' streams. Reproducibility of the
+    whole lineage is thus independent of pool occupancy and the checkpoint batch
+    schedule. An earlier consuming `osh_rng_split` coupled the parent's stream to
+    how many children were injected, which made scored output depend on the batch
+    size when a full primary wavefront overflowed the ion pool.
 
 Each stream is a pure function of `(seed, index, purpose)` or of its parent's
 lineage, so the random inputs to a history are **invariant** under pool
@@ -222,25 +236,30 @@ These depend only on `(seed, index)`. Whether history 1 runs first, last, on
 thread 0 or 47, in a pool of 1 or 65536, its sequence is the same — the
 order-independence guarantee, locked by `test_seed_history_order_independence`.
 
-### Worked example — a secondary via `split` (verified output)
+### Worked example — a secondary via `split` (verified output, `seed = 2025`)
 
 Primary history 7 takes two physics draws, then a nuclear event spawns a
-secondary, seeded by splitting the parent:
+secondary, seeded by splitting the parent at ordinal 0. The split reads the
+parent's state but **never advances it**, so the parent draws the same next
+value whether or not the secondary was ever created:
 
 ```
-parent (hist 7) draws #1,#2:  0.223872  0.725151
-child  first 2 draws:         0.252732  0.955397
-parent next draw (split advanced it by two): 0.609548
+parent (hist 7) draws #1,#2:      0.223872  0.725151
+child (ordinal 0) first 2 draws:  0.955397  0.252732
+parent's next draw, split done:   0.632358
+parent's next draw, no split:     0.632358   (identical)
 ```
 
-Re-run with any pool capacity / thread / rank and the child is identical:
+Re-run with any pool capacity / thread / rank — or drop the secondary
+altogether — and both streams are unchanged:
 
 ```
-child  first 2 draws again:   0.252732  0.955397   (identical)
+child (ordinal 0) first 2 draws again:  0.955397  0.252732   (identical)
 ```
 
-The child is independent of the parent's continuation yet fully determined by
-the parent's lineage — see `test_split_deterministic`.
+The child stream is a pure function of the parent's lineage and its ordinal,
+and the parent is independent of whether the child was ever split — see
+`test_split_deterministic` and `test_split_nonconsuming_and_drop_independent`.
 
 ### What is and isn't guaranteed
 

@@ -100,6 +100,7 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     size_t primaries_completed;
     size_t n_fill;
     size_t n_wavefront;
+    size_t width; /* primaries injected this fill: wavefront cap, headroom left for secondaries */
     size_t i;
     size_t step_budget;
     size_t steps_taken;
@@ -168,11 +169,22 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
         }
 
         /* Fill the pool when it is empty and primaries remain — never after a
-         * stop request, so no new primary is injected once we begin draining. */
+         * stop request, so no new primary is injected once we begin draining.
+         *
+         * Inject at most `wavefront_width` primaries, NOT the full pool capacity:
+         * the extra capacity is reserved as headroom for the nuclear secondaries
+         * this wavefront produces, so a full primary wavefront no longer leaves
+         * zero room for its recoils/fragments (issue #213).  A width of 0 (a
+         * context built without a simulation) falls back to the full capacity —
+         * the pre-#213 behaviour. */
         if (!stop && pool->n == 0u && primaries_done < nstat) {
+            width = transport_ctx->ion_wavefront_width;
+            if (width == 0u || width > pool->capacity) {
+                width = pool->capacity;
+            }
             n_fill = nstat - primaries_done;
-            if (n_fill > pool->capacity) {
-                n_fill = pool->capacity;
+            if (n_fill > width) {
+                n_fill = width;
             }
             if (prof) {
                 t_phase = osh_monotonic_seconds();

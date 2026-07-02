@@ -485,14 +485,18 @@ static double sum_last_column(char const *path) {
  * Drive one run of test case @p case_name at a given checkpoint cadence and
  * return the completed-primary count and total scored energy.  every_primaries
  * == 0 is FINAL-ONLY (one batch); > 0 runs family-complete batches of that size.
+ * @p pool_capacity == 0 leaves the compiled default; > 0 sets the live-history
+ * pool capacity (the perf knob) so callers can assert capacity-invariance.
  * When @p profile_out is non-NULL, profiling is enabled and the run profile is
- * copied out so callers can assert its counters accumulate across batches.  All
- * bundled cases used here are water cylinders spanning z ∈ [0, 20], so the same
- * single-quantity Energy mesh reads back the deposited energy for each.
+ * copied out so callers can assert its counters accumulate across batches (and
+ * read back ion_secondaries_dropped).  All bundled cases used here are water
+ * cylinders spanning z ∈ [0, 20], so the same single-quantity Energy mesh reads
+ * back the deposited energy for each.
  */
 static void run_checkpoint_case(char const *case_name,
                                 unsigned long long nstat,
                                 unsigned long long every_primaries,
+                                unsigned long long pool_capacity,
                                 unsigned long long *completed_out,
                                 double *energy_sum_out,
                                 struct osh_simulation_profile *profile_out) {
@@ -540,6 +544,9 @@ static void run_checkpoint_case(char const *case_name,
 
     ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
     ASSERT_TRUE(osh_simulation_set_checkpoint_policy(sim, every_primaries) == OSH_OK);
+    if (pool_capacity != 0ull) {
+        ASSERT_TRUE(osh_simulation_set_pool_capacity(sim, (size_t) pool_capacity) == OSH_OK);
+    }
     if (profile_out) {
         ASSERT_TRUE(osh_simulation_set_profiling(sim, 1) == OSH_OK);
     }
@@ -575,7 +582,7 @@ static void test_checkpoint_final_only_default_completes(void) {
 
     ASSERT_TRUE(osh_simulation_set_checkpoint_policy(NULL, 0ull) == OSH_EINVAL);
 
-    run_checkpoint_case("00_minimal", 200ull, 0ull, &completed, &energy, NULL);
+    run_checkpoint_case("00_minimal", 200ull, 0ull, 0ull, &completed, &energy, NULL);
     ASSERT_TRUE(completed == 200ull);
     ASSERT_TRUE(energy > 0.0);
 }
@@ -596,8 +603,8 @@ static void test_checkpoint_live_batches_match_final_only(void) {
     double energy_live = 0.0;
     double rel_diff;
 
-    run_checkpoint_case("00_minimal", 200ull, 0ull, &completed_final, &energy_final, NULL); /* one batch */
-    run_checkpoint_case("00_minimal", 200ull, 64ull, &completed_live, &energy_live, NULL);  /* 64,64,64,8 */
+    run_checkpoint_case("00_minimal", 200ull, 0ull, 0ull, &completed_final, &energy_final, NULL); /* one batch */
+    run_checkpoint_case("00_minimal", 200ull, 64ull, 0ull, &completed_live, &energy_live, NULL);  /* 64,64,64,8 */
 
     ASSERT_TRUE(completed_final == 200ull);
     ASSERT_TRUE(completed_live == 200ull);
@@ -612,31 +619,27 @@ static void test_checkpoint_live_batches_match_final_only(void) {
  * 00_minimal has NUCRE off, so its equivalence test never actually drains a
  * neutron family across a checkpoint.  06_minimal_nucre enables nuclear reactions,
  * so each batch's ion pass banks neutrons that the family scheduler must fully
- * drain into scoring before the checkpoint boundary.  The profile counters below
- * assert that neutrons really were produced and drained (nuclear_events and
- * neutrons_banked > 0), so this test genuinely exercises the "family-complete,
- * quiescent checkpoint" path rather than a degenerate no-secondary run.
+ * drain into scoring before the checkpoint boundary, and every nuclear event
+ * appends charged secondaries (recoils, abrasion nucleons, break-up fragments)
+ * to the ion pool.  The profile counters below assert secondaries really were
+ * produced and drained (nuclear_events and neutrons_banked > 0), so this test
+ * genuinely exercises the "family-complete, quiescent checkpoint" path rather
+ * than a degenerate no-secondary run.
  *
- * What this guards (the contract that holds):
- *   - COMPLETENESS: every primary finishes under both final-only and LIVE
- *     batching even though a batch banks neutrons that must be drained before it
- *     may advance — no primary is stranded at a checkpoint.
- *   - REPRODUCIBILITY within a batching: a given cadence is deterministic, so
- *     re-running the same LIVE policy reproduces the scored energy bit-for-bit.
- *
- * What this deliberately does NOT assert (documented limitation, see below):
- *   Single-pass (final-only) and multi-batch LIVE runs are NOT bit-identical once
- *   secondaries are in flight — on this fixture they differ by ~2.6% in scored
- *   energy.  The RNG stream of every history is a pure function of its global
- *   index (all but one neutron-producing primary are bit-identical across
- *   batchings), so this is not a seeding defect and not neutron-pool overflow
- *   (zero drops in both).  Rather, one primary's ion history reaches its nuclear
- *   vertex at a fractionally different point depending on whether the run is
- *   transported as one pass or split into batches, which flips a single stochastic
- *   reaction and cascades.  That is a transport-kernel batch-reproducibility
- *   limitation tracked separately from this scheduling seam; asserting exact
- *   final-vs-LIVE equivalence here would encode a guarantee the kernel does not
- *   yet provide.
+ * The invariant (issue #213): scored energy is batch-size invariant.
+ *   Final-only and multi-batch LIVE runs transport the *identical* set of
+ *   histories — primaries and every nuclear secondary — because (a) the ion pool
+ *   is sized with headroom beyond the primary wavefront, so no secondary is
+ *   dropped (ion_secondaries_dropped == 0 below), and (b) each secondary's RNG
+ *   stream is keyed by its lineage and ordinal, never drawn from the parent, so a
+ *   secondary's presence or absence cannot shift its parent's stream.  The only
+ *   remaining difference between the two batchings is the order deposits land in
+ *   the shared scoring accumulators, i.e. floating-point summation reassociation,
+ *   which is bounded far below any physical difference.  (Before #213 this fixture
+ *   differed by ~2.6 %: a full primary wavefront filled the pool, its secondaries
+ *   were silently dropped, and the drop count tracked the batch schedule — the
+ *   "transport-kernel FP limitation" once documented here was that bug, not a
+ *   kernel property.)
  */
 static void test_checkpoint_live_batches_drain_families_with_nuclear(void) {
     unsigned long long completed_final = 0ull;
@@ -645,31 +648,158 @@ static void test_checkpoint_live_batches_drain_families_with_nuclear(void) {
     double energy_final = 0.0;
     double energy_live_a = 0.0;
     double energy_live_b = 0.0;
+    double rel_diff;
     struct osh_simulation_profile prof_final;
     struct osh_simulation_profile prof_live;
 
     /* Final-only baseline, with profiling so we can prove secondaries were in
      * flight (otherwise the fixture could silently regress to a no-nuclear run
-     * and this test would prove nothing). */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, &completed_final, &energy_final, &prof_final);
+     * and this test would prove nothing) and that none were dropped. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 0ull, &completed_final, &energy_final, &prof_final);
     ASSERT_TRUE(completed_final == 200ull);
     ASSERT_TRUE(energy_final > 0.0);
     ASSERT_TRUE(prof_final.nuclear_events > 0ull);
     ASSERT_TRUE(prof_final.neutrons_banked > 0ull);
+    /* Headroom fix (issue #213): the default configuration drops no ion secondary. */
+    ASSERT_TRUE(prof_final.ion_secondaries_dropped == 0ull);
 
     /* LIVE batching drains a neutron family at every checkpoint, yet still
-     * finishes every primary and still produces (and drains) neutrons. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, &completed_live_a, &energy_live_a, &prof_live);
+     * finishes every primary, still produces (and drains) neutrons, and still
+     * drops nothing. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, 0ull, &completed_live_a, &energy_live_a, &prof_live);
     ASSERT_TRUE(completed_live_a == 200ull);
     ASSERT_TRUE(energy_live_a > 0.0);
     ASSERT_TRUE(prof_live.neutrons_banked > 0ull);
+    ASSERT_TRUE(prof_live.ion_secondaries_dropped == 0ull);
+
+    /* The real invariant: with no secondary dropped, final-only and LIVE agree to
+     * floating-point summation order — NOT the ~2.6 % the pre-#213 code showed. */
+    rel_diff = fabs(energy_live_a - energy_final) / energy_final;
+    ASSERT_TRUE(rel_diff < 1.0e-9);
 
     /* Reproducibility of a fixed cadence: the same LIVE policy re-run reproduces
      * the scored energy exactly (bit-for-bit), the determinism guarantee the
      * count cadence is meant to provide. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, &completed_live_b, &energy_live_b, NULL);
+    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, 0ull, &completed_live_b, &energy_live_b, NULL);
     ASSERT_TRUE(completed_live_b == 200ull);
     ASSERT_TRUE(energy_live_b == energy_live_a);
+}
+
+/*
+ * Capacity/batch invariance with nuclear reactions ON (issue #213 regression
+ * lock).  Scored energy for a fixed (seed, rndoffset) must not depend on:
+ *   - the checkpoint batch size K (full / 64 / 1), nor
+ *   - the live-history pool capacity (the cache/parallelism perf knob),
+ * because every history's RNG stream is a pure function of its lineage and no
+ * secondary is dropped (the counter is asserted 0 for each configuration).  All
+ * runs therefore transport the identical set of histories; only the scorer's
+ * floating-point summation order differs, which is bounded far below 1e-9
+ * relative.  This is the guard the earlier equivalence test could not provide —
+ * a bug whose signature was "the answer changes with K" would fail here.
+ */
+static void test_checkpoint_nuclear_invariant_across_batches_and_capacity(void) {
+    unsigned long long const nstat = 200ull;
+
+    /* K = 0 (final-only), 64, and 1 at the default capacity; then a small
+     * explicit capacity at final-only.  Each row is (every_primaries, pool_cap). */
+    struct {
+        unsigned long long every_primaries;
+        unsigned long long pool_capacity;
+    } const configs[] = {
+        {0ull, 0ull},   /* final-only, default capacity — the reference */
+        {64ull, 0ull},  /* LIVE, batch 64 */
+        {1ull, 0ull},   /* LIVE, batch 1 (checkpoint after every primary) */
+        {0ull, 64ull},  /* final-only, capacity 64 (a different wavefront width) */
+        {0ull, 256ull}, /* final-only, capacity 256 */
+    };
+
+    size_t const nconfigs = sizeof(configs) / sizeof(configs[0]);
+    double energy_ref = 0.0;
+    size_t i;
+
+    for (i = 0u; i < nconfigs; ++i) {
+        unsigned long long completed = 0ull;
+        double energy = 0.0;
+        struct osh_simulation_profile prof;
+
+        run_checkpoint_case("06_minimal_nucre",
+                            nstat,
+                            configs[i].every_primaries,
+                            configs[i].pool_capacity,
+                            &completed,
+                            &energy,
+                            &prof);
+
+        ASSERT_TRUE(completed == nstat);
+        ASSERT_TRUE(energy > 0.0);
+        /* Headroom holds at every tested capacity: no deposited energy is lost. */
+        ASSERT_TRUE(prof.ion_secondaries_dropped == 0ull);
+
+        if (i == 0u) {
+            energy_ref = energy;
+            ASSERT_TRUE(prof.nuclear_events > 0ull); /* the fixture really is nuclear */
+        } else {
+            ASSERT_TRUE(fabs(energy - energy_ref) / energy_ref < 1.0e-9);
+        }
+    }
+}
+
+/*
+ * Overflow accounting (issue #213), the positive counterpart to the
+ * ion_secondaries_dropped == 0 assertions above.  Those prove the default
+ * configuration reserves enough headroom to drop nothing; this deliberately
+ * starves the ion pool so a full wavefront's secondaries cannot all fit, and
+ * asserts the overflow is COUNTED rather than silently discarded (the exact bug
+ * #213 fixes).  It further checks that a drop never strands a primary (all
+ * histories still complete), that the lost secondaries lower the scored energy
+ * (their deposits are gone, not merely reordered), and that the starved run is
+ * still bit-for-bit deterministic on re-run.  Guards the drop counter in
+ * osh_transport_ion_step and the WARN in osh_simulation_run that surfaces it.
+ *
+ * Note this does NOT assert cross-batch invariance: once the pool overflows,
+ * which secondaries are dropped depends on pool occupancy (and thus on the
+ * checkpoint cadence), so the overflow regime trades exact invariance for a
+ * counted, warned energy loss.  Batch/capacity invariance is a property of the
+ * default, drop-free configuration and is locked by the test above.
+ */
+static void test_checkpoint_nuclear_overflow_is_counted_not_silent(void) {
+    unsigned long long completed_ref = 0ull;
+    unsigned long long completed_small = 0ull;
+    unsigned long long completed_rerun = 0ull;
+    double energy_ref = 0.0;
+    double energy_small = 0.0;
+    double energy_rerun = 0.0;
+    struct osh_simulation_profile prof_ref;
+    struct osh_simulation_profile prof_small;
+    struct osh_simulation_profile prof_rerun;
+
+    /* Reference: the default capacity has full secondary headroom, so nothing is
+     * dropped and every nuclear deposit is scored. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 0ull, &completed_ref, &energy_ref, &prof_ref);
+    ASSERT_TRUE(completed_ref == 200ull);
+    ASSERT_TRUE(prof_ref.nuclear_events > 0ull); /* the fixture really is nuclear */
+    ASSERT_TRUE(prof_ref.ion_secondaries_dropped == 0ull);
+
+    /* Starve the pool: capacity 2 leaves a full primary wavefront almost no room
+     * for its recoils/abrasion nucleons/break-up fragments, so they overflow.
+     * The overflow is counted in ion_secondaries_dropped, never a bare drop. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 2ull, &completed_small, &energy_small, &prof_small);
+    ASSERT_TRUE(prof_small.ion_secondaries_dropped > 0ull);
+    /* A drop must never strand a primary: every history still completes. */
+    ASSERT_TRUE(completed_small == 200ull);
+    /* The dropped secondaries carried deposited energy that is now simply gone,
+     * so the starved run scores strictly less than the headroom reference. */
+    ASSERT_TRUE(energy_small > 0.0);
+    ASSERT_TRUE(energy_small < energy_ref);
+
+    /* Determinism survives overflow: re-running the identical (cadence, capacity)
+     * reproduces the scored energy and the drop count exactly, because the drop
+     * pattern is a pure function of the lineage-keyed histories and the fixed
+     * pool occupancy — not of run-to-run chance. */
+    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 2ull, &completed_rerun, &energy_rerun, &prof_rerun);
+    ASSERT_TRUE(completed_rerun == 200ull);
+    ASSERT_TRUE(energy_rerun == energy_small);
+    ASSERT_TRUE(prof_rerun.ion_secondaries_dropped == prof_small.ion_secondaries_dropped);
 }
 
 /*
@@ -692,8 +822,8 @@ static void test_checkpoint_profiling_accumulates_across_batches(void) {
     struct osh_simulation_profile prof_live;
     double phase_sum_s;
 
-    run_checkpoint_case("00_minimal", 200ull, 0ull, &completed_final, &energy_final, &prof_final);
-    run_checkpoint_case("00_minimal", 200ull, 64ull, &completed_live, &energy_live, &prof_live);
+    run_checkpoint_case("00_minimal", 200ull, 0ull, 0ull, &completed_final, &energy_final, &prof_final);
+    run_checkpoint_case("00_minimal", 200ull, 64ull, 0ull, &completed_live, &energy_live, &prof_live);
 
     ASSERT_TRUE(completed_final == 200ull);
     ASSERT_TRUE(completed_live == 200ull);
@@ -735,6 +865,8 @@ int main(void) {
     test_checkpoint_final_only_default_completes();
     test_checkpoint_live_batches_match_final_only();
     test_checkpoint_live_batches_drain_families_with_nuclear();
+    test_checkpoint_nuclear_invariant_across_batches_and_capacity();
+    test_checkpoint_nuclear_overflow_is_counted_not_silent();
     test_checkpoint_profiling_accumulates_across_batches();
     return 0;
 }

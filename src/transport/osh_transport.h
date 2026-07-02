@@ -184,6 +184,14 @@ struct osh_transport_context {
     struct osh_zone_ref *zone_refs;                        /**< Transport scratch: zone/material per slot. */
     double *dist_batch;                                    /**< Transport scratch: boundary distance per slot. */
     size_t scratch_capacity;                               /**< Number of entries in zone_refs and dist_batch. */
+    size_t ion_wavefront_width;                            /**< Primaries injected per ion-pool fill (the
+                                                                cache/parallelism perf knob).  The pool is
+                                                                allocated wider than this so a full primary
+                                                                wavefront still has headroom for the nuclear
+                                                                secondaries it produces (issue #213).  0 falls
+                                                                back to the full pool capacity — the pre-#213
+                                                                behaviour — for callers that build a context
+                                                                without a simulation (e.g. unit tests). */
     struct osh_transport_profile *profile;                 /**< Borrowed master/destination profile; NULL disables
                                                                 phase timers/counters.  Written by a worker (the lone
                                                                 serial worker points its own profile here) or by the
