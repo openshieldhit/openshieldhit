@@ -8,7 +8,7 @@ OpenShieldHIT transports ions (protons, heavier ions) through 3D geometry using 
 ## Key documents
 
 - [README.md](README.md) — overview, build, install, application usage, public C API, repository layout
-- [DEVELOPER.md](DEVELOPER.md) — coding style, naming conventions, struct layout rules, C11 portability constraints (no POSIX-only APIs), module dependency rules, CMake presets
+- [DEVELOPER.md](DEVELOPER.md) — authoritative numbered coding ruleset (§1–§15): coding style, naming conventions, struct layout rules, C11 portability constraints (no POSIX-only APIs), module dependency rules, CMake presets
 - [TODO.md](TODO.md) — known open work items; treat as directional, not authoritative (items may be stale)
 - [docs/user/beam.dat.md](docs/user/beam.dat.md) — complete keyword reference for the beam input file
 - [docs/user/detect.dat.md](docs/user/detect.dat.md) — scored quantities (Dose in MeV/g, DoseGy in Gy, Fluence, DLET, TLET, …) and output formats
@@ -19,10 +19,11 @@ OpenShieldHIT transports ions (protons, heavier ions) through 3D geometry using 
 ```bash
 cmake --preset release && cmake --build --preset release --parallel   # optimised
 cmake --preset debug   && cmake --build --preset debug --parallel     # debug + sanitisers
-ctest --preset debug                                        # run tests
+ctest --test-dir build_debug --output-on-failure                      # run tests
 ```
 
-Binaries: `build_rel/bin/openshieldhit` (release) or `build/bin/openshieldhit` (debug).
+There are no CTest presets — point `ctest` at the binary dir (`--test-dir build_debug`), not `--preset`.
+Binaries: `build/bin/openshieldhit` (release) or `build_debug/bin/openshieldhit` (debug). Full preset table and commands: DEVELOPER.md §14.
 
 ## Running a simulation
 
@@ -60,16 +61,20 @@ tests/cases/             end-to-end integration cases (each is a self-contained 
 tests/fixtures/          small shared input files reused across unit tests
 ```
 
-## Key conventions (from DEVELOPER.md)
+## Coding conventions
 
-- **C11**, but no `//` single-line comments in production code (reserved for TODO/WIP)
-- No `typedef struct` — use `struct foo` explicitly everywhere
-- No POSIX-only APIs (`strcasecmp`, `mkdtemp`, `<unistd.h>`) — Windows is a target
-- Case-insensitive keyword matching: lowercase at parse time with `osh_lower_inplace()`, then `strcmp`
-- All public functions prefixed `osh_`; internal helpers are `static` with no prefix
-- Return values: predicate functions return `int` (1/0); operation functions return `enum osh_status` (OSH_OK = 0 = success)
-- No heap allocations on the simulation hot path (inside `osh_scoring_score_step` or `osh_transport_step`)
-- Doxygen `/** @brief / @param / @returns */` blocks on all non-trivial functions
+Coding rules are **not** duplicated here — [`DEVELOPER.md`](DEVELOPER.md) is the
+authoritative, numbered ruleset (§1–§15). Cite a section (e.g. "violates §1")
+rather than paraphrasing. This map points at the sections agents need most:
+
+- C dialect, K&R top-of-block declarations, initialization — §1
+- Type / `const` / boolean spelling (`struct foo`, `double const *p`) — §2
+- Comments and Doxygen (block `/* */` only in production) — §4
+- Return conventions (predicate `int` vs `enum osh_status`, `OSH_OK = 0`) — §5
+- Naming and file layout (`osh_` prefix; `static` helpers) — §6
+- Module layout and dependency direction — §9
+- No allocations on the simulation hot path — §10
+- Portability, banned APIs, case-insensitive keyword matching — §11
 
 ## Unit conventions
 

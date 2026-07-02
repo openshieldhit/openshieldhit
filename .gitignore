@@ -1,6 +1,14 @@
-.codex
-.claude
+# --- AI agent / tool configuration (local, not tracked) ---
+# Tool/runtime config areas — permissions, hooks, machine-specific settings —
+# stay out of version control. Project *guidance* for agents is tracked instead:
+# CLAUDE.md, AGENTS.md, and .github/copilot-instructions.md, all thin pointers to
+# DEVELOPER.md (the authoritative ruleset). Keep the split: config here, policy in
+# those tracked Markdown files.
+.claude/
 .claude*/
+.codex/
+.codex*/
+
 _temp*/
 NB*
 *.bdo
