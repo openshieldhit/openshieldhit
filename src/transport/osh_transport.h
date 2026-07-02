@@ -34,7 +34,8 @@ enum osh_transport_mcs_mode {
 enum osh_transport_straggling_mode {
     OSH_TRANSPORT_STRAGGLING_OFF = 0,
     OSH_TRANSPORT_STRAGGLING_GAUSSIAN = 1,
-    OSH_TRANSPORT_STRAGGLING_VAVILOV = 2
+    OSH_TRANSPORT_STRAGGLING_VAVILOV = 2,
+    OSH_TRANSPORT_STRAGGLING_URBAN = 3 /* Reserved (G4 Urbán); not implemented. */
 };
 
 /* Overridable from the build line (e.g. -DOSH_TRANSPORT_POOL_CAPACITY=256)

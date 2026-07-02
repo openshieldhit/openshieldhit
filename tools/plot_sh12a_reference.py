@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate SH12A-vs-OpenSHIELDHIT overlay plots as a multi-page PDF report."""
+"""Generate SH12A-vs-OpenShieldHIT overlay plots as a multi-page PDF report."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ PLOT_METADATA = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("reference_dir", type=Path, help="directory with imported SH12A *.dat fixtures")
-    parser.add_argument("run_dir", type=Path, help="directory with OpenSHIELDHIT outputs")
+    parser.add_argument("run_dir", type=Path, help="directory with OpenShieldHIT outputs")
     parser.add_argument("filenames", nargs="*", help="specific files to overlay; defaults to all reference *.dat files")
     parser.add_argument(
         "--normalize",
@@ -163,7 +163,7 @@ def resolve_run_path(run_dir: Path, requested_name: str) -> tuple[Path, str | No
         fallback = run_dir / f"{match.group('stem')}.dat"
         if fallback.exists():
             return fallback, f"using {fallback.name} because convertmc produced a single differential table"
-    raise FileNotFoundError(f"missing OpenSHIELDHIT output: {path}")
+    raise FileNotFoundError(f"missing OpenShieldHIT output: {path}")
 
 
 def load_run_curve(path: Path, ref_x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -272,14 +272,14 @@ def plot_one(filename: str,
         run_y_plot = normalize(run_y, normalize_mode)
         if is_differential_plot(filename):
             run_mask = positive_mask(run_x, run_y_plot)
-            ax.plot(run_x[run_mask], run_y_plot[run_mask], "-", lw=1.5, label="OpenSHIELDHIT")
+            ax.plot(run_x[run_mask], run_y_plot[run_mask], "-", lw=1.5, label="OpenShieldHIT")
         else:
-            ax.plot(run_x, run_y_plot, "-", lw=1.5, label="OpenSHIELDHIT")
+            ax.plot(run_x, run_y_plot, "-", lw=1.5, label="OpenShieldHIT")
     except (FileNotFoundError, ValueError) as exc:
         warnings.append(f"{filename}: {exc}")
         ax.text(0.5,
                 0.08,
-                "OpenSHIELDHIT output missing or not directly plottable\nsee terminal warnings for details",
+                "OpenShieldHIT output missing or not directly plottable\nsee terminal warnings for details",
                 transform=ax.transAxes,
                 ha="center",
                 va="bottom",

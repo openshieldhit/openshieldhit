@@ -6,8 +6,8 @@ external SH12A dataset `plan02_field01_geoD_mono`.
 
 Purpose:
 
-- keep a runnable OpenSHIELDHIT version of the SH12A setup in-tree
-- preserve the differential scorers used on this branch
+- keep a runnable OpenShieldHIT version of the SH12A setup in-tree
+- preserve the differential scorers used in this case
 - emit SH12A-style multi-page BDO outputs that can be postprocessed with
   `convertmc`
 
@@ -19,8 +19,9 @@ Notes:
 
 - `mono` refers to the energy-layer setup, not to a single spot. `USECBEAM` is
   therefore part of the intended test coverage.
-- The original SH12A setup used Vavilov straggling; OpenSHIELDHIT currently
-  falls back to Gaussian straggling here because Vavilov is not implemented.
+- The original SH12A setup used Vavilov straggling. This case is currently
+  configured with `STRAGG 1` (Gaussian) and can now be switched to
+  `STRAGG 2` for Vavilov/Landau straggling.
 - The example defaults to `NSTAT = 100000` primaries in `beam.dat`.
 - The directory passed via `--outdir` is created automatically if it does not
   already exist.
@@ -30,7 +31,7 @@ Notes:
 
 ## Quick Start
 
-1. Run OpenSHIELDHIT:
+1. Run OpenShieldHIT:
 
 ```bash
 ./build/bin/openshieldhit -v --outdir /tmp/plan02_geoD tests/cases/11_plan02_geoD_mono

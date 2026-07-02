@@ -17,7 +17,9 @@
 #include "physics/atomic/osh_physics_bethe.h"
 #include "physics/atomic/osh_physics_scat.h"
 #include "physics/atomic/osh_physics_scat_highland.h"
-#include "physics/atomic/osh_physics_straggling.h"
+#include "physics/atomic/osh_physics_strag.h"
+#include "physics/atomic/osh_physics_strag_landau.h"
+#include "physics/atomic/osh_physics_strag_vavilov.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "random/osh_rng.h"
@@ -43,10 +45,15 @@
 
 /*
  * Hard minimum ion kinetic energy [MeV/nucleon].
- * Particles below this threshold are killed regardless of tcut or table emin.
- * Mirrors the OSH_BEAM_TMIN floor previously imported from beam headers.
+ * Particles below this threshold are killed regardless of tcut.
+ * Set to the runtime SP/range table lower bound OSH_MATERIAL_RUNTIME_EMIN:
+ * the lowest energy the tables are valid for, so the cutoff floor is aligned
+ * to table validity and no energy below it is extrapolated.  Referenced from
+ * the macro (not a duplicated literal) so the two cannot drift apart; the
+ * _MEV_PER_U suffix signals the units the transport code applies it in.
+ * TCUT0 can only raise the effective cutoff above this floor, never lower it.
  */
-#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U 0.1
+#define OSH_TRANSPORT_ION_EMIN_MEV_PER_U OSH_MATERIAL_RUNTIME_EMIN
 
 /* ---- Per-step computation context --------------------------------------- */
 
@@ -88,6 +95,7 @@ struct ion_step_ctx {
     char enable_mcs;
     char mcs_model; /* enum osh_mcs_model selected for this run */
     char enable_straggling;
+    char straggling_mode;    /* enum osh_transport_straggling_mode selected for this run */
     char is_vacuum;          /* 1 if vacuum zone or ρ ≤ 0            */
     char done;               /* 1 if step already handled (kill/nudge/error) */
     enum osh_status done_rc; /* return value when done == 1           */
@@ -435,6 +443,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->enable_mcs = (params && params->mcs_mode != OSH_TRANSPORT_MCS_OFF);
     ctx->mcs_model = params ? (char) params->mcs_mode : (char) OSH_MCS_OFF;
     ctx->enable_straggling = (params && params->straggling_mode != OSH_TRANSPORT_STRAGGLING_OFF);
+    ctx->straggling_mode = params ? (char) params->straggling_mode : (char) OSH_TRANSPORT_STRAGGLING_OFF;
     ctx->is_vacuum = (is_vacuum_material(zone_ref->material_idx) || ctx->rho <= 0.0);
 
     /* Default exit direction: incident direction (overwritten by MCS phases) */
@@ -707,11 +716,19 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                                            size_t slot,
                                            struct osh_material_runtime const *material_rt,
                                            struct osh_rng *rng) {
-    double residual_range;
-    double e_mid;
-    double z_eff;
-    double sigma_strag;
-    double v_in[3];
+    double residual_range; /* CSDA range left after this step's areal density [g/cm²] */
+    double e_mid;          /* total kinetic energy at the step mid-point [MeV]        */
+    double z_eff;          /* effective projectile charge at e_mid                    */
+    double sigma_strag;    /* Bohr Gaussian straggling width σ [MeV]                  */
+    double v_in[3];        /* incident direction (for the boundary end-of-step MCS)   */
+    double delta;          /* energy fluctuation added to the exit energy [MeV]       */
+    double beta2;          /* projectile β² at the step mid-point                     */
+    double gamma;          /* Lorentz factor γ at the step mid-point                  */
+    double xi;             /* Vavilov/Landau width parameter ξ [MeV]                  */
+    double e_max;          /* maximum energy transfer to a target electron E_max [MeV] */
+    double kappa;          /* Vavilov parameter κ = ξ / E_max (regime selector)       */
+    double lam;            /* sampled reduced Vavilov/Landau variable λ               */
+    double u;              /* uniform deviate feeding the inverse-CDF sampler         */
 
     ctx->ds_gcm2 = ctx->rho * ctx->step_len;
 
@@ -737,18 +754,41 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
             ctx->exit_energy = ctx->cutoff;
     }
 
-    /* Bohr Gaussian energy straggling */
+    /* Energy straggling.
+     * STRAGG 1 (Gaussian): always Bohr Gaussian.
+     * STRAGG 2 (Vavilov):  auto-dispatch by κ = ξ/E_max — Gaussian (κ ≥ 10),
+     *                      Vavilov (0.01 ≤ κ < 10), or Landau (κ < 0.01), with
+     *                      ΔE_loss = ξ·(λ − λ̄) from the sampled reduced variable. */
     if (ctx->enable_straggling) {
         e_mid = 0.5 * (ctx->e0 + ctx->exit_energy);
         z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
-        sigma_strag = osh_physics_straggling_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2);
-        if (sigma_strag > 0.0) {
-            ctx->exit_energy += osh_rng_gauss(rng, 0.0, sigma_strag);
-            if (ctx->exit_energy > ctx->e0)
-                ctx->exit_energy = ctx->e0;
-            if (ctx->exit_energy < ctx->cutoff)
-                ctx->exit_energy = ctx->cutoff;
+
+        if (ctx->straggling_mode == OSH_TRANSPORT_STRAGGLING_VAVILOV) {
+            gamma = 1.0 + e_mid / ctx->proj_mass_mev;
+            beta2 = 1.0 - 1.0 / (gamma * gamma);
+            xi = osh_physics_strag_xi(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2, beta2);
+            e_max = osh_physics_strag_emax(e_mid, ctx->proj_mass_mev);
+            kappa = osh_physics_strag_kappa(xi, e_max);
+            if (kappa >= OSH_STRAG_KAPPA_GAUSS || kappa <= 0.0) {
+                sigma_strag = osh_physics_strag_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2);
+                delta = (sigma_strag > 0.0) ? osh_rng_gauss(rng, 0.0, sigma_strag) : 0.0;
+            } else {
+                u = osh_rng_double(rng);
+                lam = (kappa >= OSH_STRAG_KAPPA_LANDAU) ? osh_physics_strag_vavilov_lambda(kappa, beta2, u)
+                                                        : osh_physics_strag_landau_lambda(u);
+                /* Mean-preserving loss fluctuation; more loss lowers the exit energy. */
+                delta = -xi * (lam - osh_physics_strag_lambda_bar(kappa, beta2));
+            }
+        } else {
+            sigma_strag = osh_physics_strag_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2);
+            delta = (sigma_strag > 0.0) ? osh_rng_gauss(rng, 0.0, sigma_strag) : 0.0;
         }
+
+        ctx->exit_energy += delta;
+        if (ctx->exit_energy > ctx->e0)
+            ctx->exit_energy = ctx->e0;
+        if (ctx->exit_energy < ctx->cutoff)
+            ctx->exit_energy = ctx->cutoff;
     }
 
     /* End-of-step MCS for boundary-limited steps.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Overlay OpenSHIELDHIT vs SHIELD-HIT12A for the issue #133 MCS-isolation cases.
+"""Overlay OpenShieldHIT vs SHIELD-HIT12A for the issue #133 MCS-isolation cases.
 
 The cases tests/reference/idd_water_200mev_scat{0,1,2} (200 MeV protons in water,
 NUCRE off, STRAGG off; MSCAT 0/1/2) isolate the multiple-scattering distal-edge
@@ -16,8 +16,8 @@ A final summary page overlays the narrow-column fluence distal edges of all thre
 MSCAT modes for both codes.
 
 Column layouts handled:
-  OpenSHIELDHIT mesh : X Y Z FLUENCE ENERGY          (Z=col2, fluence=col3)
-  OpenSHIELDHIT cyl  : Z R FLUENCE ENERGY            (Z=col0, R=col1)
+  OpenShieldHIT mesh : X Y Z FLUENCE ENERGY          (Z=col2, fluence=col3)
+  OpenShieldHIT cyl  : Z R FLUENCE ENERGY            (Z=col0, R=col1)
   SHIELD-HIT12A 1D   : Z FLUENCE ENERGY              (Z=col0, fluence=col1)
   SHIELD-HIT12A cyl  : R Z FLUENCE ENERGY            (R=col0, Z=col1)
 """
@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--nstat", type=int, default=8000, help="primaries per run (default 8000)")
     p.add_argument("--repo-root", type=Path, default=root, help="openshieldhit repo root")
-    p.add_argument("--osh", type=Path, default=root / "build" / "bin" / "openshieldhit", help="OpenSHIELDHIT binary")
+    p.add_argument("--osh", type=Path, default=root / "build" / "bin" / "openshieldhit", help="OpenShieldHIT binary")
     p.add_argument("--sh12a", default="shieldhit", help="SHIELD-HIT12A binary (in PATH or absolute)")
     p.add_argument("--workdir", type=Path, default=None, help="working dir for runs (default: a temp dir)")
     p.add_argument("--out", type=Path, default=None, help="output PDF (default: <workdir>/mcs_scat_report.pdf)")
@@ -199,12 +199,12 @@ def main() -> int:
             osh_out, osh_err, osh_s = args.workdir / "osh_out" / case, "", None
             sh_out, sh_err, sh_s = args.workdir / "sh12a_deck" / case, "", None
         else:
-            print(f"[{case}] running OpenSHIELDHIT (nstat={args.nstat}) ...", flush=True)
+            print(f"[{case}] running OpenShieldHIT (nstat={args.nstat}) ...", flush=True)
             osh_out, osh_err, osh_s = run_osh(args, case)
             if osh_err:
-                print(f"[{case}] OpenSHIELDHIT unavailable after {format_elapsed(osh_s)}: {osh_err}", flush=True)
+                print(f"[{case}] OpenShieldHIT unavailable after {format_elapsed(osh_s)}: {osh_err}", flush=True)
             else:
-                print(f"[{case}] OpenSHIELDHIT done in {format_elapsed(osh_s)}", flush=True)
+                print(f"[{case}] OpenShieldHIT done in {format_elapsed(osh_s)}", flush=True)
             print(f"[{case}] running SHIELD-HIT12A (nstat={args.nstat}) ...", flush=True)
             sh_out, sh_err, sh_s = run_sh12a(args, case)
             if sh_err:
@@ -229,17 +229,17 @@ def main() -> int:
             fig, ax = plt.subplots(2, 2, figsize=(11, 8))
             note = ""
             if osh is None:
-                note = f"\n[OpenSHIELDHIT unavailable: {d['osh_err']}]"
+                note = f"\n[OpenShieldHIT unavailable: {d['osh_err']}]"
             elif sh is None:
                 note = f"\n[SHIELD-HIT12A unavailable: {d['sh_err']}]"
-            timing = (f"\nTiming: OpenSHIELDHIT {format_elapsed(d['osh_s'])}, "
+            timing = (f"\nTiming: OpenShieldHIT {format_elapsed(d['osh_s'])}, "
                       f"SHIELD-HIT12A {format_elapsed(d['sh_s'])}")
             fig.suptitle(f"200 MeV p -> water, {MODEL[case]}   (NUCRE off, STRAGG off, "
-                         f"nstat={args.nstat})\nOpenSHIELDHIT {version} vs SHIELD-HIT12A{note}{timing}",
+                         f"nstat={args.nstat})\nOpenShieldHIT {version} vs SHIELD-HIT12A{note}{timing}",
                          fontsize=11)
 
             def overlay(a, key, idx):
-                for c, style, name in ((osh, "-", "OpenSHIELDHIT"), (sh, "--", "SHIELD-HIT12A")):
+                for c, style, name in ((osh, "-", "OpenShieldHIT"), (sh, "--", "SHIELD-HIT12A")):
                     if c is None:
                         continue
                     z = c[key][0]
@@ -269,7 +269,7 @@ def main() -> int:
 
             a = ax[1, 1]
             zsel_used = zpeak
-            for c, mk, name in ((osh, "o-", "OpenSHIELDHIT"), (sh, "s--", "SHIELD-HIT12A")):
+            for c, mk, name in ((osh, "o-", "OpenShieldHIT"), (sh, "s--", "SHIELD-HIT12A")):
                 if c is None:
                     continue
                 code = "osh" if name.startswith("Open") else "sh12a"
@@ -300,7 +300,7 @@ def main() -> int:
         if zends:
             ax.set_xlim(max(zends) - 5, max(zends))
         ax.set(title="Primary-fluence distal edge (1 cm^2 column) vs MSCAT mode\n"
-               f"OpenSHIELDHIT {version} (solid) vs SHIELD-HIT12A (dashed)",
+               f"OpenShieldHIT {version} (solid) vs SHIELD-HIT12A (dashed)",
                xlabel="Depth (cm)", ylabel="Fluence (1/cm^2)")
         ax.grid(True)
         handles, _ = ax.get_legend_handles_labels()
@@ -318,7 +318,7 @@ def main() -> int:
 
     print(f"\nWrote {args.out}")
     print(f"\nTiming summary (wall clock, nstat={args.nstat}; speedup = SH12A / OSH):")
-    print(f"{'case':<8}{'OpenSHIELDHIT':>16}{'SHIELD-HIT12A':>16}{'speedup':>12}")
+    print(f"{'case':<8}{'OpenShieldHIT':>16}{'SHIELD-HIT12A':>16}{'speedup':>12}")
     for case in args.cases:
         d = data[case]
         print(f"{case:<8}{format_elapsed(d['osh_s']):>16}{format_elapsed(d['sh_s']):>16}"

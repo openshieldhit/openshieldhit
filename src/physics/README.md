@@ -99,16 +99,34 @@ Key references:
 See [docs/physics/multiple-scattering.md](../../docs/physics/multiple-scattering.md)
 for the full strategy, the Highland-anchored-Molière rationale, and the validation.
 
-### Energy straggling — `osh_physics_straggling`
+### Energy straggling — `osh_physics_strag`
 
 The Bethe formula gives only the *mean* energy loss.  In reality, statistical
 fluctuations in the number of collisions broaden the energy distribution —
-this is **straggling**.  The **Bohr variance** gives the width of this
-distribution per step; the transport loop samples it as a Gaussian correction
-to the exit energy.
+this is **straggling**.
+
+The module is split like `scat` (dispatcher + per-model files):
+
+- **Gaussian / Bohr** (`_gauss`, STRAGG 1) — the **Bohr variance** gives the
+  distribution width per step, sampled as a Gaussian correction to the exit
+  energy.  Accurate for thick absorbers.
+- **Vavilov + Landau** (`_vavilov`, `_landau`, STRAGG 2) — the statistically
+  correct distribution.  The dispatcher forms the Vavilov parameter
+  `κ = ξ / E_max` at the step mid-point and auto-selects: Gaussian (κ ≥ 10),
+  Vavilov (0.01 ≤ κ < 10), or Landau (κ < 0.01), applying the mean-preserving
+  loss fluctuation `ΔE = ξ·(λ − λ̄)`.  The reduced variable `λ` comes from a
+  fast inverse-CDF sampler (pole-free polynomial in a transformed uniform
+  deviate, coefficients Chebyshev-expanded in (κ, β²)).  Those coefficients are
+  OpenShieldHIT-specific, fit to the exact Vavilov / DENLAN-Landau
+  distributions by `tools/vavilov_fit`, following an approach by Bjarne Thomsen
+  (Aarhus University, Aarhus, Denmark, 2012) — regenerated from the
+  distributions.
 
 Key references:
 - Bohr, Mat. Fys. Medd. 18:8 (1948)
+- Vavilov, Sov. Phys. JETP 5, 749 (1957)
+- Landau, J. Phys. USSR 8, 201 (1944); Kölbig & Schorr, Comput. Phys. Commun.
+  31, 97 (1984)
 
 ---
 
@@ -226,7 +244,7 @@ fed back into ion transport yet.
 osh_transport_ion_step()
     Phase 2b  ion_step_length()              — CSDA range (Bethe tables)
     Phase 3   ion_step_hinge_and_scatter()   — Highland/Molière angle
-    Phase 4   ion_step_energy_and_straggling() — exit energy + Bohr straggling
+    Phase 4   ion_step_energy_and_straggling() — exit energy + energy straggling
     Phase 5   ion_step_nuclear()             — Tripathi survival probability
     Phase 6   ion_step_commit()              — score + update pool
 ```

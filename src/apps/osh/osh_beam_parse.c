@@ -951,6 +951,7 @@ static int _parse_rndseed(PARSE_HANDLER_ARGS) {
  *   0 — off
  *   1 — Gaussian (Bohr straggling, fast)
  *   2 — Vavilov  (statistically correct for thin absorbers)
+ *   3 — Urbán    (reserved; not yet implemented — rejected at transport setup)
  *
  * Vavilov converges to Gaussian for thick absorbers, so mode 2 is the
  * safe default.  Gaussian may be preferred when speed is critical and
@@ -969,7 +970,7 @@ static int _parse_stragg(PARSE_HANDLER_ARGS) {
         return OSH_EPARSE;
     }
     beam->straggl = (char) _i;
-    if (beam->straggl > OSH_BEAM_STRAGG_VAVILOV || beam->straggl < OSH_BEAM_STRAGG_OFF) {
+    if (beam->straggl > OSH_BEAM_STRAGG_URBAN || beam->straggl < OSH_BEAM_STRAGG_OFF) {
         OSH_DIAG_ERRORF(
             state->diag, "in %s line %i: invalid STRAGG mode '%i'", oshf->filename, oshf->lineno, beam->straggl);
         return OSH_EPARSE;
@@ -1025,7 +1026,7 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
         spot->t0_per_nucleon = 1;
         if (_f[0] < OSH_BEAM_TMIN) {
             OSH_DIAG_ERRORF(state->diag,
-                            "in %s line %i: TMAX0 %.4f MeV/nucleon is below transport threshold %.4f MeV/nucleon",
+                            "in %s line %i: TMAX0 %.4f MeV/nucleon is below the minimum beam energy %.4f MeV/nucleon",
                             oshf->filename,
                             oshf->lineno,
                             (double) _f[0],

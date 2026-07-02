@@ -8,7 +8,7 @@ This directory intentionally keeps only the 32 ASCII `*.dat` scorer outputs
 used as manual-reference fixtures. The SH12A input files, PNG plots, and scalar
 `NB_target*.txt` files stay outside the repository.
 
-Matching OpenSHIELDHIT case:
+Matching OpenShieldHIT case:
 
 - `tests/cases/11_plan02_geoD_mono`
 

@@ -1,0 +1,30 @@
+# Straggling distal-edge benchmark scoring (issue #190): depth dose, primary
+# fluence, and dose-/track-averaged LET on a single 1 cm^2 central column.
+# MSCAT off + NUCRE off => only EM stopping + energy straggling, so the distal
+# edge (Bragg-peak falloff) is governed by range straggling alone.
+
+Filter
+    Name Primary           # primary protons only
+    GEN = 0
+    Z = 1
+    A = 1
+
+# 1 cm^2 central column, 0.5 mm bins for a sharp distal edge.
+Geometry Mesh
+    Name DDCnarrow
+    X  -0.5    0.5     1
+    Y  -0.5    0.5     1
+    Z   0.0   28.0   560
+
+# idd.dat is the file the reference harness auto-compares (compare_idd.py reads
+# the first quantity / col 4).  Dose is listed FIRST so the auto-comparison
+# targets the dose distal edge — the range-straggling signature (#190).
+# DLET/TLET are scored for manual/overlay comparison of the LET tail.
+Output
+    Filename idd.dat
+    Fileformat TEXT
+    Geo DDCnarrow
+    Quantity Dose
+    Quantity Fluence Primary
+    Quantity DLET
+    Quantity TLET

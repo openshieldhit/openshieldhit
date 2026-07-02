@@ -219,10 +219,13 @@ Energy straggling model.
 | 0 | Off |
 | 1 | Gaussian (Bohr straggling) |
 | 2 | Vavilov (statistically correct for thin absorbers; **recommended**) |
+| 3 | Urbán (reserved; not yet implemented) |
 
-Vavilov converges to Gaussian for thick absorbers, so mode 2 is the safe
-default.  Gaussian is faster and acceptable when the absorber is thick
-compared to the particle range.
+Mode 2 auto-selects the correct regime per step from the Vavilov parameter
+`κ = ξ / E_max`: Gaussian for thick absorbers (κ ≥ 10), Vavilov (0.01 ≤ κ < 10),
+or Landau for thin absorbers (κ < 0.01).  It converges to Gaussian for thick
+steps, so mode 2 is the safe default.  Gaussian (mode 1) is faster and
+acceptable when the absorber is thick compared to the particle range.
 
 ### MSCAT
 

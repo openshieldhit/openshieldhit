@@ -37,8 +37,21 @@
 
 ## Transport
 
-- [ ] Gaussian MCS mode
-- [ ] Vavilov energy straggling
+- [x] Vavilov + Landau energy straggling (STRAGG 2) — branch
+      `190-physics-add-vavilov-and-landau-straggling`.  DONE: clean-room fit to
+      the exact Vavilov (1957) distribution + universal Landau; pole-free
+      polynomial+Chebyshev inverse-CDF evaluators; κ-dispatch (Gaussian ≥10 /
+      Vavilov / Landau <0.01) wired into ion step.  Validated vs SH12A: distal
+      80–20% fluence falloff width 0.4522 vs 0.4533 cm (0.2%); DLET at matched
+      fluence within ~2%.  STRAGG 0/1 byte-identical.  No GEANT3/Thomsen numbers.
+      Remaining nicety: render the `plot_straggling.py` strag2 overlay.
+- [ ] Profile STRAGG 2 Vavilov overhead on the straggling benchmark; current
+      20k-history timing is still ~2x faster than SH12A, but OSH's relative
+      STRAGG 2 cost over STRAGG 0 is larger.  Check
+      `osh_physics_strag_vavilov_lambda()` for cheap wins before broader
+      transport refactors.
+- [ ] Urban energy-loss fluctuation (STRAGG 3, reserved) — needs δ-ray cut +
+      restricted stopping power; tied to future delta-electron transport
 - [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
 - [ ] Batch ion-step phases around runtime lookup hot spots
 
@@ -84,7 +97,6 @@ by abrasion and Fermi break-up are banked in the neutron pool and drained by
 
 ## Scoring
 
-- [ ] Cylindrical `(R,Z)` mesh scoring
 - [ ] Zone scoring
 - [ ] Alanine detector response
 - [ ] MCPL phase-space output
