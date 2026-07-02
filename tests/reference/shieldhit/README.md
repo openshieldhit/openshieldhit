@@ -84,10 +84,11 @@ interpretation of pages such as:
 For day-to-day development on this branch, it is usually more informative to
 start with primary fluence, LET, QEFF, and the differential target scorers.
 
-Another known physics difference in the current OpenShieldHIT example cases is
-straggling: the original SH12A datasets used Vavilov straggling, while the
-matching OSH example inputs currently use Gaussian straggling because Vavilov
-is not implemented yet.
+A residual configuration difference in some OpenShieldHIT example cases is
+straggling: the original SH12A datasets used Vavilov straggling, and while
+OpenShieldHIT now implements STRAGG 2 (Vavilov + Landau), several matching OSH
+example inputs still default to STRAGG 1 (Gaussian) and can be switched to
+STRAGG 2 for closer SH12A parity.
 
 ## Quick Start
 

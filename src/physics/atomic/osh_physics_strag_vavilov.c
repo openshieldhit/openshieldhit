@@ -58,6 +58,12 @@ double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
      * precomputed constants in the header, so this costs a single log per call
      * (logf: single precision suffices — see _vav_xform) instead of three. */
     kn = (2.0 * logf((float) kappa) - osh_vav_klog[b] - osh_vav_khlog[b]) * osh_vav_kspan_inv[b];
+    /* Clamp the Chebyshev abscissa to [-1,1]: a no-op for in-band κ, but for any
+     * out-of-domain κ (the transport dispatcher only calls this for κ∈[0.01,10),
+     * but keep the evaluator self-safe) it evaluates at the nearest fitted band
+     * edge instead of extrapolating the polynomial — and neutralises a non-finite
+     * logf(κ≤0), since fmin/fmax with NaN yield the finite bound. */
+    kn = fmax(-1.0, fmin(1.0, kn));
 
     /* u-band dispatch. */
     for (ub = 0; ub < OSH_VAV_NUB - 1; ++ub) {
@@ -67,7 +73,10 @@ double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
     }
     xn = (_vav_xform(u, osh_vav_ukind[ub]) - osh_vav_umid[ub]) / osh_vav_uhalf[ub];
 
+    /* Same clamp for the β² abscissa: fitted over [OSH_VAV_BLO, OSH_VAV_BHI];
+     * outside that, evaluate at the edge rather than extrapolate. */
     bn = (2.0 * beta2 - OSH_VAV_BLO - OSH_VAV_BHI) / (OSH_VAV_BHI - OSH_VAV_BLO);
+    bn = fmax(-1.0, fmin(1.0, bn));
 
     /* Chebyshev product basis, same order as the fit: t[i*NBE + j]. */
     tk[0] = 1.0;

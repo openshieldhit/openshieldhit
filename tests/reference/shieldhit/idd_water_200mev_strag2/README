@@ -8,8 +8,9 @@ the issue #190 straggling-isolation set. See ./idd_water_200mev_strag0/README
 This case: STRAGG 2 (Vavilov), MSCAT off, NUCRE off.
 
 SHIELD-HIT12A implements Vavilov straggling, so this deck runs and produces the
-reference curve. openshieldhit does NOT yet implement Vavilov (issue #190): the
-openshieldhit strag2 case aborts with OSH_ENOTSUP until it lands. Generate the
-reference now and drop it into
+reference curve. openshieldhit now implements STRAGG 2 (Vavilov + Landau) too,
+so its strag2 case no longer aborts with OSH_ENOTSUP. Generate the reference
+curve and drop it into
   ../../idd_water_200mev_strag2/reference/idd_sh12a.dat
-so the CTest "reference" comparison turns green once Vavilov is implemented.
+so the CTest "reference" comparison (currently SKIPPED for lack of a curve)
+becomes an active check.

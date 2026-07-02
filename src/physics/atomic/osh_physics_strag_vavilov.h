@@ -31,9 +31,12 @@ extern "C" {
 /**
  * @brief Reduced Vavilov variable λ(u; κ, β²).
  *
- * @param[in] kappa  Vavilov parameter κ ∈ [0.01, 10] (values outside are clamped
- *                   by the band dispatch to the nearest fitted band).
- * @param[in] beta2  Projectile β².
+ * @param[in] kappa  Vavilov parameter κ ∈ [0.01, 10]; outside this range the
+ *                   normalised Chebyshev abscissa is clamped, so evaluation
+ *                   falls back to the nearest fitted band edge rather than
+ *                   extrapolating (κ ≤ 0 also folds to the low edge).
+ * @param[in] beta2  Projectile β², fitted over [OSH_VAV_BLO, OSH_VAV_BHI];
+ *                   values outside are likewise clamped to the fitted edge.
  * @param[in] u      Uniform deviate in (0, 1); clamped to the fitted range
  *                   [OSH_VAV_UMIN, 0.995].
  * @returns λ (dimensionless).

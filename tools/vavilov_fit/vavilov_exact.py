@@ -41,6 +41,12 @@ def vavilov_pdf(lam, kappa, beta2, upper=None):
         upper = max(300.0, 80.0 / max(kappa, 1e-3))
 
     def integrand(y):
+        # φ(0)=1 ⇒ integrand(0)=1.  Guard y=0 explicitly: there a=y/κ=0, and
+        # sici(0)=(0,-inf) makes log(a)-Ci(a) an ∞-∞ → NaN.  QUADPACK's
+        # Gauss-Kronrod rule samples only interior points so it never hits y=0
+        # today, but the guard keeps the integrand finite regardless.
+        if y == 0.0:
+            return 1.0
         return np.real(np.exp(_log_phi_imag(y, kappa, beta2) + 1j * lam * y))
 
     val, _ = quad(integrand, 0.0, upper, limit=500, epsabs=1e-11, epsrel=1e-9)
