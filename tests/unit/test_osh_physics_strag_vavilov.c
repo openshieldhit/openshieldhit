@@ -15,10 +15,16 @@
 #define OSH_TEST_FIXTURES_DIR "tests/fixtures"
 #endif
 
-/* Max |λ_fit − λ_ref| tolerance.  Measured worst over the whole fixture grid is
- * ~0.23 λ (negligible in energy, ξ·Δλ); 0.4 leaves headroom for coefficient
- * regeneration without being loose. */
-#define VAV_TOL 0.4
+/* Max |λ_fit − λ_ref| tolerance.  After the reference-generation fix the fit is
+ * accurate to <1e-3 λ where transport operates (κ≳0.1) and to ~0.07 for u≤0.99
+ * across the whole grid; the worst ~0.20 is confined to the extreme high-loss
+ * tail (u∈(0.99,0.995]) at small κ — a rare×rare, sub-keV region at the edge of
+ * the sampler's range that the polynomial+Chebyshev form cannot fit tighter.
+ * There OSH is still an order of magnitude closer to the exact Vavilov than the
+ * reference libvav (verified: OSH ≤0.2 λ vs libvav 5–19 λ, the latter being
+ * outside its own stated validity u≤0.990 for κ<0.04).  0.25 covers the worst
+ * with headroom while still guarding against gross coefficient regressions. */
+#define VAV_TOL 0.25
 
 static void test_vavilov_matches_fixture(void) {
     char path[1024];

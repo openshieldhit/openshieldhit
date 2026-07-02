@@ -5,15 +5,22 @@
 
 #include "physics/atomic/osh_physics_strag_vavilov_coeffs.h"
 
-/* Per-u-band transform x'(u); ids match emit_coeffs.py (0=-log u, 1=u, 2=-log(1-u)). */
+/* Per-u-band transform x'(u); ids match emit_coeffs.py (0=-log u, 1=u, 2=-log(1-u)).
+ *
+ * logf/log1pf (single precision) are used deliberately, not log/log1p: the result
+ * only feeds the band-normalised abscissa xn (~[-1,1]) of a fit whose own residual
+ * is ~1e-3..0.2 lambda, so logf's ~1e-7 relative error is ~5 orders of magnitude
+ * below the fit error — invisible in the output, but logf is markedly cheaper than
+ * log, and this evaluator sits in the per-step transport hot path.  Everything else
+ * stays double; only the transcendental is single precision. */
 static double _vav_xform(double u, int kind) {
     switch (kind) {
     case 0:
-        return -log(u);
+        return -logf((float) u);
     case 1:
         return u;
     default:
-        return -log1p(-u);
+        return -log1pf(-(float) u);
     }
 }
 
@@ -47,7 +54,10 @@ double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
             break;
         }
     }
-    kn = (2.0 * log(kappa) - log(osh_vav_klo[b]) - log(osh_vav_khi[b])) / (log(osh_vav_khi[b]) - log(osh_vav_klo[b]));
+    /* Normalised ln-kappa within the band.  ln(klo), ln(khi) and 1/(ln-span) are
+     * precomputed constants in the header, so this costs a single log per call
+     * (logf: single precision suffices — see _vav_xform) instead of three. */
+    kn = (2.0 * logf((float) kappa) - osh_vav_klog[b] - osh_vav_khlog[b]) * osh_vav_kspan_inv[b];
 
     /* u-band dispatch. */
     for (ub = 0; ub < OSH_VAV_NUB - 1; ++ub) {

@@ -119,8 +119,15 @@ def main():
             f.write(f"static {typ} const {name}[] = {{{', '.join(fmtf(v) for v in vals)}}};\n")
 
         arr("osh_vav_kdisp_hi", kdisp_hi)
-        arr("osh_vav_klo", klo)
-        arr("osh_vav_khi", khi)
+        # Precomputed per-band ln(klo), ln(khi) and 1/(ln(khi)-ln(klo)) so the
+        # runtime forms the normalised ln-kappa with ONE log call, not three
+        # logs of band constants on every (hot-path) sample.
+        klog = [float(np.log(v)) for v in klo]
+        khlog = [float(np.log(v)) for v in khi]
+        kspan_inv = [1.0 / (kh - kl) for kl, kh in zip(klog, khlog)]
+        arr("osh_vav_klog", klog)
+        arr("osh_vav_khlog", khlog)
+        arr("osh_vav_kspan_inv", kspan_inv)
         arr("osh_vav_uhi", uhi)
         arr("osh_vav_ukind", ukind, "int", lambda v: str(int(v)))
         arr("osh_vav_udeg", udeg, "int", lambda v: str(int(v)))
