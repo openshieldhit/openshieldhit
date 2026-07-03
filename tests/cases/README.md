@@ -11,7 +11,7 @@ Each case is expected to live in its own subdirectory, for example:
 A case directory may contain:
 
 - `geo.dat`, `beam.dat`, `mat.dat`, `detect.dat`
-- optional `README`
+- optional `README.md`
 - optional `args.cmake` to override default test runner arguments
 - optional `expected/` with reference `stdout`, `stderr`, exit code, or `*.dat` output files
 - reference output files such as `ref_*.bdo`

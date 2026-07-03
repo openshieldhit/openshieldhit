@@ -210,6 +210,15 @@ void osh_kinematics_elastic_lab(double T_lab,
     E2_lab = gamma_cm * (E2_cm - (beta_cm * p1z_cm));
     p2z_lab = gamma_cm * ((beta_cm * E2_cm) - p1z_cm);
 
+    /* The recoil always goes forward in a fixed-target elastic (0 <= theta2 <= 90
+     * deg), so cos_theta2_lab >= 0 as the header promises.  Floating-point
+     * cancellation in (beta_cm*E2_cm - p1z_cm) can make p2z_lab slightly negative
+     * near the forward limit; clamp it, mirroring the guard in
+     * osh_kinematics_elastic_equal_mass_lab. */
+    if (p2z_lab < 0.0) {
+        p2z_lab = 0.0;
+    }
+
     p1_tot = sqrt((p1z_lab * p1z_lab) + (p1t * p1t));
     p2_tot = sqrt((p2z_lab * p2z_lab) + (p1t * p1t));
 

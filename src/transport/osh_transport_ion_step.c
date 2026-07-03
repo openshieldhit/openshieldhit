@@ -201,17 +201,9 @@ static inline int _nuclear_event_kills_primary(enum osh_nuclear_event_kind kind)
            || kind == OSH_NUCLEAR_EVENT_FRAGMENTATION;
 }
 
-/* Nuclear de-excitation photon: neutral, massless.  Emitted via score_point as
- * energy only (score_point books no dose for a neutral, since the photon carries
- * its energy away from the vertex).  A placeholder identity until photon
- * transport exists — for now it just makes the excitation-energy balance and
- * shows where excited residues (e.g. 15N*, 15O*) de-excite. */
-static struct particle const s_gamma = {0.0, OSH_PART_PDG_GAMMA, 0, 0u, 0u, 0u};
-
 /* Deposit @p energy [MeV] at the slot's current position as a zero-length point
  * (issue #179), attributed to @p species and to a first-generation secondary of
- * the slot's history.  Shared by the sub-threshold recoil deposit and the
- * de-excitation gamma. */
+ * the slot's history.  Used for the sub-threshold recoil deposit. */
 static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
                               struct osh_particle_pool const *pool,
                               size_t slot,
@@ -445,11 +437,11 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                 dir[2] = pool->uz[slot];
             }
 
-            /* De-excitation gamma carries off the residue's excitation energy;
-             * booked as (neutral) energy at the vertex, no dose. */
-            if (frag->excitation_energy > 0.0) {
-                ion_point_deposit(score_rt, pool, slot, &ctx, &s_gamma, frag->excitation_energy, dir);
-            }
+            /* The residue's terminal excitation energy is intentionally discarded
+             * for now.  Its correct home is a de-excitation photon produced into a
+             * photon pool (future photon transport) and observed via a
+             * particle-creation scorer; booking it here as a local energy deposit
+             * would mis-inflate Quantity Energy, since the photon leaves the vertex. */
 
             species = osh_nuclear_handler_recoil_species(transport_ctx->nuclear_handler, frag->z, frag->a);
             if (species == NULL) {

@@ -32,6 +32,16 @@ _skip_hydrogen_inelastic(struct particle const *projectile, unsigned int target_
     return target_z == 1u && projectile->pdg == OSH_PART_PDG_PROTON && rate_energy_mev < H_INELASTIC_THRESHOLD_MEV;
 }
 
+/** 1 if this target element cannot be a p+A elastic recoil: below Z=2, or outside
+ *  the Fermi break-up recoil-species table (Z>ZMAX or A>AMAX) so no recoil species
+ *  exists to emit.  Applied identically to the rate_pa hazard sum and the element-
+ *  selection loop, so channel probabilities stay consistent with what can actually
+ *  be generated (heavy targets must not inflate rate_tot then discard the event). */
+static inline int _skip_pa_elastic_target(unsigned int target_z, double target_a) {
+    return target_z < 2u || target_z > (unsigned int) OSH_FERMI_BREAKUP_ZMAX
+           || target_a > (double) OSH_FERMI_BREAKUP_AMAX;
+}
+
 /* ---- Handler lifecycle --------------------------------------------------- */
 
 enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const *ws, struct osh_nuclear_handler *out) {
@@ -330,10 +340,10 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         for (i = 0u; i < nelem; ++i) {
             double ai;
             double sigma_pa_i;
-            if (elems[i].z < 2u) {
+            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
+            if (_skip_pa_elastic_target(elems[i].z, ai)) {
                 continue;
             }
-            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
             sigma_pa_i =
                 osh_nuclear_elastic_sigma(projectile->z, projectile->a, (double) elems[i].z, ai, e_per_nucleon);
             if (sigma_pa_i > 0.0) {
@@ -411,10 +421,10 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         for (i = 0u; i < nelem; ++i) {
             double ai;
             double sigma_pa_i;
-            if (elems[i].z < 2u) {
+            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
+            if (_skip_pa_elastic_target(elems[i].z, ai)) {
                 continue;
             }
-            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
             sigma_pa_i =
                 osh_nuclear_elastic_sigma(projectile->z, projectile->a, (double) elems[i].z, ai, e_per_nucleon);
             if (sigma_pa_i > 0.0) {

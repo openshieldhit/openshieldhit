@@ -23,6 +23,14 @@ enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const 
                                       double *voxel_volume_inv_out);
 
 /**
+ * Build a raytrace grid from a Cyl (R,Z) scoring geometry.  Field convention:
+ * origin/spacing/n[0] = r_min/dr/nr; origin/spacing/n[2] = z_min/dz/nz; index [1]
+ * is unused (n[1] = 1).  Per-voxel 1/V is geo->cyl_vol_inv[r_bin] with
+ * r_bin = flat_idx % nr and flat_idx = z_bin * nr + r_bin.
+ */
+enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo, struct osh_raytrace_grid *grid);
+
+/**
  * Deposit st->de into the ENERGY pages of one score group over @p crossings.
  * Per crossing the contribution is st->de * (crossing.path_len / score_len).
  */

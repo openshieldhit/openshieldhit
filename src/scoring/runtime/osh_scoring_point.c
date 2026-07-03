@@ -1,5 +1,7 @@
 #include "scoring/runtime/osh_scoring_point.h"
 
+#include <math.h>
+
 #include "common/osh_vect.h"
 #include "common/raytrace/osh_raytrace.h"
 #include "scoring/runtime/osh_scoring_step_internal.h"
@@ -44,6 +46,9 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         double voxel_volume_inv;
         struct osh_voxel_crossing one;
         size_t idx;
+        double r_cyl;
+        size_t r_bin;
+        size_t z_bin;
 
         if (geo->ngroups == 0u) {
             continue;
@@ -58,17 +63,32 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         }
 
         if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
-            /* Cylindrical point-locate is not implemented yet; skip rather than
-             * misattribute the deposit.  The reference decks score on Mesh. */
-            continue;
-        }
-
-        rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
-        if (rc != OSH_OK) {
-            return rc;
-        }
-        if (!osh_raytrace_locate(&grid, p_at, &idx)) {
-            continue; /* point lies outside this geometry's mesh */
+            rc = cyl_geometry_to_grid(geo, &grid);
+            if (rc != OSH_OK) {
+                return rc;
+            }
+            /* Cylinder axis is local Z, R the transverse radius.  Uniform dr/dz
+             * bins; flat index z_bin*nr + r_bin matches score_step's layout, and
+             * 1/V is the precomputed per-R-bin value. */
+            r_cyl = sqrt(p_at[0] * p_at[0] + p_at[1] * p_at[1]);
+            if (r_cyl < grid.origin[0] || p_at[2] < grid.origin[2]) {
+                continue; /* inside the bore or below the axial stack */
+            }
+            r_bin = (size_t) ((r_cyl - grid.origin[0]) / grid.spacing[0]);
+            z_bin = (size_t) ((p_at[2] - grid.origin[2]) / grid.spacing[2]);
+            if (r_bin >= grid.n[0] || z_bin >= grid.n[2]) {
+                continue; /* beyond the R or Z extent */
+            }
+            idx = z_bin * grid.n[0] + r_bin;
+            voxel_volume_inv = (geo->cyl_vol_inv && r_bin < geo->cyl_nr) ? geo->cyl_vol_inv[r_bin] : 0.0;
+        } else {
+            rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
+            if (rc != OSH_OK) {
+                return rc;
+            }
+            if (!osh_raytrace_locate(&grid, p_at, &idx)) {
+                continue; /* point lies outside this geometry's mesh */
+            }
         }
 
         /* One unit-"length" crossing at the located voxel.  With score_len == 1

@@ -1,4 +1,4 @@
-10_max_time — graceful wall-time stop (issue #192, informed by #195)
+06_max_time — graceful wall-time stop (issue #192, informed by #195)
 
 Runs the 00_minimal proton-in-water setup but requests 5,000,000 primaries with
 a 0.2 s wall-time budget and a small (200) wavefront pool.  The budget expires

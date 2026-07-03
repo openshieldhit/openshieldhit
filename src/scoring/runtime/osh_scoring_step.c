@@ -15,10 +15,9 @@ static void step_scoring_segment(struct step const *st, double dir_out[3], doubl
 static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out);
 static double
 compute_step_let(struct osh_scoring_runtime const *rt, struct particle const *part, struct step const *st);
-/* mesh_geometry_to_grid, score_group_energy, score_group_dose are declared in
- * osh_scoring_step_internal.h (shared with osh_scoring_point.c). */
-static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
-                                            struct osh_raytrace_grid *grid);
+/* mesh_geometry_to_grid, cyl_geometry_to_grid, score_group_energy,
+ * score_group_dose are declared in osh_scoring_step_internal.h (shared with
+ * osh_scoring_point.c). */
 static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
                                            struct osh_scoring_accumulator *acc_set,
                                            struct osh_scoring_geometry_score_group const *group,
@@ -357,8 +356,7 @@ enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const 
  * Field convention: origin/spacing/n[0] = r_min/dr/nr;
  * origin/spacing/n[2] = z_min/dz/nz; origin/spacing/n[1] = 0/0/1 (unused).
  */
-static enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
-                                            struct osh_raytrace_grid *grid) {
+enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo, struct osh_raytrace_grid *grid) {
     int ir;
     int iz;
     double dr;

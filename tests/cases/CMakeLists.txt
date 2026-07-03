@@ -9,7 +9,7 @@
 #       stdout.txt      (optional; if present, output is compared exactly)
 #       stderr.txt      (optional; if present, output is compared exactly)
 #     args.cmake        (optional; overrides default CLI args for this case)
-#     README            (optional; human-readable description)
+#     README.md         (optional; human-readable description)
 #
 # Binary reference files (*.bdo) are ignored by the driver — they will be
 # used for numeric output validation once transport is implemented.
