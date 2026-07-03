@@ -86,7 +86,11 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
                 break;
             case OSH_SCORING_SCORE_DOSE:
             case OSH_SCORING_SCORE_DOSEGY:
-                rc = score_group_dose(rt, acc_set, &geo->groups[g], &one, 1u, part, st, 1.0);
+                /* Neutral point deposits (e.g. a de-excitation gamma) release
+                 * their energy here but carry it away without depositing dose
+                 * locally, so they book energy but never dose. */
+                rc = (part->charge == 0) ? OSH_OK
+                                         : score_group_dose(rt, acc_set, &geo->groups[g], &one, 1u, part, st, 1.0);
                 break;
             default:
                 /* Fluence / LET / QEFF need a track length; wired in later via

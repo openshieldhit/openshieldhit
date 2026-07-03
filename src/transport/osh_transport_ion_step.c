@@ -201,6 +201,62 @@ static inline int _nuclear_event_kills_primary(enum osh_nuclear_event_kind kind)
            || kind == OSH_NUCLEAR_EVENT_FRAGMENTATION;
 }
 
+/* Nuclear de-excitation photon: neutral, massless.  Emitted via score_point as
+ * energy only (score_point books no dose for a neutral, since the photon carries
+ * its energy away from the vertex).  A placeholder identity until photon
+ * transport exists — for now it just makes the excitation-energy balance and
+ * shows where excited residues (e.g. 15N*, 15O*) de-excite. */
+static struct particle const s_gamma = {0.0, OSH_PART_PDG_GAMMA, 0, 0u, 0u, 0u};
+
+/* Deposit @p energy [MeV] at the slot's current position as a zero-length point
+ * (issue #179), attributed to @p species and to a first-generation secondary of
+ * the slot's history.  Shared by the sub-threshold recoil deposit and the
+ * de-excitation gamma. */
+static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
+                              struct osh_particle_pool const *pool,
+                              size_t slot,
+                              struct ion_step_ctx const *ctx,
+                              struct particle const *species,
+                              double energy,
+                              double const dir[3]) {
+    struct step pt;
+
+    if (score_rt == NULL || !(energy > 0.0)) {
+        return;
+    }
+    memset(&pt, 0, sizeof(pt));
+    pt.p[0] = pool->x[slot];
+    pt.p[1] = pool->y[slot];
+    pt.p[2] = pool->z[slot];
+    pt.p[3] = energy;
+    pt.q[0] = pt.p[0];
+    pt.q[1] = pt.p[1];
+    pt.q[2] = pt.p[2];
+    pt.q[3] = energy;
+    pt.v[0] = dir[0];
+    pt.v[1] = dir[1];
+    pt.v[2] = dir[2];
+    pt.w[0] = dir[0];
+    pt.w[1] = dir[1];
+    pt.w[2] = dir[2];
+    pt.ds = 0.0;
+    pt.de = energy;
+    pt.rho = ctx->rho;
+    pt.wt = pool->wt[slot];
+    pt.voxel_idx = ctx->voxel_idx;
+    pt.medium = (int) ctx->zone_material_idx;
+    pt.zone = (int) ctx->zone_idx;
+    pt.system = OSH_COORD_UNIVERSE;
+    pt.prim_idx = pool->prim_idx[slot];
+    pt.gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+    pt.has_voxel = ctx->has_voxel;
+    osh_scoring_score_point(score_rt,
+                            osh_scoring_runtime_master_accumulators(score_rt),
+                            osh_scoring_runtime_master_scratch(score_rt),
+                            species,
+                            &pt);
+}
+
 /* ---- Public API ---------------------------------------------------------- */
 
 /**
@@ -362,31 +418,23 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
      * injected into the ion pool for a proper track next pass; one below it has
      * no valid transportable range, so its kinetic energy is dumped at the
      * reaction site via a point deposit (issue #179), attributed to the recoil
-     * (Z,A) so it lands in the right species scorers.  Excitation energy is not
-     * yet disposed of here — that follows with the Fermi break-up recursion. */
+     * (Z,A) so it lands in the right species scorers.  Any residual excitation
+     * energy (a particle-stable but excited residue such as N-15* or O-15*) is
+     * emitted as a de-excitation gamma: energy only, no dose, as it escapes. */
     if (ctx.nuclear_event.n_fragments > 0u && transport_ctx->nuclear_handler != NULL) {
         struct osh_nuclear_event const *ev = &ctx.nuclear_event;
         size_t fi;
         for (fi = 0u; fi < ev->n_fragments; ++fi) {
             struct osh_nuclear_fragment const *frag = &ev->fragments[fi];
-            struct particle const *species =
-                osh_nuclear_handler_recoil_species(transport_ctx->nuclear_handler, frag->z, frag->a);
+            struct particle const *species;
             double m;
             double psq;
             double pmag;
             double ke;
             double dir[3];
 
-            if (species == NULL) {
-                continue; /* (Z,A) outside the recoil species table (heavy target) */
-            }
-            m = species->mass;
             psq = (frag->p[0] * frag->p[0]) + (frag->p[1] * frag->p[1]) + (frag->p[2] * frag->p[2]);
             pmag = sqrt(psq);
-            ke = sqrt(psq + (m * m)) - m;
-            if (!(ke > 0.0)) {
-                continue;
-            }
             if (pmag > 0.0) {
                 dir[0] = frag->p[0] / pmag;
                 dir[1] = frag->p[1] / pmag;
@@ -397,42 +445,25 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                 dir[2] = pool->uz[slot];
             }
 
+            /* De-excitation gamma carries off the residue's excitation energy;
+             * booked as (neutral) energy at the vertex, no dose. */
+            if (frag->excitation_energy > 0.0) {
+                ion_point_deposit(score_rt, pool, slot, &ctx, &s_gamma, frag->excitation_energy, dir);
+            }
+
+            species = osh_nuclear_handler_recoil_species(transport_ctx->nuclear_handler, frag->z, frag->a);
+            if (species == NULL) {
+                continue; /* (Z,A) outside the recoil species table (heavy target) */
+            }
+            m = species->mass;
+            ke = sqrt(psq + (m * m)) - m;
+            if (!(ke > 0.0)) {
+                continue;
+            }
+
             if (ke / (double) frag->a < OSH_TRANSPORT_ION_EMIN_MEV_PER_U) {
                 /* Sub-threshold: no transportable range — point deposit here. */
-                struct step pt;
-                memset(&pt, 0, sizeof(pt));
-                pt.p[0] = pool->x[slot];
-                pt.p[1] = pool->y[slot];
-                pt.p[2] = pool->z[slot];
-                pt.p[3] = ke;
-                pt.q[0] = pt.p[0];
-                pt.q[1] = pt.p[1];
-                pt.q[2] = pt.p[2];
-                pt.q[3] = ke;
-                pt.v[0] = dir[0];
-                pt.v[1] = dir[1];
-                pt.v[2] = dir[2];
-                pt.w[0] = dir[0];
-                pt.w[1] = dir[1];
-                pt.w[2] = dir[2];
-                pt.ds = 0.0;
-                pt.de = ke;
-                pt.rho = ctx.rho;
-                pt.wt = pool->wt[slot];
-                pt.voxel_idx = ctx.voxel_idx;
-                pt.medium = (int) ctx.zone_material_idx;
-                pt.zone = (int) ctx.zone_idx;
-                pt.system = OSH_COORD_UNIVERSE;
-                pt.prim_idx = pool->prim_idx[slot];
-                pt.gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
-                pt.has_voxel = ctx.has_voxel;
-                if (score_rt != NULL) {
-                    osh_scoring_score_point(score_rt,
-                                            osh_scoring_runtime_master_accumulators(score_rt),
-                                            osh_scoring_runtime_master_scratch(score_rt),
-                                            species,
-                                            &pt);
-                }
+                ion_point_deposit(score_rt, pool, slot, &ctx, species, ke, dir);
             } else {
                 /* Above threshold: inject as an ion for transport next pass. */
                 size_t s;

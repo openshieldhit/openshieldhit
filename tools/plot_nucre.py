@@ -109,7 +109,7 @@ SPEC_LO, SPEC_HI, SPEC_NBINS = 0.1, 300.0, 150
 def parse_args() -> argparse.Namespace:
     root = Path(__file__).resolve().parent.parent
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--nstat", type=int, default=50000, help="OpenShieldHIT primaries per run (default 50000)")
+    p.add_argument("-n", "--nstat", type=int, default=50000, help="OpenShieldHIT primaries per run (default 50000)")
     p.add_argument("--repo-root", type=Path, default=root, help="openshieldhit repo root")
     p.add_argument("--osh", type=Path, default=root / "build" / "bin" / "openshieldhit", help="OpenShieldHIT binary")
     p.add_argument("--workdir", type=Path, default=None, help="working dir for runs (default: a temp dir)")
@@ -283,21 +283,27 @@ def draw_residual_strip(ax, osh, sh, families, zend, ylim_pct=30.0):
 
 
 def osh_spectrum(out_dir: Path):
-    """OpenShieldHIT plateau spectrum -> dPhi/dEkin (dividing Phi(bin) by bin width, issue #215)."""
+    """OpenShieldHIT plateau spectrum -> dPhi/dEkin (dividing Phi(bin) by bin width, issue #215).
+
+    Columns are X Y Z EKIN Phi_all Phi_prot [Phi_alpha] (the third fluence page is
+    present once the deck is run with the alpha differential scorer).
+    """
     path = out_dir / "spectrum.dat"
     if not path.exists():
         return None
-    d = load_numeric(path)  # X Y Z EKIN Phi_all Phi_prot
+    d = load_numeric(path)
     if d.shape[1] < 6:
         return None
-    ekin = d[:, -3]
     _, widths = log_bin_centers_widths(SPEC_LO, SPEC_HI, SPEC_NBINS)
-    n = min(len(ekin), len(widths))
-    return {
-        "ekin": ekin[:n],
-        "dphi_all": d[:n, -2] / widths[:n],
-        "dphi_prot": d[:n, -1] / widths[:n],
+    n = min(d.shape[0], len(widths))
+    out = {
+        "ekin": d[:n, 3],
+        "dphi_all": d[:n, 4] / widths[:n],
+        "dphi_prot": d[:n, 5] / widths[:n],
     }
+    if d.shape[1] >= 7:
+        out["dphi_alpha"] = d[:n, 6] / widths[:n]
+    return out
 
 
 def sh12a_spectrum(ref_dir: Path):
@@ -320,8 +326,12 @@ def sh12a_spectrum(ref_dir: Path):
         return None
     centers, widths = log_bin_centers_widths(SPEC_LO, SPEC_HI, SPEC_NBINS)
     out = {"ekin": centers}
-    for page, key in ((0, "dphi_all"), (1, "dphi_prot")):
+    # Pages: 0 all, 1 protons, 2 alphas (page 2 absent in fixtures predating the
+    # alpha differential scorer — skipped gracefully).
+    for page, key in ((0, "dphi_all"), (1, "dphi_prot"), (2, "dphi_alpha")):
         rows = d[d[:, 0].astype(int) == page]
+        if rows.size == 0:
+            continue
         rows = rows[np.argsort(rows[:, 1])]  # order by bin index
         vals = rows[:, 2]
         n = min(len(centers), len(vals))
@@ -484,6 +494,8 @@ def main() -> int:
                     continue
                 a.plot(spec["ekin"], spec["dphi_all"], label=f"{tag} all", **code_style(code, "C0"))
                 a.plot(spec["ekin"], spec["dphi_prot"], label=f"{tag} protons", **code_style(code, "C2"))
+                if "dphi_alpha" in spec:
+                    a.plot(spec["ekin"], spec["dphi_alpha"], label=f"{tag} alphas", **code_style(code, "C3"))
             a.set(title="Plateau secondary spectrum (z=9.5-10.5 cm)",
                   xlabel="Ekin (MeV)", ylabel="dPhi/dEkin per primary (1/cm^2/MeV)")
             a.set_xscale("log")

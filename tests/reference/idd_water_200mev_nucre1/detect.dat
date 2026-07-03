@@ -61,6 +61,7 @@ Output
 # Differential secondary spectrum in the plateau slab: kinetic energy, 0.1..300
 # MeV, 150 logarithmic bins.  The scorer accumulates Phi(bin); tools/plot_nucre.py
 # divides by the log-bin width to obtain the spectral density dPhi/dEkin.
+# Three pages: all particles, protons, and alphas (order matters for the plotter).
 Output
     Filename spectrum.dat
     Fileformat TEXT
@@ -69,6 +70,9 @@ Output
     Diff1     0.1  300.0  150  LOG
     Diff1Type EKIN
     Quantity Fluence Protons
+    Diff1     0.1  300.0  150  LOG
+    Diff1Type EKIN
+    Quantity Fluence Alphas
     Diff1     0.1  300.0  150  LOG
     Diff1Type EKIN
 
