@@ -213,13 +213,18 @@ enum osh_status osh_simulation_set_checkpoint_policy(struct osh_simulation *sim,
  *     each checkpoint; expected to be edge-triggered (read-and-clear) so one
  *     external request yields one dump.  NULL for none.
  *
- * Setting any cadence also puts the run in LIVE checkpoint-batching mode (the dump
- * cadence *is* the checkpoint cadence — "a periodic dump and a parallel checkpoint
- * are the same operation", issue #170), overriding any prior
+ * Setting a time or count cadence also puts the run in LIVE checkpoint-batching
+ * mode (the dump cadence *is* the checkpoint cadence — "a periodic dump and a
+ * parallel checkpoint are the same operation", issue #170), overriding any prior
  * osh_simulation_set_checkpoint_policy().  Passing all three off (0, 0, NULL)
- * disables dumping and restores the final-only fast path.  On-demand dumps with no
- * cadence are observed only at the run's single final checkpoint; pair @c SIGUSR1
- * with a cadence to bound its latency.
+ * disables dumping and restores the final-only fast path.
+ *
+ * @note @p should_dump is observed only at checkpoint boundaries, and those exist
+ * only when a **cadence** is also set — the final boundary is deliberately skipped
+ * (the run's own end-of-run save already writes the complete result).  An
+ * on-demand trigger with no cadence therefore has **no effect**: pair @c SIGUSR1
+ * with a @p dump_every_s / @p dump_every_primaries cadence, which both enables
+ * dumps and bounds how soon the on-demand request is serviced.
  *
  * A dump is a preview, never the run's product: a write or allocation failure is
  * logged and the run continues to its exact final save rather than aborting.
@@ -227,7 +232,8 @@ enum osh_status osh_simulation_set_checkpoint_policy(struct osh_simulation *sim,
  * @param[in] sim                  Simulation handle created by osh_simulation_create().
  * @param[in] dump_every_s         Time cadence [s]; <= 0 disables the time trigger.
  * @param[in] dump_every_primaries Count cadence in primaries; 0 disables the count trigger.
- * @param[in] should_dump          Borrowed on-demand callback; NULL = none.
+ * @param[in] should_dump          Borrowed on-demand callback; NULL = none.  Observed
+ *                                 only at checkpoints, so it needs a cadence to fire.
  * @param[in] user                 Opaque context passed to @p should_dump; may be NULL.
  *
  * @returns OSH_OK on success; OSH_EINVAL when @p sim is NULL, or when

@@ -138,7 +138,7 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "  all secondaries drain, and the partial result is saved normalised by the\n");
     fprintf(out, "  true number of completed primaries.\n");
     fprintf(out, "  SIGUSR1 (POSIX) requests a one-off dump-and-continue at the next checkpoint;\n");
-    fprintf(out, "  pair it with --dump-every to bound how soon it takes effect.\n");
+    fprintf(out, "  it takes effect only alongside a --dump-every[-primaries] cadence.\n");
 }
 
 /**

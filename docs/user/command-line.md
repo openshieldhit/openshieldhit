@@ -112,7 +112,11 @@ estimate from the histories that finished.
 ## Periodic partial-result dumps
 
 A long run can refine its output files on disk as it goes, so you can inspect
-convergence without waiting for the end or stopping the run. Two cadences select
+convergence without waiting for the end or stopping the run.
+
+Throughout, a **cadence** is the interval at which the run pauses at a live
+checkpoint to attempt a dump — expressed either by **wall time** (`--dump-every`)
+or by **completed primary count** (`--dump-every-primaries`). Two cadences select
 how often a dump fires; both overwrite the normal output files with the current
 partial result and then let the run continue, untouched.
 
@@ -139,10 +143,14 @@ was normalised by. Taking the snapshot never mutates the live accumulators, so
 the run's final result is identical whether or not dumps were taken.
 
 **On-demand dump (POSIX).** Sending `SIGUSR1` to the process
-(`kill -USR1 <pid>`) requests a one-off dump. It takes effect at the next
-checkpoint, so pair it with a `--dump-every[-primaries]` cadence to bound how
-soon it lands. There is no `SIGUSR1` on Windows, so on-demand dumps are a no-op
-there; the scheduled cadences work on every platform.
+(`kill -USR1 <pid>`) requests a one-off dump at the next checkpoint. Because
+checkpoints exist only while a cadence is running, `SIGUSR1` is meaningful **only
+alongside** a `--dump-every[-primaries]` cadence: it then services the request at
+the next checkpoint (ahead of the cadence's own schedule), so a cadence both
+enables on-demand dumps and bounds how soon they land. With no cadence there are
+no intermediate checkpoints and the signal has no effect. There is no `SIGUSR1`
+on Windows, so on-demand dumps are a no-op there; the scheduled cadences work on
+every platform.
 
 **Memory.** When a dump cadence is set, the small extra buffer a snapshot needs
 is reserved up front and shown in the `Scoring memory:` line, so a scheduled dump

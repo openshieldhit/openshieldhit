@@ -68,7 +68,6 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
     size_t neutron_capacity;
     size_t nstat;
     size_t done;
-    double t_run_start;   /* monotonic baseline for the dump time cadence */
     double measured_rate; /* primaries/s from the last batch; seeds the adaptive time cadence */
     int neutron_enabled;  /* cache: neutron pool is present for this run */
     enum osh_status rc;
@@ -111,7 +110,6 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
 
     /* ---- Outer checkpoint batch loop ------------------------------------- */
     done = 0u; /* primaries whose histories have finished; the true completed count */
-    t_run_start = osh_monotonic_seconds();
     measured_rate = 0.0;
     while (done < nstat) {
         size_t batch_completed = 0u;
@@ -152,7 +150,11 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
          * also folds a variance batch (#169) and merges per-worker accumulators
          * (#161) at this exact point. */
         if (done < nstat && ctl && ctl->dump_sink && ctl->dump_shadow) {
-            double const elapsed = osh_monotonic_seconds() - t_run_start;
+            /* Measure elapsed from the run-control baseline (ctl->t_start, set by
+             * osh_run_control_start before transport), the same clock the wall-budget
+             * stop path uses — so the dump time cadence and the stop cadence never
+             * drift relative to each other or to a caller reading now - ctl->t_start. */
+            double const elapsed = osh_monotonic_seconds() - ctl->t_start;
             if (run_ctl_should_dump(ctl, elapsed, done)) {
                 enum osh_status const drc = osh_scoring_snapshot_save(
                     ctl->dump_sink, ctl->dump_shadow, (unsigned long long) done, ctl->dump_outputs, ctl->dump_noutputs);

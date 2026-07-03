@@ -72,11 +72,9 @@ struct osh_simulation {
  * be handed the run-control block at all.  Keeps the "is a policy active?"
  * decision in one place so the two independent setters cannot disagree. */
 static int simulation_run_control_active(struct osh_simulation const *sim) {
-    struct osh_run_control const *rc = &sim->run_control;
-    return (rc->wall_budget_s > 0.0) || (rc->should_stop != NULL) || (rc->dump_every_s > 0.0)
-                   || (rc->dump_every_primaries != 0u) || (rc->should_dump != NULL)
-               ? 1
-               : 0;
+    struct osh_run_control const *ctl = &sim->run_control;
+    return ctl->wall_budget_s > 0.0 || ctl->should_stop != NULL || ctl->dump_every_s > 0.0
+           || ctl->dump_every_primaries != 0u || ctl->should_dump != NULL;
 }
 
 static int prepared_has_voxel_body(struct osh_gemca_prepared const *gemca) {
@@ -473,7 +471,11 @@ enum osh_status osh_simulation_set_dump_control(struct osh_simulation *sim,
      * intermediate family-complete checkpoints to fire at, so put the run in LIVE
      * batching whenever a cadence is set (overriding any prior
      * osh_simulation_set_checkpoint_policy()).  An on-demand-only trigger adds no
-     * cadence, so the run stays final-only and the request lands at the end. */
+     * cadence, so the run stays final-only — and since the transport dump hook
+     * skips the final boundary, an on-demand request with no cadence never fires.
+     * That is intentional (see the API note on osh_simulation_set_dump_control):
+     * SIGUSR1 is meaningful only alongside a cadence, and the CLI passes the
+     * callback through only when a cadence exists. */
     osh_checkpoint_policy_init(&sim->checkpoint_policy);
     if (sim->run_control.dump_every_s > 0.0 || sim->run_control.dump_every_primaries > 0u) {
         sim->checkpoint_policy.mode = OSH_PARTIAL_LIVE;
