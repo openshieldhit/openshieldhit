@@ -41,10 +41,10 @@ double osh_nuclear_elastic_slope(double at) {
 }
 
 double osh_nuclear_elastic_sample_cos_cm(double p_cm, double at, struct osh_rng *rng) {
-    double b;      /* diffraction slope [ (MeV/c)^-2 ] */
-    double t_max;  /* |t| at 180 deg CM = 4 p_cm^2      */
-    double norm;   /* CDF normalisation over [0, t_max] */
-    double t;      /* sampled momentum transfer |t|     */
+    double b;     /* diffraction slope [ (MeV/c)^-2 ] */
+    double t_max; /* |t| at 180 deg CM = 4 p_cm^2      */
+    double norm;  /* CDF normalisation over [0, t_max] */
+    double t;     /* sampled momentum transfer |t|     */
     double cos_cm;
 
     if (!(p_cm > 0.0)) {
