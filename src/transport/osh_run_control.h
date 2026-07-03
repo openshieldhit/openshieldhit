@@ -148,10 +148,13 @@ int run_ctl_should_dump(struct osh_run_control *ctl, double elapsed, size_t comp
  * @details
  * True when a time or count cadence is set — i.e. dumps will fire on a schedule
  * regardless of any external signal.  This is the discriminator for the shadow
- * memory budget-reservation rule (issue #193): a scheduled dump reserves its
- * shadow up front (it *will* happen, so it must never OOM mid-run), whereas an
- * on-demand-only dump (@ref should_dump set but no cadence) allocates lazily and
- * is fail-soft.  An on-demand callback alone does **not** count as scheduled.
+ * memory budget-reservation rule (issue #193): a scheduled dump budgets its
+ * shadow up front (it *will* happen, so its cost is accounted before the run
+ * rather than discovered mid-run), whereas an on-demand-only dump (@ref
+ * should_dump set but no cadence) allocates lazily and is fail-soft.  The shadow
+ * itself still allocates lazily at the first dump, so the reservation lowers risk
+ * rather than being an absolute guarantee.  An on-demand callback alone does
+ * **not** count as scheduled.
  *
  * @param[in] ctl  Run-control block, or NULL.
  * @returns 1 when @c dump_every_s > 0 or @c dump_every_primaries > 0, else 0.

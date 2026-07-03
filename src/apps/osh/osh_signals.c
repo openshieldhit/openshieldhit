@@ -79,7 +79,9 @@ static sig_atomic_t volatile g_stop = 0;
 /* On-demand dump flag, raised by SIGUSR1 and consumed (read-and-cleared) by the
  * run loop.  Same concurrency model as g_stop: the handler runs in the
  * interrupted thread, so volatile sig_atomic_t is the right, async-signal-safe
- * type.  Edge-triggered, unlike g_stop, so one signal yields exactly one dump. */
+ * type.  Best-effort edge trigger, unlike the level-held g_stop: one or more
+ * SIGUSR1s pending before a checkpoint coalesce into a single dump (standard
+ * POSIX signals coalesce, so N rapid signals need not yield N dumps). */
 static sig_atomic_t volatile g_dump = 0;
 
 static void on_sigint(int sig) {
@@ -127,9 +129,11 @@ void osh_signals_install_dump(void) {
 
 int osh_signals_should_dump(void *user) {
     (void) user; /* the flag is a process singleton; no per-call context needed */
-    /* Edge-triggered: read and clear so each SIGUSR1 fires exactly one dump.  The
-     * clear races only with the handler *setting* it; a signal landing between the
-     * read and the clear is simply serviced by the next poll, never lost for good. */
+    /* Best-effort edge trigger: read and clear so pending SIGUSR1 requests produce
+     * one dump at this poll.  This is not a lossless one-dump-per-signal guarantee:
+     * signals coalesce, and a SIGUSR1 landing between the read and the clear is
+     * dropped rather than deferred.  That is acceptable for a dump-and-continue
+     * hint — the user simply re-signals, and a scheduled cadence bounds latency. */
     if (g_dump) {
         g_dump = 0;
         return 1;

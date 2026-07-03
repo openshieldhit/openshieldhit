@@ -300,8 +300,9 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
     /* Detect host resources, report the scoring memory footprint, and refuse
      * the run up front if it would exceed the memory budget — before
      * osh_simulation_create() allocates any scoring buffers.  When a periodic dump
-     * is scheduled, the snapshot shadow is reserved here too so a scheduled dump
-     * can never OOM mid-run (issue #193 budget-reservation rule). */
+     * is scheduled, the snapshot shadow is budgeted here too so a scheduled dump
+     * is accounted up front, not discovered mid-run (issue #193 budget-reservation
+     * rule); the shadow still allocates lazily at the first dump and is fail-soft. */
     rc = run_check_memory(scoring, opt->mem_budget, scheduled_dump, out, err);
     if (rc != OSH_OK) {
         goto cleanup;
@@ -360,16 +361,25 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         }
         if (out) {
             if (eff_dump_every_primaries > 0ull) {
+                char const *src;
+                if (opt->has_dump_every_primaries) {
+                    src = " (--dump-every-primaries)";
+                } else {
+                    src = " (beam.dat NSTAT step)";
+                }
                 fprintf(out,
                         "Periodic dumps   : every %llu primaries%s (exact partial result)\n",
                         eff_dump_every_primaries,
-                        opt->has_dump_every_primaries ? " (--dump-every-primaries)" : " (beam.dat NSTAT step)");
+                        src);
             }
             if (eff_dump_every_s > 0.0) {
-                fprintf(out,
-                        "Periodic dumps   : every %g s%s (exact partial result)\n",
-                        eff_dump_every_s,
-                        opt->has_dump_every ? " (--dump-every)" : " (beam.dat DUMPEVERY)");
+                char const *src;
+                if (opt->has_dump_every) {
+                    src = " (--dump-every)";
+                } else {
+                    src = " (beam.dat DUMPEVERY)";
+                }
+                fprintf(out, "Periodic dumps   : every %g s%s (exact partial result)\n", eff_dump_every_s, src);
             }
         }
     }
@@ -480,9 +490,10 @@ cleanup:
  * @param[in] mem_budget_override Budget string (e.g. "8GB", "80%") or NULL.
  * @param[in] reserve_shadow      Non-zero when a periodic dump is scheduled: add
  *                                the snapshot shadow (est.shadow_bytes) to the
- *                                footprint so a scheduled dump can never OOM
- *                                mid-run (issue #193).  On-demand-only dumps do
- *                                not reserve — they allocate lazily and fail-soft.
+ *                                footprint so a scheduled dump is budgeted up
+ *                                front (issue #193), not discovered mid-run.  The
+ *                                shadow still allocates lazily and is fail-soft;
+ *                                on-demand-only dumps do not reserve at all.
  * @param[in] out                 Human-readable report stream, or NULL.
  * @param[in] err                 Error stream for the refusal message, or NULL.
  *
@@ -535,11 +546,15 @@ static enum osh_status run_check_memory(struct osh_scoring_workspace const *scor
 
     /* Footprint gated against the budget: the accumulators, plus the snapshot
      * shadow when a periodic dump is scheduled (it will be allocated on the first
-     * dump, so reserving it up front means a scheduled dump never OOMs mid-run).
+     * dump, so it is budgeted up front rather than discovered mid-run).
      * Saturate rather than wrap on the (practically impossible) overflow. */
     footprint = est.accum_bytes;
     if (reserve_shadow && est.shadow_bytes > 0u) {
-        footprint = (footprint <= UINT64_MAX - est.shadow_bytes) ? (footprint + est.shadow_bytes) : UINT64_MAX;
+        if (footprint <= UINT64_MAX - est.shadow_bytes) {
+            footprint = footprint + est.shadow_bytes;
+        } else {
+            footprint = UINT64_MAX;
+        }
     }
 
     osh_sysinfo_format_bytes(info.ram_total_bytes, b_total, sizeof(b_total));
