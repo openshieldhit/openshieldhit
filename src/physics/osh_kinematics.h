@@ -100,6 +100,36 @@ void osh_kinematics_elastic_equal_mass_lab(double T_lab,
                                            double *e2_lab_mev);
 
 /**
+ * @brief General (unequal-mass) two-body elastic kinematics in the lab frame.
+ *
+ * @details
+ * Projectile of rest mass @p m1 and kinetic energy @p T_lab strikes a target of
+ * rest mass @p m2 at rest.  Given the CM scattering-angle cosine of the
+ * projectile @p cos_theta_cm, returns the scattered projectile (particle 1) and
+ * recoil target (particle 2) lab polar-angle cosines and kinetic energies via a
+ * Lorentz boost of the CM 4-momenta.  The equal-mass case reduces to
+ * @ref osh_kinematics_elastic_equal_mass_lab.  Energy/momentum are conserved:
+ * *e1_lab_mev + *e2_lab_mev == T_lab up to floating-point rounding.
+ *
+ * @param[in]  T_lab          Incident projectile lab kinetic energy [MeV].
+ * @param[in]  m1             Projectile rest mass [MeV/c²].
+ * @param[in]  m2             Target rest mass [MeV/c²].
+ * @param[in]  cos_theta_cm   CM scatter-angle cosine of the projectile.
+ * @param[out] cos_theta1_lab Lab polar-angle cosine of the scattered projectile.
+ * @param[out] e1_lab_mev     Scattered projectile lab kinetic energy [MeV].
+ * @param[out] cos_theta2_lab Lab polar-angle cosine of the recoil target (>= 0).
+ * @param[out] e2_lab_mev     Recoil target lab kinetic energy [MeV].
+ */
+void osh_kinematics_elastic_lab(double T_lab,
+                                double m1,
+                                double m2,
+                                double cos_theta_cm,
+                                double *cos_theta1_lab,
+                                double *e1_lab_mev,
+                                double *cos_theta2_lab,
+                                double *e2_lab_mev);
+
+/**
  * @brief CM momentum magnitude of the two-body decay M → m1 + m2.
  *
  * @details

@@ -1005,7 +1005,8 @@ static void ion_step_nuclear(struct ion_step_ctx *ctx,
                                  &ctx->nuclear_event);
 
         /* Elastic overrides MCS: straight-line endpoint. */
-        if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+        if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP
+            || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PA) {
             ctx->w_scat[0] = ctx->incident_dir[0];
             ctx->w_scat[1] = ctx->incident_dir[1];
             ctx->w_scat[2] = ctx->incident_dir[2];
@@ -1097,7 +1098,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
          * holds the ionisation energy deposited — do not modify it.
          * st.q[3] = 0 signals that the primary exits dead. */
         st.q[3] = 0.0;
-    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP
+               || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PA) {
         /* Primary survives with a new direction and energy from elastic scatter. */
         st.q[3] = ctx->nuclear_event.primary_energy;
         st.w[0] = ctx->nuclear_event.primary_dir[0];

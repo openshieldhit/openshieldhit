@@ -51,7 +51,8 @@ struct particle;
 enum osh_nuclear_event_kind {
     OSH_NUCLEAR_EVENT_NONE = 0,     /**< No nuclear event this step.                          */
     OSH_NUCLEAR_EVENT_ABSORB,       /**< Inelastic kill, no secondaries (threshold / fallback). */
-    OSH_NUCLEAR_EVENT_ELASTIC_PP,   /**< pp elastic scatter.                                  */
+    OSH_NUCLEAR_EVENT_ELASTIC_PP,   /**< pp elastic scatter (proton on hydrogen).             */
+    OSH_NUCLEAR_EVENT_ELASTIC_PA,   /**< proton-nucleus (p+A) elastic scatter; recoil nucleus emitted. */
     OSH_NUCLEAR_EVENT_ABRASION,     /**< Inelastic: primary absorbed, fast nucleons emitted (AA model). */
     OSH_NUCLEAR_EVENT_FRAGMENTATION /**< Inelastic: abrasion + Fermi break-up products emitted. */
 };

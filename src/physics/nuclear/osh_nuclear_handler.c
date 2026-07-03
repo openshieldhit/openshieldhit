@@ -10,6 +10,7 @@
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
 #include "physics/nuclear/osh_nuclear_abrasion.h"
+#include "physics/nuclear/osh_nuclear_elastic.h"
 #include "physics/nuclear/osh_nuclear_fermi_breakup.h"
 #include "physics/nuclear/osh_nuclear_pp.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
@@ -237,9 +238,13 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     double lambda_pp;
     double rate_pp;
 
+    /* p+A elastic hazard, summed over the Z>=2 target elements. */
+    double rate_pa;
+
     /* Competing-process event sampling. */
     double rate_tot;
     double p_event;
+    double channel_draw;
 
     /* pp elastic final-state kinematics. */
     double cos_cm;
@@ -318,7 +323,26 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         }
     }
 
-    rate_tot = rate_inel + rate_pp;
+    /* p+A elastic rate — proton projectile, summed over Z>=2 target elements
+     * (hydrogen is the pp channel above; must mirror the selection loop below). */
+    rate_pa = 0.0;
+    if (params->nuclear_elastic && projectile->pdg == OSH_PART_PDG_PROTON) {
+        for (i = 0u; i < nelem; ++i) {
+            double ai;
+            double sigma_pa_i;
+            if (elems[i].z < 2u) {
+                continue;
+            }
+            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
+            sigma_pa_i =
+                osh_nuclear_elastic_sigma(projectile->z, projectile->a, (double) elems[i].z, ai, e_per_nucleon);
+            if (sigma_pa_i > 0.0) {
+                rate_pa += (double) elems[i].mass_fraction / osh_nuclear_elastic_lambda_gcm2(ai, sigma_pa_i);
+            }
+        }
+    }
+
+    rate_tot = rate_inel + rate_pp + rate_pa;
     if (rate_tot <= 0.0) {
         return;
     }
@@ -328,8 +352,11 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         return;
     }
 
-    /* Event fired: select channel by exact rate ratio */
-    if (rate_pp > 0.0 && osh_rng_double(rng) < rate_pp / rate_tot) {
+    /* Event fired: select the channel (pp elastic, p+A elastic, or inelastic).
+     * The channel selector is drawn only when an elastic channel competes, so the
+     * RNG stream is unchanged when elastic is off (pure-inelastic decks). */
+    channel_draw = (rate_pp > 0.0 || rate_pa > 0.0) ? (osh_rng_double(rng) * rate_tot) : rate_tot;
+    if (rate_pp > 0.0 && channel_draw < rate_pp) {
         /* pp elastic — use final_energy_mev for kinematics */
         cos_cm = osh_nuclear_pp_sample_cos_theta_cm(rate_energy_mev, rng);
         osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
@@ -362,6 +389,73 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
         event_out->n_secondaries = 1u;
         event_out->secondaries[0].energy = e2;
         event_out->secondaries[0].species = projectile; /* proton = same species */
+    } else if (rate_pa > 0.0 && channel_draw < rate_pp + rate_pa) {
+        /* p+A elastic: scatter the proton (stays primary) off a Z>=2 target
+         * nucleus and emit the recoil nucleus (Stage-1 recoil path deposits it).
+         * Must mirror the rate_pa element sum above so hazards stay consistent. */
+        double threshold;
+        double cumulative;
+        unsigned int zt;
+        unsigned int at;
+        struct particle const *recoil;
+        double m_proj;
+        double m_target;
+        double p_lab;
+        double w_inv;
+        double p_cm;
+
+        threshold = osh_rng_double(rng) * rate_pa;
+        cumulative = 0.0;
+        zt = 0u;
+        at = 0u;
+        for (i = 0u; i < nelem; ++i) {
+            double ai;
+            double sigma_pa_i;
+            if (elems[i].z < 2u) {
+                continue;
+            }
+            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
+            sigma_pa_i =
+                osh_nuclear_elastic_sigma(projectile->z, projectile->a, (double) elems[i].z, ai, e_per_nucleon);
+            if (sigma_pa_i > 0.0) {
+                cumulative += (double) elems[i].mass_fraction / osh_nuclear_elastic_lambda_gcm2(ai, sigma_pa_i);
+                zt = elems[i].z;
+                at = (unsigned int) ai;
+                if (threshold <= cumulative) {
+                    break;
+                }
+            }
+        }
+
+        recoil = (zt > 0u) ? osh_nuclear_handler_recoil_species(handler, zt, at) : NULL;
+        if (recoil == NULL) {
+            /* Target outside the recoil species table (heavy element): treat as
+             * no event this step rather than fabricate a recoil species. */
+            event_out->kind = OSH_NUCLEAR_EVENT_NONE;
+            return;
+        }
+
+        m_proj = projectile->mass;
+        m_target = recoil->mass;
+        p_lab = sqrt(final_energy_mev * (final_energy_mev + (2.0 * m_proj)));
+        w_inv = sqrt((m_proj * m_proj) + (m_target * m_target) + (2.0 * m_target * (final_energy_mev + m_proj)));
+        p_cm = (w_inv > 0.0) ? (p_lab * m_target / w_inv) : 0.0;
+
+        cos_cm = osh_nuclear_elastic_sample_cos_cm(p_cm, (double) at, rng);
+        osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
+        osh_kinematics_elastic_lab(final_energy_mev, m_proj, m_target, cos_cm, &cos1, &e1, &cos2, &e2);
+
+        sin1 = sqrt(fmax(0.0, 1.0 - (cos1 * cos1)));
+        sin2 = sqrt(fmax(0.0, 1.0 - (cos2 * cos2)));
+
+        osh_kinematics_rotate_dir_cos(incident_dir, event_out->primary_dir, cos1, sin1, cos_phi, sin_phi);
+        osh_kinematics_rotate_dir_cos(incident_dir, event_out->secondaries[0].dir, cos2, sin2, -cos_phi, -sin_phi);
+
+        event_out->kind = OSH_NUCLEAR_EVENT_ELASTIC_PA;
+        event_out->primary_energy = e1; /* scattered proton stays primary */
+        event_out->n_secondaries = 1u;
+        event_out->secondaries[0].energy = e2; /* recoil nucleus (high-LET, short range) */
+        event_out->secondaries[0].species = recoil;
     } else {
         /* Select the actual struck element, not a compound-average nucleus. */
         double threshold;
