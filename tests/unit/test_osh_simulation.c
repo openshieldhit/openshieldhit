@@ -572,6 +572,172 @@ static void run_checkpoint_case(char const *case_name,
 }
 
 /*
+ * Like run_checkpoint_case, but drives periodic partial-result dumps (issue #193)
+ * via osh_simulation_set_dump_control() instead of a bare checkpoint policy.  The
+ * count cadence @p dump_every_primaries makes the run overwrite its output file
+ * with the exact partial result at every checkpoint; the file read back at the
+ * end therefore reflects the *final* save (the last dump is overwritten by it).
+ * The point of the comparison in the caller is that those interleaved dumps —
+ * non-destructive shadow snapshots — must not perturb the live accumulators, so
+ * the final result is bit-identical to the same cadence run *without* dumps.
+ */
+static void run_dump_case(char const *case_name,
+                          unsigned long long nstat,
+                          unsigned long long dump_every_primaries,
+                          unsigned long long *completed_out,
+                          double *energy_sum_out) {
+    char geo_path[512];
+    char beam_path[512];
+    char mat_path[512];
+    char scoring_path[512];
+    char scoring_text[1024];
+    char out_path[256];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+    struct osh_results const *results = NULL;
+
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/%s/geo.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/%s/beam.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/%s/mat.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+
+    snprintf(out_path, sizeof(out_path), "osh_dump_%d.dat", tmp_counter++);
+    snprintf(scoring_text,
+             sizeof(scoring_text),
+             "Geometry Mesh\n"
+             "  Name M\n"
+             "  X -5.0 5.0 1\n"
+             "  Y -5.0 5.0 1\n"
+             "  Z 0.0 20.0 200\n"
+             "Output\n"
+             "  Filename %s\n"
+             "  Fileformat TEXT\n"
+             "  Geo M\n"
+             "  Quantity Energy\n",
+             out_path);
+    write_temp_file(scoring_path, sizeof(scoring_path), scoring_text);
+
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
+
+    beam->nstat = (size_t) nstat;
+
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
+    /* Count cadence + no on-demand callback: deterministic periodic dumps. */
+    ASSERT_TRUE(osh_simulation_set_dump_control(sim, 0.0, dump_every_primaries, NULL, NULL) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
+    *completed_out = osh_results_completed_nstat(results);
+
+    ASSERT_TRUE(osh_simulation_save(sim) == OSH_OK);
+    *energy_sum_out = sum_last_column(out_path);
+
+    ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+    remove(out_path);
+    remove(scoring_path);
+}
+
+/*
+ * A dump is a preview, never the run's product: a failed dump write must be
+ * fail-soft — logged and skipped — so the run still completes.  Force every dump
+ * to fail by pointing the scoring output at a non-existent subdirectory (fopen
+ * cannot create the missing directory), then assert the run itself still succeeds
+ * despite the periodic dumps at each checkpoint failing to write.
+ */
+static void test_dump_write_failure_is_fail_soft(void) {
+    char geo_path[512];
+    char beam_path[512];
+    char mat_path[512];
+    char scoring_path[512];
+    char scoring_text[1024];
+    char bad_out[256];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/00_minimal/geo.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/00_minimal/beam.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/00_minimal/mat.dat", OSH_PROJECT_SOURCE_DIR);
+
+    /* Output under a directory that does not exist → every fopen("wb") fails. */
+    snprintf(bad_out, sizeof(bad_out), "osh_no_such_dir_%d/dose.dat", tmp_counter++);
+    snprintf(scoring_text,
+             sizeof(scoring_text),
+             "Geometry Mesh\n"
+             "  Name M\n"
+             "  X -5.0 5.0 1\n"
+             "  Y -5.0 5.0 1\n"
+             "  Z 0.0 20.0 200\n"
+             "Output\n"
+             "  Filename %s\n"
+             "  Fileformat TEXT\n"
+             "  Geo M\n"
+             "  Quantity Energy\n",
+             bad_out);
+    write_temp_file(scoring_path, sizeof(scoring_path), scoring_text);
+
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
+
+    beam->nstat = 200u;
+
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
+    /* Cadence 40 over 200 → dumps attempted at 40/80/120/160, all failing. */
+    ASSERT_TRUE(osh_simulation_set_dump_control(sim, 0.0, 40ull, NULL, NULL) == OSH_OK);
+    /* The run must complete despite the failing dumps (fail-soft). */
+    ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+    remove(scoring_path);
+}
+
+/*
+ * Periodic dumps (issue #193) must be non-destructive: interleaving mid-run
+ * snapshots at a checkpoint cadence must leave the live accumulators untouched,
+ * so the final result is *bit-identical* to the same-cadence run that takes no
+ * dumps.  Comparing at a fixed cadence (not against final-only) isolates the dump
+ * machinery from the FP-reduction-order difference that batching itself
+ * introduces: the only variable between the two runs here is whether snapshots
+ * are taken, so any discrepancy would be a snapshot perturbing live state.
+ */
+static void test_dump_control_is_non_destructive(void) {
+    unsigned long long completed_batch = 0ull;
+    unsigned long long completed_dump = 0ull;
+    double energy_batch = 0.0;
+    double energy_dump = 0.0;
+
+    ASSERT_TRUE(osh_simulation_set_dump_control(NULL, 0.0, 0ull, NULL, NULL) == OSH_EINVAL);
+
+    /* Same cadence (K = 40 over 200 → checkpoints at 40,80,120,160), one run with
+     * periodic dumps and one without. */
+    run_checkpoint_case("00_minimal", 200ull, 40ull, 0ull, &completed_batch, &energy_batch, NULL);
+    run_dump_case("00_minimal", 200ull, 40ull, &completed_dump, &energy_dump);
+
+    ASSERT_TRUE(completed_batch == 200ull);
+    ASSERT_TRUE(completed_dump == 200ull);
+    ASSERT_TRUE(energy_batch > 0.0);
+    /* Bit-identical: the dumps changed nothing in the live run. */
+    ASSERT_TRUE(energy_dump == energy_batch);
+}
+
+/*
  * Checkpoint policy (issue #195), default path: every_primaries == 0 is
  * FINAL-ONLY — the run must complete every requested primary in one batch, and
  * calling the setter with 0 must be indistinguishable from never calling it.
@@ -875,5 +1041,7 @@ int main(void) {
     test_checkpoint_nuclear_invariant_across_batches_and_capacity();
     test_checkpoint_nuclear_overflow_is_counted_not_silent();
     test_checkpoint_profiling_accumulates_across_batches();
+    test_dump_control_is_non_destructive();
+    test_dump_write_failure_is_fail_soft();
     return 0;
 }

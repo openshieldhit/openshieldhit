@@ -48,6 +48,10 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
     opt->profile_path = NULL;
     opt->max_time_s = 0.0;
     opt->has_max_time = 0;
+    opt->dump_every_s = 0.0;
+    opt->has_dump_every = 0;
+    opt->dump_every_primaries = 0;
+    opt->has_dump_every_primaries = 0;
 
     if (argc <= 1) {
         opt->action = OSH_CLI_ACTION_HELP;
@@ -120,6 +124,12 @@ void osh_cli_print_help(FILE *out, char const *prog) {
             "      --max-time <dur>  Wall-time budget; stop cleanly at the next safe point and save the\n"
             "                        partial result (e.g. 30s, 30m, 1h, or a bare number of seconds).\n"
             "                        Overrides the beam.dat MAXTIME card.\n");
+    fprintf(out,
+            "      --dump-every <dur>  Periodically overwrite the output files with the partial result,\n"
+            "                        every <dur> of wall time (e.g. 30s, 10m, 1h). Overrides beam.dat DUMPEVERY.\n");
+    fprintf(out,
+            "      --dump-every-primaries <n>  Same, but every <n> completed primaries (deterministic).\n"
+            "                        Overrides the beam.dat NSTAT save step (nsave).\n");
     fprintf(out, "\n");
     fprintf(out, "Notes:\n");
     fprintf(out, "  WORKDIR defaults input files to WORKDIR/{geo,beam,mat,detect}.dat.\n");
@@ -127,6 +137,8 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out, "  Ctrl-C (SIGINT) requests the same clean stop: in-flight histories finish,\n");
     fprintf(out, "  all secondaries drain, and the partial result is saved normalised by the\n");
     fprintf(out, "  true number of completed primaries.\n");
+    fprintf(out, "  SIGUSR1 (POSIX) requests a one-off dump-and-continue at the next checkpoint;\n");
+    fprintf(out, "  it takes effect only alongside a --dump-every[-primaries] cadence.\n");
 }
 
 /**
@@ -289,6 +301,28 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
             return set_err(err, err_cap, "invalid duration value for option '%s' (use e.g. 30s, 30m, 1h, or 500)", arg);
         }
         opt->has_max_time = 1;
+        return 0;
+    }
+    /* Checked before "dump-every": the two are disambiguated by exact name length
+     * (20 vs 10), so this ordering is defensive, not required. */
+    if ((name_len == 20) && (strncmp(name, "dump-every-primaries", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "option '%s' requires a value (number of primaries)", arg);
+        }
+        if (!parse_u64(value, &opt->dump_every_primaries) || opt->dump_every_primaries == 0ull) {
+            return set_err(err, err_cap, "invalid value for option '%s' (expected a positive integer)", arg);
+        }
+        opt->has_dump_every_primaries = 1;
+        return 0;
+    }
+    if ((name_len == 10) && (strncmp(name, "dump-every", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "option '%s' requires a value (e.g. 30s, 10m, 1h, or 500)", arg);
+        }
+        if (!osh_parse_duration(value, &opt->dump_every_s) || opt->dump_every_s <= 0.0) {
+            return set_err(err, err_cap, "invalid duration value for option '%s' (use e.g. 30s, 10m, 1h, or 500)", arg);
+        }
+        opt->has_dump_every = 1;
         return 0;
     }
     if ((name_len == 7) && (strncmp(name, "workdir", name_len) == 0)) {

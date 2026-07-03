@@ -1,0 +1,22 @@
+12_partial_dump — periodic partial-result dump integration case (issue #193)
+
+Runs 200 primaries (150 MeV protons in water, NUCRE off, fixed RNDSEED) with a
+deterministic count cadence, `--dump-every-primaries 40` (see args.cmake). The
+run reaches five family-complete checkpoints and, at the first four, overwrites
+NB_msh.dat with the exact partial result.
+
+Because a dump is a non-destructive snapshot (an out-of-place postprocess of a
+shadow copy, never the live accumulators), the FINAL saved output must be
+identical — within compare_dat.py's tolerance, well inside floating-point
+reduction-order noise — to a plain no-dump run of the same 200 primaries. That
+reference is expected/NB_msh.dat, captured from `openshieldhit -n 200` without any
+dump flags. compare_dat.py ignores `#` comment lines, so the extra
+`# COMPLETENESS: exact` header the dump path stamps does not affect the match.
+
+What this case exercises end to end: `--dump-every-primaries` flag parsing, the
+LIVE checkpoint batching it implies, the file sink that writes each dump, the
+completeness stamp, and the guarantee that periodic dumps do not perturb the run.
+The deterministic "dump at K primaries == a truncated K-primary run" invariant it
+rests on is proven at the unit level in
+tests/unit/test_osh_simulation.c::test_dump_control_is_non_destructive and the
+checkpoint-batching invariance tests.

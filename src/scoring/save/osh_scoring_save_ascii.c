@@ -129,6 +129,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fprintf(fp, "# R START: %12.6E Z START: %12.6E\n", r0, z0);
             fprintf(fp, "# R END  : %12.6E Z END  : %12.6E\n", geo->axes[ir_axis].hi, geo->axes[iz_axis].hi);
             fprintf(fp, "# PRIMARIES: %llu\n", nstat);
+            fprintf(fp, "# COMPLETENESS: %s\n", osh_scoring_runtime_completeness_label(rt));
             fprintf(fp, "# Data written in canonical flat cyl order: idx = ir + nr * iz\n");
             fprintf(fp,
                     "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical "
@@ -268,6 +269,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                     geo->axes[iy_axis].hi,
                     geo->axes[iz_axis].hi);
             fprintf(fp, "# PRIMARIES: %llu\n", nstat);
+            fprintf(fp, "# COMPLETENESS: %s\n", osh_scoring_runtime_completeness_label(rt));
             fprintf(fp, "# Data written in canonical flat mesh order: idx = ix + nx * (iy + ny * iz)\n");
             fprintf(fp,
                     "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical "

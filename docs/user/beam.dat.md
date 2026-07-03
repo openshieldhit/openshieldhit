@@ -12,7 +12,8 @@ TMAX0           200.0       0.0     # 200 MeV, no energy spread
 BEAMPOS         0.0  0.0  -50.0
 BEAMSAD         200.0  256.0
 USECBEAM        sobp.dat
-NSTAT           100000      10000
+NSTAT           100000      10000   # 100k histories; dump every 10k (count cadence)
+DUMPEVERY       10m                 # ...or dump every 10 min of wall time
 RNDSEED         12345
 DELTAE          0.005
 DEMIN           0.025
@@ -316,8 +317,32 @@ NSTAT  <n>  [<step>]
 Total number of primary particle histories, and optional save interval.
 
 - `n` — total histories to simulate (required)
-- `step` — write intermediate results to disk every `step` histories; `−1`
-  disables intermediate saves (write only at the end)
+- `step` — write an intermediate partial-result dump to disk every `step`
+  completed histories; `−1` (or absent) disables intermediate saves (write only
+  at the end). This is the count-cadence equivalent of `DUMPEVERY`, and is
+  overridden by the `--dump-every-primaries` command-line flag.
+
+Each intermediate dump overwrites the normal output files with the current,
+physically **exact** partial result (taken at a family-complete checkpoint) and
+lets the run continue unperturbed. See
+[the command-line reference](command-line.md#periodic-partial-result-dumps) for
+the full semantics, the `# COMPLETENESS:` label, and `SIGUSR1`.
+
+### DUMPEVERY
+
+```
+DUMPEVERY  <duration>
+```
+
+Write an intermediate partial-result dump every `<duration>` of **wall-clock**
+time. The duration takes an optional unit suffix — `s` (seconds, the default),
+`m` (minutes), or `h` (hours) — e.g. `DUMPEVERY 10m`. `0` (the default) disables
+periodic dumps.
+
+A wall-time cadence is the one to prefer for long or parallel runs: its overhead
+is bounded per wall-hour independent of how fast the machine is, whereas a count
+cadence (`NSTAT` step) fires more often the faster the run goes. The
+`--dump-every` command-line flag overrides this card.
 
 ### RNDSEED
 

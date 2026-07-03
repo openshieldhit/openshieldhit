@@ -190,6 +190,62 @@ enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
 enum osh_status osh_simulation_set_checkpoint_policy(struct osh_simulation *sim, unsigned long long every_primaries);
 
 /**
+ * @brief Configure periodic and on-demand partial-result dumps (issue #193).
+ *
+ * @details
+ * Must be called after osh_simulation_create() and before osh_simulation_run().
+ * Arranges for the run to write a *non-destructive* snapshot of the current
+ * scoring result to the same output files as the final save, refining them on
+ * disk as the run progresses.  Each dump is taken at a family-complete checkpoint
+ * (issue #195), so the partial result written is physically **exact** — every
+ * secondary family the completed primaries banked has been drained into scoring —
+ * and the live accumulators are left byte-identical, so the run continues
+ * unperturbed.
+ *
+ * Three independent triggers, evaluated at each checkpoint boundary:
+ *   - @p dump_every_s > 0 — a **time** cadence: dump roughly every this many
+ *     wall-clock seconds.  The production cadence; its per-run overhead is bounded
+ *     independent of core count.  Non-deterministic by nature.
+ *   - @p dump_every_primaries > 0 — a **count** cadence: dump every this many
+ *     completed primaries.  Deterministic and reproducible (the natural cadence
+ *     for tests); equivalent to the beam.dat @c NSTAT save step / @c nsave.
+ *   - @p should_dump — an **on-demand** callback (e.g. POSIX @c SIGUSR1) polled at
+ *     each checkpoint; expected to be edge-triggered (read-and-clear) so one
+ *     external request yields one dump.  NULL for none.
+ *
+ * Setting a time or count cadence also puts the run in LIVE checkpoint-batching
+ * mode (the dump cadence *is* the checkpoint cadence — "a periodic dump and a
+ * parallel checkpoint are the same operation", issue #170), overriding any prior
+ * osh_simulation_set_checkpoint_policy().  Passing all three off (0, 0, NULL)
+ * disables dumping and restores the final-only fast path.
+ *
+ * @note @p should_dump is observed only at checkpoint boundaries, and those exist
+ * only when a **cadence** is also set — the final boundary is deliberately skipped
+ * (the run's own end-of-run save already writes the complete result).  An
+ * on-demand trigger with no cadence therefore has **no effect**: pair @c SIGUSR1
+ * with a @p dump_every_s / @p dump_every_primaries cadence, which both enables
+ * dumps and bounds how soon the on-demand request is serviced.
+ *
+ * A dump is a preview, never the run's product: a write or allocation failure is
+ * logged and the run continues to its exact final save rather than aborting.
+ *
+ * @param[in] sim                  Simulation handle created by osh_simulation_create().
+ * @param[in] dump_every_s         Time cadence [s]; <= 0 disables the time trigger.
+ * @param[in] dump_every_primaries Count cadence in primaries; 0 disables the count trigger.
+ * @param[in] should_dump          Borrowed on-demand callback; NULL = none.  Observed
+ *                                 only at checkpoints, so it needs a cadence to fire.
+ * @param[in] user                 Opaque context passed to @p should_dump; may be NULL.
+ *
+ * @returns OSH_OK on success; OSH_EINVAL when @p sim is NULL, or when
+ *          @p dump_every_primaries exceeds what the platform's @c size_t can hold.
+ */
+enum osh_status osh_simulation_set_dump_control(struct osh_simulation *sim,
+                                                double dump_every_s,
+                                                unsigned long long dump_every_primaries,
+                                                int (*should_dump)(void *user),
+                                                void *user);
+
+/**
  * @brief Retrieve the transport profile of the last completed run.
  *
  * @param[in]  sim  Simulation handle created by osh_simulation_create().

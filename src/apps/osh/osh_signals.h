@@ -54,6 +54,49 @@ int osh_signals_should_stop(void *user);
  */
 void osh_signals_reset_stop(void);
 
+/**
+ * @brief Install an on-demand dump handler for interactive, mid-run snapshots.
+ *
+ * @details
+ * On POSIX this catches @c SIGUSR1 via @c sigaction and raises a one-shot dump
+ * flag, polled and cleared by @ref osh_signals_should_dump.  The handler only
+ * raises the flag — no I/O, no allocation — and the run loop performs the actual
+ * dump at its next family-complete checkpoint (issue #193/#195), so the partial
+ * result written is physically exact and the live accumulators are untouched.
+ *
+ * There is no Windows equivalent to @c SIGUSR1, so on Windows (and any platform
+ * without the signal) this is a no-op and @ref osh_signals_should_dump always
+ * reports 0; scheduled @c --dump-every[-primaries] dumps still work everywhere.
+ *
+ * Idempotent; safe to call once at startup.
+ */
+void osh_signals_install_dump(void);
+
+/**
+ * @brief Run-control dump callback backed by the on-demand dump flag.
+ *
+ * @details
+ * Ready-made adapter matching @c osh_simulation_set_dump_control's
+ * @c should_dump signature.  Unlike @ref osh_signals_should_stop this is
+ * **edge-triggered**: it reads *and clears* the flag, returning non-zero exactly
+ * once per @c SIGUSR1 so a single signal produces a single dump rather than a
+ * dump at every subsequent checkpoint.  @p user is ignored (the flag is a
+ * process singleton); pass NULL.
+ *
+ * @param[in] user  Unused; pass NULL.
+ * @returns 1 if a dump was requested since the last call, 0 otherwise.
+ */
+int osh_signals_should_dump(void *user);
+
+/**
+ * @brief Clear the on-demand dump flag.
+ *
+ * @details
+ * Resets any pending request so @ref osh_signals_should_dump reports 0.  Exists
+ * for tests; a real run relies on the read-and-clear behaviour of the poll.
+ */
+void osh_signals_reset_dump(void);
+
 #ifdef __cplusplus
 }
 #endif

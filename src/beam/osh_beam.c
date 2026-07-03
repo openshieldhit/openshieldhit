@@ -196,6 +196,7 @@ static void _wb_defaults(struct beam_workspace *wb) {
     wb->nstat = 0;
     wb->nsave = 0;
     wb->wall_budget_s = 0.0;
+    wb->dump_every_s = 0.0;
     wb->rndseed = 0;
     wb->rndoffset = 0;
     wb->deltae = 0.0f;

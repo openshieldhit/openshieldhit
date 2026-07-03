@@ -59,6 +59,13 @@ result:
 build/bin/openshieldhit --max-time 30m tests/cases/00_minimal/
 ```
 
+Refine the output files on disk while the run progresses, writing the current
+partial result every 10 minutes of wall time:
+
+```bash
+build/bin/openshieldhit --dump-every 10m tests/cases/00_minimal/
+```
+
 ## Options
 
 ```text
@@ -77,6 +84,9 @@ build/bin/openshieldhit --max-time 30m tests/cases/00_minimal/
     --profile <file>  Write a one-line JSON timing/counter profile to <file>
     --max-time <dur>  Wall-time budget; stop cleanly and save the partial result
                       (e.g. 30s, 30m, 1h, or a bare number of seconds)
+    --dump-every <dur>            Periodically overwrite the output files with the
+                                  current partial result, every <dur> of wall time
+    --dump-every-primaries <n>    Same, but every <n> completed primaries
 ```
 
 ## Stopping a run early
@@ -98,6 +108,54 @@ count (reported on the console and written to the `# PRIMARIES:` header), not by
 the originally requested `nstat`. Because each history is an independent
 function of its global index, the partial result is an unbiased Monte Carlo
 estimate from the histories that finished.
+
+## Periodic partial-result dumps
+
+A long run can refine its output files on disk as it goes, so you can inspect
+convergence without waiting for the end or stopping the run.
+
+Throughout, a **cadence** is the interval at which the run pauses at a live
+checkpoint to attempt a dump — expressed either by **wall time** (`--dump-every`)
+or by **completed primary count** (`--dump-every-primaries`). Two cadences select
+how often a dump fires; both overwrite the normal output files with the current
+partial result and then let the run continue, untouched.
+
+- **By wall time.** `--dump-every <dur>` dumps roughly every `<dur>` of wall-clock
+  time (same duration grammar as `--max-time`: `30s`, `10m`, `1h`, or bare
+  seconds). This is the cadence to use in production and on many cores: its
+  overhead is bounded per wall-hour regardless of how fast the machine is. It
+  overrides the `DUMPEVERY` card in `beam.dat`.
+- **By primary count.** `--dump-every-primaries <n>` dumps every `<n>` completed
+  primaries. This cadence is deterministic and reproducible (each history is a
+  pure function of its global index), which makes it the right choice for tests.
+  It overrides the `beam.dat` `NSTAT <n> <step>` save step (`nsave`).
+
+A command-line flag always overrides the corresponding `beam.dat` card. With no
+dump flag and no card, no periodic dumps are written (the fastest path).
+
+**Every dump is physically exact.** A dump is taken only at a *family-complete
+checkpoint* — a point where every secondary family (neutrons, fragments, …) the
+completed primaries banked has been fully transported into scoring. A mid-run
+ratio such as `DLET = Σ(LET·dose)/Σdose` is therefore unbiased, not merely
+noisier. Each output records this with a `# COMPLETENESS: exact` header (ASCII)
+or an `OSHBDO_RT_COMPLETENESS` token (BDO), alongside the `# PRIMARIES:` count it
+was normalised by. Taking the snapshot never mutates the live accumulators, so
+the run's final result is identical whether or not dumps were taken.
+
+**On-demand dump (POSIX).** Sending `SIGUSR1` to the process
+(`kill -USR1 <pid>`) requests a one-off dump at the next checkpoint. Because
+checkpoints exist only while a cadence is running, `SIGUSR1` is meaningful **only
+alongside** a `--dump-every[-primaries]` cadence: it then services the request at
+the next checkpoint (ahead of the cadence's own schedule), so a cadence both
+enables on-demand dumps and bounds how soon they land. With no cadence there are
+no intermediate checkpoints and the signal has no effect. There is no `SIGUSR1`
+on Windows, so on-demand dumps are a no-op there; the scheduled cadences work on
+every platform.
+
+**Memory.** When a dump cadence is set, the small extra buffer a snapshot needs
+is reserved up front and shown in the `Scoring memory:` line, so a scheduled dump
+can never run the process out of memory partway through. Runs without a dump
+cadence pay nothing for this.
 
 ## Notes
 

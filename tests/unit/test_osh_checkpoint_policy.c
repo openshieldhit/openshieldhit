@@ -104,8 +104,12 @@ static void test_next_batch_size_time_cadence_adaptive(void) {
     ASSERT_TRUE(osh_checkpoint_next_batch_size(&p, 100.0, 150u) == 150u);
     /* A tiny rate still yields at least one primary of progress. */
     ASSERT_TRUE(osh_checkpoint_next_batch_size(&p, 0.1, 1000u) == 1u);
-    /* No measured rate yet → span the rest (stay exact, keep progressing). */
-    ASSERT_TRUE(osh_checkpoint_next_batch_size(&p, 0.0, 1000u) == 1000u);
+    /* No measured rate yet (the first batch of a time cadence) → a bootstrap
+     * probe of remaining/100, not the whole run, so a rate can be measured and an
+     * early checkpoint reached for the first timed dump.  1000/100 = 10. */
+    ASSERT_TRUE(osh_checkpoint_next_batch_size(&p, 0.0, 1000u) == 10u);
+    /* The probe floors at 1 so a short remainder still makes progress. */
+    ASSERT_TRUE(osh_checkpoint_next_batch_size(&p, 0.0, 50u) == 1u);
 }
 
 static void test_next_batch_size_live_without_cadence_is_whole_run(void) {

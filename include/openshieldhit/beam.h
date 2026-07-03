@@ -165,6 +165,9 @@ struct osh_beam_workspace {
     size_t nsave;                       /**< Save interval in histories; 0 = write only at end (NSTAT step). */
     double wall_budget_s;               /**< Wall-time budget [s] from the MAXTIME card; 0 = unlimited.
                                              A CLI --max-time overrides this value. */
+    double dump_every_s;                /**< Periodic partial-result dump time cadence [s] from the DUMPEVERY
+                                             card; 0 = off.  A CLI --dump-every overrides this value.  The
+                                             count-cadence equivalent is the NSTAT save step (@ref nsave). */
     int rndseed;                        /**< RNG seed; same seed gives bit-for-bit reproducible results (RNDSEED). */
     int rndoffset;                      /**< RNG stream offset for producing independent parallel runs
                                              from the same seed. */

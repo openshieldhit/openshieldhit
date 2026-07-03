@@ -15,6 +15,17 @@ static int cb_from_flag(void *user) {
     return *(int const *) user;
 }
 
+/* Edge-triggered dump source: returns the flag once, then clears it, mimicking a
+ * read-and-clear SIGUSR1 adapter so one "signal" yields exactly one dump. */
+static int cb_dump_edge(void *user) {
+    int *f = (int *) user;
+    if (*f) {
+        *f = 0;
+        return 1;
+    }
+    return 0;
+}
+
 /* ---- run_ctl_should_stop: defaults & NULL safety ------------------------- */
 
 static void test_null_control_never_stops(void) {
@@ -124,8 +135,103 @@ static void test_start_records_baseline(void) {
     osh_run_control_start(&ctl, 1234.5);
 
     ASSERT_TRUE(ctl.t_start == 1234.5);
-    ASSERT_TRUE(ctl.last_dump_s == 1234.5);
+    /* Dump bookkeeping is run-relative (elapsed seconds), so it baselines at 0,
+     * not the absolute start instant: the first time cadence fires once
+     * dump_every_s has *elapsed*. */
+    ASSERT_TRUE(ctl.last_dump_s == 0.0);
     ASSERT_TRUE(ctl.last_dump_primaries == 0u);
+}
+
+/* ---- run_ctl_should_dump: cadences, on-demand, bookkeeping ---------------- */
+
+static void test_dump_null_and_disabled(void) {
+    struct osh_run_control ctl;
+    osh_run_control_init(&ctl);
+
+    /* NULL control and an all-off control both never dump. */
+    ASSERT_TRUE(run_ctl_should_dump(NULL, 1.0e9, 1000000u) == 0);
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 1.0e9, 1000000u) == 0);
+    ASSERT_TRUE(run_ctl_has_scheduled_dump(&ctl) == 0);
+    ASSERT_TRUE(run_ctl_has_scheduled_dump(NULL) == 0);
+}
+
+static void test_dump_count_cadence(void) {
+    struct osh_run_control ctl;
+    osh_run_control_init(&ctl);
+    osh_run_control_start(&ctl, 0.0);
+    ctl.dump_every_primaries = 100u;
+
+    ASSERT_TRUE(run_ctl_has_scheduled_dump(&ctl) == 1);
+
+    /* Below the first cadence: no dump. */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 0.0, 50u) == 0);
+    /* Reaching the cadence fires and rebases the counter to 100. */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 0.0, 100u) == 1);
+    /* Next window: nothing until 100 more have completed. */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 0.0, 150u) == 0);
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 0.0, 200u) == 1);
+    /* An overshoot past a boundary still fires exactly once and rebases to the
+     * observed count (self-correcting), not to last + cadence. */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 0.0, 450u) == 1);
+    ASSERT_TRUE(ctl.last_dump_primaries == 450u);
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 0.0, 500u) == 0);
+}
+
+static void test_dump_time_cadence(void) {
+    struct osh_run_control ctl;
+    osh_run_control_init(&ctl);
+    osh_run_control_start(&ctl, 0.0);
+    ctl.dump_every_s = 10.0;
+
+    ASSERT_TRUE(run_ctl_has_scheduled_dump(&ctl) == 1);
+
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 9.9, 0u) == 0);
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 10.0, 0u) == 1); /* rebases last_dump_s to 10 */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 15.0, 0u) == 0);
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 20.0, 0u) == 1);
+    ASSERT_TRUE(ctl.last_dump_s == 20.0);
+}
+
+static void test_dump_on_demand_edge(void) {
+    struct osh_run_control ctl;
+    int flag = 0;
+
+    osh_run_control_init(&ctl);
+    osh_run_control_start(&ctl, 0.0);
+    ctl.should_dump = cb_dump_edge;
+    ctl.should_dump_user = &flag;
+
+    /* On-demand alone is not a *scheduled* dump (no cadence). */
+    ASSERT_TRUE(run_ctl_has_scheduled_dump(&ctl) == 0);
+
+    /* No request: no dump. */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 1.0, 1u) == 0);
+    /* One request → exactly one dump; the edge callback self-clears. */
+    flag = 1;
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 1.0, 1u) == 1);
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 1.0, 1u) == 0);
+}
+
+static void test_dump_triggers_combine_or(void) {
+    struct osh_run_control ctl;
+    int flag = 0;
+
+    osh_run_control_init(&ctl);
+    osh_run_control_start(&ctl, 0.0);
+    ctl.dump_every_s = 100.0;
+    ctl.dump_every_primaries = 1000u;
+    ctl.should_dump = cb_dump_edge;
+    ctl.should_dump_user = &flag;
+
+    /* None of the three met. */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 1.0, 10u) == 0);
+    /* On-demand alone fires even though neither cadence is due. */
+    flag = 1;
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 1.0, 10u) == 1);
+    /* Count cadence alone. */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 1.0, 1010u) == 1);
+    /* Time cadence alone (elapsed rebased above to ~1s; +100 crosses it). */
+    ASSERT_TRUE(run_ctl_should_dump(&ctl, 101.0, 1010u) == 1);
 }
 
 /* ---- NULL-safe lifecycle calls ------------------------------------------- */
@@ -145,6 +251,11 @@ int main(void) {
     test_budget_and_callback_combine_or();
     test_callback_without_user();
     test_start_records_baseline();
+    test_dump_null_and_disabled();
+    test_dump_count_cadence();
+    test_dump_time_cadence();
+    test_dump_on_demand_edge();
+    test_dump_triggers_combine_or();
     test_null_lifecycle_calls_are_noops();
     return 0;
 }

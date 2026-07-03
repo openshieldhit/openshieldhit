@@ -131,6 +131,9 @@ enum osh_scoring_bdo2019_tag_id {
     OSHBDO_RT_NSTAT = 0xAA00,
     OSHBDO_RT_TIME,
     OSHBDO_RT_TIMESIM,
+    OSHBDO_RT_COMPLETENESS, /**< Partial-result honesty label (issue #193/#195): "exact" for a
+                                 family-complete result, "families_pending=…" for a mid-run
+                                 snapshot taken before every secondary family was drained. */
 
     OSHBDO_COMMENT = 0xFFCC,
     OSHBDO_DEBUG,
