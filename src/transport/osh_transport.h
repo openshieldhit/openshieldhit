@@ -71,6 +71,14 @@ struct osh_transport_params {
                                             RNG streams make the physics each history sees identical
                                             across capacities (scored output matches up to
                                             floating-point reduction order in scoring). */
+    size_t score_replicas;             /**< Diagnostic (issue #230): split [0, nstat) into this many
+                                            contiguous sub-ranges, transport each sequentially into its
+                                            own private accumulator set, then merge into the master
+                                            before postprocess/save.  0 (default) or 1 both reproduce
+                                            the serial result — 0 uses the shared-master fast path,
+                                            1 routes through one private set + merge (bit-identical);
+                                            must be <= nstat.  It exercises the parallel-scoring merge
+                                            path with zero concurrency; it does not speed anything up. */
     float deltae;                      /**< Max fractional energy loss per CSDA substep [dimensionless]. */
     float demin;                       /**< Min energy loss per material substep [MeV/nucleon]. */
     float tcut;                        /**< Lower ion energy cutoff [MeV/nucleon]. */

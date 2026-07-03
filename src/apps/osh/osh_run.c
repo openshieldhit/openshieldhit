@@ -328,6 +328,26 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         }
     }
 
+    /* Sequential score-replica diagnostic (issue #230): splits the run into N
+     * private-accumulator sub-ranges merged into the master.  Rejected here if it
+     * exceeds nstat (the earliest point both are known), before the run starts. */
+    if (opt->has_score_replicas) {
+        rc = osh_simulation_set_score_replicas(sim, (size_t) opt->score_replicas);
+        if (rc != OSH_OK) {
+            if (err) {
+                fprintf(
+                    err, "Error: --score-replicas %llu is invalid (must be >= 1 and <= nstat)\n", opt->score_replicas);
+            }
+            goto cleanup;
+        }
+        if (out) {
+            fprintf(out,
+                    "Score replicas   : %llu sequential private-accumulator sub-range(s) "
+                    "(diagnostic; merged before save)\n",
+                    opt->score_replicas);
+        }
+    }
+
     /* Clean-stop / wall-budget policy.  The CLI --max-time overrides the
      * beam.dat MAXTIME card; the graceful-stop callback (e.g. from Ctrl-C) is
      * wired in unconditionally so an interactive interrupt always stops cleanly. */

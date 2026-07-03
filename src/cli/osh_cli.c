@@ -52,6 +52,8 @@ int osh_cli_parse(int argc, char *argv[], struct osh_cli_options *opt, char *err
     opt->has_dump_every = 0;
     opt->dump_every_primaries = 0;
     opt->has_dump_every_primaries = 0;
+    opt->score_replicas = 0;
+    opt->has_score_replicas = 0;
 
     if (argc <= 1) {
         opt->action = OSH_CLI_ACTION_HELP;
@@ -130,6 +132,10 @@ void osh_cli_print_help(FILE *out, char const *prog) {
     fprintf(out,
             "      --dump-every-primaries <n>  Same, but every <n> completed primaries (deterministic).\n"
             "                        Overrides the beam.dat NSTAT save step (nsave).\n");
+    fprintf(out,
+            "      --score-replicas <n>  Diagnostic: transport [0, nstat) as <n> sequential sub-ranges,\n"
+            "                        each into a private accumulator set, then merge (n <= nstat). Verifies\n"
+            "                        the parallel-scoring merge path; does not run faster.\n");
     fprintf(out, "\n");
     fprintf(out, "Notes:\n");
     fprintf(out, "  WORKDIR defaults input files to WORKDIR/{geo,beam,mat,detect}.dat.\n");
@@ -323,6 +329,19 @@ static int parse_long_option(int argc, char *argv[], int *idx, struct osh_cli_op
             return set_err(err, err_cap, "invalid duration value for option '%s' (use e.g. 30s, 10m, 1h, or 500)", arg);
         }
         opt->has_dump_every = 1;
+        return 0;
+    }
+    if ((name_len == 14) && (strncmp(name, "score-replicas", name_len) == 0)) {
+        if (!value && !consume_option_arg(argc, argv, idx, arg, &value)) {
+            return set_err(err, err_cap, "option '%s' requires a value (a positive integer)", arg);
+        }
+        /* 0 is rejected: a replica must transport at least one history, and 0 also
+         * doubles as the "harness off" sentinel internally, so a user 0 is a misuse
+         * (the > nstat upper bound is checked later, once nstat is known). */
+        if (!parse_u64(value, &opt->score_replicas) || opt->score_replicas == 0ull) {
+            return set_err(err, err_cap, "invalid value for option '%s' (expected a positive integer)", arg);
+        }
+        opt->has_score_replicas = 1;
         return 0;
     }
     if ((name_len == 7) && (strncmp(name, "workdir", name_len) == 0)) {

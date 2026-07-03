@@ -39,8 +39,11 @@ struct osh_run_options {
     double dump_every_s;              /**< Periodic dump time cadence [s]; used only when has_dump_every != 0. */
     int has_dump_every;               /**< 1 if dump_every_s should override the beam file DUMPEVERY card. */
     unsigned long long
-        dump_every_primaries;         /**< Periodic dump count cadence; used when has_dump_every_primaries != 0. */
-    int has_dump_every_primaries;     /**< 1 if dump_every_primaries should override the NSTAT save step. */
+        dump_every_primaries;     /**< Periodic dump count cadence; used when has_dump_every_primaries != 0. */
+    int has_dump_every_primaries; /**< 1 if dump_every_primaries should override the NSTAT save step. */
+    unsigned long long
+        score_replicas;               /**< Sequential score-replica count (diagnostic); used when has_score_replicas. */
+    int has_score_replicas;           /**< 1 if --score-replicas was given (see osh_simulation_set_score_replicas). */
     int (*should_stop)(void *user);   /**< Borrowed graceful-stop callback (e.g. SIGINT-backed); NULL = none. */
     void *should_stop_user;           /**< Opaque context passed to @ref should_stop. */
     int (*should_dump)(void *user);   /**< Borrowed on-demand dump callback (e.g. SIGUSR1-backed); NULL = none. */

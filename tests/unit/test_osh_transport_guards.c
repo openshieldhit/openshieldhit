@@ -31,12 +31,12 @@ static void test_ion_run_range_validates_arguments(void) {
     size_t completed = 12345u;
 
     /* NULL context: rejected, and completed_out is zeroed up front. */
-    ASSERT_TRUE(osh_transport_ion_run_range(NULL, nn, nn, nn, nn, 0u, 10u, &completed) == OSH_EINVAL);
+    ASSERT_TRUE(osh_transport_ion_run_range(NULL, nn, nn, nn, nn, NULL, 0u, 10u, &completed) == OSH_EINVAL);
     ASSERT_TRUE(completed == 0u);
 
     /* Missing pool / scratch on the context. */
     memset(&ctx, 0, sizeof(ctx));
-    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, 0u, 10u, &completed) == OSH_EINVAL);
+    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, NULL, 0u, 10u, &completed) == OSH_EINVAL);
 
     /* Wire non-NULL sentinel pool + scratch so the later guards are reachable. */
     ctx.ion_pool = nn;
@@ -44,16 +44,16 @@ static void test_ion_run_range_validates_arguments(void) {
     ctx.dist_batch = nn;
 
     /* Empty / inverted range (hist_hi <= hist_lo). */
-    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, 5u, 5u, &completed) == OSH_EINVAL);
+    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, NULL, 5u, 5u, &completed) == OSH_EINVAL);
 
     /* nstat == 0. */
     ctx.params.nstat = 0u;
-    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, 0u, 10u, &completed) == OSH_EINVAL);
+    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, NULL, 0u, 10u, &completed) == OSH_EINVAL);
 
     /* Out-of-range DELTAE. */
     ctx.params.nstat = 10u;
     ctx.params.deltae = 0.0f;
-    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, 0u, 10u, &completed) == OSH_EINVAL);
+    ASSERT_TRUE(osh_transport_ion_run_range(&ctx, nn, nn, nn, nn, NULL, 0u, 10u, &completed) == OSH_EINVAL);
 }
 
 int main(void) {

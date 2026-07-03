@@ -34,6 +34,13 @@ def parse_args():
         "--coord-cols", type=int, default=3, help="number of leading coordinate columns, not normalised (default: 3)"
     )
     p.add_argument("--label", default="", help="short label for error messages")
+    p.add_argument(
+        "--exact",
+        action="store_true",
+        help="byte-identity check: compare raw values for exact equality (no normalisation). "
+        "Used for the reproducibility guards (serial vs --score-replicas 1, and a fixed "
+        "replica count run twice), where the numeric data must match to the printed digit.",
+    )
     return p.parse_args()
 
 
@@ -101,6 +108,31 @@ def main():
     if not a_rows:
         print(f"FAIL {label}no data lines found", file=sys.stderr)
         sys.exit(1)
+
+    if args.exact:
+        # Byte-identity: raw values must match exactly (comment lines already
+        # skipped).  Two runs producing bit-identical accumulators print the same
+        # digits, so exact equality on the parsed values is the file-level
+        # "byte-identical" check the reproducibility guards need.
+        errors = []
+        for idx, (a_row, e_row) in enumerate(zip(a_rows, e_rows), 1):
+            if len(a_row) != len(e_row):
+                errors.append(f"  data line {idx}: column count mismatch (actual={len(a_row)} expected={len(e_row)})")
+                continue
+            for col, (a, e) in enumerate(zip(a_row, e_row)):
+                if a != e:
+                    errors.append(f"  data line {idx} col {col + 1}: actual={a:.12e} expected={e:.12e} (not exact)")
+        if errors:
+            print(f"FAIL {label}{len(errors)} value(s) not bit-identical:", file=sys.stderr)
+            for msg in errors[:20]:
+                print(msg, file=sys.stderr)
+            if len(errors) > 20:
+                print(f"  ... and {len(errors) - 20} more", file=sys.stderr)
+            print(f"  actual  : {args.actual}", file=sys.stderr)
+            print(f"  expected: {args.expected}", file=sys.stderr)
+            sys.exit(1)
+        print(f"OK {label}{len(a_rows)} data lines bit-identical")
+        return
 
     cc = args.coord_cols
 
