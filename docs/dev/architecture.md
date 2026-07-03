@@ -129,9 +129,11 @@ complete one (`osh_checkpoint_completeness_label()`).  The graceful wall-time st
 (issue #192) routes its early stop through the family scheduler, so its partial
 save is always family-exact for the primaries that finished.
 
-Scheduled dumps also reserve their snapshot buffer against the memory budget up
-front (`osh_scoring_mem_estimate::shadow_bytes`), so a periodic dump can never run
-the process out of memory mid-run.  Still growing into the stable
+Scheduled dumps also budget their snapshot buffer against the memory budget up
+front (`osh_scoring_mem_estimate::shadow_bytes`), so a periodic dump's cost is
+accounted before the run rather than discovered mid-run; the buffer still
+allocates lazily at the first dump and fails soft under memory pressure.  Still
+growing into the stable
 `osh_checkpoint_policy` shape in their own follow-ups: variance-batch folding
 (#169) and per-worker accumulator merges (#161).
 
