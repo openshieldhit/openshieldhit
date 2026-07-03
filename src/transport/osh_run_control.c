@@ -80,5 +80,14 @@ int run_ctl_has_scheduled_dump(struct osh_run_control const *ctl) {
     if (!ctl) {
         return 0;
     }
-    return (ctl->dump_every_s > 0.0 || ctl->dump_every_primaries > 0u) ? 1 : 0;
+    /* "Scheduled" means a cadence fires dumps on its own, with no external signal.
+     * Either cadence being set is enough; report them one at a time so each reason
+     * is spelled out rather than folded into one boolean expression. */
+    if (ctl->dump_every_s > 0.0) {
+        return 1; /* wall-time cadence armed */
+    }
+    if (ctl->dump_every_primaries > 0u) {
+        return 1; /* primary-count cadence armed */
+    }
+    return 0;
 }

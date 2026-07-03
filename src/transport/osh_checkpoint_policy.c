@@ -55,7 +55,13 @@ osh_checkpoint_next_batch_size(struct osh_checkpoint_policy const *policy, doubl
             if (target >= (double) remaining) {
                 return remaining;
             }
-            k = (target < 1.0) ? 1u : (size_t) target;
+            /* Floor at one primary so a very low rate still makes progress rather
+             * than truncating to a zero-length batch. */
+            if (target < 1.0) {
+                k = 1u;
+            } else {
+                k = (size_t) target;
+            }
         } else {
             /* Time cadence, but throughput is not known yet (the first batch):
              * run a small bootstrap probe rather than the whole run, so we both

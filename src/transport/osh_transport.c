@@ -120,6 +120,7 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
         size_t const k = osh_checkpoint_next_batch_size(policy, measured_rate, remaining);
         double t_batch_start = osh_monotonic_seconds();
         double batch_s;
+        int dump_destination_ready; /* set below: the driver wired a sink + shadow for dumps */
 
         rc = run_families_over_range(
             transport_ctx, beam_rt, geom_rt, material_rt, score_rt, done, done + k, neutron_enabled, &batch_completed);
@@ -149,7 +150,12 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
          * complete result, so a dump there would be redundant work.  Future work
          * also folds a variance batch (#169) and merges per-worker accumulators
          * (#161) at this exact point. */
-        if (done < nstat && ctl && ctl->dump_sink && ctl->dump_shadow) {
+        /* A dump needs a wired destination (sink + reusable shadow scratch); when
+         * the driver configured no dumps these stay NULL and the block is skipped.
+         * Named separately from the "not the final boundary" guard so the intent of
+         * each half is clear. */
+        dump_destination_ready = (ctl != NULL) && (ctl->dump_sink != NULL) && (ctl->dump_shadow != NULL);
+        if (done < nstat && dump_destination_ready) {
             /* Measure elapsed from the run-control baseline (ctl->t_start, set by
              * osh_run_control_start before transport), the same clock the wall-budget
              * stop path uses — so the dump time cadence and the stop cadence never

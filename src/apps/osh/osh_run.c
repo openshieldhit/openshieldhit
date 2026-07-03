@@ -273,14 +273,29 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
-    /* Resolve the effective dump cadences (CLI overrides the beam.dat card) so the
-     * memory check can reserve the snapshot shadow when a periodic dump *will*
-     * happen, and osh_simulation_set_dump_control() below can apply the same
-     * values.  The count cadence falls back to the NSTAT save step (nsave). */
-    eff_dump_every_s = opt->has_dump_every ? opt->dump_every_s : beam->dump_every_s;
-    eff_dump_every_primaries =
-        opt->has_dump_every_primaries ? opt->dump_every_primaries : (unsigned long long) beam->nsave;
-    scheduled_dump = (eff_dump_every_s > 0.0 || eff_dump_every_primaries > 0ull) ? 1 : 0;
+    /* Resolve the effective dump cadences so the memory check can reserve the
+     * snapshot shadow when a periodic dump *will* happen, and
+     * osh_simulation_set_dump_control() below can apply the same values.
+     *
+     * Precedence: a command-line flag always overrides the matching beam.dat card.
+     * The time cadence is CLI --dump-every over the DUMPEVERY card; the count
+     * cadence is CLI --dump-every-primaries over the NSTAT save step (nsave). */
+    if (opt->has_dump_every) {
+        eff_dump_every_s = opt->dump_every_s; /* CLI --dump-every wins */
+    } else {
+        eff_dump_every_s = beam->dump_every_s; /* else the beam.dat DUMPEVERY card */
+    }
+    if (opt->has_dump_every_primaries) {
+        eff_dump_every_primaries = opt->dump_every_primaries; /* CLI --dump-every-primaries wins */
+    } else {
+        eff_dump_every_primaries = (unsigned long long) beam->nsave; /* else the NSTAT save step */
+    }
+    /* A dump is "scheduled" when either cadence is active (as opposed to only the
+     * on-demand SIGUSR1 trigger); scheduled dumps are the ones that reserve memory. */
+    scheduled_dump = 0;
+    if (eff_dump_every_s > 0.0 || eff_dump_every_primaries > 0ull) {
+        scheduled_dump = 1;
+    }
 
     /* Detect host resources, report the scoring memory footprint, and refuse
      * the run up front if it would exceed the memory budget — before
@@ -489,6 +504,7 @@ static enum osh_status run_check_memory(struct osh_scoring_workspace const *scor
     char b_scoring[32];
     char b_budget[32];
     char b_largest[32];
+    char const *dump_drop_hint; /* extra "drop periodic dumps" advice in the refusal message */
 
     osh_sysinfo_query(&info);
 
@@ -565,6 +581,13 @@ static enum osh_status run_check_memory(struct osh_scoring_workspace const *scor
         if (err) {
             osh_sysinfo_format_bytes(budget, b_budget, sizeof(b_budget));
             osh_sysinfo_format_bytes(est.largest_page_bytes, b_largest, sizeof(b_largest));
+            /* Only suggest dropping periodic dumps when they are the reason the
+             * footprint grew (a scheduled dump actually reserved a shadow). */
+            if (reserve_shadow && est.shadow_bytes > 0u) {
+                dump_drop_hint = ", drop periodic dumps";
+            } else {
+                dump_drop_hint = "";
+            }
             fprintf(err,
                     "Error: scoring would allocate %s, exceeding the memory budget of %s.\n"
                     "  Largest scorer: geometry '%s' (%s).\n"
@@ -577,7 +600,7 @@ static enum osh_status run_check_memory(struct osh_scoring_workspace const *scor
                     b_largest,
                     info.ram_total_bytes > 0u ? b_total : "unknown",
                     info.ram_available_bytes > 0u ? b_avail : "unknown",
-                    (reserve_shadow && est.shadow_bytes > 0u) ? ", drop periodic dumps" : "",
+                    dump_drop_hint,
                     b_scoring);
         }
         return OSH_ENOMEM;

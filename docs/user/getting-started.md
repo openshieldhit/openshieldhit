@@ -84,6 +84,76 @@ The partial result is normalised by the number of primaries that actually
 finished, so it stays a valid (just noisier) estimate — see
 [stopping a run early](command-line.md#stopping-a-run-early).
 
+## Controlling when a run ends
+
+A run can end for two reasons, and **whichever limit is reached first wins**:
+
+1. **Primary count** — the number of source histories, `nstat`. This is always
+   set (a run needs a target), and the run stops as soon as that many primaries
+   have been simulated. Set it with `NSTAT` in `beam.dat` or with `-n` / `--nstat`
+   on the command line.
+2. **Wall-time budget** — an optional real-time limit. Set it with `MAXTIME` in
+   `beam.dat` or with `--max-time` on the command line; `0` (the default) means
+   *no* time limit. When the budget elapses the run stops **cleanly**: in-flight
+   histories finish, all secondaries drain, and the partial result is saved,
+   normalised by the primaries that actually completed.
+
+So with both set, the run stops at the **first** of "all `nstat` primaries done"
+or "time budget elapsed". Pressing **Ctrl-C** requests the same clean stop at any
+moment. (Getting a *preview while the run keeps going* is a different feature —
+see [periodic dumps](command-line.md#periodic-partial-result-dumps).)
+
+### Precedence: command line overrides beam.dat
+
+Each setting can be given in `beam.dat` **and** on the command line. The rule is
+simple: **a command-line flag always overrides the matching `beam.dat` card** for
+that one setting. The two files are not "merged" beyond this per-setting override.
+
+| Setting | `beam.dat` card | Command-line flag (wins) |
+|---|---|---|
+| Primary count | `NSTAT <n>` | `-n <n>` / `--nstat <n>` |
+| Wall-time budget | `MAXTIME <dur>` | `--max-time <dur>` |
+| Periodic dump, by time | `DUMPEVERY <dur>` | `--dump-every <dur>` |
+| Periodic dump, by primaries | `NSTAT <n> <step>` (the `<step>` field) | `--dump-every-primaries <n>` |
+
+Durations accept `s` / `m` / `h` suffixes (or a bare number of seconds), e.g.
+`30s`, `10m`, `1h`.
+
+### Examples
+
+Stop after one million primaries (no time limit):
+
+```bash
+build/bin/openshieldhit -n 1000000 path/to/case/
+```
+
+Run up to one million primaries **or** two hours, whichever comes first:
+
+```bash
+build/bin/openshieldhit -n 1000000 --max-time 2h path/to/case/
+```
+
+`beam.dat` says `NSTAT 1000000` but you want a quick smoke run — the flag wins,
+so this simulates 50 000:
+
+```bash
+build/bin/openshieldhit -n 50000 path/to/case/
+```
+
+`beam.dat` says `MAXTIME 1h`, but tonight you can spare only 20 minutes — the flag
+wins:
+
+```bash
+build/bin/openshieldhit --max-time 20m path/to/case/
+```
+
+Long run that also refines its output files every 10 minutes **without stopping**
+(a partial-result dump, not a stop), capped at a 6-hour budget:
+
+```bash
+build/bin/openshieldhit -n 100000000 --dump-every 10m --max-time 6h path/to/case/
+```
+
 ## Try the minimal example
 
 ```bash

@@ -31,6 +31,28 @@ Library (simulation)
 
 ## Checkpoints, batches, and partial results
 
+### Vocabulary
+
+These terms recur throughout this section, the run-control headers, and the user
+docs; they have precise meanings here, so pin them down once:
+
+| Term | Definition |
+|------|------------|
+| **primary** | One requested source history. The run transports `[0, nstat)` of them. |
+| **batch** | A contiguous slice of primaries `[b, b+K)` transported as one unit. `K` is the batch size. |
+| **family** | A transport species processed as a pass: ions, then the neutrons/fragments (and, later, electrons) those ions banked. |
+| **family-complete** / **quiescent** | A point where *every* secondary family spawned by the completed primaries has been drained into scoring — nothing is still in flight. A result read here is physically whole, not an ion-only fraction. |
+| **checkpoint** | The boundary between two batches, which is by construction family-complete/quiescent. The only correct place to observe, dump, merge, or fold a partial result. |
+| **cadence** | *How often* checkpoints happen — equivalently, how often a dump is attempted. Expressed **either** by wall time (`every_s`, e.g. "every 10 min") **or** by completed-primary count (`every_primaries`, e.g. "every 1e6 primaries"). "No cadence" ⇒ one final checkpoint only. |
+| **dump** | A non-destructive snapshot of the current scoring result written at a checkpoint (out-of-place postprocess of a **shadow** copy → a pluggable **sink**), after which the run continues with its live accumulators byte-identical. |
+| **final-only** vs **live** | The two `osh_checkpoint_policy` modes: *final-only* is one batch of `K = nstat` (no intermediate checkpoints — today's fastest path); *live* runs several checkpointed batches at a cadence. |
+
+The mental model in one line: a **cadence** sets how often the run reaches a
+**checkpoint**, and a checkpoint is the only place a **dump** (or a future merge /
+variance fold) may happen, because it is the only **family-complete** point.
+
+### The batch loop
+
 `osh_simulation_run()` drives transport as an **outer batch loop** around the
 **inner family scheduler** (`src/transport/osh_transport.c`).  The family
 scheduler transports a range of ion primaries, then drains every secondary family

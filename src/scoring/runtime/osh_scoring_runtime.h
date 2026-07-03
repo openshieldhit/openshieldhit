@@ -124,7 +124,12 @@ static inline struct osh_scoring_scratch *osh_scoring_runtime_master_scratch(str
  * label is well-defined for every output, dump or final.
  */
 static inline char const *osh_scoring_runtime_completeness_label(struct osh_scoring_runtime const *rt) {
-    return (rt && rt->completeness) ? rt->completeness : "exact";
+    /* A NULL completeness (the default after compile) means a fully family-drained
+     * result, which the writers stamp as the literal "exact". */
+    if (rt && rt->completeness) {
+        return rt->completeness;
+    }
+    return "exact";
 }
 
 #ifdef __cplusplus
