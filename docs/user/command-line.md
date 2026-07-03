@@ -155,7 +155,7 @@ every platform.
 **Memory.** When a dump cadence is set, the small extra buffer a snapshot needs
 is budgeted up front and shown in the `Scoring memory:` line, so its cost is
 accounted before the run starts rather than discovered partway through. The
-buffer is still allocated lazily at the first dump and fails soft if that
+buffer is still allocated lazily at the first dump and is fail-soft if that
 allocation cannot be satisfied. Runs without a dump cadence pay nothing for this.
 
 ## Notes

@@ -1,11 +1,11 @@
 /*
  * App-layer coverage for the periodic-dump wiring in osh_run() (issue #193):
- * the time-cadence report, the shadow memory-budget reservation, and the
- * over-budget refusal.  Drives osh_run() end to end against the bundled
- * 12_partial_dump water inputs (geo/beam/mat/Water.txt), overriding only the
- * detect file with a DoseGy scorer so the snapshot shadow has a non-zero size
- * (DoseGy postprocess writes data, unlike Energy/Fluence), which is what makes
- * the reservation branch fire.
+ * the time-cadence report, the beam.dat-sourced cadence report labels, the
+ * shadow memory-budget reservation, and the over-budget refusal.  Drives
+ * osh_run() end to end against the bundled 12_partial_dump water inputs
+ * (geo/beam/mat/Water.txt), overriding only the detect file with a DoseGy scorer
+ * so the snapshot shadow has a non-zero size (DoseGy postprocess writes data,
+ * unlike Energy/Fluence), which is what makes the reservation branch fire.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,6 +84,55 @@ static void test_time_cadence_run_reports_and_reserves(void) {
     remove(detect_path);
 }
 
+/* A valid beam.dat whose cadence comes from the cards themselves — a positive
+ * NSTAT save step and a DUMPEVERY duration — with no CLI override.  Driving
+ * osh_run() with this exercises the beam.dat-sourced report labels ("beam.dat
+ * NSTAT step" / "beam.dat DUMPEVERY"), the else arms of the CLI-over-card
+ * precedence, which the CLI-flag tests above never reach. */
+static char const *const BEAM_WITH_CARDS = "RNDSEED   89736501\n"
+                                           "PRIMARY   1 1\n"
+                                           "TMAX0     150.0 0.0\n"
+                                           "BEAMSIGMA 0.0 0.0\n"
+                                           "BEAMPOS   0.0 0.0 -5.00\n"
+                                           "NSTAT     200 40\n" /* save step 40 -> nsave = 40 */
+                                           "DUMPEVERY 0.05\n"   /* wall-time cadence from the card */
+                                           "DELTAE    0.005\n"
+                                           "DEMIN     0.025\n"
+                                           "STRAGG    1\n"
+                                           "MSCAT     2\n"
+                                           "NUCRE     0\n";
+
+/*
+ * Cadence sourced from beam.dat rather than the CLI: with no --dump-every[-primaries]
+ * flag but a beam.dat carrying a positive NSTAT step and a DUMPEVERY duration, both
+ * "Periodic dumps" report lines take their else arm and print the "beam.dat ..."
+ * source label.  A non-NULL out stream is required so the reporting branches run.
+ */
+static void test_beam_dat_cadence_reports(void) {
+    char detect_path[256];
+    char beam_path[256];
+    char out_dir[256];
+    struct osh_run_options opt;
+    FILE *out;
+    FILE *err;
+
+    write_temp_file(detect_path, sizeof(detect_path), DOSEGY_DETECT);
+    write_temp_file(beam_path, sizeof(beam_path), BEAM_WITH_CARDS);
+    snprintf(out_dir, sizeof(out_dir), "osh_rundump_out_%d", tmp_counter++);
+
+    init_opts(&opt, detect_path, out_dir);
+    opt.beam_path = beam_path; /* override beam.dat; no has_dump_every* -> cadence comes from the cards */
+
+    out = tmpfile();
+    err = tmpfile();
+    ASSERT_TRUE(out != NULL && err != NULL);
+    ASSERT_TRUE(osh_run(&opt, out, err) == OSH_OK);
+    fclose(out);
+    fclose(err);
+    remove(beam_path);
+    remove(detect_path);
+}
+
 /*
  * The budget-reservation refusal: with a scheduled dump the snapshot shadow is
  * added to the footprint, and a tiny --mem-budget must refuse the run up front
@@ -113,6 +162,7 @@ static void test_scheduled_dump_over_budget_is_refused(void) {
 
 int main(void) {
     test_time_cadence_run_reports_and_reserves();
+    test_beam_dat_cadence_reports();
     test_scheduled_dump_over_budget_is_refused();
     return 0;
 }

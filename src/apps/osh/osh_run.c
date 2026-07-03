@@ -302,7 +302,7 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
      * osh_simulation_create() allocates any scoring buffers.  When a periodic dump
      * is scheduled, the snapshot shadow is budgeted here too so a scheduled dump
      * is accounted up front, not discovered mid-run (issue #193 budget-reservation
-     * rule); the shadow still allocates lazily at the first dump and fails soft. */
+     * rule); the shadow still allocates lazily at the first dump and is fail-soft. */
     rc = run_check_memory(scoring, opt->mem_budget, scheduled_dump, out, err);
     if (rc != OSH_OK) {
         goto cleanup;
@@ -492,7 +492,7 @@ cleanup:
  *                                the snapshot shadow (est.shadow_bytes) to the
  *                                footprint so a scheduled dump is budgeted up
  *                                front (issue #193), not discovered mid-run.  The
- *                                shadow still allocates lazily and fails soft;
+ *                                shadow still allocates lazily and is fail-soft;
  *                                on-demand-only dumps do not reserve at all.
  * @param[in] out                 Human-readable report stream, or NULL.
  * @param[in] err                 Error stream for the refusal message, or NULL.
