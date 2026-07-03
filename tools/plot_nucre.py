@@ -96,6 +96,12 @@ QUANTITIES = (
     "flu", "flu_prim", "flu_prot", "flu_alpha", "flu_heavy",
 )
 
+# let.dat quantity order (must match detect.dat).
+LET_QUANTITIES = (
+    "dlet", "dlet_prim", "dlet_prot", "dlet_alpha", "dlet_heavy",
+    "tlet", "tlet_prim", "tlet_prot", "tlet_alpha", "tlet_heavy",
+)
+
 # Differential spectrum axis (must match the Diff1 line in detect.dat).
 SPEC_LO, SPEC_HI, SPEC_NBINS = 0.1, 300.0, 150
 
@@ -205,23 +211,75 @@ def read_nstat(beam_path: Path):
     return None
 
 
-def depth_quantities(out_dir: Path, code: str):
-    """Return dict {z, <QUANTITIES>} for the 1D idd.dat depth file, or None."""
-    path = out_dir / "idd.dat"
+def load_depth(out_dir: Path, code: str, filename: str, quantities):
+    """Return dict {z, <quantities>} for a 1D depth file, or None if absent.
+
+    OpenShieldHIT mesh output is `X Y Z <quantities>` (Z=col2); SHIELD-HIT12A 1D
+    is `Z <quantities>` (Z=col0).
+    """
+    path = out_dir / filename
     if not path.exists():
         return None
     d = load_numeric(path)
-    if code == "osh":  # X Y Z <10 quantities>
-        z = d[:, 2]
-        base = 3
-    else:  # SH12A: Z <10 quantities>
-        z = d[:, 0]
-        base = 1
-    if d.shape[1] < base + len(QUANTITIES):
+    base = 3 if code == "osh" else 1
+    z = d[:, 2] if code == "osh" else d[:, 0]
+    if d.shape[1] < base + len(quantities):
         return None
-    cols = {q: d[:, base + i] for i, q in enumerate(QUANTITIES)}
+    cols = {q: d[:, base + i] for i, q in enumerate(quantities)}
     cols["z"] = z
     return cols
+
+
+def depth_quantities(out_dir: Path, code: str):
+    """Species-resolved dose/fluence depth curves from idd.dat."""
+    return load_depth(out_dir, code, "idd.dat", QUANTITIES)
+
+
+def depth_let(out_dir: Path, code: str):
+    """Species-resolved DLET/TLET depth curves from let.dat (may be absent)."""
+    return load_depth(out_dir, code, "let.dat", LET_QUANTITIES)
+
+
+def rel_diff(osh, sh, key):
+    """(OSH - SH12A)/SH12A vs depth for one quantity, masked in the low-reference
+    tail where the ratio explodes.  Returns (z, reldiff) or (None, None)."""
+    if osh is None or sh is None or key not in osh or key not in sh:
+        return None, None
+    n = min(len(osh[key]), len(sh[key]), len(osh["z"]))
+    o = np.asarray(osh[key][:n], dtype=float)
+    s = np.asarray(sh[key][:n], dtype=float)
+    z = np.asarray(osh["z"][:n], dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rd = (o - s) / s
+    smax = np.nanmax(np.abs(s)) if n else 0.0
+    if smax > 0.0:
+        rd = np.where(np.abs(s) > 0.01 * smax, rd, np.nan)  # hide the noisy tail
+    return z, rd
+
+
+def draw_residual_strip(ax, osh, sh, families, zend, ylim_pct=30.0):
+    """Per-species (OSH-SH12A)/SH12A in % under a main panel, sharing its x-axis.
+
+    One line per species, coloured to match the main panel above (whose legend
+    labels them), so the strip is 'coupled' to the plot it sits under.
+    """
+    drew = False
+    for key, _label, color in families:
+        z, rd = rel_diff(osh, sh, key)
+        if rd is None:
+            continue
+        ax.plot(z, 100.0 * rd, color=color, lw=1.0, drawstyle="steps-mid")
+        drew = True
+    if drew:
+        ax.axhline(0.0, color="k", lw=0.5)
+        ax.set_ylim(-ylim_pct, ylim_pct)
+    else:
+        ax.text(0.5, 0.5, "no SH12A reference", ha="center", va="center",
+                transform=ax.transAxes, fontsize=6, color="gray")
+    ax.set_xlim(0.0, zend)
+    ax.set_ylabel("(O-S)/S [%]", fontsize=6)
+    ax.tick_params(labelsize=6)
+    ax.grid(True, alpha=0.3)
 
 
 def osh_spectrum(out_dir: Path):
@@ -310,14 +368,16 @@ def main() -> int:
     for case in args.cases:
         osh_out, osh_err, osh_s = osh_res[case]
         osh = depth_quantities(osh_out, "osh") if osh_out is not None else None
+        osh_let = depth_let(osh_out, "osh") if osh_out is not None else None
         osh_spec = osh_spectrum(osh_out) if osh_out is not None else None
-        sh = sh_spec = None
+        sh = sh_let = sh_spec = None
         if case in SH12A_CASES:
             ref = sh12a_ref_dir(args, case)
             sh = depth_quantities(ref, "sh12a")
+            sh_let = depth_let(ref, "sh12a")
             sh_spec = sh12a_spectrum(ref)
-        data[case] = {"osh": osh, "osh_err": osh_err, "osh_s": osh_s, "osh_spec": osh_spec,
-                      "sh": sh, "sh_spec": sh_spec}
+        data[case] = {"osh": osh, "osh_let": osh_let, "osh_err": osh_err, "osh_s": osh_s, "osh_spec": osh_spec,
+                      "sh": sh, "sh_let": sh_let, "sh_spec": sh_spec}
 
     DOSE_SPECIES = [
         ("dose", "all", "C0"), ("dose_prim", "primary p", "C1"),
@@ -329,6 +389,13 @@ def main() -> int:
         ("flu_prot", "all p", "C2"), ("flu_alpha", "alphas", "C3"),
         ("flu_heavy", "heavy rec (Z>=3)", "C4"),
     ]
+    # Only the track-based species read cleanly; alphas/heavy DLET are dominated
+    # by rare high-LET transported recoils in low-statistics bins, and heavy-recoil
+    # LET is ~0 until point deposits feed LET (score_point energy/dose only today).
+    DLET_SPECIES = [
+        ("dlet", "all", "C0"), ("dlet_prim", "primary p", "C1"),
+        ("dlet_prot", "all p", "C2"),
+    ]
 
     with PdfPages(args.out) as pdf:
         for case in args.cases:
@@ -339,56 +406,79 @@ def main() -> int:
             ref = osh or sh
             zend = max((c["z"].max() for c in (osh, sh) if c), default=ref["z"].max())
 
-            fig, ax = plt.subplots(2, 2, figsize=(11, 8))
+            osh_let, sh_let = d["osh_let"], d["sh_let"]
             note = ""
             if osh is None:
-                note = f"\n[OpenShieldHIT unavailable: {d['osh_err']}]"
+                note = f"  [OpenShieldHIT unavailable: {d['osh_err']}]"
             elif case not in SH12A_CASES:
-                note = "\n[OpenShieldHIT-only NUCRE mode]"
+                note = "  [OpenShieldHIT-only NUCRE mode]"
             elif sh is None:
-                note = "\n[SHIELD-HIT12A fixture missing]"
-            fig.suptitle(f"200 MeV p -> water, {MODEL[case]}   (MSCAT off, STRAGG off; "
-                         f"OSH nstat={args.nstat})\nOpenShieldHIT {version} (thin, saturated) vs "
-                         f"SHIELD-HIT12A committed fixture (thick, light){note}", fontsize=11)
+                note = "  [SHIELD-HIT12A fixture missing]"
 
-            def overlay_species(a, families):
-                # Reference (SH12A) underneath, thick+light; OSH on top, thin+saturated.
-                for c, code, tag in ((sh, "sh", "SH12A"), (osh, "osh", "OSH")):
+            # Each depth quantity is a main panel with a thin (OSH-SH12A)/SH12A
+            # residual strip below it (shared x-axis); the spectrum spans the
+            # lower-right.  SH12A underneath (thick, light); OSH on top (thin).
+            fig = plt.figure(figsize=(12, 10), constrained_layout=True)
+            gs = fig.add_gridspec(4, 2, height_ratios=[3, 1, 3, 1])
+            fig.suptitle(f"200 MeV p -> water, {MODEL[case]}   (MSCAT off, STRAGG off; OSH nstat={args.nstat})\n"
+                         f"OpenShieldHIT {version} (thin, saturated) vs SHIELD-HIT12A committed fixture "
+                         f"(thick, light){note}", fontsize=11)
+
+            def overlay(a, sh_src, osh_src, families):
+                for c, code, tag in ((sh_src, "sh", "SH12A"), (osh_src, "osh", "OSH")):
                     if c is None:
                         continue
                     for key, label, color in families:
-                        a.plot(c["z"], c[key], label=f"{tag} {label}", **code_style(code, color))
+                        if key in c:
+                            a.plot(c["z"], c[key], label=f"{tag} {label}", **code_style(code, color))
                 a.set_xlim(0.0, zend)
 
-            a = ax[0, 0]
-            overlay_species(a, DOSE_SPECIES)
-            a.set(title="Depth dose by species, 1 cm^2 column", xlabel="Depth (cm)", ylabel="Dose per primary (MeV/g)")
-            a.grid(True)
-            a.legend(fontsize=7, ncol=2)
+            # --- Depth dose by species (+ residual) ---
+            a = fig.add_subplot(gs[0, 0])
+            overlay(a, sh, osh, DOSE_SPECIES)
+            a.set(title="Depth dose by species, 1 cm^2 column", ylabel="Dose/primary (MeV/g)")
+            a.set_yscale("log")
+            a.set_ylim(1e-3, None)  # log so the alpha/heavy-recoil secondary dose is visible
+            a.grid(True, which="both", alpha=0.3)
+            a.legend(fontsize=6, ncol=2)
+            a.tick_params(labelbottom=False)
+            # Residual strip: the all/primary/all-proton family, where a % residual
+            # is meaningful; the tiny alpha/heavy secondaries are 2-4x apart (off
+            # this scale) and are compared directly in the log-y main panel above.
+            draw_residual_strip(fig.add_subplot(gs[1, 0], sharex=a), osh, sh, DOSE_SPECIES[:3], zend)
 
-            a = ax[0, 1]
-            for c, code, tag in ((sh, "sh", "SH12A"), (osh, "osh", "OSH")):
-                if c is None:
-                    continue
-                # nuclear-added dose, decomposed by secondary species
-                a.plot(c["z"], c["dose_prot"] - c["dose_prim"], label=f"{tag} secondary p", **code_style(code, "C0"))
-                a.plot(c["z"], c["dose_alpha"], label=f"{tag} alphas", **code_style(code, "C3"))
-                a.plot(c["z"], c["dose_heavy"], label=f"{tag} heavy rec", **code_style(code, "C4"))
-            a.set(title="Secondary dose by species (nuclear-added)", xlabel="Depth (cm)", ylabel="Dose per primary (MeV/g)")
-            a.set_xlim(0.0, zend)
+            # --- Depth fluence by species (+ residual) ---
+            a = fig.add_subplot(gs[2, 0])
+            overlay(a, sh, osh, FLU_SPECIES)
+            a.set(title="Depth fluence by species, 1 cm^2 column", ylabel="Fluence/primary (1/cm^2)")
+            a.set_yscale("log")
+            a.set_ylim(0.5, None)
+            a.grid(True, which="both", alpha=0.3)
+            a.legend(fontsize=6, ncol=2)
+            a.tick_params(labelbottom=False)
+            afs = fig.add_subplot(gs[3, 0], sharex=a)
+            draw_residual_strip(afs, osh, sh, FLU_SPECIES[:3], zend)
+            afs.set_xlabel("Depth (cm)")
+
+            # --- Dose-averaged LET by species (+ residual) ---
+            a = fig.add_subplot(gs[0, 1])
+            overlay(a, sh_let, osh_let, DLET_SPECIES)
+            a.set(title="Dose-averaged LET by species (DLET)", ylabel="DLET (MeV/cm)")
             a.set_yscale("log")
             a.grid(True, which="both", alpha=0.3)
-            a.legend(fontsize=7)
+            if osh_let is not None:
+                a.legend(fontsize=6, ncol=2)
+            else:
+                a.text(0.5, 0.5, "no let.dat (run the case with the updated detect.dat)",
+                       ha="center", va="center", transform=a.transAxes, fontsize=8, color="gray")
+            a.tick_params(labelbottom=False)
+            # DLET-all omitted from the residual: OSH's heavy-recoil LET is not yet
+            # scored (point deposits feed dose, not LET), so DLET-all is not
+            # comparable; primary/all-proton DLET are.
+            draw_residual_strip(fig.add_subplot(gs[1, 1], sharex=a), osh_let, sh_let, DLET_SPECIES[1:], zend)
 
-            a = ax[1, 0]
-            overlay_species(a, FLU_SPECIES)
-            a.set(title="Depth fluence by species, 1 cm^2 column", xlabel="Depth (cm)", ylabel="Fluence per primary (1/cm^2)")
-            a.set_yscale("log")
-            a.set_ylim(0.5, None)  # focus on the proton-family curves; secondaries live on the dose panel
-            a.grid(True, which="both", alpha=0.3)
-            a.legend(fontsize=7, ncol=2)
-
-            a = ax[1, 1]
+            # --- Plateau secondary spectrum (spans lower-right) ---
+            a = fig.add_subplot(gs[2:, 1])
             for spec, code, tag in ((d["sh_spec"], "sh", "SH12A"), (d["osh_spec"], "osh", "OSH")):
                 if spec is None:
                     continue
@@ -403,7 +493,6 @@ def main() -> int:
             if handles:
                 a.legend(fontsize=7)
 
-            fig.tight_layout(rect=(0, 0, 1, 0.92))
             pdf.savefig(fig)
             plt.close(fig)
 

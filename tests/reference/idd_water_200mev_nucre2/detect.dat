@@ -71,3 +71,22 @@ Output
     Quantity Fluence Protons
     Diff1     0.1  300.0  150  LOG
     Diff1Type EKIN
+
+# Depth-resolved LET by species on the narrow column (issue #212 LET criterion).
+# NB: sub-threshold recoils are point-deposited (issue #179) and feed dose/energy
+# but not yet LET, so HeavyRec LET here reflects only above-threshold transported
+# recoils until the score_point LET tables land.
+Output
+    Filename let.dat
+    Fileformat TEXT
+    Geo DDCnarrow
+    Quantity DLET
+    Quantity DLET Primary
+    Quantity DLET Protons
+    Quantity DLET Alphas
+    Quantity DLET HeavyRec
+    Quantity TLET
+    Quantity TLET Primary
+    Quantity TLET Protons
+    Quantity TLET Alphas
+    Quantity TLET HeavyRec
