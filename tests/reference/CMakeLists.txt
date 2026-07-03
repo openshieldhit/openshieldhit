@@ -7,7 +7,7 @@
 #     reference/
 #       idd_<code>.dat      (external reference curves: SH12A, FLUKA, ...)
 #     compare_args.cmake    (optional; per-case tolerance overrides)
-#     README                (setup description for reproducing the reference)
+#     README.md             (setup description for reproducing the reference)
 #
 # Tests carry the label "reference" (excluded from the unit/cases labels;
 # run with `ctest -L reference`).  A case with no reference curve yet is

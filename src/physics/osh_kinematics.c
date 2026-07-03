@@ -162,6 +162,77 @@ void osh_kinematics_elastic_equal_mass_lab(double T_lab,
         *e2_lab_mev = 0.0;
 }
 
+void osh_kinematics_elastic_lab(double T_lab,
+                                double m1,
+                                double m2,
+                                double cos_theta_cm,
+                                double *cos_theta1_lab,
+                                double *e1_lab_mev,
+                                double *cos_theta2_lab,
+                                double *e2_lab_mev) {
+    double p_lab;        /* incident projectile lab momentum [MeV/c]           */
+    double E1_lab_in;    /* incident projectile total lab energy [MeV]         */
+    double s;            /* Mandelstam s = W²                                  */
+    double W;            /* invariant mass sqrt(s) [MeV]                       */
+    double p_cm;         /* CM momentum of either particle (elastic) [MeV/c]   */
+    double E1_cm;        /* projectile CM total energy [MeV]                   */
+    double E2_cm;        /* target CM total energy [MeV]                       */
+    double beta_cm;      /* CM velocity                                        */
+    double gamma_cm;     /* CM Lorentz factor                                  */
+    double sin_theta_cm; /* sin θ_CM                                           */
+    double p1z_cm;       /* projectile CM longitudinal momentum               */
+    double p1t;          /* transverse momentum (shared magnitude)            */
+    double E1_lab;
+    double E2_lab;
+    double p1z_lab;
+    double p2z_lab;
+    double p1_tot;
+    double p2_tot;
+
+    p_lab = sqrt(T_lab * (T_lab + 2.0 * m1));
+    E1_lab_in = T_lab + m1;
+    s = (m1 * m1) + (m2 * m2) + (2.0 * m2 * E1_lab_in);
+    W = sqrt(s);
+    p_cm = (W > 0.0) ? (p_lab * m2 / W) : 0.0;
+    E1_cm = sqrt((p_cm * p_cm) + (m1 * m1));
+    E2_cm = sqrt((p_cm * p_cm) + (m2 * m2));
+    beta_cm = p_lab / (E1_lab_in + m2);
+    gamma_cm = (E1_lab_in + m2) / W;
+
+    sin_theta_cm = sqrt(fmax(0.0, 1.0 - (cos_theta_cm * cos_theta_cm)));
+    p1z_cm = p_cm * cos_theta_cm;
+    p1t = p_cm * sin_theta_cm;
+
+    /* Boost the scattered projectile (particle 1) and the recoil target
+     * (particle 2, back-to-back in CM: p2z_cm = -p1z_cm) from CM to lab. */
+    E1_lab = gamma_cm * (E1_cm + (beta_cm * p1z_cm));
+    p1z_lab = gamma_cm * (p1z_cm + (beta_cm * E1_cm));
+    E2_lab = gamma_cm * (E2_cm - (beta_cm * p1z_cm));
+    p2z_lab = gamma_cm * ((beta_cm * E2_cm) - p1z_cm);
+
+    /* The recoil always goes forward in a fixed-target elastic (0 <= theta2 <= 90
+     * deg), so cos_theta2_lab >= 0 as the header promises.  Floating-point
+     * cancellation in (beta_cm*E2_cm - p1z_cm) can make p2z_lab slightly negative
+     * near the forward limit; clamp it, mirroring the guard in
+     * osh_kinematics_elastic_equal_mass_lab. */
+    if (p2z_lab < 0.0) {
+        p2z_lab = 0.0;
+    }
+
+    p1_tot = sqrt((p1z_lab * p1z_lab) + (p1t * p1t));
+    p2_tot = sqrt((p2z_lab * p2z_lab) + (p1t * p1t));
+
+    *e1_lab_mev = E1_lab - m1;
+    *e2_lab_mev = E2_lab - m2;
+    *cos_theta1_lab = (p1_tot > 0.0) ? (p1z_lab / p1_tot) : 1.0;
+    *cos_theta2_lab = (p2_tot > 0.0) ? (p2z_lab / p2_tot) : 1.0;
+
+    if (*e1_lab_mev < 0.0)
+        *e1_lab_mev = 0.0;
+    if (*e2_lab_mev < 0.0)
+        *e2_lab_mev = 0.0;
+}
+
 /* ---- Two-body decay ------------------------------------------------------- */
 
 double osh_kinematics_two_body_decay_p(double m_parent, double m1, double m2) {

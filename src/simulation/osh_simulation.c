@@ -534,8 +534,9 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
     }
     if (sim->fragment_pool.n_created > 0u) {
         OSH_DIAG_INFOF(sim->diag,
-                       "simulation: %zu nuclear fragment(s) left unprocessed (outside Fermi break-up domain; "
-                       "evaporation/SMM not yet implemented)",
+                       "simulation: %zu heavy nuclear fragment(s) emitted (Fermi break-up residues and "
+                       "prefragments outside the break-up domain), transported as recoil ions or "
+                       "point-deposited when below the transport threshold",
                        sim->fragment_pool.n_created);
     }
 

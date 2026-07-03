@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "common/osh_coord.h"
 #include "common/osh_diag.h"
@@ -23,6 +24,7 @@
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "random/osh_rng.h"
+#include "scoring/runtime/osh_scoring_point.h"
 #include "scoring/runtime/osh_scoring_step.h"
 #include "transport/osh_fragment_pool.h"
 #include "transport/osh_neutron_pool.h"
@@ -199,6 +201,54 @@ static inline int _nuclear_event_kills_primary(enum osh_nuclear_event_kind kind)
            || kind == OSH_NUCLEAR_EVENT_FRAGMENTATION;
 }
 
+/* Deposit @p energy [MeV] at the slot's current position as a zero-length point
+ * (issue #179), attributed to @p species and to a first-generation secondary of
+ * the slot's history.  Used for the sub-threshold recoil deposit. */
+static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
+                              struct osh_particle_pool const *pool,
+                              size_t slot,
+                              struct ion_step_ctx const *ctx,
+                              struct particle const *species,
+                              double energy,
+                              double const dir[3]) {
+    struct step pt;
+
+    if (score_rt == NULL || !(energy > 0.0)) {
+        return;
+    }
+    memset(&pt, 0, sizeof(pt));
+    pt.p[0] = pool->x[slot];
+    pt.p[1] = pool->y[slot];
+    pt.p[2] = pool->z[slot];
+    pt.p[3] = energy;
+    pt.q[0] = pt.p[0];
+    pt.q[1] = pt.p[1];
+    pt.q[2] = pt.p[2];
+    pt.q[3] = energy;
+    pt.v[0] = dir[0];
+    pt.v[1] = dir[1];
+    pt.v[2] = dir[2];
+    pt.w[0] = dir[0];
+    pt.w[1] = dir[1];
+    pt.w[2] = dir[2];
+    pt.ds = 0.0;
+    pt.de = energy;
+    pt.rho = ctx->rho;
+    pt.wt = pool->wt[slot];
+    pt.voxel_idx = ctx->voxel_idx;
+    pt.medium = (int) ctx->zone_material_idx;
+    pt.zone = (int) ctx->zone_idx;
+    pt.system = OSH_COORD_UNIVERSE;
+    pt.prim_idx = pool->prim_idx[slot];
+    pt.gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+    pt.has_voxel = ctx->has_voxel;
+    osh_scoring_score_point(score_rt,
+                            osh_scoring_runtime_master_accumulators(score_rt),
+                            osh_scoring_runtime_master_scratch(score_rt),
+                            species,
+                            &pt);
+}
+
 /* ---- Public API ---------------------------------------------------------- */
 
 /**
@@ -353,6 +403,84 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             fp->n_sent_breakup++;
         }
         fp->n_created += ctx.nuclear_event.n_fragments;
+    }
+
+    /* Transport or locally deposit the residual nuclear fragments (heavy recoils,
+     * break-up residues).  A fragment above the ion transport threshold is
+     * injected into the ion pool for a proper track next pass; one below it has
+     * no valid transportable range, so its kinetic energy is dumped at the
+     * reaction site via a point deposit (issue #179), attributed to the recoil
+     * (Z,A) so it lands in the right species scorers.  Any residual excitation
+     * energy (a particle-stable but excited residue such as N-15* or O-15*) is
+     * emitted as a de-excitation gamma: energy only, no dose, as it escapes. */
+    if (ctx.nuclear_event.n_fragments > 0u && transport_ctx->nuclear_handler != NULL) {
+        struct osh_nuclear_event const *ev = &ctx.nuclear_event;
+        size_t fi;
+        for (fi = 0u; fi < ev->n_fragments; ++fi) {
+            struct osh_nuclear_fragment const *frag = &ev->fragments[fi];
+            struct particle const *species;
+            double m;
+            double psq;
+            double pmag;
+            double ke;
+            double dir[3];
+
+            psq = (frag->p[0] * frag->p[0]) + (frag->p[1] * frag->p[1]) + (frag->p[2] * frag->p[2]);
+            pmag = sqrt(psq);
+            if (pmag > 0.0) {
+                dir[0] = frag->p[0] / pmag;
+                dir[1] = frag->p[1] / pmag;
+                dir[2] = frag->p[2] / pmag;
+            } else {
+                dir[0] = pool->ux[slot];
+                dir[1] = pool->uy[slot];
+                dir[2] = pool->uz[slot];
+            }
+
+            /* The residue's terminal excitation energy is intentionally discarded
+             * for now.  Its correct home is a de-excitation photon produced into a
+             * photon pool (future photon transport) and observed via a
+             * particle-creation scorer; booking it here as a local energy deposit
+             * would mis-inflate Quantity Energy, since the photon leaves the vertex. */
+
+            species = osh_nuclear_handler_recoil_species(transport_ctx->nuclear_handler, frag->z, frag->a);
+            if (species == NULL) {
+                continue; /* (Z,A) outside the recoil species table (heavy target) */
+            }
+            m = species->mass;
+            ke = sqrt(psq + (m * m)) - m;
+            if (!(ke > 0.0)) {
+                continue;
+            }
+
+            if (ke / (double) frag->a < OSH_TRANSPORT_ION_EMIN_MEV_PER_U) {
+                /* Sub-threshold: no transportable range — point deposit here. */
+                ion_point_deposit(score_rt, pool, slot, &ctx, species, ke, dir);
+            } else {
+                /* Above threshold: inject as an ion for transport next pass. */
+                size_t s;
+                if (pool->n >= pool->capacity) {
+                    pool->n_dropped++; /* counted, never silent (issue #213) */
+                    continue;
+                }
+                s = pool->n;
+                pool->x[s] = pool->x[slot];
+                pool->y[s] = pool->y[slot];
+                pool->z[s] = pool->z[slot];
+                pool->ux[s] = dir[0];
+                pool->uy[s] = dir[1];
+                pool->uz[s] = dir[2];
+                pool->e[s] = ke;
+                pool->wt[s] = pool->wt[slot];
+                pool->prim_idx[s] = pool->prim_idx[slot];
+                pool->gen[s] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+                pool->species[s] = species;
+                /* Distinct child stream from the secondaries (which used ordinals
+                 * [0, n_secondaries)); offset the fragment ordinals past them. */
+                osh_rng_split(&pool->rng[s], rng, (uint64_t) (ev->n_secondaries + fi));
+                pool->n++;
+            }
+        }
     }
 
     return OSH_OK;
@@ -869,7 +997,8 @@ static void ion_step_nuclear(struct ion_step_ctx *ctx,
                                  &ctx->nuclear_event);
 
         /* Elastic overrides MCS: straight-line endpoint. */
-        if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+        if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP
+            || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PA) {
             ctx->w_scat[0] = ctx->incident_dir[0];
             ctx->w_scat[1] = ctx->incident_dir[1];
             ctx->w_scat[2] = ctx->incident_dir[2];
@@ -961,7 +1090,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
          * holds the ionisation energy deposited — do not modify it.
          * st.q[3] = 0 signals that the primary exits dead. */
         st.q[3] = 0.0;
-    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP
+               || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PA) {
         /* Primary survives with a new direction and energy from elastic scatter. */
         st.q[3] = ctx->nuclear_event.primary_energy;
         st.w[0] = ctx->nuclear_event.primary_dir[0];

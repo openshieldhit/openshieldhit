@@ -52,3 +52,8 @@ build/bin/openshieldhit --help
 ```bash
 cd build && ctest --output-on-failure -j4
 ```
+
+## TL;DR
+```
+$ cmake --preset debug && cmake --build --preset debug --parallel; cmake --install build --prefix ~/.local
+```

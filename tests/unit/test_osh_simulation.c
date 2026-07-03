@@ -617,7 +617,8 @@ static void test_checkpoint_live_batches_match_final_only(void) {
 /*
  * Checkpoint policy (issue #195), LIVE batching WITH secondaries in flight.
  * 00_minimal has NUCRE off, so its equivalence test never actually drains a
- * neutron family across a checkpoint.  06_minimal_nucre enables nuclear reactions,
+ * neutron family across a checkpoint.  The idd_water_200mev_nucre1 reference deck
+ * (NUCRE 1, 200 MeV p in water) enables nuclear reactions,
  * so each batch's ion pass banks neutrons that the family scheduler must fully
  * drain into scoring before the checkpoint boundary, and every nuclear event
  * appends charged secondaries (recoils, abrasion nucleons, break-up fragments)
@@ -655,7 +656,8 @@ static void test_checkpoint_live_batches_drain_families_with_nuclear(void) {
     /* Final-only baseline, with profiling so we can prove secondaries were in
      * flight (otherwise the fixture could silently regress to a no-nuclear run
      * and this test would prove nothing) and that none were dropped. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 0ull, &completed_final, &energy_final, &prof_final);
+    run_checkpoint_case(
+        "../reference/idd_water_200mev_nucre1", 200ull, 0ull, 0ull, &completed_final, &energy_final, &prof_final);
     ASSERT_TRUE(completed_final == 200ull);
     ASSERT_TRUE(energy_final > 0.0);
     ASSERT_TRUE(prof_final.nuclear_events > 0ull);
@@ -666,7 +668,8 @@ static void test_checkpoint_live_batches_drain_families_with_nuclear(void) {
     /* LIVE batching drains a neutron family at every checkpoint, yet still
      * finishes every primary, still produces (and drains) neutrons, and still
      * drops nothing. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, 0ull, &completed_live_a, &energy_live_a, &prof_live);
+    run_checkpoint_case(
+        "../reference/idd_water_200mev_nucre1", 200ull, 64ull, 0ull, &completed_live_a, &energy_live_a, &prof_live);
     ASSERT_TRUE(completed_live_a == 200ull);
     ASSERT_TRUE(energy_live_a > 0.0);
     ASSERT_TRUE(prof_live.neutrons_banked > 0ull);
@@ -680,7 +683,8 @@ static void test_checkpoint_live_batches_drain_families_with_nuclear(void) {
     /* Reproducibility of a fixed cadence: the same LIVE policy re-run reproduces
      * the scored energy exactly (bit-for-bit), the determinism guarantee the
      * count cadence is meant to provide. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 64ull, 0ull, &completed_live_b, &energy_live_b, NULL);
+    run_checkpoint_case(
+        "../reference/idd_water_200mev_nucre1", 200ull, 64ull, 0ull, &completed_live_b, &energy_live_b, NULL);
     ASSERT_TRUE(completed_live_b == 200ull);
     ASSERT_TRUE(energy_live_b == energy_live_a);
 }
@@ -722,7 +726,7 @@ static void test_checkpoint_nuclear_invariant_across_batches_and_capacity(void) 
         double energy = 0.0;
         struct osh_simulation_profile prof;
 
-        run_checkpoint_case("06_minimal_nucre",
+        run_checkpoint_case("../reference/idd_water_200mev_nucre1",
                             nstat,
                             configs[i].every_primaries,
                             configs[i].pool_capacity,
@@ -775,7 +779,8 @@ static void test_checkpoint_nuclear_overflow_is_counted_not_silent(void) {
 
     /* Reference: the default capacity has full secondary headroom, so nothing is
      * dropped and every nuclear deposit is scored. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 0ull, &completed_ref, &energy_ref, &prof_ref);
+    run_checkpoint_case(
+        "../reference/idd_water_200mev_nucre1", 200ull, 0ull, 0ull, &completed_ref, &energy_ref, &prof_ref);
     ASSERT_TRUE(completed_ref == 200ull);
     ASSERT_TRUE(prof_ref.nuclear_events > 0ull); /* the fixture really is nuclear */
     ASSERT_TRUE(prof_ref.ion_secondaries_dropped == 0ull);
@@ -783,7 +788,8 @@ static void test_checkpoint_nuclear_overflow_is_counted_not_silent(void) {
     /* Starve the pool: capacity 2 leaves a full primary wavefront almost no room
      * for its recoils/abrasion nucleons/break-up fragments, so they overflow.
      * The overflow is counted in ion_secondaries_dropped, never a bare drop. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 2ull, &completed_small, &energy_small, &prof_small);
+    run_checkpoint_case(
+        "../reference/idd_water_200mev_nucre1", 200ull, 0ull, 2ull, &completed_small, &energy_small, &prof_small);
     ASSERT_TRUE(prof_small.ion_secondaries_dropped > 0ull);
     /* A drop must never strand a primary: every history still completes. */
     ASSERT_TRUE(completed_small == 200ull);
@@ -796,7 +802,8 @@ static void test_checkpoint_nuclear_overflow_is_counted_not_silent(void) {
      * reproduces the scored energy and the drop count exactly, because the drop
      * pattern is a pure function of the lineage-keyed histories and the fixed
      * pool occupancy — not of run-to-run chance. */
-    run_checkpoint_case("06_minimal_nucre", 200ull, 0ull, 2ull, &completed_rerun, &energy_rerun, &prof_rerun);
+    run_checkpoint_case(
+        "../reference/idd_water_200mev_nucre1", 200ull, 0ull, 2ull, &completed_rerun, &energy_rerun, &prof_rerun);
     ASSERT_TRUE(completed_rerun == 200ull);
     ASSERT_TRUE(energy_rerun == energy_small);
     ASSERT_TRUE(prof_rerun.ion_secondaries_dropped == prof_small.ion_secondaries_dropped);

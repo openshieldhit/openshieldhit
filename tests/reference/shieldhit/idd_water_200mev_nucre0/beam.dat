@@ -1,0 +1,11 @@
+RNDSEED     89736532               # Random seed
+JPART0         2                   # Proton
+TMAX0       200.0   0.0            # Incident energy; (MeV/nucl)
+BEAMSIGMA     0.0   0.0            # Pencil beam with no size
+BEAMPOS       0.0   0.0  -5.00     # Beam XYZ start pos
+NSTAT      500000    -1            # NSTAT, Step of saving
+DELTAE      0.005                  # Step relative loss (0.5 %)
+DEMIN       0.025                  # Minimum Energy step 0.025 (MeV/nucleon)
+STRAGG                         0   # Straggling OFF (isolate the nuclear channel)
+MSCAT                          0   # Mult. scatt OFF (no lateral escape in the 1 cm^2 column)
+NUCRE                          0   # Nuclear reaction switch (OFF: no secondaries)

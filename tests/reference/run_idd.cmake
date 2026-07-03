@@ -14,7 +14,7 @@
 #      (SH12A, later FLUKA) is available.
 #
 # Adding a reference:
-#   - Run the equivalent setup in the reference code (see the case README).
+#   - Run the equivalent setup in the reference code (see the case README.md).
 #   - Export the IDD as text: either two columns (z [cm], energy per primary
 #     per bin) or openshieldhit mesh format (X Y Z E ...).
 #   - Save it as <case>/reference/idd_<code>.dat (e.g. idd_sh12a.dat).

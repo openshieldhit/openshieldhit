@@ -61,7 +61,7 @@ if(BENCH_PYTHON)
         COMMAND ${CMAKE_COMMAND}
             -DBENCH_PYTHON=${BENCH_PYTHON}
             -DOSH_EXECUTABLE=$<TARGET_FILE:openshieldhit>
-            -DCASE_DIR=${PROJECT_SOURCE_DIR}/tests/cases/06_minimal_nucre
+            -DCASE_DIR=${PROJECT_SOURCE_DIR}/tests/reference/idd_water_200mev_nucre1
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/bit_identity
             -P ${CMAKE_CURRENT_SOURCE_DIR}/run_bit_identity.cmake
     )
