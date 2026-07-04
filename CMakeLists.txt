@@ -118,7 +118,16 @@ if(OSH_ENABLE_SANITIZERS)
         add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         add_link_options(-fsanitize=address,undefined)
     elseif(MSVC)
+        # MSVC ships AddressSanitizer only (no UBSan). Two MSVC-specific
+        # requirements, both flagged in review: ASan is incompatible with the
+        # /RTC run-time checks that CMake's Debug flags enable by default (strip
+        # them, or cl.exe errors out), and with incremental linking (force it
+        # off). The ASan runtime is import-linked automatically by cl.exe, but
+        # its DLL (clang_rt.asan_dynamic-*.dll, shipped with the MSVC toolchain)
+        # must be discoverable on PATH when the instrumented tests run.
+        string(REGEX REPLACE "/RTC[1csu]+" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
         add_compile_options(/fsanitize=address)
+        add_link_options(/INCREMENTAL:NO)
     else()
         message(FATAL_ERROR "OSH_ENABLE_SANITIZERS requires GCC, Clang, or MSVC")
     endif()
