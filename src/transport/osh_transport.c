@@ -320,8 +320,8 @@ static enum osh_status run_score_replicas(struct osh_transport_context *transpor
     if (npages > 0u && nreplicas > (size_t) -1 / npages) {
         return OSH_ENOMEM;
     }
-    private_acc = (npages > 0u) ? (struct osh_scoring_accumulator *) calloc(nreplicas * npages, sizeof(*private_acc))
-                                : NULL;
+    private_acc =
+        (npages > 0u) ? (struct osh_scoring_accumulator *) calloc(nreplicas * npages, sizeof(*private_acc)) : NULL;
     private_scratch = (struct osh_scoring_scratch *) calloc(nreplicas, sizeof(*private_scratch));
     if ((npages > 0u && !private_acc) || !private_scratch) {
         free(private_acc);
