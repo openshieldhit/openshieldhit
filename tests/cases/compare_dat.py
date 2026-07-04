@@ -37,7 +37,7 @@ def parse_args():
     p.add_argument(
         "--exact",
         action="store_true",
-        help="byte-identity check: compare raw values for exact equality (no normalisation). "
+        help="byte-identity check: compare the printed tokens for exact equality (no normalisation). "
         "Used for the reproducibility guards (serial vs --score-replicas 1, and a fixed "
         "replica count run twice), where the numeric data must match to the printed digit.",
     )
@@ -63,6 +63,11 @@ def parse_rows(path):
             print(f"parse error in {path}: {exc}", file=sys.stderr)
             sys.exit(1)
     return rows
+
+
+def token_rows(path):
+    """Return list of per-line token-string lists (no float parsing)."""
+    return [line.split() for line in data_lines(path)]
 
 
 def l1_norms(rows, first_col):
@@ -92,9 +97,54 @@ def close_enough(a, b, rtol):
     return abs(a - b) <= rtol * scale
 
 
+def run_exact(args, label):
+    """Printed-digit identity check on the raw data-line tokens.
+
+    Compares the token *strings* of every non-comment data line rather than
+    parsed floats: two distinct printed values can round to the same binary
+    float (and `1` vs `1.0` parse equal), so a float comparison would not be
+    the byte-identity guard the reproducibility contract needs.
+    """
+    a_rows = token_rows(args.actual)
+    e_rows = token_rows(args.expected)
+
+    if len(a_rows) != len(e_rows):
+        print(f"FAIL {label}data line count mismatch: actual={len(a_rows)} expected={len(e_rows)}", file=sys.stderr)
+        print(f"  actual  : {args.actual}", file=sys.stderr)
+        print(f"  expected: {args.expected}", file=sys.stderr)
+        sys.exit(1)
+
+    if not a_rows:
+        print(f"FAIL {label}no data lines found", file=sys.stderr)
+        sys.exit(1)
+
+    errors = []
+    for idx, (a_row, e_row) in enumerate(zip(a_rows, e_rows), 1):
+        if len(a_row) != len(e_row):
+            errors.append(f"  data line {idx}: column count mismatch (actual={len(a_row)} expected={len(e_row)})")
+            continue
+        for col, (a, e) in enumerate(zip(a_row, e_row)):
+            if a != e:
+                errors.append(f"  data line {idx} col {col + 1}: actual={a!r} expected={e!r} (not exact)")
+    if errors:
+        print(f"FAIL {label}{len(errors)} value(s) not bit-identical:", file=sys.stderr)
+        for msg in errors[:20]:
+            print(msg, file=sys.stderr)
+        if len(errors) > 20:
+            print(f"  ... and {len(errors) - 20} more", file=sys.stderr)
+        print(f"  actual  : {args.actual}", file=sys.stderr)
+        print(f"  expected: {args.expected}", file=sys.stderr)
+        sys.exit(1)
+    print(f"OK {label}{len(a_rows)} data lines bit-identical")
+
+
 def main():
     args = parse_args()
     label = f"[{args.label}] " if args.label else ""
+
+    if args.exact:
+        run_exact(args, label)
+        return
 
     a_rows = parse_rows(args.actual)
     e_rows = parse_rows(args.expected)
@@ -108,31 +158,6 @@ def main():
     if not a_rows:
         print(f"FAIL {label}no data lines found", file=sys.stderr)
         sys.exit(1)
-
-    if args.exact:
-        # Byte-identity: raw values must match exactly (comment lines already
-        # skipped).  Two runs producing bit-identical accumulators print the same
-        # digits, so exact equality on the parsed values is the file-level
-        # "byte-identical" check the reproducibility guards need.
-        errors = []
-        for idx, (a_row, e_row) in enumerate(zip(a_rows, e_rows), 1):
-            if len(a_row) != len(e_row):
-                errors.append(f"  data line {idx}: column count mismatch (actual={len(a_row)} expected={len(e_row)})")
-                continue
-            for col, (a, e) in enumerate(zip(a_row, e_row)):
-                if a != e:
-                    errors.append(f"  data line {idx} col {col + 1}: actual={a:.12e} expected={e:.12e} (not exact)")
-        if errors:
-            print(f"FAIL {label}{len(errors)} value(s) not bit-identical:", file=sys.stderr)
-            for msg in errors[:20]:
-                print(msg, file=sys.stderr)
-            if len(errors) > 20:
-                print(f"  ... and {len(errors) - 20} more", file=sys.stderr)
-            print(f"  actual  : {args.actual}", file=sys.stderr)
-            print(f"  expected: {args.expected}", file=sys.stderr)
-            sys.exit(1)
-        print(f"OK {label}{len(a_rows)} data lines bit-identical")
-        return
 
     cc = args.coord_cols
 

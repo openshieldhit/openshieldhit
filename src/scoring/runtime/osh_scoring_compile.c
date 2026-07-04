@@ -684,6 +684,12 @@ enum osh_status osh_scoring_runtime_clone_scratch(struct osh_scoring_runtime con
     if (!rt || !scratch_out) {
         return OSH_EINVAL;
     }
+    /* @p scratch_out is a pure output: reject a struct that still owns a buffer so
+     * a mistaken reuse surfaces as an error instead of silently leaking it.  The
+     * caller must hand us a zero-initialised (or already-freed) scratch. */
+    if (scratch_out->crossing_buf != NULL) {
+        return OSH_EINVAL;
+    }
     scratch_out->crossing_buf = NULL;
     scratch_out->crossing_cap = 0u;
     /* Mirror the master scratch: a runtime with no crossing geometry keeps a NULL

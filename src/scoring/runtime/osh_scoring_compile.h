@@ -87,8 +87,10 @@ void osh_scoring_runtime_free_accumulator_set(struct osh_scoring_accumulator *se
  *
  * @param[in]  rt           Compiled scoring runtime to mirror.
  * @param[out] scratch_out  Receives the scratch (owned by the caller; free with
- *                          @ref osh_scoring_runtime_free_scratch).
- * @returns OSH_OK on success, OSH_EINVAL on NULL argument, OSH_ENOMEM on failure.
+ *                          @ref osh_scoring_runtime_free_scratch).  Must be
+ *                          zero-initialised (or already freed): a non-NULL
+ *                          @c crossing_buf is rejected to avoid leaking it.
+ * @returns OSH_OK on success, OSH_EINVAL on NULL/non-empty argument, OSH_ENOMEM on failure.
  */
 enum osh_status osh_scoring_runtime_clone_scratch(struct osh_scoring_runtime const *rt,
                                                   struct osh_scoring_scratch *scratch_out);
