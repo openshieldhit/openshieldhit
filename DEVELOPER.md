@@ -664,7 +664,9 @@ configure and build presets are defined in `CMakePresets.json`.
 > The `debug` preset does **not** enable sanitizers — it is a plain `-Og` build.
 > Use the `asan` preset (or `-DOSH_ENABLE_SANITIZERS=ON` on any GCC/Clang
 > configure) to build with AddressSanitizer + UndefinedBehaviorSanitizer; CI runs
-> the full test suite under it. Run leak checks separately: the `asan` CI job sets
+> the full test suite under it on three toolchains — Linux GCC, Linux Clang, and
+> macOS Apple Clang — so implementation-specific reports surface on each. Run
+> leak checks separately: the `asan` CI job sets
 > `ASAN_OPTIONS=detect_leaks=0` while the codebase's benign at-exit leaks are
 > worked through, so LeakSanitizer does not fire there by default.
 
