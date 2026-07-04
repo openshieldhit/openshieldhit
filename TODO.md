@@ -3,18 +3,18 @@
 - [ ] Revisit remaining path/file metadata in public cold workspaces
   (`wdir`, `fname`, and similar fields should disappear as app-owned path
   handling is cleaned up)
-- [ ] Add result merge API for embarrassingly parallel runs
+- [ ] Add result merge API for embarrassingly parallel runs ([#230])
 - [x] Add chunked / partial run control (run in batches, inspect partial
-  results, save explicitly) — batch-aware checkpoint scheduler (#195/#207) plus
-  periodic/on-demand family-exact dumps (#193). The per-worker *merge* step is
-  still open (tracked in #161).
+  results, save explicitly) — batch-aware checkpoint scheduler ([#195]/[#207]) plus
+  periodic/on-demand family-exact dumps ([#193]). The per-worker *merge* step is
+  still open (tracked in [#161]).
 - [ ] Finish naming consistency: remaining stale "prepare" wording in
   messages/comments
 
 ## Beam
 
-- [ ] Add ridge-modulator / ripple-filter support
-- [ ] Add MCPL phase-space import
+- [ ] Add ridge-modulator / ripple-filter support ([#42])
+- [ ] Add MCPL phase-space import ([#41])
 - [ ] Add EXTSPEC support
 - [ ] Add parlev support
 
@@ -39,25 +39,24 @@
 
 ## Transport
 
-- [x] Vavilov + Landau energy straggling (STRAGG 2) — branch
+- [x] Vavilov + Landau energy straggling (STRAGG 2, [#190]) — branch
       `190-physics-add-vavilov-and-landau-straggling`.  DONE: clean-room fit to
       the exact Vavilov (1957) distribution + universal Landau; pole-free
       polynomial+Chebyshev inverse-CDF evaluators; κ-dispatch (Gaussian ≥10 /
       Vavilov / Landau <0.01) wired into ion step.  Validated vs SH12A: distal
       80–20% fluence falloff width 0.4522 vs 0.4533 cm (0.2%); DLET at matched
       fluence within ~2%.  STRAGG 0/1 byte-identical.  No GEANT3/Thomsen numbers.
-      Remaining nicety: render the `plot_straggling.py` strag2 overlay.
-- [ ] Profile STRAGG 2 Vavilov overhead on the straggling benchmark; current
+- [ ] Profile STRAGG 2 Vavilov overhead on the straggling benchmark ([#211]); current
       20k-history timing is still ~2x faster than SH12A, but OSH's relative
       STRAGG 2 cost over STRAGG 0 is larger.  Check
       `osh_physics_strag_vavilov_lambda()` for cheap wins before broader
       transport refactors.
 - [ ] Urban energy-loss fluctuation (STRAGG 3, reserved) — needs δ-ray cut +
       restricted stopping power; tied to future delta-electron transport
-- [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.)
+- [ ] Nuclear fragmentation — secondary particle transport (SMM, Bondorf et al.) ([#176])
 - [ ] Batch ion-step phases around runtime lookup hot spots
 
-## Neutron Transport (issue #154, merged via branch 154-neutron-transport-minimal-model)
+## Neutron Transport ([#154], merged via branch 154-neutron-transport-minimal-model)
 
 Fast-neutron transport is implemented as a condensed model.  Neutrons produced
 by abrasion and Fermi break-up are banked in the neutron pool and drained by
@@ -87,7 +86,7 @@ by abrasion and Fermi break-up are banked in the neutron pool and drained by
 - [ ] Charged secondaries from neutron reactions (n,p)/(n,α) fed back into the
       ion transport family (currently deposited locally)
 - [ ] Local neutron energy deposits scored (point-deposit scoring path)
-- [ ] Thermal-neutron physics below 1 eV (separate issue #178)
+- [ ] Thermal-neutron physics below 1 eV (separate issue [#178])
 - [ ] Validation: compare neutron fluence to FLUKA or TOPAS reference for
       130 MeV protons on water
 
@@ -130,7 +129,7 @@ Open:
 - [ ] Revisit data-module structure (`material/`, `particle/`, embedded tables)
 - [ ] Rename `struct ray` to `struct ray_v` throughout
 
-## DICOM Study Recalculator (future app)
+## DICOM Study Recalculator (future app, RTPLAN support [#92])
 
 A dedicated `apps/osh_dicom_study` (name TBD) will handle full-plan DICOM
 recalculation without the file-parse overhead of `osh_sim`:
@@ -158,3 +157,18 @@ Positioning in `osh_sim` (manual / current design):
   through data-only APIs.
 - Cold workspaces are the stable user-facing model; runtime structs are derived
   compile products used by simulation and transport.
+
+<!-- Issue / PR references (reference-style links; render as clickable #nnn on GitHub). -->
+[#41]: https://github.com/openshieldhit/openshieldhit/issues/41
+[#42]: https://github.com/openshieldhit/openshieldhit/issues/42
+[#92]: https://github.com/openshieldhit/openshieldhit/issues/92
+[#154]: https://github.com/openshieldhit/openshieldhit/issues/154
+[#161]: https://github.com/openshieldhit/openshieldhit/issues/161
+[#176]: https://github.com/openshieldhit/openshieldhit/issues/176
+[#178]: https://github.com/openshieldhit/openshieldhit/issues/178
+[#190]: https://github.com/openshieldhit/openshieldhit/issues/190
+[#193]: https://github.com/openshieldhit/openshieldhit/issues/193
+[#195]: https://github.com/openshieldhit/openshieldhit/issues/195
+[#207]: https://github.com/openshieldhit/openshieldhit/pull/207
+[#211]: https://github.com/openshieldhit/openshieldhit/issues/211
+[#230]: https://github.com/openshieldhit/openshieldhit/issues/230
