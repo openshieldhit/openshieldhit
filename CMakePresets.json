@@ -38,6 +38,16 @@
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_C_FLAGS": "-fno-omit-frame-pointer"
             }
+        },
+        {
+            "name": "asan",
+            "displayName": "ASan+UBSan",
+            "description": "Debug build instrumented with AddressSanitizer + UndefinedBehaviorSanitizer",
+            "binaryDir": "${sourceDir}/build_asan",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "OSH_ENABLE_SANITIZERS": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -56,6 +66,10 @@
         {
             "name": "prof",
             "configurePreset": "prof"
+        },
+        {
+            "name": "asan",
+            "configurePreset": "asan"
         }
     ]
 }

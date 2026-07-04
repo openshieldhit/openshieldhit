@@ -105,6 +105,25 @@ if(OSH_ENABLE_COVERAGE)
     endif()
 endif()
 
+# Opt-in AddressSanitizer + UndefinedBehaviorSanitizer instrumentation. The
+# `debug` preset is a plain -Og build; the sanitizer pass lives behind this
+# switch and is exposed as the dedicated `asan` preset (build_asan/) so CI can
+# run an instrumented ctest without slowing everyday debug builds. GCC/Clang get
+# ASan+UBSan; MSVC only ships AddressSanitizer (no UBSan), so it gets ASan alone.
+# -fno-sanitize-recover=all turns UBSan reports into hard aborts so a violation
+# fails the test run instead of merely printing a warning.
+option(OSH_ENABLE_SANITIZERS "Enable AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+if(OSH_ENABLE_SANITIZERS)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    elseif(MSVC)
+        add_compile_options(/fsanitize=address)
+    else()
+        message(FATAL_ERROR "OSH_ENABLE_SANITIZERS requires GCC, Clang, or MSVC")
+    endif()
+endif()
+
 # ---- Libraries / modules (these create osh_common, osh_random, etc.) ----
 add_subdirectory(src/common)
 add_subdirectory(src/random)

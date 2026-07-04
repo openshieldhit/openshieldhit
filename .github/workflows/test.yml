@@ -92,3 +92,39 @@ jobs:
 
     - name: Build project (Release)
       run: cmake --build build --config Release --parallel
+
+  # AddressSanitizer + UndefinedBehaviorSanitizer pass.  Builds the dedicated
+  # `asan` preset (Debug + -fsanitize=address,undefined) and runs the full ctest
+  # suite instrumented, so memory-safety bugs (heap/stack buffer overflow,
+  # use-after-free, use-after-scope) and undefined behaviour fail CI instead of
+  # silently passing the plain -Og debug build.  GCC/Clang only; Windows is
+  # covered by the Debug/Release jobs above.
+  sanitizers:
+    runs-on: ubuntu-latest
+    env:
+      # LeakSanitizer is disabled for now: the codebase still has benign at-exit
+      # "leaks" (memory reachable at process teardown) that would otherwise mask
+      # the memory-safety signal this job exists to provide.  abort_on_error and
+      # halt_on_error turn a sanitizer report into a non-zero exit so ctest fails.
+      ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # Full git history needed for version extraction (git describe)
+        lfs: false
+
+    - name: Set up CMake
+      uses: jwlawson/actions-setup-cmake@v2.2.0
+
+    - name: Configure project (ASan+UBSan)
+      run: cmake --preset asan
+
+    - name: Build project (ASan+UBSan)
+      run: cmake --build --preset asan --parallel
+
+    - name: Run tests (ASan+UBSan)
+      # DICOM fixtures are downloaded on demand by the DICOM_FIXTURES setup
+      # fixture, same as the main test job.
+      run: ctest --test-dir build_asan --output-on-failure

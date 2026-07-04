@@ -213,57 +213,60 @@ static void test_error_missing_args(void) {
     int nw;
     enum osh_status rc;
 
+    /* tokenize() stores pointers *into* the mutable line buffer, so the buffer
+     * must outlive the parse call; keep each call in the same block as its l[]. */
+
     /* name with no argument */
     memset(&geo, 0, sizeof(geo));
     {
         char l[] = "name";
         nw = tokenize(l, words, 8);
+        rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
+        ASSERT_TRUE(rc == OSH_EPARSE);
     }
-    rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
-    ASSERT_TRUE(rc == OSH_EPARSE);
 
     /* axis with too few arguments */
     memset(&geo, 0, sizeof(geo));
     {
         char l[] = "x -10.0 10.0";
         nw = tokenize(l, words, 8);
+        rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
+        ASSERT_TRUE(rc == OSH_EPARSE);
     }
-    rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
-    ASSERT_TRUE(rc == OSH_EPARSE);
 
     /* rotation with no arguments */
     memset(&geo, 0, sizeof(geo));
     {
         char l[] = "rotation";
         nw = tokenize(l, words, 8);
+        rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
+        ASSERT_TRUE(rc == OSH_EPARSE);
     }
-    rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
-    ASSERT_TRUE(rc == OSH_EPARSE);
 
     /* zones with too few arguments */
     memset(&geo, 0, sizeof(geo));
     {
         char l[] = "zones 3";
         nw = tokenize(l, words, 8);
+        rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
+        ASSERT_TRUE(rc == OSH_EPARSE);
     }
-    rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
-    ASSERT_TRUE(rc == OSH_EPARSE);
 
     /* inputpath with no argument */
     memset(&geo, 0, sizeof(geo));
     {
         char l[] = "inputpath";
         nw = tokenize(l, words, 8);
+        rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
+        ASSERT_TRUE(rc == OSH_EPARSE);
     }
-    rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
-    ASSERT_TRUE(rc == OSH_EPARSE);
 
     /* body with no argument */
     memset(&geo, 0, sizeof(geo));
     {
         char l[] = "body";
         nw = tokenize(l, words, 8);
+        rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
+        ASSERT_TRUE(rc == OSH_EPARSE);
     }
-    rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
-    ASSERT_TRUE(rc == OSH_EPARSE);
 }
