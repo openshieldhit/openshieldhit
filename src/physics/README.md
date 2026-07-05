@@ -210,7 +210,10 @@ The current reaction model is intentionally minimal:
 
 - elastic scattering uses an isotropic CM approximation; H-1 recoils are
   returned as proton secondaries, while heavier recoils deposit their recoil
-  energy locally.
+  energy locally.  At or below the thermal energy (`OSH_NEUTRON_THERMAL_E_MEV`,
+  0.0253 eV) the collision is *energy-frozen*: the neutron changes direction only
+  (isotropic in the lab) and keeps its energy, and a down-scatter crossing that
+  threshold is clamped up to it (see the thermal model below).
 - `(n,gamma)` capture kills the neutron and deposits the neutron kinetic energy
   locally.
 - `(n,p)` and `(n,alpha)` use two-body relativistic kinematics when the mass
@@ -219,11 +222,26 @@ The current reaction model is intentionally minimal:
 - `(n,n')`, `(n,2n)`, and generic non-elastic remainder build a compound
   nucleus `(Z,A+1,E*)` and delegate de-excitation to the compound adapter.
 
-Thermal-neutron physics is not yet modeled separately; current lookups simply
-use the available cross-section tables at the requested energy.  The generated
-tables extend down to `1e-9 MeV` (`1 meV`), while the transport default cutoff
-is `1e-3 MeV` (`1 keV`) unless `NEUTRLCUT` is set to a positive value.  A later
-thermal layer can live under the same `neutron/` ownership boundary.
+Thermal neutrons are transported with a simple **one-group freeze** model.  The
+default transport cutoff is the cross-section table floor, `1e-9 MeV` (`1 meV`,
+`OSH_NEUTRON_CUTOFF_DEFAULT_MEV` in `osh_neutron_const.h`), so neutrons slow all
+the way to thermal by default; `NEUTRLCUT` still raises the cutoff (e.g. `1e-3`
+restores the historical 1 keV kill and disables thermal transport).  Once a
+neutron reaches `OSH_NEUTRON_THERMAL_E_MEV` (0.0253 eV) its energy is **frozen**
+— elastic collisions only redirect it — so it keeps transporting at that fixed
+energy (above the cutoff) until it is **captured or escapes** the geometry,
+instead of being killed at an arbitrary low-energy floor.  A thermal neutron
+always makes spatial progress each step, so in any bounded geometry it terminates
+on capture or escape (no explicit step cap needed).
+
+Caveats of this first cut: the free-gas 0 K cross sections are used unchanged (no
+S(α,β) molecular binding below ~1 eV — the freeze avoids the worst artifact,
+unphysical down-scatter toward zero, but the scattering kinematics are still
+free-gas); and `(n,gamma)` still deposits only the incident kinetic energy (≈0 at
+thermal), so the ~2.2 MeV H-1 capture γ is not yet modeled.  The `(n,alpha)`
+channels (¹⁰B, ⁶Li) already emit real reaction products via full kinematics.
+Implicit capture (variance reduction) is a planned follow-up, paired with a
+capture reaction-rate estimator.
 
 `osh_transport_neutron_run()` currently drains the neutron pool with a
 wavefront loop that mirrors the ion driver at a high level: batch zone lookup,

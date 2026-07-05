@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "openshieldhit/status.h"
+#include "physics/neutron/osh_neutron_const.h"
 #include "physics/neutron/osh_neutron_reaction.h"
 #include "physics/neutron/osh_neutron_xsec.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
@@ -145,9 +146,93 @@ static void test_elastic_dir_normalized(void) {
     osh_neutron_xsec_free(&xsec);
 }
 
+/*
+ * Thermal freeze: at or below OSH_NEUTRON_THERMAL_E_MEV an elastic scatter must
+ * leave the neutron energy unchanged (energy frozen), emit no recoil secondary,
+ * deposit nothing, and only redirect the neutron (still a unit vector, and it
+ * must actually turn away from the incident direction over the sample).
+ */
+static void test_thermal_freeze_energy_unchanged(void) {
+    struct osh_neutron_xsec xsec;
+    struct osh_nuclear_handler handler;
+    struct osh_nuclear_elem elem;
+    size_t offset, count;
+    struct osh_rng rng;
+    struct osh_neutron_reaction_event ev;
+    double dir[3] = {0.0, 0.0, 1.0};
+    double e_mev = OSH_NEUTRON_THERMAL_E_MEV;
+    double norm2;
+    int i, n_elastic = 0, n_turned = 0;
+
+    ASSERT_TRUE(osh_neutron_xsec_compile(NULL, &xsec) == OSH_OK);
+    make_handler(&handler, &elem, &offset, &count, 1u, 1u);
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 4u, 0u);
+
+    for (i = 0; i < N_SAMPLES; ++i) {
+        osh_neutron_reaction_sample(&xsec, &handler, 0u, 1.0, e_mev, dir, &rng, &ev);
+        if (ev.kind != OSH_NEUTRON_REACTION_ELASTIC) {
+            continue;
+        }
+        ++n_elastic;
+        ASSERT_NEAR(ev.neutron_e_mev, e_mev, 0.0); /* energy frozen exactly */
+        ASSERT_TRUE(ev.n_secondaries == 0u);       /* no recoil at thermal */
+        ASSERT_NEAR(ev.local_deposit_mev, 0.0, 0.0);
+        norm2 = ev.neutron_dir[0] * ev.neutron_dir[0] + ev.neutron_dir[1] * ev.neutron_dir[1]
+                + ev.neutron_dir[2] * ev.neutron_dir[2];
+        ASSERT_NEAR(norm2, 1.0, 1e-10);
+        if (ev.neutron_dir[2] < 0.999) {
+            ++n_turned;
+        }
+    }
+
+    ASSERT_TRUE(n_elastic > N_SAMPLES / 2); /* elastic dominates at thermal */
+    ASSERT_TRUE(n_turned > 0);              /* direction actually changes */
+    osh_neutron_xsec_free(&xsec);
+}
+
+/*
+ * Thermalisation clamp: a neutron just above thermal that down-scatters below
+ * OSH_NEUTRON_THERMAL_E_MEV must be clamped up to it — no elastic event may leave
+ * the neutron below the thermal energy — and the clamp must actually fire (H-1
+ * backward scatters dip well below thermal, so some events land exactly on it).
+ */
+static void test_thermal_clamp_from_above(void) {
+    struct osh_neutron_xsec xsec;
+    struct osh_nuclear_handler handler;
+    struct osh_nuclear_elem elem;
+    size_t offset, count;
+    struct osh_rng rng;
+    struct osh_neutron_reaction_event ev;
+    double dir[3] = {0.0, 0.0, 1.0};
+    double e_mev = 10.0 * OSH_NEUTRON_THERMAL_E_MEV; /* above thermal; H backscatter dips below */
+    int i, n_elastic = 0, n_clamped = 0;
+
+    ASSERT_TRUE(osh_neutron_xsec_compile(NULL, &xsec) == OSH_OK);
+    make_handler(&handler, &elem, &offset, &count, 1u, 1u);
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 5u, 0u);
+
+    for (i = 0; i < N_SAMPLES; ++i) {
+        osh_neutron_reaction_sample(&xsec, &handler, 0u, 1.0, e_mev, dir, &rng, &ev);
+        if (ev.kind != OSH_NEUTRON_REACTION_ELASTIC) {
+            continue;
+        }
+        ++n_elastic;
+        ASSERT_TRUE(ev.neutron_e_mev >= OSH_NEUTRON_THERMAL_E_MEV); /* never below thermal */
+        if (ev.neutron_e_mev <= OSH_NEUTRON_THERMAL_E_MEV) {
+            ++n_clamped; /* combined with the assert above: pinned exactly to thermal */
+        }
+    }
+
+    ASSERT_TRUE(n_elastic > N_SAMPLES / 2);
+    ASSERT_TRUE(n_clamped > 0); /* clamp actually fires for deep down-scatters */
+    osh_neutron_xsec_free(&xsec);
+}
+
 int main(void) {
     test_elastic_h1_secondary_energy();
     test_elastic_o16_energy_bounds();
     test_elastic_dir_normalized();
+    test_thermal_freeze_energy_unchanged();
+    test_thermal_clamp_from_above();
     return 0;
 }
