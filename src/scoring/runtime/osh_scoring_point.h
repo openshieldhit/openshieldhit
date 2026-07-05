@@ -30,8 +30,7 @@ extern "C" {
  * Only ENERGY and DOSE/DOSEGY pages receive a point contribution for now.
  * FLUENCE and LET/QEFF have no meaning without a track length and are wired in
  * later via precomputed LETd/LETt-versus-Ekin tables; those page kinds are
- * silently skipped.  Mesh (X,Y,Z) geometries are supported; cylindrical
- * geometries are not yet located for point deposits and are skipped.
+ * silently skipped. Mesh (X,Y,Z), Cyl (R,Z), and Zone geometries are supported.
  *
  * @param rt       Read-only compiled scoring descriptor.
  * @param acc_set  Mutable accumulator storage (indexed in lockstep with rt->pages).

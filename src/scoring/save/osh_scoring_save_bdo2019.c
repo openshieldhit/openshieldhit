@@ -342,7 +342,8 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         return OSH_ESTATE;
     }
     geo = &rt->geometries[out->geometry_idx];
-    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL) {
+    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL
+        && geo->geo_kind != OSH_SCORING_GEO_ZONE) {
         return OSH_ENOTSUP;
     }
     for (ip = 0; ip < out->npages; ++ip) {
@@ -373,6 +374,12 @@ geometry_arrays(struct osh_scoring_geometry_runtime const *geo, double p[3], dou
     p[0] = p[1] = p[2] = 0.0;
     q[0] = q[1] = q[2] = 0.0;
     n[0] = n[1] = n[2] = 1;
+
+    if (geo->geo_kind == OSH_SCORING_GEO_ZONE) {
+        q[0] = (double) geo->nzone_indices;
+        n[0] = (int) geo->nzone_indices;
+        return OSH_OK;
+    }
 
     if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
         if (axis_index(geo, "R", &i0) != OSH_OK || axis_index(geo, "Z", &i2) != OSH_OK) {

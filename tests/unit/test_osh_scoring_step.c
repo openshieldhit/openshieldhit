@@ -531,6 +531,74 @@ static void test_score_mesh_dqeff_tqeff(void) {
     osh_scoring_workspace_free(ws);
 }
 
+static void test_score_zone_energy_by_index(void) {
+    char const *path = "osh_zone_scoring_detect.tmp";
+    char const *text = "Geometry Zone\n"
+                       "    Name Z\n"
+                       "    Zone 0\n"
+                       "    Zone 1\n"
+                       "    Volume 2.0\n"
+                       "\n"
+                       "Output\n"
+                       "    Filename zone_energy.txt\n"
+                       "    FileFormat TEXT\n"
+                       "    Geo Z\n"
+                       "    Quantity Energy\n"
+                       "    Quantity Fluence\n";
+    FILE *fp;
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    enum osh_status rc;
+
+    fp = fopen(path, "w");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fputs(text, fp) >= 0);
+    ASSERT_TRUE(fclose(fp) == 0);
+
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.geometries[0].geo_kind == OSH_SCORING_GEO_ZONE);
+    ASSERT_TRUE(rt.geometries[0].nbins == 2u);
+
+    ASSERT_TRUE(rt.geometries[0].zone_indices[0] == 0u);
+    ASSERT_TRUE(rt.geometries[0].zone_indices[1] == 1u);
+    assert_close(rt.geometries[0].zone_vol_inv[0], 1.0);
+    assert_close(rt.geometries[0].zone_vol_inv[1], 0.5);
+
+    memset(&part, 0, sizeof(part));
+    part.z = 1u;
+    part.a = 1u;
+    memset(&st, 0, sizeof(st));
+    st.p[2] = 0.0;
+    st.p[3] = 100.0;
+    st.q[2] = 1.0;
+    st.q[3] = 96.0;
+    st.v[2] = 1.0;
+    st.ds = 1.0;
+    st.de = 4.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+    st.zone = 1;
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+    assert_close(rt.pages[0].acc.data[0], 0.0);
+    assert_close(rt.pages[0].acc.data[1], 4.0);
+    assert_close(rt.pages[1].acc.data[0], 0.0);
+    assert_close(rt.pages[1].acc.data[1], 0.5);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 /* Allocate a private accumulator set cloning the shape of every page in rt
  * (same len and data2 presence), zero-initialised.  Mirrors what a future
  * worker_accumulators_alloc() does, but inline for the test. */
@@ -646,6 +714,7 @@ int main(void) {
     test_score_mesh_neutron_id_filter();
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
+    test_score_zone_energy_by_index();
     test_score_private_then_merge_equals_direct();
     return 0;
 }

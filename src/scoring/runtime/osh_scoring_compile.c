@@ -56,8 +56,8 @@ static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
         return nbins;
     }
 
-    if (geo->zone_stop >= geo->zone_start && geo->zone_start > 0) {
-        return (size_t) (geo->zone_stop - geo->zone_start + 1);
+    if (geo->nzone_indices > 0u) {
+        return geo->nzone_indices;
     }
 
     return 0u;
@@ -329,7 +329,8 @@ static int runtime_supports_geometry(struct osh_scoring_geometry_runtime const *
     if (!geo) {
         return 0;
     }
-    return geo->geo_kind == OSH_SCORING_GEO_MESH || geo->geo_kind == OSH_SCORING_GEO_CYL;
+    return geo->geo_kind == OSH_SCORING_GEO_MESH || geo->geo_kind == OSH_SCORING_GEO_CYL
+           || geo->geo_kind == OSH_SCORING_GEO_ZONE;
 }
 
 static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
@@ -449,7 +450,8 @@ static enum osh_status copy_settings_runtime(struct osh_scoring_settings_runtime
 }
 
 static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime *dst,
-                                             struct osh_scoring_geometry_def const *src) {
+                                             struct osh_scoring_geometry_def const *src,
+                                             struct osh_diag_sink const *diag) {
     size_t i;
 
     memset(dst, 0, sizeof(*dst));
@@ -475,8 +477,26 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
         }
     }
     memcpy(dst->t, src->t, sizeof(dst->t));
-    dst->zone_start = src->zone_start;
-    dst->zone_stop = src->zone_stop;
+    if (src->nzone_indices > 0u) {
+        dst->zone_indices = (size_t *) calloc(src->nzone_indices, sizeof(*dst->zone_indices));
+        dst->zone_vol_inv = (double *) calloc(src->nzone_indices, sizeof(*dst->zone_vol_inv));
+        if (!dst->zone_indices || !dst->zone_vol_inv) {
+            return OSH_ENOMEM;
+        }
+        dst->nzone_indices = src->nzone_indices;
+        for (i = 0; i < src->nzone_indices; ++i) {
+            dst->zone_indices[i] = src->zone_indices[i];
+            if (src->zone_volumes && src->zone_volumes[i] > 0.0) {
+                dst->zone_vol_inv[i] = 1.0 / src->zone_volumes[i];
+            } else {
+                OSH_DIAG_WARNF(diag,
+                               "Scoring Zone geometry '%s' zone %zu has no Volume card; defaulting to 1.0 cm3",
+                               src->name ? src->name : "(unnamed)",
+                               src->zone_indices[i]);
+                dst->zone_vol_inv[i] = 1.0;
+            }
+        }
+    }
     dst->has_rotation = src->has_rotation;
     dst->geo_kind = geometry_kind_to_enum(src->kind);
     dst->nbins = geometry_nbins(src);
@@ -602,6 +622,8 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
             free(rt->geometries[i].kind);
             free(rt->geometries[i].name);
             free(rt->geometries[i].axes);
+            free(rt->geometries[i].zone_indices);
+            free(rt->geometries[i].zone_vol_inv);
             free(rt->geometries[i].groups);
             free(rt->geometries[i].rtdose_template_path);
             free(rt->geometries[i].cyl_vol_inv);
@@ -706,7 +728,7 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             goto fail;
         }
         for (i = 0; i < rt->ngeometries; ++i) {
-            rc = copy_geometry_runtime(&rt->geometries[i], &ws->geometries[i]);
+            rc = copy_geometry_runtime(&rt->geometries[i], &ws->geometries[i], diag);
             if (rc != OSH_OK) {
                 if (rc == OSH_EINVAL) {
                     OSH_DIAG_ERRORF(diag, "Scoring geometry '%s' has no valid runtime binning", ws->geometries[i].name);
@@ -754,6 +776,18 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                                 "Scoring output '%s' uses unsupported quantity '%s' for runtime scoring",
                                 ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
                                 ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)");
+                rc = OSH_ENOTSUP;
+                goto fail;
+            }
+            if (rt->geometries[gidx].geo_kind == OSH_SCORING_GEO_ZONE
+                && score_kind != OSH_SCORING_SCORE_ENERGY && score_kind != OSH_SCORING_SCORE_FLUENCE
+                && score_kind != OSH_SCORING_SCORE_DOSE && score_kind != OSH_SCORING_SCORE_DOSEGY) {
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring output '%s' uses quantity '%s' on Zone geometry '%s'; only Energy, Fluence, "
+                                "Dose, and DoseGy are supported for Zone scoring",
+                                ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                                ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)",
+                                ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)");
                 rc = OSH_ENOTSUP;
                 goto fail;
             }

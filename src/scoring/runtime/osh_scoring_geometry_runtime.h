@@ -52,7 +52,7 @@ struct osh_scoring_geometry_score_group {
  * |-----------------------|------------------------|----------------|
  * | OSH_SCORING_GEO_MESH  | 3 (X, Y, Z)            | "X", "Y", "Z" |
  * | OSH_SCORING_GEO_CYL   | 2 (radial + axial)     | "R", "Z"      |
- * | OSH_SCORING_GEO_ZONE  | 0 (zone range instead) | —             |
+ * | OSH_SCORING_GEO_ZONE  | 0 (zone list instead)  | —             |
  *
  * For @c CYL the @c axes array contains exactly one entry labelled @c "R"
  * and one labelled @c "Z"; which comes first depends on the input file.
@@ -70,8 +70,9 @@ struct osh_scoring_geometry_runtime {
     size_t npages;                                   /* Number of pages owned by this geometry. */
     size_t ngroups;                                  /* Number of score-kind groups. */
     enum osh_scoring_geo_kind geo_kind;              /* Resolved geometry kind enum. */
-    int zone_start;                                  /* First zone (Zone geometry only). */
-    int zone_stop;                                   /* Last zone  (Zone geometry only). */
+    size_t *zone_indices;                            /* Internal GEMCA zone indices, one per Zone bin (owned). */
+    double *zone_vol_inv;                            /* Zone geometry only: 1/volume [1/cm3], length nzone_indices. */
+    size_t nzone_indices;                            /* Number of explicit Zone bins. */
     char has_rotation;                               /* Non-zero when t[] is valid and axes are in local frame. */
     char *rtdose_template_path; /* Non-NULL when FileFormat RTDOSE; owned; path to RTDOSE template. */
     double *cyl_vol_inv;        /* [cyl_nr] 1/V per R-bin, precomputed at compile; NULL for non-CYL */

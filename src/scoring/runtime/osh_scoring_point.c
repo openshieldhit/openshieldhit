@@ -6,6 +6,8 @@
 #include "common/raytrace/osh_raytrace.h"
 #include "scoring/runtime/osh_scoring_step_internal.h"
 
+static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out);
+
 /*
  * Point scorer: deposit a particle's energy at a single location with no track
  * length (c.f. issue #179).  Reuses the step scorer's per-group ENERGY and DOSE
@@ -54,40 +56,47 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
             continue;
         }
 
-        /* Universe→local rotation (same t[16] layout as score_step). */
-        if (geo->has_rotation) {
-            osh_vect_trans_point_affine(st->p, p_local, geo->t);
-            p_at = p_local;
+        if (geo->geo_kind == OSH_SCORING_GEO_ZONE) {
+            if (!zone_bin_index(geo, st->zone, &idx)) {
+                continue;
+            }
+            voxel_volume_inv = geo->zone_vol_inv ? geo->zone_vol_inv[idx] : 1.0;
         } else {
-            p_at = st->p;
-        }
+            /* Universe->local rotation (same t[16] layout as score_step). */
+            if (geo->has_rotation) {
+                osh_vect_trans_point_affine(st->p, p_local, geo->t);
+                p_at = p_local;
+            } else {
+                p_at = st->p;
+            }
 
-        if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
-            rc = cyl_geometry_to_grid(geo, &grid);
-            if (rc != OSH_OK) {
-                return rc;
-            }
-            /* Cylinder axis is local Z, R the transverse radius.  Uniform dr/dz
-             * bins; flat index z_bin*nr + r_bin matches score_step's layout, and
-             * 1/V is the precomputed per-R-bin value. */
-            r_cyl = sqrt(p_at[0] * p_at[0] + p_at[1] * p_at[1]);
-            if (r_cyl < grid.origin[0] || p_at[2] < grid.origin[2]) {
-                continue; /* inside the bore or below the axial stack */
-            }
-            r_bin = (size_t) ((r_cyl - grid.origin[0]) / grid.spacing[0]);
-            z_bin = (size_t) ((p_at[2] - grid.origin[2]) / grid.spacing[2]);
-            if (r_bin >= grid.n[0] || z_bin >= grid.n[2]) {
-                continue; /* beyond the R or Z extent */
-            }
-            idx = z_bin * grid.n[0] + r_bin;
-            voxel_volume_inv = (geo->cyl_vol_inv && r_bin < geo->cyl_nr) ? geo->cyl_vol_inv[r_bin] : 0.0;
-        } else {
-            rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
-            if (rc != OSH_OK) {
-                return rc;
-            }
-            if (!osh_raytrace_locate(&grid, p_at, &idx)) {
-                continue; /* point lies outside this geometry's mesh */
+            if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
+                rc = cyl_geometry_to_grid(geo, &grid);
+                if (rc != OSH_OK) {
+                    return rc;
+                }
+                /* Cylinder axis is local Z, R the transverse radius.  Uniform dr/dz
+                 * bins; flat index z_bin*nr + r_bin matches score_step's layout, and
+                 * 1/V is the precomputed per-R-bin value. */
+                r_cyl = sqrt(p_at[0] * p_at[0] + p_at[1] * p_at[1]);
+                if (r_cyl < grid.origin[0] || p_at[2] < grid.origin[2]) {
+                    continue; /* inside the bore or below the axial stack */
+                }
+                r_bin = (size_t) ((r_cyl - grid.origin[0]) / grid.spacing[0]);
+                z_bin = (size_t) ((p_at[2] - grid.origin[2]) / grid.spacing[2]);
+                if (r_bin >= grid.n[0] || z_bin >= grid.n[2]) {
+                    continue; /* beyond the R or Z extent */
+                }
+                idx = z_bin * grid.n[0] + r_bin;
+                voxel_volume_inv = (geo->cyl_vol_inv && r_bin < geo->cyl_nr) ? geo->cyl_vol_inv[r_bin] : 0.0;
+            } else {
+                rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
+                if (rc != OSH_OK) {
+                    return rc;
+                }
+                if (!osh_raytrace_locate(&grid, p_at, &idx)) {
+                    continue; /* point lies outside this geometry's mesh */
+                }
             }
         }
 
@@ -124,4 +133,19 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         }
     }
     return OSH_OK;
+}
+
+static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out) {
+    size_t iz;
+
+    if (!geo || !idx_out || zone < 0) {
+        return 0;
+    }
+    for (iz = 0u; iz < geo->nzone_indices; ++iz) {
+        if (geo->zone_indices[iz] == (size_t) zone) {
+            *idx_out = iz;
+            return 1;
+        }
+    }
+    return 0;
 }

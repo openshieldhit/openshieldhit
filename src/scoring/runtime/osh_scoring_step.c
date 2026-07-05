@@ -11,6 +11,7 @@
 #include "scoring/runtime/osh_scoring_step_internal.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
+static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out);
 static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out);
 static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out);
 static double
@@ -104,6 +105,7 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
         double const *dir_trace;
         double voxel_volume_inv;
         double const *lut;
+        struct osh_voxel_crossing one;
         size_t nr_cyl;
         size_t g;
 
@@ -120,6 +122,35 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
         } else {
             p_trace = st->p;
             dir_trace = score_dir;
+        }
+
+        if (geo->geo_kind == OSH_SCORING_GEO_ZONE) {
+            if (!zone_bin_index(geo, st->zone, &one.idx)) {
+                continue;
+            }
+            one.path_len = score_len;
+            one.vol_inv = geo->zone_vol_inv ? geo->zone_vol_inv[one.idx] : 1.0;
+            for (g = 0; g < geo->ngroups; ++g) {
+                switch (geo->groups[g].score_kind) {
+                case OSH_SCORING_SCORE_ENERGY:
+                    rc = score_group_energy(rt, acc_set, &geo->groups[g], &one, 1u, part, st, score_len);
+                    break;
+                case OSH_SCORING_SCORE_FLUENCE:
+                    rc = score_group_fluence(rt, acc_set, &geo->groups[g], &one, 1u, part, st, score_len);
+                    break;
+                case OSH_SCORING_SCORE_DOSE:
+                case OSH_SCORING_SCORE_DOSEGY:
+                    rc = score_group_dose(rt, acc_set, &geo->groups[g], &one, 1u, part, st, score_len);
+                    break;
+                default:
+                    rc = OSH_ENOTSUP;
+                    break;
+                }
+                if (rc != OSH_OK) {
+                    return rc;
+                }
+            }
+            continue;
         }
 
         is_cyl = (geo->geo_kind == OSH_SCORING_GEO_CYL);
@@ -202,6 +233,21 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
     }
 
     return OSH_OK;
+}
+
+static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out) {
+    size_t iz;
+
+    if (!geo || !idx_out || zone < 0) {
+        return 0;
+    }
+    for (iz = 0u; iz < geo->nzone_indices; ++iz) {
+        if (geo->zone_indices[iz] == (size_t) zone) {
+            *idx_out = iz;
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /**

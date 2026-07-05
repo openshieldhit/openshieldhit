@@ -47,9 +47,12 @@ static void free_geo(struct osh_scoring_geometry_def *geo) {
     free(geo->kind);
     free(geo->name);
     free(geo->axes);
+    free(geo->zone_indices);
+    free(geo->zone_volumes);
     free(geo->vox_rtdose_path);
     free(geo->vox_body_name);
     geo->naxes = 0;
+    geo->nzone_indices = 0u;
 }
 
 static int nearly(double a, double b) {
@@ -158,14 +161,26 @@ static void test_rotation_identity(void) {
 
 static void test_zones(void) {
     struct osh_scoring_geometry_def geo = make_geo();
-    char line[] = "zones 3 7";
+    char line0[] = "zone 0";
+    char line0v[] = "volume 13.37";
+    char line1[] = "zone 1";
     char *words[8];
-    int nw = tokenize(line, words, 8);
+    int nw = tokenize(line0, words, 8);
     int found = 0;
     ASSERT_TRUE(osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, &found) == OSH_OK);
     ASSERT_TRUE(found == 1);
-    ASSERT_TRUE(geo.zone_start == 3);
-    ASSERT_TRUE(geo.zone_stop == 7);
+
+    nw = tokenize(line0v, words, 8);
+    ASSERT_TRUE(osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 2, &found) == OSH_OK);
+
+    nw = tokenize(line1, words, 8);
+    ASSERT_TRUE(osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 3, &found) == OSH_OK);
+
+    ASSERT_TRUE(geo.nzone_indices == 2u);
+    ASSERT_TRUE(geo.zone_indices[0] == 0u);
+    ASSERT_TRUE(geo.zone_indices[1] == 1u);
+    ASSERT_TRUE(nearly(geo.zone_volumes[0], 13.37));
+    ASSERT_TRUE(nearly(geo.zone_volumes[1], 0.0));
     free_geo(&geo);
 }
 
@@ -240,10 +255,10 @@ static void test_error_missing_args(void) {
     rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
     ASSERT_TRUE(rc == OSH_EPARSE);
 
-    /* zones with too few arguments */
+    /* zone with no argument */
     memset(&geo, 0, sizeof(geo));
     {
-        char l[] = "zones 3";
+        char l[] = "zone";
         nw = tokenize(l, words, 8);
     }
     rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);

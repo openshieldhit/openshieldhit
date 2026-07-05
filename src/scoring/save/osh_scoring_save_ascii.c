@@ -75,7 +75,93 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
     inv_nstat = 1.0 / (double) nstat;
     format_now_rfc2822(datestr, sizeof(datestr));
 
-    if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
+    if (geo->geo_kind == OSH_SCORING_GEO_ZONE) {
+        /* --- ZONE output --- */
+        size_t izone;
+
+        {
+            struct osh_scoring_page_runtime const *p0;
+            size_t diff_nbins;
+            size_t diff2_nbins;
+
+            if (out->npages == 0u) {
+                fclose(fp);
+                return OSH_OK;
+            }
+            p0 = &rt->pages[out->page_indices[0]];
+            diff_nbins = p0->diff_nbins;
+            diff2_nbins = p0->diff2_nbins;
+
+            fprintf(fp, "# OpenShieldHIT version %s\n", OSH_VERSION);
+            fprintf(fp, "# Calculated %s\n", datestr);
+            fprintf(fp, "# DETECTOR OUTPUT ZONE\n");
+            fprintf(fp, "# ZONE BIN: %5zu\n", geo->nzone_indices);
+            fprintf(fp, "# DETECTOR TYPE:");
+            fprint_quantity_names(fp, rt, out);
+            fputc('\n', fp);
+            fprintf(fp, "# PRIMARIES: %llu\n", nstat);
+            fprintf(fp, "# COMPLETENESS: %s\n", osh_scoring_runtime_completeness_label(rt));
+            fprintf(fp, "# Data written in explicit Zone order from detect.dat\n");
+            fprintf(fp,
+                    "# Values: NORM/SUM quantities divided by nstat; AVER quantities written as physical mean\n");
+            if (diff_nbins > 0u) {
+                fprintf(fp,
+                        "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
+                        diff_kind_label(p0->diff_kind),
+                        p0->diff_lo,
+                        p0->diff_hi,
+                        p0->diff_nbins,
+                        p0->diff_log ? " LOG" : "",
+                        p0->has_diff_sset ? "  (SP override active)" : "");
+            }
+            if (diff2_nbins > 0u) {
+                fprintf(fp,
+                        "# Diff2Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
+                        diff_kind_label(p0->diff2_kind),
+                        p0->diff2_lo,
+                        p0->diff2_hi,
+                        p0->diff2_nbins,
+                        p0->diff2_log ? " LOG" : "",
+                        p0->has_diff2_sset ? "  (SP override active)" : "");
+            }
+            fprintf(fp, "# ZONE");
+            if (diff_nbins > 0u) {
+                fprintf(fp, " %s", diff_kind_label(p0->diff_kind));
+            }
+            if (diff2_nbins > 0u) {
+                fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
+            }
+            fprint_quantity_names(fp, rt, out);
+            fputc('\n', fp);
+
+            for (izone = 0u; izone < geo->nzone_indices; ++izone) {
+                size_t db;
+                size_t db2;
+                size_t ndb = (diff_nbins > 0u) ? diff_nbins : 1u;
+                size_t ndb2 = (diff2_nbins > 0u) ? diff2_nbins : 1u;
+                for (db = 0u; db < ndb; ++db) {
+                    for (db2 = 0u; db2 < ndb2; ++db2) {
+                        fprintf(fp, " %zu", geo->zone_indices[izone]);
+                        if (diff_nbins > 0u) {
+                            fprintf(fp, " %.12e", ascii_diff_center(p0, db));
+                        }
+                        if (diff2_nbins > 0u) {
+                            fprintf(fp, " %.12e", ascii_diff2_center(p0, db2));
+                        }
+                        for (ip = 0u; ip < out->npages; ++ip) {
+                            size_t page_idx = out->page_indices[ip];
+                            struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
+                            double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
+                            size_t data_idx = izone + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
+                                              + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
+                            fprintf(fp, " %.12e", page->acc.data[data_idx] * scale);
+                        }
+                        fprintf(fp, "\n");
+                    }
+                }
+            }
+        }
+    } else if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
         /* --- CYL output --- */
         size_t ir_axis;
         size_t iz_axis;
@@ -408,7 +494,8 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         return OSH_ESTATE;
     }
     geo = &rt->geometries[out->geometry_idx];
-    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL) {
+    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL
+        && geo->geo_kind != OSH_SCORING_GEO_ZONE) {
         return OSH_ENOTSUP;
     }
     /* Rotated MESH ASCII output would emit local-frame X/Y/Z which is ambiguous;

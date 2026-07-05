@@ -25,6 +25,8 @@
 
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes);
 static void write_detect_file(char const *content);
+static void test_save_zone_ascii(void);
+static void test_save_zone_bdo_default(void);
 
 static void test_save_bdo2019_with_dose_and_dlet(void) {
     char const *detect_text = "Geometry Mesh\n"
@@ -237,7 +239,113 @@ int main(void) {
 
     test_save_bdo2019_with_dose_and_dlet();
     test_save_cyl_ascii_and_bdo();
+    test_save_zone_ascii();
+    test_save_zone_bdo_default();
     return 0;
+}
+
+static void test_save_zone_ascii(void) {
+    char const *detect_text = "Geometry Zone\n"
+                              "    Name G\n"
+                              "    Zone 0\n"
+                              "    Zone 1\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_zone_ascii.txt\n"
+                              "    FileFormat TEXT\n"
+                              "    Geo G\n"
+                              "    Quantity ENERGY\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    FILE *fp;
+    char line[512];
+    enum osh_status rc;
+    int saw_zone_header;
+    int saw_axis_header;
+    int saw_target_row;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.noutputs == 1u);
+    ASSERT_TRUE(rt.geometries[0].geo_kind == OSH_SCORING_GEO_ZONE);
+
+    rt.pages[0].acc.data[0] = 1.0;
+    rt.pages[0].acc.data[1] = 4.0;
+
+    rc = osh_scoring_save(ws, &rt, 4u);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    fp = fopen("out_zone_ascii.txt", "r");
+    ASSERT_TRUE(fp != NULL);
+    saw_zone_header = 0;
+    saw_axis_header = 0;
+    saw_target_row = 0;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strstr(line, "# DETECTOR OUTPUT ZONE") != NULL) {
+            saw_zone_header = 1;
+        }
+        if (strstr(line, "# ZONE ENERGY") != NULL) {
+            saw_axis_header = 1;
+        }
+        if (strstr(line, "1 1.000000000000e+00") != NULL) {
+            saw_target_row = 1;
+        }
+    }
+    ASSERT_TRUE(saw_zone_header);
+    ASSERT_TRUE(saw_axis_header);
+    ASSERT_TRUE(saw_target_row);
+    ASSERT_TRUE(fclose(fp) == 0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_zone_ascii.txt");
+}
+
+static void test_save_zone_bdo_default(void) {
+    char const *detect_text = "Geometry Zone\n"
+                              "    Name G\n"
+                              "    Zone 0\n"
+                              "    Zone 1\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_zone_default.bdo\n"
+                              "    Geo G\n"
+                              "    Quantity ENERGY\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    FILE *fp;
+    enum osh_status rc;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rt.pages[0].acc.data[0] = 1.0;
+    rt.pages[0].acc.data[1] = 4.0;
+
+    rc = osh_scoring_save(ws, &rt, 4u);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    fp = fopen("out_zone_default.bdo", "rb");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fclose(fp) == 0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_zone_default.bdo");
 }
 
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes) {

@@ -75,6 +75,29 @@ For `Geometry Cyl`:
 - `BDO2019` stores the geometry as legacy `CYL` metadata with an implicit
   full-azimuth span (`phi = 0..360`, one bin) for compatibility.
 
+### Zone
+
+GEMCA zones from `geo.dat`, one output bin per explicitly listed transport zone index.
+
+```text
+Geometry Zone
+    Name MyZones
+    Zone 0
+    Zone 3
+    Volume 13.37
+```
+
+Rules and semantics:
+
+- `Zone <index>` selects one transport zone index; repeat it for each zone to score.
+- `Volume <cm3>` optionally follows a `Zone` card and sets the volume used for
+  volume-normalized scores for that zone bin. If omitted, the simulation warns
+  and defaults that zone volume to `1.0 cm3`.
+- The output order is exactly the order of `Zone` lines in `detect.dat`.
+- Range shorthand is not implemented in this first milestone.
+- Initial support covers `Quantity Energy`, `Fluence`, `Dose`, and `DoseGy`.
+  `FileFormat BDO` is the default; `FileFormat TEXT` is also supported.
+
 ## Differential scoring
 
 A `Quantity` line can be followed by `Diff1`/`Diff1Type` (and optionally `Diff2`/`Diff2Type`)
