@@ -205,9 +205,10 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
     /* Mirror exactly what osh_scoring_compile() allocates: one page per
      * (output, quantity); each page owns `bins` doubles for its primary
      * accumulator, plus a second `bins`-double weight accumulator for the
-     * "average" quantities (LET/Qeff).  bins is the geometry's bin product,
-     * computed by the same geometry_nbins() the compiler uses, so the estimate
-     * cannot drift from the real allocation. */
+     * "average" quantities (LET/Qeff).  A global VARIANCE card (issue #209)
+     * doubles this: each sum array gains a companion Welford M2 array.  bins is
+     * the geometry's bin product, computed by the same geometry_nbins() the
+     * compiler uses, so the estimate cannot drift from the real allocation. */
     for (i = 0u; i < ws->noutputs; ++i) {
         struct osh_scoring_output_def const *output = &ws->outputs[i];
         struct osh_scoring_geometry_def const *geo = osh_scoring_geometry_by_name(ws, output->geometry_name);
@@ -216,7 +217,9 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
         for (j = 0u; j < output->npages; ++j) {
             struct osh_scoring_page_def const *page = &output->pages[j];
             enum osh_scoring_score_kind const kind = quantity_to_score_kind(page->quantity);
-            unsigned const arrays = score_kind_uses_data2(kind) ? 2u : 1u;
+            unsigned const sum_arrays = score_kind_uses_data2(kind) ? 2u : 1u;
+            /* Variance doubles the arrays: data_var mirrors data, data2_var mirrors data2. */
+            unsigned const arrays = ws->variance ? (sum_arrays * 2u) : sum_arrays;
             uint64_t len = (uint64_t) bins;
             uint64_t page_bytes;
 
@@ -658,10 +661,12 @@ enum osh_status osh_scoring_runtime_alloc_accumulator_set(struct osh_scoring_run
         return OSH_EINVAL;
     }
     for (i = 0; i < rt->npages; ++i) {
-        /* Match the master page exactly: same len, same data2 presence.  The
-         * variance arrays track the master too (NULL today), so a later merge
-         * always agrees on optional-array presence. */
-        rc = osh_scoring_accumulator_alloc(&set[i], rt->pages[i].acc.len, rt->pages[i].acc.data2 != NULL);
+        /* Match the master page exactly: same len, same data2 presence, same
+         * variance (Welford M2) presence — so a later merge always agrees on
+         * optional-array presence and the private batch accumulates M2 alongside
+         * the master. */
+        rc = osh_scoring_accumulator_alloc_variance(
+            &set[i], rt->pages[i].acc.len, rt->pages[i].acc.data2 != NULL, rt->pages[i].acc.data_var != NULL);
         if (rc != OSH_OK) {
             osh_scoring_runtime_free_accumulator_set(set, i); /* release the pages built so far */
             return rc;
@@ -926,6 +931,11 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         dst_page->has_data2 = score_kind_uses_data2(dst_page->score_kind);
         dst_page->divide = dst_page->has_data2;
         dst_page->postproc = score_kind_postproc(dst_page->score_kind, dst_page->divide);
+        /* Monte-Carlo standard-error tracking (issue #209): a global detect.dat
+         * VARIANCE card turns it on for every page.  The batch-means M2 arrays are
+         * allocated below; the per-batch fold and finalize happen in transport and
+         * postprocess.  0 keeps the accumulator exactly as before (no var arrays). */
+        dst_page->variance = ws->variance ? 1 : 0;
 
         /* Differential axis — expand data[] to geo_nbins × diff_nbins. */
         dst_page->diff_stride = rt->geometries[dst_page->geometry_idx].nbins;
@@ -1012,7 +1022,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             dst_page->len = dst_page->diff_stride;
         }
 
-        rc = osh_scoring_accumulator_alloc(&dst_page->acc, dst_page->len, dst_page->has_data2);
+        rc = osh_scoring_accumulator_alloc_variance(
+            &dst_page->acc, dst_page->len, dst_page->has_data2, dst_page->variance);
         if (rc != OSH_OK) {
             goto fail;
         }

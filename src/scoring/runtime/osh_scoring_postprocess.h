@@ -41,6 +41,38 @@ enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
 enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, struct osh_scoring_runtime const *src);
 
 /**
+ * @brief Finalise per-bin Monte-Carlo standard error into the M2 arrays, in place.
+ *
+ * @details
+ * Converts each variance-tracking page's batch-means sufficient statistics into a
+ * per-bin **relative standard error** of its reported quantity, stored back into
+ * @c acc.data_var (spent afterwards).  Storing the *relative* error makes it
+ * normalisation-invariant: the save layer emits the absolute error column as
+ * @c |value| * data_var, so whatever per-primary / per-volume / unit scaling the
+ * writer applies to the value applies to its error automatically.
+ *
+ * With @c B = @c nbatch batches, @c W = @c weight (Σ history count) and Welford
+ * @c M2 in @c data_var, the standard error of the per-primary mean is
+ * @c sqrt(M2 / ((B-1)·W)); dividing by the mean @c data/W gives the relative form
+ * @c sqrt(M2·W/(B-1)) / |data|.  For the two-pass AVER quantities (DLET/TLET/Qeff)
+ * the reported value is the ratio @c data/data2, whose relative error is combined
+ * from the numerator (@c data_var) and denominator (@c data2_var) in quadrature
+ * (@c rel² = rel_num² + rel_den²).  This ignores the num/den covariance, which for
+ * the strongly-correlated LET numerator and denominator makes the estimate
+ * *conservative* (an upper bound), never an under-estimate.
+ *
+ * @b Ordering: this reads the raw sums (@c data, @c data2) and their M2 arrays, so
+ * it must run **before** @ref osh_scoring_postprocess rescales @c data or collapses
+ * the LET ratio.  @c B < 2 (zero degrees of freedom), a zero mean, or a zero
+ * weight yield a 0 error for that bin.  Pages without M2 arrays (variance off, or
+ * the dump shadow) are skipped, so this is a no-op unless the VARIANCE card is set.
+ *
+ * @param[in,out] rt  Scoring runtime whose variance pages are finalised in place.
+ * @returns OSH_OK on success, OSH_EINVAL if @p rt is NULL.
+ */
+enum osh_status osh_scoring_finalize_errors(struct osh_scoring_runtime *rt);
+
+/**
  * @brief True for score kinds whose postprocess writes @c acc.data.
  *
  * @details

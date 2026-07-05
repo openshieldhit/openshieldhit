@@ -151,11 +151,25 @@ QUANTITIES = ("dose", "fluence", "dlet", "tlet")
 
 
 def depth_quantities(out_dir: Path, code: str):
-    """Return dict {z, dose, fluence, dlet, tlet} for the 1D idd.dat depth file."""
+    """Return dict {z, dose, fluence, dlet, tlet} for the 1D idd.dat depth file.
+
+    When the OpenShieldHIT run used the detect.dat VARIANCE card each quantity is
+    followed by a paired standard-error column (X Y Z DOSE DOSE_ERR FLUENCE
+    FLUENCE_ERR ...), detected here from the column count; the errors are exposed
+    as "<quantity>_err" so the plots can draw error bands.  A plain run (no
+    VARIANCE) has no error columns and none are added.
+    """
     d = load_numeric(out_dir / "idd.dat")
-    if code == "osh":  # X Y Z DOSE FLUENCE DLET TLET
+    nq = len(QUANTITIES)
+    if code == "osh":
         z = d[:, 2]
-        cols = {q: d[:, 3 + i] for i, q in enumerate(QUANTITIES)}
+        base = 3
+        paired = d.shape[1] >= base + 2 * nq  # value/error pairs present?
+        if paired:
+            cols = {q: d[:, base + 2 * i] for i, q in enumerate(QUANTITIES)}
+            cols.update({q + "_err": d[:, base + 2 * i + 1] for i, q in enumerate(QUANTITIES)})
+        else:  # X Y Z DOSE FLUENCE DLET TLET
+            cols = {q: d[:, base + i] for i, q in enumerate(QUANTITIES)}
     else:  # SH12A: Z DOSE FLUENCE DLET TLET
         z = d[:, 0]
         cols = {q: d[:, 1 + i] for i, q in enumerate(QUANTITIES)}
@@ -233,6 +247,13 @@ def main() -> int:
                         continue
                     color = "C0" if name.startswith("Open") else "C1"
                     a.plot(c["z"], c[quantity], style, color=color, label=name, drawstyle="steps-mid")
+                    # Shade the Monte-Carlo standard error when a VARIANCE run
+                    # provided it (idd.dat _ERR columns); absent for a plain run.
+                    err = c.get(quantity + "_err")
+                    if err is not None:
+                        val = c[quantity]
+                        a.fill_between(c["z"], val - err, val + err, step="mid",
+                                       color=color, alpha=0.25, linewidth=0)
 
             a = ax[0, 0]
             overlay(a, "dose")

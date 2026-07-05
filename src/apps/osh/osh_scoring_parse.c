@@ -47,6 +47,11 @@
 
 enum scoring_section { SECTION_NONE = 0, SECTION_FILTER, SECTION_SETTINGS, SECTION_GEOMETRY, SECTION_OUTPUT };
 
+/* Batch-means observations used when a bare VARIANCE card gives no explicit count
+ * (issue #209).  Enough degrees of freedom for a stable error estimate without
+ * paying many merge boundaries; the user can override with "VARIANCE N". */
+#define OSH_SCORING_VARIANCE_DEFAULT_BATCHES 10
+
 /* ---- Internal helper declarations ---------------------------------------- */
 
 static enum osh_status append_filter(struct osh_scoring_workspace *ws);
@@ -119,6 +124,29 @@ osh_scoring_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struct
             if (rc != OSH_OK)
                 goto fail;
             section = SECTION_OUTPUT;
+            continue;
+        }
+
+        /* ---- Global directives (not a section) ---------------------------- */
+        /* VARIANCE [N] — enable Monte-Carlo standard-error tracking on every page
+         * (issue #209).  N is the number of batch-means observations; a bare card
+         * uses OSH_SCORING_VARIANCE_DEFAULT_BATCHES.  It is run-global (all pages
+         * share the same batch boundaries), so it is a top-level card, not a
+         * per-section key, and it leaves the current section unchanged. */
+        if (strcmp(words[0], "variance") == 0) {
+            long nbatches = OSH_SCORING_VARIANCE_DEFAULT_BATCHES;
+            if (nwords >= 2) {
+                char *endp = NULL;
+                long v = strtol(words[1], &endp, 10);
+                if (endp == words[1] || *endp != '\0' || v < 1) {
+                    OSH_DIAG_ERRORF(
+                        diag, "%s:%u: VARIANCE batch count must be a positive integer", path, (unsigned int) lineno);
+                    rc = OSH_EPARSE;
+                    goto fail;
+                }
+                nbatches = v;
+            }
+            ws->variance = (int) nbatches;
             continue;
         }
 

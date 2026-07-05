@@ -113,14 +113,38 @@ static inline void osh_score_deposit(double *arr, size_t idx, double value) {
 }
 
 /**
- * @brief Allocate zero-initialised accumulator arrays.
+ * @brief Allocate zero-initialised accumulator arrays, with optional variance.
  *
  * @details
- * Allocates @p data always, and @p data2 when @p want_data2 is non-zero.  The
- * variance arrays are left NULL (the variance feature will allocate them when it
- * lands).  A @p len of 0 is rounded up to a single element so the pointers are
- * never NULL on success, matching the previous inline behaviour in
- * osh_scoring_compile().
+ * Allocates @p data always; @p data2 when @p want_data2 is non-zero; and the
+ * Welford M2 variance arrays when @p want_variance is non-zero — @p data_var
+ * (pairing @p data) always, plus @p data2_var (pairing @p data2) when
+ * @p want_data2 is also set.  This keeps the optional-array presence a merge
+ * accepts self-consistent: a var array is allocated only alongside the sum array
+ * it derives its mean from.  A @p len of 0 is rounded up to a single element so
+ * the pointers are never NULL on success.
+ *
+ * @param[out] acc          Accumulator to populate (overwritten; must not be NULL).
+ * @param[in]  len          Element count for each array.
+ * @param[in]  want_data2   Non-zero to also allocate the secondary @p data2 array.
+ * @param[in]  want_variance Non-zero to also allocate the Welford M2 arrays
+ *                          (@p data_var, and @p data2_var when @p want_data2).
+ * @returns OSH_OK on success, OSH_EINVAL if @p acc is NULL, OSH_ENOMEM on
+ *          allocation failure (no arrays leak; @p acc is left freed).
+ */
+enum osh_status osh_scoring_accumulator_alloc_variance(struct osh_scoring_accumulator *acc,
+                                                       size_t len,
+                                                       int want_data2,
+                                                       int want_variance);
+
+/**
+ * @brief Allocate zero-initialised accumulator arrays without variance state.
+ *
+ * @details
+ * Convenience wrapper for @ref osh_scoring_accumulator_alloc_variance with
+ * @c want_variance = 0: allocates @p data (and @p data2 when @p want_data2),
+ * leaving the M2 arrays NULL.  This is the common case for scorers that do not
+ * track a per-bin standard error.
  *
  * @param[out] acc        Accumulator to populate (overwritten; must not be NULL).
  * @param[in]  len        Element count for each array.
