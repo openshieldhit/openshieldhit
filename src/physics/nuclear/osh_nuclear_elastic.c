@@ -20,12 +20,15 @@
 /* hbar*c [MeV fm] — converts the slope from fm^2 to (MeV/c)^-2. */
 #define OSH_HBARC_MEV_FM 197.327
 
-double osh_nuclear_elastic_sigma(unsigned int zp, unsigned int ap, double zt, double at, double e_lab_per_nucleon) {
-    double sigma_reac = osh_nuclear_tripathi_sigma(zp, ap, zt, at, e_lab_per_nucleon);
-    if (!(sigma_reac > 0.0)) {
+double osh_nuclear_elastic_sigma_from_reac(double sigma_reac_cm2) {
+    if (!(sigma_reac_cm2 > 0.0)) {
         return 0.0;
     }
-    return OSH_NUCLEAR_ELASTIC_SIGMA_FACTOR * sigma_reac;
+    return OSH_NUCLEAR_ELASTIC_SIGMA_FACTOR * sigma_reac_cm2;
+}
+
+double osh_nuclear_elastic_sigma(unsigned int zp, unsigned int ap, double zt, double at, double e_lab_per_nucleon) {
+    return osh_nuclear_elastic_sigma_from_reac(osh_nuclear_tripathi_sigma(zp, ap, zt, at, e_lab_per_nucleon));
 }
 
 double osh_nuclear_elastic_lambda_gcm2(double at_g_per_mol, double sigma_cm2) {

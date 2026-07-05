@@ -251,6 +251,10 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     /* p+A elastic hazard, summed over the Z>=2 target elements. */
     double rate_pa;
 
+    /* Channel-enable gates, hoisted out of the per-element rate loop. */
+    int do_inel;
+    int do_pa;
+
     /* Competing-process event sampling. */
     double rate_tot;
     double p_event;
@@ -290,34 +294,60 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
     a_proj = (projectile->a > 0u) ? (double) projectile->a : 1.0;
     e_per_nucleon = rate_energy_mev / a_proj;
 
+    do_inel = params->nuclear_inelastic != 0;
+    do_pa = params->nuclear_elastic != 0 && projectile->pdg == OSH_PART_PDG_PROTON;
+
     /*
-     * Inelastic rate: sum per-element hazards, then sample the struck element
-     * proportional to its hazard when the inelastic channel wins. This keeps
-     * compound materials physically meaningful for fragmentation: water is
-     * struck on oxygen (abrasion + break-up), while hydrogen is excluded
-     * below the pion-production threshold (no p+p inelastic channel there;
-     * pp elastic is handled separately).
+     * Inelastic + p+A-elastic rate: one pass over the material elements, feeding
+     * both hazards from a single Tripathi σ_R per (element, E) — the p+A-elastic
+     * hazard scales σ_R by the σ_el/σ_R prefactor instead of re-running the
+     * parametric formula. The struck element is re-sampled proportional to its
+     * hazard when a channel wins (selection loops below).
+     * This keeps compound materials physically meaningful for fragmentation: water
+     * is struck on oxygen (abrasion + break-up), while hydrogen is excluded from the
+     * inelastic channel below the pion-production threshold (no p+p inelastic there;
+     * pp elastic is handled separately) and from p+A elastic (that is the pp channel).
      */
     rate_inel = 0.0;
-    if (params->nuclear_inelastic) {
+    rate_pa = 0.0;
+    if (do_inel || do_pa) {
         for (i = 0u; i < nelem; ++i) {
-            double ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
-            double zi = (double) elems[i].z;
-            double sigma_i;
-            if (_skip_hydrogen_inelastic(projectile, elems[i].z, rate_energy_mev)) {
+            double ai;         /* target mass number A (2*Z fallback for natural elements) */
+            double zi;         /* target atomic number Z */
+            int inel_i;        /* inelastic channel active for this element */
+            int pa_i;          /* p+A elastic channel active for this element */
+            double sigma_reac; /* Tripathi reaction cross section for (element, E) [cm^2] */
+            double sigma_pa_i; /* p+A elastic cross section = prefactor * sigma_reac [cm^2] */
+
+            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
+            zi = (double) elems[i].z;
+            inel_i = do_inel && !_skip_hydrogen_inelastic(projectile, elems[i].z, rate_energy_mev);
+            pa_i = do_pa && !_skip_pa_elastic_target(elems[i].z, ai);
+            if (!inel_i && !pa_i) {
                 continue;
             }
-            sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
-            if (sigma_i > 0.0) {
-                lambda_inel = osh_nuclear_lambda_gcm2(ai, sigma_i);
+
+            sigma_reac = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
+            if (!(sigma_reac > 0.0)) {
+                continue;
+            }
+
+            if (inel_i) {
+                lambda_inel = osh_nuclear_lambda_gcm2(ai, sigma_reac);
                 rate_inel += (double) elems[i].mass_fraction / lambda_inel;
+            }
+            if (pa_i) {
+                sigma_pa_i = osh_nuclear_elastic_sigma_from_reac(sigma_reac);
+                if (sigma_pa_i > 0.0) {
+                    rate_pa += (double) elems[i].mass_fraction / osh_nuclear_elastic_lambda_gcm2(ai, sigma_pa_i);
+                }
             }
         }
     }
 
     /* pp elastic rate — only for proton projectile */
     rate_pp = 0.0;
-    if (params->nuclear_elastic && projectile->pdg == OSH_PART_PDG_PROTON) {
+    if (do_pa) {
         hydrogen_mf = 0.0;
         for (i = 0u; i < nelem; ++i) {
             if (elems[i].z == 1u) {
@@ -329,25 +359,6 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             if (sigma_el > 0.0) {
                 lambda_pp = osh_nuclear_pp_lambda_gcm2(hydrogen_mf, sigma_el);
                 rate_pp = 1.0 / lambda_pp;
-            }
-        }
-    }
-
-    /* p+A elastic rate — proton projectile, summed over Z>=2 target elements
-     * (hydrogen is the pp channel above; must mirror the selection loop below). */
-    rate_pa = 0.0;
-    if (params->nuclear_elastic && projectile->pdg == OSH_PART_PDG_PROTON) {
-        for (i = 0u; i < nelem; ++i) {
-            double ai;
-            double sigma_pa_i;
-            ai = (double) (elems[i].a > 0u ? elems[i].a : elems[i].z * 2u);
-            if (_skip_pa_elastic_target(elems[i].z, ai)) {
-                continue;
-            }
-            sigma_pa_i =
-                osh_nuclear_elastic_sigma(projectile->z, projectile->a, (double) elems[i].z, ai, e_per_nucleon);
-            if (sigma_pa_i > 0.0) {
-                rate_pa += (double) elems[i].mass_fraction / osh_nuclear_elastic_lambda_gcm2(ai, sigma_pa_i);
             }
         }
     }
