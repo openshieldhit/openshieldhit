@@ -446,7 +446,10 @@ static void test_score_mesh_dqeff_tqeff(void) {
     unsigned int proj_a[1];
     double proj_mass[1];
     float rho_arr[1];
-    float sp_dummy[1];
+    /* Two-point log energy grid: enough for osh_material_runtime_sp_lookup(),
+     * which interpolates between grid points idx and idx+1 (so nenergy >= 2 and
+     * the table must hold two entries per [material][projectile]). */
+    float sp_dummy[2];
     struct osh_material_runtime mat_rt;
     double mean_energy;
     double gamma_inv;
@@ -458,11 +461,21 @@ static void test_score_mesh_dqeff_tqeff(void) {
     proj_a[0] = 1u;
     proj_mass[0] = proton_mass_mev;
     rho_arr[0] = 1.0f;
-    sp_dummy[0] = 0.0f;
+    /* Flat, non-zero stopping power. Its magnitude does not affect the Qeff
+     * pages exercised here (they carry no dose-to-medium override, so the
+     * looked-up value only feeds sp_tr, which stays unused); it only has to be a
+     * valid in-bounds read. */
+    sp_dummy[0] = 1.0f;
+    sp_dummy[1] = 1.0f;
 
     memset(&mat_rt, 0, sizeof(mat_rt));
     mat_rt.nprojectiles = 1u;
     mat_rt.nmaterials = 1u;
+    mat_rt.nenergy = 2u;
+    mat_rt.emin = OSH_MATERIAL_RUNTIME_EMIN;
+    mat_rt.emax = OSH_MATERIAL_RUNTIME_EMAX;
+    mat_rt.log_emin = log(OSH_MATERIAL_RUNTIME_EMIN);
+    mat_rt.inv_dlog = (double) (mat_rt.nenergy - 1u) / log(OSH_MATERIAL_RUNTIME_EMAX / OSH_MATERIAL_RUNTIME_EMIN);
     mat_rt.projectile_z = proj_z;
     mat_rt.projectile_a = proj_a;
     mat_rt.projectile_mass_mev = proj_mass;

@@ -655,10 +655,20 @@ configure and build presets are defined in `CMakePresets.json`.
 
 | Preset | Binary dir | Flags | Use for |
 |---|---|---|---|
-| `debug` | `build_debug/` | `-O0 -g` | Day-to-day development, sanitizers |
+| `debug` | `build_debug/` | `-Og -g3 -fno-omit-frame-pointer` | Day-to-day development |
+| `asan` | `build_asan/` | `-Og -g3 -fsanitize=address,undefined` | Instrumented `ctest` (ASan + UBSan) |
 | `release` | `build/` | `-O3` | Fastest baseline benchmarking |
 | `relwithdebinfo` | `build-rel/` | `-O3 -g` | Optimized benchmarking with symbols |
 | `prof` | `build_prof/` | `-O3 -g -fno-omit-frame-pointer` | `perf record` / flamegraphs |
+
+> The `debug` preset does **not** enable sanitizers — it is a plain `-Og` build.
+> Use the `asan` preset (or `-DOSH_ENABLE_SANITIZERS=ON` on any GCC/Clang
+> configure) to build with AddressSanitizer + UndefinedBehaviorSanitizer; CI runs
+> the full test suite under it on three toolchains — Linux GCC, Linux Clang, and
+> macOS Apple Clang — so implementation-specific reports surface on each. Run
+> leak checks separately: the `asan` CI job sets
+> `ASAN_OPTIONS=detect_leaks=0` while the codebase's benign at-exit leaks are
+> worked through, so LeakSanitizer does not fire there by default.
 
 ### §14.2 Common Commands
 
@@ -690,6 +700,22 @@ Build one target:
 
 ```bash
 cmake --build --preset release --parallel --target gemca_raycast_bench
+```
+
+Configure, build, and run the test suite under AddressSanitizer + UBSan (matches
+the `sanitizers` CI job; LeakSanitizer is disabled while benign at-exit leaks are
+worked through):
+
+```bash
+cmake --preset asan
+```
+
+```bash
+cmake --build --preset asan --parallel
+```
+
+```bash
+ASAN_OPTIONS=detect_leaks=0 ctest --test-dir build_asan --output-on-failure
 ```
 
 ### §14.3 Formatting and Static Analysis

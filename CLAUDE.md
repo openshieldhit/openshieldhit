@@ -21,7 +21,9 @@ For *what the project is* and where things live, read [`llms.txt`](llms.txt) fir
 
 ## Build, test, format
 
-Day-to-day work uses the **debug** preset (unoptimised, sanitiser-friendly).
+Day-to-day work uses the **debug** preset — a plain `-Og` build (no sanitizers).
+For an AddressSanitizer + UBSan run, use the **asan** preset (`build_asan/`),
+which is what the `sanitizers` CI job builds and tests.
 One command per block:
 
 ```bash

@@ -18,7 +18,8 @@ OpenShieldHIT transports ions (protons, heavier ions) through 3D geometry using 
 
 ```bash
 cmake --preset release && cmake --build --preset release --parallel   # optimised
-cmake --preset debug   && cmake --build --preset debug --parallel     # debug + sanitisers
+cmake --preset debug   && cmake --build --preset debug --parallel     # plain -Og debug
+cmake --preset asan    && cmake --build --preset asan    --parallel   # ASan + UBSan
 ctest --test-dir build_debug --output-on-failure                      # run tests
 ```
 

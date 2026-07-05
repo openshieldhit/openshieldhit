@@ -105,6 +105,34 @@ if(OSH_ENABLE_COVERAGE)
     endif()
 endif()
 
+# Opt-in AddressSanitizer + UndefinedBehaviorSanitizer instrumentation. The
+# `debug` preset is a plain -Og build; the sanitizer pass lives behind this
+# switch and is exposed as the dedicated `asan` preset (build_asan/) so CI can
+# run an instrumented ctest without slowing everyday debug builds. GCC/Clang get
+# ASan+UBSan; MSVC only ships AddressSanitizer (no UBSan), so it gets ASan alone.
+# -fno-sanitize-recover=all turns UBSan reports into hard aborts so a violation
+# fails the test run instead of merely printing a warning.
+option(OSH_ENABLE_SANITIZERS "Enable AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+if(OSH_ENABLE_SANITIZERS)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    elseif(MSVC)
+        # MSVC ships AddressSanitizer only (no UBSan). Two MSVC-specific
+        # requirements, both flagged in review: ASan is incompatible with the
+        # /RTC run-time checks that CMake's Debug flags enable by default (strip
+        # them, or cl.exe errors out), and with incremental linking (force it
+        # off). The ASan runtime is import-linked automatically by cl.exe, but
+        # its DLL (clang_rt.asan_dynamic-*.dll, shipped with the MSVC toolchain)
+        # must be discoverable on PATH when the instrumented tests run.
+        string(REGEX REPLACE "/RTC[1csu]+" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+        add_compile_options(/fsanitize=address)
+        add_link_options(/INCREMENTAL:NO)
+    else()
+        message(FATAL_ERROR "OSH_ENABLE_SANITIZERS requires GCC, Clang, or MSVC")
+    endif()
+endif()
+
 # ---- Libraries / modules (these create osh_common, osh_random, etc.) ----
 add_subdirectory(src/common)
 add_subdirectory(src/random)
