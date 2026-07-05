@@ -320,4 +320,117 @@ Fine today; a future finer DEMIN, or 1 GeV/u ions (R ~ 100 g/cm², ULP
 
 ---
 
+## 2. Scoring: estimators, binning, normalization, variance/parallel readiness
+
+Scope: `src/scoring/runtime/` (step scorer, accumulator, postprocess, shadow,
+snapshot), `src/scoring/save/` (ASCII/BDO), plus the deposit call sites in
+transport.
+
+### S-1 (high, high) Particle weight `st->wt` is ignored by every deposit site
+
+The weight is carefully plumbed end-to-end — `pool->wt` at fill, copied to
+secondaries (`osh_transport_ion_step.c:358,380,474`), into the neutron pool
+and back (`osh_transport_neutron.c:103,146`), and into every scoring step
+(`step_from_pool`, `osh_transport_ion_step.c:1311`; point deposits
+`osh_transport_ion_step.c:237`) — and then **no scorer reads it**:
+`grep -n 'st->wt' src/scoring/runtime/*.c` matches nothing. `score_group_energy`
+deposits `st->de·frac` (`osh_scoring_step.c:706-711`), dose deposits
+`path_len·vol_inv·dose_scale` (`:891-896`), fluence `path_len·vol_inv`
+(`:778-782`), DLET numerator/denominator `let·w`, `w = de·path/score_len`
+(`:986-990`) — all weight-free. Same in `osh_scoring_point.c`.
+
+Today this is invisible: the beam always sets `pool->wt[slot] = 1.0` (SOBP
+spot weights are absorbed into the CDF *sampling*, `osh_beam_runtime.c:231`),
+and neutron transport has no implicit capture yet. But:
+
+- **MCPL phase-space import is planned** (TODO.md Beam, #41) — MCPL records
+  carry per-particle weights; the moment that lands, every scorer silently
+  produces wrong results with no test to catch it.
+- Any future variance-reduction (implicit capture in the neutron family is
+  the standard technique for exactly this code's regime) hits the same wall.
+- The stddev work (#169) must also decide *now* whether batch `weight` means
+  "history count" or "sum of statistical weights" — the current accumulator
+  bookkeeping (`acc->weight`) assumes unit weights.
+- Fix direction: multiply `st->wt` into the deposited value at each
+  `score_group_*` (numerator *and* denominator for the two-pass LET/Qeff
+  pages), add a unit test transporting a `wt = 2` primary and asserting
+  doubled deposits; decide the weighted-variance contract in #169 at the same
+  time.
+
+### S-2 (medium, high) Nuclear-kill steps evaluate LET/Qeff/differential axes at half the true midpoint energy
+
+For a primary destroyed by an inelastic nuclear event, `ion_step_commit()`
+signals death via `st.q[3] = 0.0` (`osh_transport_ion_step.c:1088-1092`).
+But every scorer that needs a midpoint energy computes it as
+`0.5·(st->p[3] + st->q[3])` (`osh_scoring_step.c:441` `compute_step_let_medium`,
+`:548` `compute_step_qeff` path, `:566` `diff_step_val`): for the absorption
+step this is `e0/2` instead of `(e0 + exit)/2`. LET at half the energy is
+substantially larger (for 100 MeV protons, S(50 MeV) ≈ 1.8× S(100 MeV)), so:
+
+- DLET/TLET maps acquire a *systematic high bias* in exactly the regions
+  where nuclear reactions matter, weighted by the (non-small) ionization
+  `de` of those steps;
+- differential (spectrum) scorers mis-bin those steps' deposits toward lower
+  energy / higher LET.
+- Elastic events have the milder variant (`q[3]` = post-elastic energy,
+  `osh_transport_ion_step.c:1096`, instead of the pre-elastic CSDA exit).
+- Fix direction: carry the ionization exit energy separately in `struct step`
+  (e.g. keep `q[3] = exit_energy` and signal death via an explicit flag or
+  via `pool->e` only), so scoring midpoints are physics-consistent.
+
+### S-3 (medium, high) Dose uses the transport voxel's density at step start for all scoring-mesh crossings
+
+`score_group_dose` computes one `base_scale = st->de/(score_len·st->rho)`
+per step (`osh_scoring_step.c:838-841`), where `st->rho` is the density of the
+transport zone/voxel where the step *began*. Every scoring-mesh crossing of
+that step — which may span several CT voxels of very different density —
+gets that single ρ. This is the known TODO item ("DOSE scoring with per-voxel
+density weighting for CT geometries"), confirmed in code; the error is largest
+exactly at lung/soft-tissue/bone interfaces where dose accuracy is most
+scrutinised. (Also note the step is scored on the chord `p→q` while the
+transport step may have been hinge-bent — documented O(θ₀²·L), fine.)
+
+### S-4 (low, high) Differential-axis edge semantics: both edges exclusive, out-of-range silently dropped, ASCII spectra not divided by bin width
+
+`diff_axis_bin` (`osh_scoring_step.c:407-421`) treats the axis as the *open*
+interval `(lo, hi)`: a value exactly at `lo` (or `hi`) is discarded via the
+out-of-range sentinel, and there are no under/overflow bins anywhere, so the
+discarded tally is invisible. Combined with the ASCII writer normalising only
+by `1/nstat` (`osh_scoring_save_ascii.c:333-340`) and *not* by bin width, a
+log-binned "spectrum" output is a per-bin count whose shape differs from the
+physical dN/dE — fine as a convention, but it is not documented in the
+writer header, which advertises "immediately human-readable".
+
+### S-5 (info, high) Verified-OK: the accumulator/merge layer is sound and correctly shaped for #169
+
+- `osh_scoring_accumulator_merge` implements the pairwise Welford/West M2
+  combine with the Schubert–Gertz cross-term, empty-batch identities, ordered
+  correctly before the additive fold, with consistency guards
+  (`osh_scoring_accumulator.c:100-210`). This is the *right* variance
+  representation (batch means / M2), not the precision-hazardous naive Σx²
+  — the #169 decision can simply ratify what is scaffolded.
+- `data_var`/`data2_var` are pure scaffold today: nothing allocates them
+  (only `alloc(data, data2)` exists), so merge/zero paths on them are no-ops.
+  One inconsistency to fix when wiring them: `osh_scoring_accumulator_alloc`
+  cannot create them, and `osh_scoring_accumulator_rescale`
+  (`osh_scoring_accumulator.c:67-75`) rescales only `data` — currently dead
+  code (zero call sites); if ever used on a two-pass (LET) page before the
+  divide, it would corrupt the ratio. Delete it or make it scale all arrays
+  consistently.
+- Normalization chain verified: BDO stores raw sums + `OSHBDO_RT_NSTAT` (+
+  the #195 completeness label) for post-hoc/merge use
+  (`osh_scoring_save_bdo2019.c:9-23,119-131`); ASCII divides NORM/SUM pages by
+  `completed_nstat` and correctly leaves AVER (DLET/TLET) undivided
+  (`osh_scoring_save_ascii.c:329-341`); `completed_nstat` is the exact drained
+  count, including clean-stop paths (`osh_simulation.c:645-650`,
+  `osh_transport_ion.c:329-333`).
+- The deposit seam `osh_score_deposit` (issue #158) is in place at all sites
+  (plain `+=`, `osh_scoring_accumulator.h:111-113`), so per-worker
+  redirection (#166) is mechanical.
+- Crossing scratch is caller-owned with capacity checked before use
+  (`osh_scoring_step.c:135-137,155-157` return OSH_ESTATE rather than
+  overflow); capacity `Σ nbins` per geometry is a safe DDA bound.
+
+---
+
 *(Sections below are appended as the audit proceeds.)*
