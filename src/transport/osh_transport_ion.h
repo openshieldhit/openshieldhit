@@ -14,6 +14,7 @@ struct osh_beam_runtime;
 struct osh_gemca_runtime;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
+struct osh_score_target;
 
 /**
  * @brief Transport the ion primaries of one history range [@p hist_lo, @p hist_hi).
@@ -44,6 +45,11 @@ struct osh_scoring_runtime;
  * @param[in]     geom_rt        Compiled geometry runtime.
  * @param[in]     material_rt    Hot material runtime tables.
  * @param[in,out] score_rt       Scoring runtime.
+ * @param[in]     target         Caller-owned deposit target (accumulator set +
+ *                               traversal scratch) the range scores into; NULL (or
+ *                               NULL fields) falls back to @p score_rt's shared
+ *                               master views, reproducing the single-worker path
+ *                               bit-for-bit (issue #230).
  * @param[in]     hist_lo        Inclusive lower bound of the range.
  * @param[in]     hist_hi        Exclusive upper bound; must be > @p hist_lo.
  * @param[out]    completed_out  Receives the number of primaries whose histories
@@ -58,6 +64,7 @@ enum osh_status osh_transport_ion_run_range(struct osh_transport_context *transp
                                             struct osh_gemca_runtime const *geom_rt,
                                             struct osh_material_runtime const *material_rt,
                                             struct osh_scoring_runtime *score_rt,
+                                            struct osh_score_target const *target,
                                             size_t hist_lo,
                                             size_t hist_hi,
                                             size_t *completed_out);

@@ -18,6 +18,7 @@ struct osh_transport_context;
 struct osh_transport_profile;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
+struct osh_score_target;
 struct osh_rng;
 
 /**
@@ -49,6 +50,11 @@ struct osh_rng;
  * pass NULL to disable, or the worker's own profile so concurrent workers never
  * race on shared counters.  It is read-only diagnostics: it never touches the
  * RNG or physics state.
+ *
+ * @p target is the caller-owned deposit target (accumulator set + traversal
+ * scratch) that scoring writes into; a NULL @p target (or NULL fields within it)
+ * falls back to @p score_rt's shared master views, reproducing the single-worker
+ * behaviour bit-for-bit.  A replica or parallel worker passes its own private set.
  */
 enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        size_t slot,
@@ -60,6 +66,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        struct osh_transport_profile *prof,
                                        struct osh_material_runtime const *material_rt,
                                        struct osh_scoring_runtime *score_rt,
+                                       struct osh_score_target const *target,
                                        struct osh_rng *rng);
 
 #endif /* OSH_TRANSPORT_ION_STEP_H */

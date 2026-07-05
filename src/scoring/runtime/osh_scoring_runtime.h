@@ -37,6 +37,34 @@ struct osh_scoring_scratch {
     size_t crossing_cap;                     /* allocated length of crossing_buf */
 };
 
+/* ---- Deposit target ------------------------------------------------------ */
+
+struct osh_scoring_accumulator;
+
+/**
+ * @brief Where a transport worker deposits its scoring: an accumulator set plus
+ *        the per-step traversal scratch, threaded together as one unit.
+ *
+ * @details
+ * The pair @ref osh_scoring_score_step / @ref osh_scoring_score_point need in
+ * lockstep: @p acc_set is the mutable accumulator storage (indexed alongside
+ * @c rt->pages, length @c rt->npages) and @p scratch is the caller-owned
+ * voxel-crossing scratch the traversal writes into.  Bundling them means the
+ * transport call chain threads a single small struct instead of two parallel
+ * pointers through several signatures — and it is the natural unit a worker owns.
+ *
+ * The serial single-worker driver points this at the shared master views
+ * (@ref osh_scoring_runtime_master_accumulators / @ref osh_scoring_runtime_master_scratch);
+ * a parallel or replica worker points it at its own private set, and the driver
+ * folds the accumulators into the master afterwards with
+ * @ref osh_scoring_accumulator_merge.  A NULL @p acc_set / @p scratch means "use
+ * the master view" so a call site can fall back to today's exact behaviour.
+ */
+struct osh_score_target {
+    struct osh_scoring_accumulator *acc_set; /* deposit target (npages-long); NULL ⇒ master */
+    struct osh_scoring_scratch *scratch;     /* per-worker traversal scratch; NULL ⇒ master */
+};
+
 /* ---- Top-level compiled runtime ------------------------------------------ */
 
 /**
@@ -112,6 +140,32 @@ static inline struct osh_scoring_accumulator *osh_scoring_runtime_master_accumul
  */
 static inline struct osh_scoring_scratch *osh_scoring_runtime_master_scratch(struct osh_scoring_runtime *rt) {
     return rt ? &rt->master_scratch : NULL;
+}
+
+/**
+ * @brief Resolve a deposit target's accumulator set, falling back to the master.
+ *
+ * @details
+ * Returns @p t->acc_set when a worker supplied a private set, else the shared
+ * master view.  A NULL @p t (no target threaded) resolves to the master too, so
+ * the serial path is bit-for-bit today's behaviour.  Single seam for the
+ * "private-or-master" decision so no call site hard-codes the master again.
+ */
+static inline struct osh_scoring_accumulator *osh_score_target_accumulators(struct osh_score_target const *t,
+                                                                            struct osh_scoring_runtime *rt) {
+    return (t && t->acc_set) ? t->acc_set : osh_scoring_runtime_master_accumulators(rt);
+}
+
+/**
+ * @brief Resolve a deposit target's traversal scratch, falling back to the master.
+ *
+ * @details
+ * The scratch counterpart to @ref osh_score_target_accumulators: @p t->scratch
+ * when supplied, else the master scratch (also the NULL-@p t case).
+ */
+static inline struct osh_scoring_scratch *osh_score_target_scratch(struct osh_score_target const *t,
+                                                                   struct osh_scoring_runtime *rt) {
+    return (t && t->scratch) ? t->scratch : osh_scoring_runtime_master_scratch(rt);
 }
 
 /**

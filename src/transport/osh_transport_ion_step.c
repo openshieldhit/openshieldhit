@@ -170,7 +170,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
                                        size_t slot,
                                        struct osh_transport_context const *transport_ctx,
-                                       struct osh_scoring_runtime *score_rt);
+                                       struct osh_scoring_runtime *score_rt,
+                                       struct osh_score_target const *target);
 
 /* Table helpers */
 static double cutoff_total_energy(struct osh_transport_params const *params,
@@ -203,8 +204,11 @@ static inline int _nuclear_event_kills_primary(enum osh_nuclear_event_kind kind)
 
 /* Deposit @p energy [MeV] at the slot's current position as a zero-length point
  * (issue #179), attributed to @p species and to a first-generation secondary of
- * the slot's history.  Used for the sub-threshold recoil deposit. */
+ * the slot's history.  Used for the sub-threshold recoil deposit.  @p target is
+ * the worker-supplied deposit target; NULL (or NULL fields) fall back to the
+ * shared master views (issue #230). */
 static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
+                              struct osh_score_target const *target,
                               struct osh_particle_pool const *pool,
                               size_t slot,
                               struct ion_step_ctx const *ctx,
@@ -243,8 +247,8 @@ static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
     pt.gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
     pt.has_voxel = ctx->has_voxel;
     osh_scoring_score_point(score_rt,
-                            osh_scoring_runtime_master_accumulators(score_rt),
-                            osh_scoring_runtime_master_scratch(score_rt),
+                            osh_score_target_accumulators(target, score_rt),
+                            osh_score_target_scratch(target, score_rt),
                             species,
                             &pt);
 }
@@ -267,6 +271,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                                        struct osh_transport_profile *prof,
                                        struct osh_material_runtime const *material_rt,
                                        struct osh_scoring_runtime *score_rt,
+                                       struct osh_score_target const *target,
                                        struct osh_rng *rng) {
     struct ion_step_ctx ctx;
     enum osh_status rc;
@@ -304,7 +309,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
     }
 
     /* Phase 6 — score step, update pool position/energy/direction, nudge */
-    rc = ion_step_commit(&ctx, pool, slot, transport_ctx, score_rt);
+    rc = ion_step_commit(&ctx, pool, slot, transport_ctx, score_rt, target);
     if (rc != OSH_OK) {
         return rc;
     }
@@ -455,7 +460,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
 
             if (ke / (double) frag->a < OSH_TRANSPORT_ION_EMIN_MEV_PER_U) {
                 /* Sub-threshold: no transportable range — point deposit here. */
-                ion_point_deposit(score_rt, pool, slot, &ctx, species, ke, dir);
+                ion_point_deposit(score_rt, target, pool, slot, &ctx, species, ke, dir);
             } else {
                 /* Above threshold: inject as an ion for transport next pass. */
                 size_t s;
@@ -1045,7 +1050,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
                                        struct osh_particle_pool *pool,
                                        size_t slot,
                                        struct osh_transport_context const *transport_ctx,
-                                       struct osh_scoring_runtime *score_rt) {
+                                       struct osh_scoring_runtime *score_rt,
+                                       struct osh_score_target const *target) {
     double qx;
     double qy;
     double qz;
@@ -1100,8 +1106,8 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
     }
 
     rc = osh_scoring_score_step(score_rt,
-                                osh_scoring_runtime_master_accumulators(score_rt),
-                                osh_scoring_runtime_master_scratch(score_rt),
+                                osh_score_target_accumulators(target, score_rt),
+                                osh_score_target_scratch(target, score_rt),
                                 ctx->part,
                                 &st);
     if (rc != OSH_OK) {

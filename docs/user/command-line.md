@@ -87,6 +87,8 @@ build/bin/openshieldhit --dump-every 10m tests/cases/00_minimal/
     --dump-every <dur>            Periodically overwrite the output files with the
                                   current partial result, every <dur> of wall time
     --dump-every-primaries <n>    Same, but every <n> completed primaries
+    --score-replicas <n>          Diagnostic: transport the run as <n> sequential
+                                  private-accumulator sub-ranges, then merge (n <= nstat)
 ```
 
 ## Stopping a run early
@@ -157,6 +159,33 @@ is budgeted up front and shown in the `Scoring memory:` line, so its cost is
 accounted before the run starts rather than discovered partway through. The
 buffer is still allocated lazily at the first dump and is fail-soft if that
 allocation cannot be satisfied. Runs without a dump cadence pay nothing for this.
+
+## Diagnostics
+
+### `--score-replicas <n>` — sequential private-accumulator harness
+
+`--score-replicas <n>` splits the run's `[0, nstat)` histories into `n` contiguous
+sub-ranges, transports them **one after another** (no threads), each depositing
+into its **own private accumulator set**, then **merges** all `n` into the master
+before the normal postprocess and save. It is a **diagnostic and profiling
+harness, not a speed-up**: it runs no faster than a plain run (often a touch
+slower, from the extra accumulator memory and the final merge).
+
+Its purpose is to exercise — with zero concurrency risk — the per-worker
+private-accumulator and merge machinery that the future threaded, MPI, and WASM
+Web Worker backends all depend on, and to make the parallel **reproducibility
+contract** testable before any threading exists:
+
+| Invocation | Guarantee |
+|---|---|
+| `--score-replicas 1` vs a plain run | **bit-identical** — one range → private set → merge into an empty master is the same summation order as serial |
+| `--score-replicas N` (N>1) vs a plain run | **equal within tolerance** — identical per-history physics (each history's RNG stream is a pure function of its global index); only the cross-partition floating-point summation order differs |
+| `--score-replicas N` run **twice** | **bit-identical to each other** — a fixed partition gives a deterministic merge order |
+| `--score-replicas N` vs `--score-replicas M` (N≠M) | **not** guaranteed identical — a different partition changes the merge grouping |
+
+`n` must be at least 1 and at most `nstat` (each replica needs at least one
+history); `0` or `n > nstat` is rejected. With the flag absent, the run takes the
+ordinary shared-master path, byte-for-byte unchanged.
 
 ## Notes
 

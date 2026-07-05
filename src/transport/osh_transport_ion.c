@@ -9,6 +9,7 @@
 #include "material/runtime/osh_material_runtime.h"
 #include "physics/atomic/osh_physics_scat_moliere.h"
 #include "random/osh_rng.h"
+#include "scoring/runtime/osh_scoring_runtime.h"
 #include "transport/osh_run_control.h"
 #include "transport/osh_transport.h"
 #include "transport/osh_transport_ion_step.h"
@@ -108,6 +109,10 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     size_t progress_chunk;
     size_t next_report_completed;
     struct osh_step_segment step_seg;
+    /* Deposit target for this worker: its private accumulator set + scratch, or
+     * NULL fields that osh_score_target_* resolve to the shared master views —
+     * the single-worker baseline, bit-for-bit unchanged (issue #230). */
+    struct osh_score_target target;
     struct osh_transport_profile *prof = wctx->profile; /* per-worker; never the shared master on the hot path */
     struct osh_run_control const *ctl = transport_ctx->run_control; /* clean-stop / wall-budget policy, or NULL */
     double ctl_t_start;
@@ -135,6 +140,12 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     seeding.type = OSH_RNG_TYPE_PCG32;
     seeding.seed = (uint64_t) params->rndseed;
     seeding.hist_base = (uint64_t) params->rndoffset;
+
+    /* Deposit target for the score-step calls below.  The worker owns the pair;
+     * NULL fields resolve to the shared master views inside osh_scoring_score_step
+     * (osh_score_target_*), so a worker with no private set is bit-for-bit serial. */
+    target.acc_set = wctx->accumulators;
+    target.scratch = wctx->scratch;
 
     /* Total step budget: nstat × max_steps, capped at SIZE_MAX to avoid overflow. */
     if (nstat > (size_t) -1 / OSH_TRANSPORT_MAX_STEPS_PER_PRIMARY) {
@@ -265,6 +276,7 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
                                         prof,
                                         material_rt,
                                         score_rt,
+                                        &target,
                                         &pool->rng[i]);
             if (rc != OSH_OK) {
                 OSH_DIAG_ERRORF(transport_ctx->diag,
@@ -444,6 +456,7 @@ enum osh_status osh_transport_ion_run_range(struct osh_transport_context *transp
                                             struct osh_gemca_runtime const *geom_rt,
                                             struct osh_material_runtime const *material_rt,
                                             struct osh_scoring_runtime *score_rt,
+                                            struct osh_score_target const *target,
                                             size_t hist_lo,
                                             size_t hist_hi,
                                             size_t *completed_out) {
@@ -481,6 +494,16 @@ enum osh_status osh_transport_ion_run_range(struct osh_transport_context *transp
     transport_ctx->ion_pool->n = 0u;
     osh_worker_context_attach(
         &wctx, hist_lo, hist_hi, transport_ctx->ion_pool, transport_ctx->zone_refs, transport_ctx->dist_batch);
+
+    /* Wire this worker's deposit target: a caller-supplied private set (the replica
+     * driver, issue #230) or NULL for the shared-master baseline.  run_history_range
+     * builds the score target from these fields; NULL fields resolve to the master
+     * so the un-partitioned path is bit-for-bit unchanged. */
+    if (target) {
+        wctx.accumulators = target->acc_set;
+        wctx.naccumulators = target->acc_set ? score_rt->npages : 0u;
+        wctx.scratch = target->scratch;
+    }
 
     /* Single worker: point its profile straight at the run's master so counters
      * land there directly — bit-identical to the un-parallelised path, no merge.

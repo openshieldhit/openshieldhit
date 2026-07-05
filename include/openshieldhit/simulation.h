@@ -190,6 +190,39 @@ enum osh_status osh_simulation_set_run_control(struct osh_simulation *sim,
 enum osh_status osh_simulation_set_checkpoint_policy(struct osh_simulation *sim, unsigned long long every_primaries);
 
 /**
+ * @brief Configure the sequential score-replica diagnostic harness (issue #230).
+ *
+ * @details
+ * Must be called after osh_simulation_create() and before osh_simulation_run().
+ * Splits the run's [0, nstat) histories into @p replicas contiguous sub-ranges,
+ * transports each one **sequentially** (no threads) into its own private
+ * accumulator set, then merges all of them into the master before the normal
+ * postprocess + save.  It is a correctness- and profiling-harness: the first thing
+ * that exercises the private-accumulator + merge reduce every parallel backend
+ * (threads, MPI, WASM workers) will depend on — with zero concurrency risk.  It
+ * does **not** speed anything up.
+ *
+ * Reproducibility (the deterministic core of the parallel contract, issue #168):
+ *   - @p replicas == 0 (default) → the shared-master fast path, byte-for-byte the
+ *     un-replica'd run.
+ *   - @p replicas == 1 → one private set merged into an empty master: the same
+ *     summation order as serial, so **bit-identical** to it.
+ *   - @p replicas  > 1 → identical per-history physics (each history's RNG stream
+ *     is a pure function of its global index); only cross-partition floating-point
+ *     summation order differs, so the result matches serial within tolerance, and
+ *     the **same** @p replicas run twice is bit-identical.
+ *
+ * @param[in] sim       Simulation handle created by osh_simulation_create().
+ * @param[in] replicas  Number of sequential replicas; 0 disables the harness.
+ *                      Must be <= the run's nstat (each replica needs at least one
+ *                      history) or the call is rejected.
+ *
+ * @returns OSH_OK on success; OSH_EINVAL when @p sim is NULL or @p replicas
+ *          exceeds nstat.
+ */
+enum osh_status osh_simulation_set_score_replicas(struct osh_simulation *sim, size_t replicas);
+
+/**
  * @brief Configure periodic and on-demand partial-result dumps (issue #193).
  *
  * @details

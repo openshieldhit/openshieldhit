@@ -558,6 +558,24 @@ enum osh_status osh_simulation_set_checkpoint_policy(struct osh_simulation *sim,
     return OSH_OK;
 }
 
+enum osh_status osh_simulation_set_score_replicas(struct osh_simulation *sim, size_t replicas) {
+    if (!sim) {
+        return OSH_EINVAL;
+    }
+    /* A contiguous integer partition of [0, nstat) into N parts only tiles the
+     * range with no empty part when N <= nstat; reject the misuse here, at the
+     * earliest point nstat is known, with a clear diagnostic. */
+    if (replicas > (size_t) sim->transport_ctx.params.nstat) {
+        OSH_DIAG_ERRORF(sim->diag,
+                        "simulation: --score-replicas %zu exceeds nstat %zu (each replica needs at least one history)",
+                        replicas,
+                        (size_t) sim->transport_ctx.params.nstat);
+        return OSH_EINVAL;
+    }
+    sim->transport_ctx.params.score_replicas = replicas;
+    return OSH_OK;
+}
+
 enum osh_status osh_simulation_set_pool_capacity(struct osh_simulation *sim, size_t capacity) {
     if (!sim) {
         return OSH_EINVAL;

@@ -101,6 +101,8 @@ int main(int argc, char *argv[]) {
     run_opt.has_dump_every = opt.has_dump_every;
     run_opt.dump_every_primaries = opt.dump_every_primaries;
     run_opt.has_dump_every_primaries = opt.has_dump_every_primaries;
+    run_opt.score_replicas = opt.score_replicas;
+    run_opt.has_score_replicas = opt.has_score_replicas;
 
     /* Install the graceful-stop handler before running so an interactive Ctrl-C
      * (or a --max-time budget) ends the run cleanly with a saved partial result

@@ -334,6 +334,45 @@ static void test_dump_every_primaries_option(void) {
     ASSERT_TRUE(strstr(err, "requires a value") != NULL);
 }
 
+static void test_score_replicas_option(void) {
+    char err[256];
+    struct osh_cli_options opt;
+    char *argv[] = {"openshieldhit", "--score-replicas", "4", "run_17", NULL};
+    char *argv_eq[] = {"openshieldhit", "--score-replicas=8", NULL};
+    char *argv_plain[] = {"openshieldhit", "run_17", NULL};
+    char *argv_zero[] = {"openshieldhit", "--score-replicas=0", NULL};
+    char *argv_bad[] = {"openshieldhit", "--score-replicas=abc", NULL};
+    char *argv_missing[] = {"openshieldhit", "--score-replicas", NULL};
+
+    int rc = osh_cli_parse(4, argv, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_score_replicas == 1);
+    ASSERT_TRUE(opt.score_replicas == 4ULL);
+    ASSERT_TRUE(opt.workdir != NULL && strcmp(opt.workdir, "run_17") == 0);
+
+    rc = osh_cli_parse(2, argv_eq, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_score_replicas == 1);
+    ASSERT_TRUE(opt.score_replicas == 8ULL);
+
+    /* Absent flag leaves the harness off. */
+    rc = osh_cli_parse(2, argv_plain, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(opt.has_score_replicas == 0);
+
+    /* 0 is rejected: a replica must transport at least one history. */
+    rc = osh_cli_parse(2, argv_zero, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "positive integer") != NULL);
+
+    rc = osh_cli_parse(2, argv_bad, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+
+    rc = osh_cli_parse(2, argv_missing, &opt, err, sizeof(err));
+    ASSERT_TRUE(rc != 0);
+    ASSERT_TRUE(strstr(err, "requires a value") != NULL);
+}
+
 static int run_named_test(char const *name) {
     if (strcmp(name, "parse_duration_good") == 0) {
         test_parse_duration_good();
@@ -399,6 +438,10 @@ static int run_named_test(char const *name) {
         test_dump_every_primaries_option();
         return 0;
     }
+    if (strcmp(name, "score_replicas_option") == 0) {
+        test_score_replicas_option();
+        return 0;
+    }
     return 1;
 }
 
@@ -423,5 +466,6 @@ int main(int argc, char *argv[]) {
     test_max_time_option();
     test_dump_every_option();
     test_dump_every_primaries_option();
+    test_score_replicas_option();
     return 0;
 }

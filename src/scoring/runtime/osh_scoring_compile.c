@@ -635,6 +635,77 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
     memset(rt, 0, sizeof(*rt));
 }
 
+/* ---- Private deposit-target cloning (issue #230) ------------------------- */
+
+void osh_scoring_runtime_free_accumulator_set(struct osh_scoring_accumulator *set, size_t npages) {
+    size_t i;
+
+    if (!set) {
+        return;
+    }
+    /* Free only the per-page arrays; the set array itself is caller-owned. */
+    for (i = 0; i < npages; ++i) {
+        osh_scoring_accumulator_free(&set[i]);
+    }
+}
+
+enum osh_status osh_scoring_runtime_alloc_accumulator_set(struct osh_scoring_runtime const *rt,
+                                                          struct osh_scoring_accumulator *set) {
+    size_t i;
+    enum osh_status rc;
+
+    if (!rt || (rt->npages > 0u && !set)) {
+        return OSH_EINVAL;
+    }
+    for (i = 0; i < rt->npages; ++i) {
+        /* Match the master page exactly: same len, same data2 presence.  The
+         * variance arrays track the master too (NULL today), so a later merge
+         * always agrees on optional-array presence. */
+        rc = osh_scoring_accumulator_alloc(&set[i], rt->pages[i].acc.len, rt->pages[i].acc.data2 != NULL);
+        if (rc != OSH_OK) {
+            osh_scoring_runtime_free_accumulator_set(set, i); /* release the pages built so far */
+            return rc;
+        }
+    }
+    return OSH_OK;
+}
+
+void osh_scoring_runtime_free_scratch(struct osh_scoring_scratch *scratch) {
+    if (!scratch) {
+        return;
+    }
+    free(scratch->crossing_buf);
+    scratch->crossing_buf = NULL;
+    scratch->crossing_cap = 0u;
+}
+
+enum osh_status osh_scoring_runtime_clone_scratch(struct osh_scoring_runtime const *rt,
+                                                  struct osh_scoring_scratch *scratch_out) {
+    if (!rt || !scratch_out) {
+        return OSH_EINVAL;
+    }
+    /* @p scratch_out is a pure output: reject a struct that still owns a buffer so
+     * a mistaken reuse surfaces as an error instead of silently leaking it.  The
+     * caller must hand us a zero-initialised (or already-freed) scratch. */
+    if (scratch_out->crossing_buf != NULL) {
+        return OSH_EINVAL;
+    }
+    scratch_out->crossing_buf = NULL;
+    scratch_out->crossing_cap = 0u;
+    /* Mirror the master scratch: a runtime with no crossing geometry keeps a NULL
+     * buffer (cap 0), so the clone does too. */
+    if (rt->master_scratch.crossing_cap == 0u) {
+        return OSH_OK;
+    }
+    scratch_out->crossing_buf =
+        (struct osh_voxel_crossing *) malloc(rt->master_scratch.crossing_cap * sizeof(*scratch_out->crossing_buf));
+    if (!scratch_out->crossing_buf) {
+        return OSH_ENOMEM;
+    }
+    scratch_out->crossing_cap = rt->master_scratch.crossing_cap;
+    return OSH_OK;
+}
+
 enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                                     struct osh_diag_sink const *diag,
                                     struct osh_scoring_runtime *rt) {

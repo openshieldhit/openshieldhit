@@ -73,6 +73,7 @@ static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k, double 
 }
 
 static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
+                                          struct osh_score_target const *target,
                                           struct osh_neutron_pool const *pool,
                                           size_t k,
                                           struct osh_zone_ref const *zone_ref,
@@ -111,8 +112,8 @@ static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
     st.has_voxel = (zone_ref && zone_ref->has_hu) ? 1u : 0u;
 
     return osh_scoring_score_step(score_rt,
-                                  osh_scoring_runtime_master_accumulators(score_rt),
-                                  osh_scoring_runtime_master_scratch(score_rt),
+                                  osh_score_target_accumulators(target, score_rt),
+                                  osh_score_target_scratch(target, score_rt),
                                   &k_neutron_species,
                                   &st);
 }
@@ -210,7 +211,8 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
                                           struct osh_beam_runtime *beam_rt,
                                           struct osh_gemca_runtime const *geom_rt,
                                           struct osh_material_runtime const *material_rt,
-                                          struct osh_scoring_runtime *score_rt) {
+                                          struct osh_scoring_runtime *score_rt,
+                                          struct osh_score_target const *target) {
     struct osh_neutron_pool *pool;             /* borrowed from transport_ctx */
     struct osh_nuclear_handler const *handler; /* element composition + FBU */
     struct osh_neutron_xsec xsec;              /* cross-section model (stack-alloc) */
@@ -314,7 +316,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
 
             /* -- vacuum or zero-density material --------------------------- */
             if (rho <= 0.0) {
-                rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, dist_batch[k]);
+                rc = score_neutron_step(score_rt, target, pool, k, &zone_refs[k], rho, dist_batch[k]);
                 if (rc != OSH_OK) {
                     osh_neutron_xsec_free(&xsec);
                     return rc;
@@ -329,7 +331,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
 
             /* -- transparent material (no xsec for any element) ------------ */
             if (sigma_tot <= 0.0) {
-                rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, dist_batch[k]);
+                rc = score_neutron_step(score_rt, target, pool, k, &zone_refs[k], rho, dist_batch[k]);
                 if (rc != OSH_OK) {
                     osh_neutron_xsec_free(&xsec);
                     return rc;
@@ -350,7 +352,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
 
             if (l >= dist_batch[k]) {
                 /* no interaction this step: neutron crosses zone boundary */
-                rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, dist_batch[k]);
+                rc = score_neutron_step(score_rt, target, pool, k, &zone_refs[k], rho, dist_batch[k]);
                 if (rc != OSH_OK) {
                     osh_neutron_xsec_free(&xsec);
                     return rc;
@@ -361,7 +363,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
             }
 
             /* -- advance to interaction point ------------------------------- */
-            rc = score_neutron_step(score_rt, pool, k, &zone_refs[k], rho, l);
+            rc = score_neutron_step(score_rt, target, pool, k, &zone_refs[k], rho, l);
             if (rc != OSH_OK) {
                 osh_neutron_xsec_free(&xsec);
                 return rc;

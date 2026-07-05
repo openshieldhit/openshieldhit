@@ -1,0 +1,15 @@
+# Minimal nuclear-on case (NUCRE 1) for the --score-replicas equivalence tests.
+# One TEXT mesh output so run_score_replicas.cmake can compare data columns.
+
+Geometry Mesh
+   Name MyMesh                    # geometry type
+    X -5.0    5.0    1
+    Y -5.0    5.0    1
+    Z  0.0   20.0  200   # 1 mm steps
+
+Output
+         Filename NB_msh.dat
+         Fileformat TEXT
+         Geo MyMesh
+         Quantity Energy
+         Quantity Dose

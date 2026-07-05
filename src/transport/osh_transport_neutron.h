@@ -12,6 +12,7 @@ struct osh_beam_runtime;
 struct osh_gemca_runtime;
 struct osh_material_runtime;
 struct osh_scoring_runtime;
+struct osh_score_target;
 
 /**
  * @brief Minimal fast-neutron transport loop.
@@ -35,13 +36,17 @@ struct osh_scoring_runtime;
  *
  * @param transport_ctx  Must have neutron_pool and nuclear_handler set.
  * @param beam_rt        Unused (no primary beam refill for neutrons).
- * @param score_rt       Unused until point scoring is wired.
+ * @param score_rt       Scoring runtime the step deposits into.
+ * @param target         Caller-owned deposit target (accumulator set + scratch);
+ *                       NULL (or NULL fields) falls back to @p score_rt's master
+ *                       views, so the single-worker path is unchanged (issue #230).
  */
 enum osh_status osh_transport_neutron_run(struct osh_transport_context *transport_ctx,
                                           struct osh_beam_runtime *beam_rt,
                                           struct osh_gemca_runtime const *geom_rt,
                                           struct osh_material_runtime const *material_rt,
-                                          struct osh_scoring_runtime *score_rt);
+                                          struct osh_scoring_runtime *score_rt,
+                                          struct osh_score_target const *target);
 
 #ifdef __cplusplus
 }

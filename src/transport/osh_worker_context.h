@@ -12,6 +12,7 @@ extern "C" {
 struct osh_particle_pool;
 struct osh_zone_ref;
 struct osh_scoring_accumulator;
+struct osh_scoring_scratch;
 struct osh_transport_profile;
 
 /**
@@ -54,14 +55,17 @@ struct osh_worker_context {
     struct osh_zone_ref *zone_refs; /* Batch zone-reference scratch, length >= @ref capacity (borrowed). */
     double *dist_batch;             /* Batch boundary-distance scratch, length >= @ref capacity (borrowed). */
 
-    /* Future per-worker private scoring memory.  When non-NULL the worker will
-     * deposit into this private set and the driver will fold it into the shared
-     * master with osh_scoring_accumulator_merge() once the range completes.  NULL
-     * today: the single worker deposits straight into the shared master, so there
-     * is nothing to merge.  Profiling per-worker vs shared scoring memory plugs in
-     * here without touching the transport loop. */
+    /* Per-worker private scoring memory (the deposit target).  When @ref
+     * accumulators is non-NULL the worker deposits into this private set and the
+     * driver folds it into the shared master with osh_scoring_accumulator_merge()
+     * once the range completes; @ref scratch is the matching per-worker traversal
+     * scratch the deposit path writes crossings into.  Both NULL means "use the
+     * shared master views" — the single-worker baseline, bit-for-bit unchanged.
+     * The sequential-replica driver (issue #230) is the first caller to populate
+     * these; a threaded/MPI/WASM backend attaches its own set here the same way. */
     struct osh_scoring_accumulator *accumulators;
     size_t naccumulators;
+    struct osh_scoring_scratch *scratch;
 
     /* Per-worker transport profile (phase timers + event counters).  The worker
      * accumulates here on the hot path, never into a shared profile, so workers

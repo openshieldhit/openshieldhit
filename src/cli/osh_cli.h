@@ -47,6 +47,8 @@ struct osh_cli_options {
     int has_dump_every;  /**< Non-zero if --dump-every was explicitly given. */
     unsigned long long dump_every_primaries; /**< Periodic dump count cadence from --dump-every-primaries. */
     int has_dump_every_primaries;            /**< Non-zero if --dump-every-primaries was explicitly given. */
+    unsigned long long score_replicas;       /**< Sequential score-replica count (diagnostic); >= 1 when set. */
+    int has_score_replicas;                  /**< Non-zero if --score-replicas was explicitly given. */
 };
 
 /**

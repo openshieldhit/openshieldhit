@@ -49,3 +49,23 @@ if(TEST "cases::05_dicom_simple")
         FIXTURES_REQUIRED DICOM_FIXTURES)
     set_property(TEST "cases::05_dicom_simple" APPEND PROPERTY LABELS "dicom")
 endif()
+
+# ---- --score-replicas reproducibility contract (issue #230) ------------------
+# Real-transport runs of an EM-only and a nuclear case, each transported serially
+# and via 1 and N sequential private-accumulator replicas, then cross-compared:
+#   serial == --score-replicas 1  (byte-identical) ; == --score-replicas N (tol) ;
+#   --score-replicas N run twice   (byte-identical).
+# Driven by run_score_replicas.cmake (separate from the plain dry-run case entry).
+foreach(repl_case "00_minimal" "13_minimal_nucre")
+    add_test(
+        NAME "cases::score_replicas::${repl_case}"
+        COMMAND ${CMAKE_COMMAND}
+            -DOSH_EXECUTABLE=$<TARGET_FILE:openshieldhit>
+            -DCASE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/${repl_case}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/score_replicas_${repl_case}
+            -DNSTAT=200
+            -DREPLICAS=4
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/run_score_replicas.cmake
+    )
+    set_tests_properties("cases::score_replicas::${repl_case}" PROPERTIES LABELS "cases")
+endforeach()
