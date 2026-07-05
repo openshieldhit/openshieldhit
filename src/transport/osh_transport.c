@@ -177,12 +177,47 @@ static enum osh_status run_master_batched(struct osh_transport_context *transpor
     struct osh_checkpoint_policy const *policy = transport_ctx->checkpoint_policy;
     struct osh_run_control *ctl = transport_ctx->run_control; /* clean-stop / dump policy, or NULL */
     size_t const nstat = transport_ctx->params.nstat;
+    size_t const npages = score_rt->npages;
+    /* Variance (issue #209): when the VARIANCE card allocated per-page M2 arrays,
+     * each checkpoint batch is scored into its own private set and folded into the
+     * master as one batch-means observation, so the master's M2 captures the
+     * between-batch spread.  Off ⇒ the classic cumulative-into-master path,
+     * byte-for-byte unchanged. */
+    int const variance = osh_scoring_runtime_tracks_variance(score_rt);
+    struct osh_scoring_accumulator *batch_acc = NULL; /* reusable private set (variance only) */
+    struct osh_scoring_scratch batch_scratch;         /* reusable per-batch traversal scratch */
     size_t done;          /* primaries whose histories have finished; the true completed count */
     double measured_rate; /* primaries/s from the last batch; seeds the adaptive time cadence */
     enum osh_status rc;
 
+    memset(&batch_scratch, 0, sizeof(batch_scratch));
     done = 0u;
     measured_rate = 0.0;
+
+    /* Setup once, off the hot path (DEVELOPER.md §10): one reusable private
+     * accumulator set + traversal scratch, zeroed and re-used per batch, merged at
+     * each quiescent batch boundary.  One extra set, not N — the replicas run
+     * sequentially. */
+    if (variance) {
+        if (npages > 0u) {
+            batch_acc = (struct osh_scoring_accumulator *) calloc(npages, sizeof(*batch_acc));
+            if (!batch_acc) {
+                return OSH_ENOMEM;
+            }
+            rc = osh_scoring_runtime_alloc_accumulator_set(score_rt, batch_acc);
+            if (rc != OSH_OK) {
+                free(batch_acc);
+                return rc;
+            }
+        }
+        rc = osh_scoring_runtime_clone_scratch(score_rt, &batch_scratch);
+        if (rc != OSH_OK) {
+            osh_scoring_runtime_free_accumulator_set(batch_acc, npages);
+            free(batch_acc);
+            return rc;
+        }
+    }
+
     while (done < nstat) {
         size_t batch_completed = 0u;
         size_t const remaining = nstat - done;
@@ -192,21 +227,56 @@ static enum osh_status run_master_batched(struct osh_transport_context *transpor
         size_t const k = osh_checkpoint_next_batch_size(policy, measured_rate, remaining);
         double t_batch_start = osh_monotonic_seconds();
         double batch_s;
-        int dump_destination_ready; /* set below: the driver wired a sink + shadow for dumps */
+        int dump_destination_ready;                       /* set below: the driver wired a sink + shadow for dumps */
+        struct osh_score_target target;                   /* private deposit target (variance only) */
+        struct osh_score_target const *target_ptr = NULL; /* NULL ⇒ deposit into the shared master */
+        size_t p;
 
-        /* target == NULL: deposit straight into the shared master views. */
+        if (variance) {
+            /* Fresh batch: zero the private set so this batch is one independent
+             * observation, then route deposits to it instead of the master. */
+            for (p = 0u; p < npages; ++p) {
+                osh_scoring_accumulator_zero(&batch_acc[p]);
+            }
+            target.acc_set = batch_acc;
+            target.scratch = &batch_scratch;
+            target_ptr = &target;
+        }
+
+        /* target_ptr == NULL: deposit straight into the shared master views. */
         rc = run_families_over_range(transport_ctx,
                                      beam_rt,
                                      geom_rt,
                                      material_rt,
                                      score_rt,
-                                     NULL,
+                                     target_ptr,
                                      done,
                                      done + k,
                                      neutron_enabled,
                                      &batch_completed);
         if (rc != OSH_OK) {
-            return rc;
+            goto cleanup;
+        }
+
+        /* Fold this batch into the master as one weighted observation (weight =
+         * primaries that finished, nbatch = 1) before advancing `done`: merge()
+         * applies the Schubert–Gertz cross-term so the master's M2 accumulates the
+         * between-batch spread.  Skipped for an empty batch (a clean stop drained
+         * nothing): a weight-0/nbatch-1 pair would be rejected as inconsistent. */
+        if (variance && batch_completed > 0u) {
+            for (p = 0u; p < npages; ++p) {
+                batch_acc[p].weight = (double) batch_completed;
+                batch_acc[p].nbatch = 1u;
+                /* Merge into the page's own storage (the canonical read-back the
+                 * finalize + save layers use); its data arrays alias the master
+                 * view, so this is the exact seam issue #161 reserves. */
+                rc = osh_scoring_accumulator_merge(&score_rt->pages[p].acc, &batch_acc[p]);
+                if (rc != OSH_OK) {
+                    OSH_DIAG_ERRORF(
+                        transport_ctx->diag, "transport: variance batch merge failed (rc=%d) on page %zu", (int) rc, p);
+                    goto cleanup;
+                }
+            }
         }
 
         /* Advance by the primaries that actually finished, never the requested
@@ -263,7 +333,17 @@ static enum osh_status run_master_batched(struct osh_transport_context *transpor
     }
 
     *completed_out = done;
-    return OSH_OK;
+    rc = OSH_OK;
+
+cleanup:
+    /* Release the reusable variance batch set + scratch (no-ops when variance is
+     * off: batch_acc is NULL and batch_scratch was memset to zero). */
+    if (batch_acc) {
+        osh_scoring_runtime_free_accumulator_set(batch_acc, npages);
+        free(batch_acc);
+    }
+    osh_scoring_runtime_free_scratch(&batch_scratch);
+    return rc;
 }
 
 /*
@@ -302,7 +382,6 @@ static enum osh_status run_score_replicas(struct osh_transport_context *transpor
      * (vs. an array of per-replica pointers) is one allocation and one free. */
     struct osh_scoring_accumulator *private_acc;  /* flat nreplicas*npages block, or NULL when npages==0 */
     struct osh_scoring_scratch *private_scratch;  /* one traversal scratch per replica */
-    struct osh_scoring_accumulator *master;       /* master accumulator view (merge destination) */
     struct osh_transport_profile *master_profile; /* run master profile, or NULL when profiling off */
     size_t const nstat = transport_ctx->params.nstat;
     size_t const npages = score_rt->npages;
@@ -380,6 +459,19 @@ static enum osh_status run_score_replicas(struct osh_transport_context *transpor
             goto cleanup;
         }
 
+        /* Tag this replica as one batch-means observation so a VARIANCE run folds
+         * its Welford M2 too (weight = primaries it actually ran, nbatch = 1) —
+         * i.e. --score-replicas N doubles as an N-batch variance source with no
+         * dumps.  Harmless when variance is off (the scalars are never read).  An
+         * empty (drained) replica keeps weight 0 / nbatch 0 so the merge treats it
+         * as the identity and the variance bookkeeping stays consistent. */
+        if (completed > 0u) {
+            for (p = 0u; p < npages; ++p) {
+                private_acc[r * npages + p].weight = (double) completed;
+                private_acc[r * npages + p].nbatch = 1u;
+            }
+        }
+
         completed_total += completed;
         /* A short range means a clean stop drained it early; do not launch more
          * replicas (their un-run private sets stay zeroed and merge as identity). */
@@ -388,15 +480,17 @@ static enum osh_status run_score_replicas(struct osh_transport_context *transpor
         }
     }
 
-    /* ---- Merge boundary: fold every private set into the shared master ------ */
+    /* ---- Merge boundary: fold every private set into the master ------------- */
     /* Quiescent point — every range has fully drained its families — so this is
-     * the exact seam issue #161 reserves.  Merging a private set into the empty
-     * master is additive (data += data), so N == 1 reproduces serial bit-for-bit;
-     * a zeroed (un-run) set folds in as the identity. */
-    master = osh_scoring_runtime_master_accumulators(score_rt);
+     * the exact seam issue #161 reserves.  Merge into each page's own accumulator
+     * storage (the canonical read-back the finalize + save layers use); its data
+     * arrays alias the master view, and the merge also folds the batch weight /
+     * nbatch / M2 the variance finalize needs.  Merging a private set into the
+     * empty page is additive (data += data), so N == 1 reproduces serial
+     * bit-for-bit; a zeroed (un-run) set folds in as the identity. */
     for (r = 0u; r < nreplicas; ++r) {
         for (p = 0u; p < npages; ++p) {
-            rc = osh_scoring_accumulator_merge(&master[p], &private_acc[r * npages + p]);
+            rc = osh_scoring_accumulator_merge(&score_rt->pages[p].acc, &private_acc[r * npages + p]);
             if (rc != OSH_OK) {
                 OSH_DIAG_ERRORF(
                     transport_ctx->diag, "transport: score-replica merge failed (rc=%d) on page %zu", (int) rc, p);

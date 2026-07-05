@@ -615,6 +615,26 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
         return OSH_EINVAL;
     }
 
+    /* Variance batching (issue #209): a VARIANCE run needs >= 2 checkpoint batches
+     * to have any degrees of freedom.  If the user set no other cadence and no
+     * score-replica split, derive a count cadence that yields the requested number
+     * of batches (ws->variance), so a plain single-threaded run produces error bars
+     * out of the box.  An explicit dump/checkpoint cadence or --score-replicas
+     * already provides batches, so those are left untouched (the variance fold rides
+     * whatever cadence is active). */
+    if (osh_scoring_runtime_tracks_variance(&sim->scoring_runtime) && sim->transport_ctx.params.score_replicas == 0u
+        && sim->checkpoint_policy.mode == OSH_PARTIAL_NONE) {
+        int const nbatches = sim->scoring ? sim->scoring->variance : 0;
+        unsigned long long const nstat = (unsigned long long) sim->transport_ctx.params.nstat;
+        if (nbatches >= 2 && nstat > 0ull) {
+            /* ceil(nstat / nbatches): the count cadence that splits [0, nstat) into
+             * about `nbatches` family-complete batches. */
+            unsigned long long const every =
+                (nstat + (unsigned long long) nbatches - 1ull) / (unsigned long long) nbatches;
+            osh_simulation_set_checkpoint_policy(sim, every);
+        }
+    }
+
     /* Bind the dump destination when any dump trigger is armed.  Done here, not in
      * the setter, because the shadow aliases the compiled scoring runtime and the
      * file sink needs the workspace's resolved output paths — both stable across
@@ -694,6 +714,16 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
                        "prefragments outside the break-up domain), transported as recoil ions or "
                        "point-deposited when below the transport threshold",
                        sim->fragment_pool.n_created);
+    }
+
+    /* Finalise per-bin Monte-Carlo standard error (issue #209) BEFORE postprocess:
+     * it reads the raw sums (and, for LET/Qeff, the two-pass weight) that
+     * postprocess is about to rescale/collapse.  A no-op unless the VARIANCE card
+     * allocated the M2 arrays. */
+    rc = osh_scoring_finalize_errors(&sim->scoring_runtime);
+    if (rc != OSH_OK) {
+        OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: scoring error finalize failed");
+        return rc;
     }
 
     rc = osh_scoring_postprocess(&sim->scoring_runtime);

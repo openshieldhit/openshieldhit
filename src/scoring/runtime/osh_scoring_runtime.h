@@ -169,6 +169,23 @@ static inline struct osh_scoring_scratch *osh_score_target_scratch(struct osh_sc
 }
 
 /**
+ * @brief Does this runtime track per-bin Monte-Carlo variance (Welford M2)?
+ *
+ * @details
+ * True when the global VARIANCE card was set, so @ref osh_scoring_compile
+ * allocated the M2 arrays on every page (issue #209).  Variance is all-or-nothing
+ * (a run-global card), so the first page is representative.  The transport driver
+ * uses this once at setup to decide whether to score each checkpoint batch into a
+ * private set and fold it (with the Schubert–Gertz cross-term) instead of
+ * depositing cumulatively into the master; the finalize/save layers use it to emit
+ * the standard-error columns.  Off ⇒ the accumulators and the hot path are exactly
+ * as before.
+ */
+static inline int osh_scoring_runtime_tracks_variance(struct osh_scoring_runtime const *rt) {
+    return (rt && rt->npages > 0u && rt->pages && rt->pages[0].acc.data_var != NULL) ? 1 : 0;
+}
+
+/**
  * @brief Completeness label to stamp on a saved result — never NULL.
  *
  * @details

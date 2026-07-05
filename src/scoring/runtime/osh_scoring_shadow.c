@@ -47,6 +47,15 @@ enum osh_status osh_scoring_shadow_init(struct osh_scoring_shadow *shadow, struc
 
     for (i = 0; i < live->npages; ++i) {
         shadow->pages[i] = live->pages[i]; /* struct copy: aliases data/data2/var + scalars */
+        /* A mid-run dump is a data-only preview: the shadow copies only the `data`
+         * array (osh_scoring_shadow_refresh), not the Welford M2 state, and the
+         * live run keeps folding batches after the dump.  Drop the variance aliases
+         * so a dump never (a) emits a standard-error column it cannot fill, nor
+         * (b) lets a finalize on the view corrupt the still-live M2 arrays.  Final
+         * (end-of-run) error bars come from the live runtime, not this shadow. */
+        shadow->pages[i].variance = 0;
+        shadow->pages[i].acc.data_var = NULL;
+        shadow->pages[i].acc.data2_var = NULL;
     }
     shadow->view.pages = shadow->pages;
 

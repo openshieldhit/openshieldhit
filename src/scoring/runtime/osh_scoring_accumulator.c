@@ -3,7 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *acc, size_t len, int want_data2) {
+enum osh_status osh_scoring_accumulator_alloc_variance(struct osh_scoring_accumulator *acc,
+                                                       size_t len,
+                                                       int want_data2,
+                                                       int want_variance) {
     size_t n = len; /* never allocate a zero-length array */
 
     if (!acc) {
@@ -29,13 +32,32 @@ enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *ac
     if (want_data2) {
         acc->data2 = (double *) calloc(n, sizeof(*acc->data2));
         if (!acc->data2) {
-            free(acc->data);
-            acc->data = NULL;
-            acc->len = 0u;
+            osh_scoring_accumulator_free(acc);
             return OSH_ENOMEM;
         }
     }
+    /* Variance (Welford M2) arrays mirror the sum arrays: data_var always, and
+     * data2_var only when data2 exists, so the optional-array presence a merge
+     * checks stays self-consistent. */
+    if (want_variance) {
+        acc->data_var = (double *) calloc(n, sizeof(*acc->data_var));
+        if (!acc->data_var) {
+            osh_scoring_accumulator_free(acc);
+            return OSH_ENOMEM;
+        }
+        if (want_data2) {
+            acc->data2_var = (double *) calloc(n, sizeof(*acc->data2_var));
+            if (!acc->data2_var) {
+                osh_scoring_accumulator_free(acc);
+                return OSH_ENOMEM;
+            }
+        }
+    }
     return OSH_OK;
+}
+
+enum osh_status osh_scoring_accumulator_alloc(struct osh_scoring_accumulator *acc, size_t len, int want_data2) {
+    return osh_scoring_accumulator_alloc_variance(acc, len, want_data2, 0);
 }
 
 void osh_scoring_accumulator_zero(struct osh_scoring_accumulator *acc) {

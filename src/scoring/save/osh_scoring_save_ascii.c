@@ -20,6 +20,15 @@
  * ASCII output is intended for quick single-run inspection.  It is NOT suited
  * for multi-run merging: once divided by nstat the absolute weight of each
  * run is lost.  Use BDO format for production work and multi-run accumulation.
+ *
+ * Standard error (issue #209)
+ * ---------------------------
+ * When the detect.dat VARIANCE card is set, each scored quantity gains a paired
+ * standard-error column immediately after its value column (e.g. "DOSE DOSE_ERR").
+ * The error is the batch-means standard error of the reported value, in the same
+ * units as that value (it already carries the per-primary / physical-mean scaling).
+ * A run with fewer than two batches has zero degrees of freedom, so its error
+ * column is all zeros.
  */
 
 #include "scoring/save/osh_scoring_save_ascii.h"
@@ -43,8 +52,11 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
 static int ascii_diff_layout_matches(struct osh_scoring_page_runtime const *a,
                                      struct osh_scoring_page_runtime const *b);
 static void format_now_rfc2822(char *buf, size_t cap);
-static void
-fprint_quantity_names(FILE *fp, struct osh_scoring_runtime const *rt, struct osh_scoring_output_runtime const *out);
+static void fprint_quantity_names(FILE *fp,
+                                  struct osh_scoring_runtime const *rt,
+                                  struct osh_scoring_output_runtime const *out,
+                                  int with_err);
+static void fprint_page_cell(FILE *fp, struct osh_scoring_page_runtime const *page, size_t data_idx, double inv_nstat);
 static double ascii_diff_center(struct osh_scoring_page_runtime const *page, size_t db);
 static double ascii_diff2_center(struct osh_scoring_page_runtime const *page, size_t db);
 static char const *diff_kind_label(enum osh_scoring_diff_kind kind);
@@ -99,7 +111,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fprintf(fp, "# DETECTOR OUTPUT ZONE\n");
             fprintf(fp, "# ZONE BIN: %5zu\n", geo->nzone_indices);
             fprintf(fp, "# DETECTOR TYPE:");
-            fprint_quantity_names(fp, rt, out);
+            fprint_quantity_names(fp, rt, out, 0);
             fputc('\n', fp);
             fprintf(fp, "# PRIMARIES: %llu\n", nstat);
             fprintf(fp, "# COMPLETENESS: %s\n", osh_scoring_runtime_completeness_label(rt));
@@ -132,7 +144,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             if (diff2_nbins > 0u) {
                 fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
             }
-            fprint_quantity_names(fp, rt, out);
+            fprint_quantity_names(fp, rt, out, 1);
             fputc('\n', fp);
 
             for (izone = 0u; izone < geo->nzone_indices; ++izone) {
@@ -152,10 +164,11 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                         for (ip = 0u; ip < out->npages; ++ip) {
                             size_t page_idx = out->page_indices[ip];
                             struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
-                            double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
                             size_t data_idx = izone + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
                                               + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
-                            fprintf(fp, " %.12e", page->acc.data[data_idx] * scale);
+                            /* Emits the value plus its paired standard-error column when the
+                             * page tracks variance, matching the MESH/CYL rows and the header. */
+                            fprint_page_cell(fp, page, data_idx, inv_nstat);
                         }
                         fprintf(fp, "\n");
                     }
@@ -211,7 +224,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fprintf(fp, "# DETECTOR OUTPUT CYL\n");
             fprintf(fp, "# R BIN: %5zu Z BIN: %5zu\n", nr, nz);
             fprintf(fp, "# DETECTOR TYPE:");
-            fprint_quantity_names(fp, rt, out);
+            fprint_quantity_names(fp, rt, out, 0);
             fputc('\n', fp);
             fprintf(fp, "# R START: %12.6E Z START: %12.6E\n", r0, z0);
             fprintf(fp, "# R END  : %12.6E Z END  : %12.6E\n", geo->axes[ir_axis].hi, geo->axes[iz_axis].hi);
@@ -248,7 +261,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             if (diff2_nbins > 0u) {
                 fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
             }
-            fprint_quantity_names(fp, rt, out);
+            fprint_quantity_names(fp, rt, out, 1);
             fputc('\n', fp);
 
             for (iz = 0; iz < nz; ++iz) {
@@ -270,14 +283,13 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                             for (ip = 0; ip < out->npages; ++ip) {
                                 size_t page_idx = out->page_indices[ip];
                                 struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
-                                double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
                                 /* Use each page's own diff_nbins to gate the offset: non-differential
                                  * pages (diff_nbins==0) have len==geo_nbins and must not use db/db2
                                  * offsets, even when other pages in the same output are differential.
                                  * Their scalar value is repeated across all diff-bin rows. */
                                 size_t data_idx = spatial_idx + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
                                                   + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
-                                fprintf(fp, " %.12e", page->acc.data[data_idx] * scale);
+                                fprint_page_cell(fp, page, data_idx, inv_nstat);
                             }
                             fprintf(fp, "\n");
                         }
@@ -347,7 +359,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fprintf(fp, "# DETECTOR OUTPUT MSH\n");
             fprintf(fp, "# X BIN: %5zu Y BIN: %5zu Z BIN: %5zu\n", nx, ny, nz);
             fprintf(fp, "# DETECTOR TYPE:");
-            fprint_quantity_names(fp, rt, out);
+            fprint_quantity_names(fp, rt, out, 0);
             fputc('\n', fp);
             fprintf(fp, "# X START: %12.6E Y START: %12.6E Z START: %12.6E\n", x0, y0, z0);
             fprintf(fp,
@@ -388,7 +400,7 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             if (diff2_nbins > 0u) {
                 fprintf(fp, " %s", diff_kind_label(p0->diff2_kind));
             }
-            fprint_quantity_names(fp, rt, out);
+            fprint_quantity_names(fp, rt, out, 1);
             fputc('\n', fp);
 
             for (iz = 0; iz < nz; ++iz) {
@@ -415,16 +427,13 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
                                 for (ip = 0; ip < out->npages; ++ip) {
                                     size_t page_idx = out->page_indices[ip];
                                     struct osh_scoring_page_runtime const *page = &rt->pages[page_idx];
-                                    /* AVER pages (e.g. DLET/TLET) hold a physical mean after
-                                     * postprocessing — do not normalise per primary. */
-                                    double scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
                                     /* Use each page's own diff_nbins to gate the offset: non-differential
                                      * pages have len==geo_nbins and must not have db/db2 offsets applied,
                                      * even when other pages in the same output are differential. */
                                     size_t data_idx = spatial_idx
                                                       + (page->diff_nbins > 0u ? db * page->diff_stride : 0u)
                                                       + (page->diff2_nbins > 0u ? db2 * page->diff2_stride : 0u);
-                                    fprintf(fp, " %.12e", page->acc.data[data_idx] * scale);
+                                    fprint_page_cell(fp, page, data_idx, inv_nstat);
                                 }
                                 fprintf(fp, "\n");
                             }
@@ -441,20 +450,50 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
     return OSH_OK;
 }
 
-static void
-fprint_quantity_names(FILE *fp, struct osh_scoring_runtime const *rt, struct osh_scoring_output_runtime const *out) {
+static void fprint_quantity_names(FILE *fp,
+                                  struct osh_scoring_runtime const *rt,
+                                  struct osh_scoring_output_runtime const *out,
+                                  int with_err) {
     size_t ip;
     size_t page_idx;
     char const *qty;
     char const *c;
 
     for (ip = 0; ip < out->npages; ++ip) {
+        struct osh_scoring_page_runtime const *page;
         page_idx = out->page_indices[ip];
-        qty = rt->pages[page_idx].quantity ? rt->pages[page_idx].quantity : "?";
+        page = &rt->pages[page_idx];
+        qty = page->quantity ? page->quantity : "?";
         fputc(' ', fp);
         for (c = qty; *c; ++c) {
             fputc(toupper((unsigned char) *c), fp);
         }
+        /* When error bars are enabled, the data rows carry a paired standard-error
+         * column right after each value column; mirror that in the header so the
+         * two line up (e.g. "DOSE DOSE_ERR").  Only for the column-header line
+         * (with_err); the DETECTOR TYPE summary lists the quantities only. */
+        if (with_err && page->variance) {
+            fputc(' ', fp);
+            for (c = qty; *c; ++c) {
+                fputc(toupper((unsigned char) *c), fp);
+            }
+            fputs("_ERR", fp);
+        }
+    }
+}
+
+/* Print one page's value column at data_idx, plus its paired standard-error column
+ * when the page tracks variance.  NORM/SUM quantities are divided by nstat; AVER
+ * quantities (DLET/TLET) hold a physical mean after postprocess and are not.  The
+ * error column is |value| × relative-error (data_var holds the relative standard
+ * error after osh_scoring_finalize_errors), so it is in the same units as value. */
+static void fprint_page_cell(FILE *fp, struct osh_scoring_page_runtime const *page, size_t data_idx, double inv_nstat) {
+    double const scale = (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
+    double const value = page->acc.data[data_idx] * scale;
+
+    fprintf(fp, " %.12e", value);
+    if (page->variance && page->acc.data_var) {
+        fprintf(fp, " %.12e", fabs(value) * page->acc.data_var[data_idx]);
     }
 }
 
@@ -520,7 +559,10 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         if (page->geometry_idx != out->geometry_idx) {
             return OSH_ESTATE;
         }
-        if (!page->acc.data || page->variance || page->has_data2 || page->divide) {
+        /* has_data2 / divide must be cleared by osh_scoring_postprocess before save
+         * (a raw two-pass page cannot be written); page->variance is now supported —
+         * a finalized variance page emits an inline standard-error column. */
+        if (!page->acc.data || page->has_data2 || page->divide) {
             return OSH_ENOTSUP;
         }
         /* ASCII output writes one rectangular table per Output and takes the

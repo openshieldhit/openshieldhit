@@ -462,6 +462,71 @@ static void test_merge_variance_inconsistent_rejected(void) {
     }
 }
 
+/* ---- alloc with variance (issue #209): the M2 arrays now allocate ----------
+ *
+ * These exercise osh_scoring_accumulator_alloc_variance() directly (the wiring
+ * that makes variance tracking possible), rather than the make_batch() hand-build
+ * the older variance tests use.
+ */
+
+/* want_variance controls the M2 arrays; want_data2 controls whether data2_var
+ * pairs with a data2, so the four presence combinations are all self-consistent. */
+static void test_alloc_variance_presence(void) {
+    struct osh_scoring_accumulator none;
+    struct osh_scoring_accumulator var_only;
+    struct osh_scoring_accumulator var_and_data2;
+
+    /* No variance: M2 arrays stay NULL (the 3-arg wrapper's behaviour). */
+    ASSERT_TRUE(osh_scoring_accumulator_alloc(&none, 3u, 1) == OSH_OK);
+    ASSERT_TRUE(none.data != NULL && none.data2 != NULL);
+    ASSERT_TRUE(none.data_var == NULL && none.data2_var == NULL);
+
+    /* Variance, no data2: data_var present, data2_var stays NULL (nothing to pair). */
+    ASSERT_TRUE(osh_scoring_accumulator_alloc_variance(&var_only, 3u, 0, 1) == OSH_OK);
+    ASSERT_TRUE(var_only.data != NULL && var_only.data2 == NULL);
+    ASSERT_TRUE(var_only.data_var != NULL && var_only.data2_var == NULL);
+
+    /* Variance + data2: all four arrays present, so a two-pass average tracks both. */
+    ASSERT_TRUE(osh_scoring_accumulator_alloc_variance(&var_and_data2, 3u, 1, 1) == OSH_OK);
+    ASSERT_TRUE(var_and_data2.data != NULL && var_and_data2.data2 != NULL);
+    ASSERT_TRUE(var_and_data2.data_var != NULL && var_and_data2.data2_var != NULL);
+
+    osh_scoring_accumulator_free(&none);
+    osh_scoring_accumulator_free(&var_only);
+    osh_scoring_accumulator_free(&var_and_data2);
+}
+
+/* Two batches built through the real alloc path merge to the exact hand-computed
+ * M2 — the same dyadic case as test_merge_variance_two_batches, but proving the
+ * allocator (not just a hand-built struct) produces a mergeable variance batch. */
+static void test_merge_variance_via_alloc(void) {
+    struct osh_scoring_accumulator a;
+    struct osh_scoring_accumulator b;
+    /* bin0: means 4, 8 at weight 2 → δ=4, M2 = δ²·(2·2/4) = 16; bin1: means 2, 2 → 0. */
+    double const da[2] = {8.0, 4.0};
+    double const db[2] = {16.0, 4.0};
+
+    ASSERT_TRUE(osh_scoring_accumulator_alloc_variance(&a, 2u, 0, 1) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_accumulator_alloc_variance(&b, 2u, 0, 1) == OSH_OK);
+    a.data[0] = da[0];
+    a.data[1] = da[1];
+    a.weight = 2.0;
+    a.nbatch = 1u;
+    b.data[0] = db[0];
+    b.data[1] = db[1];
+    b.weight = 2.0;
+    b.nbatch = 1u;
+
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&a, &b) == OSH_OK);
+    ASSERT_TRUE(a.data[0] == 24.0 && a.data[1] == 8.0);
+    ASSERT_TRUE(a.weight == 4.0 && a.nbatch == 2u);
+    ASSERT_TRUE(approx(a.data_var[0], 16.0));
+    ASSERT_TRUE(approx(a.data_var[1], 0.0));
+
+    osh_scoring_accumulator_free(&a);
+    osh_scoring_accumulator_free(&b);
+}
+
 int main(void) {
     test_merge_identity();
     test_merge_correctness();
@@ -476,6 +541,8 @@ int main(void) {
     test_merge_variance_unequal_single_pass();
     test_merge_variance_empty_identity();
     test_merge_variance_inconsistent_rejected();
+    test_alloc_variance_presence();
+    test_merge_variance_via_alloc();
     printf("All osh_scoring_accumulator tests passed.\n");
     return 0;
 }
