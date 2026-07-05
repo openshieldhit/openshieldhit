@@ -29,6 +29,18 @@ struct osh_rng;
 /** Elastic cross section [cm^2] for projectile (zp,ap) on target (zt,at). */
 double osh_nuclear_elastic_sigma(unsigned int zp, unsigned int ap, double zt, double at, double e_lab_per_nucleon);
 
+/**
+ * @brief Elastic cross section [cm^2] from an already-evaluated reaction cross
+ *        section @p sigma_reac_cm2 (Tripathi σ_R), applying only the sigma_el /
+ *        sigma_reac prefactor.
+ *
+ * Lets a caller that already holds σ_R (e.g. the shared rate loop that feeds both
+ * the inelastic and the p+A-elastic hazard) obtain σ_el without re-evaluating the
+ * parametric Tripathi formula. `osh_nuclear_elastic_sigma()` is exactly this
+ * applied to a fresh Tripathi call.
+ */
+double osh_nuclear_elastic_sigma_from_reac(double sigma_reac_cm2);
+
 /** Mean free path [g/cm^2] from target molar mass [g/mol] and sigma [cm^2]. */
 double osh_nuclear_elastic_lambda_gcm2(double at_g_per_mol, double sigma_cm2);
 
