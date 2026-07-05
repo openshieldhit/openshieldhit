@@ -544,4 +544,115 @@ systematic, though small against the model's other approximations. The
 
 ---
 
+## 4. RNG & parallelization readiness (#161, #165–#169)
+
+Scope: `src/random/`, worker context and history loop (partly covered in §1),
+whole-tree shared-mutable-state sweep, and the **WIP pthreads driver on the
+local branch `feat/parallel-threads`** (`osh_transport_parallel.c` — reviewed
+because it is the concrete next step of #161).
+
+### R-1 (info, high) RNG core verified against references
+
+- PCG32 matches O'Neill's reference exactly: state advance
+  `state·6364136223846793005 + (inc|1)`, XSH-RR output, and the canonical
+  `srandom` init sequence (`osh_rng_pcg32.c:15-47`).
+- Per-history stream derivation `rng_mix_stream(seed, hist_index, purpose)`
+  is a proper hash: golden-ratio Weyl spacing on the index axis, distinct odd
+  constant on the purpose axis, Stafford Mix13 finaliser, all with excellent
+  in-source rationale (`osh_rng.c:25-88`) and an empirical disjointness test.
+  This is genuinely parallel-ready seeding (#165's contract holds).
+- `osh_rng_double` = 53-bit in [0,1); can return exactly 0 — the one `-log(u)`
+  consumer guards it explicitly (`osh_transport_neutron.c:338-345`).
+- Marsaglia-polar gaussian with per-stream spare cache — safe because each
+  pool slot owns its stream; no cross-thread hazard as long as streams stay
+  slot-owned.
+- Known-and-accepted: PCG32 "streams" (different `inc`) are not provably
+  independent sequences; with hashed 64-bit stream ids and per-history
+  reseeding this is a non-issue in practice, but worth one line in the RNG
+  doc.
+
+### R-2 (low, medium) `osh_rng_split` seeds children from the parent's *future* output window
+
+Detailed as P-6 in §1: child ordinal k consumes the parent-copy's draws
+[2k, 2k+1] as (seed, stream) — the same u64s the parent itself will consume
+for its next physics decisions (`osh_rng.c:90-120`). Structural seed reuse;
+practically masked by PCG's init permutation; cheap to eliminate by hashing
+`(parent_state, ordinal)` with the existing `rng_mix_stream` machinery. The
+drop-proof/order-independent design itself is excellent.
+
+### R-3 (medium, high) Shared-mutable-state inventory — what actually blocks `--threads N`
+
+Complete sweep of file-scope mutable statics in `src/` (excluding apps
+parse-dispatch tables, which are logically-const and should just gain
+`const`):
+
+| State | Where | Hazard under threads | Needed change |
+|---|---|---|---|
+| `s_proton`, `s_alpha`, `s_species_ready` | `osh_neutron_reaction.c:23-33` | lazy init inside neutron drain — data race (see N-3) | init at handler compile (setup thread) |
+| `s_n_warned` | `osh_nuclear_compound.c:17` | warn-once counter incremented on hot path — benign race, still UB | per-handler counter or C11 atomic |
+| `osh_moliere_inited` + tables | `osh_physics_scat_moliere.c:38` | initialised on the setup thread via `validate_transport_modes` (`osh_transport_ion.c:562-566`) — **safe in the serial driver**, but the WIP parallel driver has each worker call `osh_transport_ion_run_range` → `validate_transport_modes` → `osh_physics_moliere_init` concurrently → first-call race | init once in the parallel driver before spawning workers |
+| `g_stop`, `g_dump` | `osh_apps/osh_signals.c:77-85` | `volatile sig_atomic_t` — correct pattern | none |
+
+Beyond statics, the known open items hold as documented: master accumulator
+deposits (#166 — the seam exists), and everything else on the hot path
+(pools, scratch, profile, RNG) is already per-worker-ownable. The codebase is
+closer to thread-ready than #161's "honest gap" list implies — the gaps are
+the table above plus #166.
+
+### R-4 (high, high) WIP parallel driver (`feat/parallel-threads`) — concrete bugs to fix before it merges
+
+`src/transport/osh_transport_parallel.c` at branch head 83b3575:
+
+1. **`pthread_join` on a never-created thread.** If `pthread_create` fails
+   the code sets `w->rc = OSH_ESTATE` (`:579-583`) but the join loop
+   unconditionally joins `w->thread` for every non-empty slice (`:586-592`)
+   — joining an uninitialized `pthread_t` is UB. Track a `spawned` flag.
+2. **Error-path leaks in worker setup.** The neutron-pool failure path
+   (`:519-531`) and fragment-pool failure path (`:533-546`) free only worker
+   *i*'s resources and `free(workers)`, leaking workers `0..i-1`'s pools,
+   accumulator sets and scratch (the earlier failure paths do clean up
+   predecessors — the last two branches were evidently written later).
+3. **Per-worker neutron pools are each sized to the full run.**
+   `neutron_capacity = nstat` (`:443-444`) and every worker gets one
+   (`:520-521`): memory scales O(nthreads·nstat) — for the #161 benchmark's
+   200-core scenario this is a blow-up. Size by the worker's range
+   (`hist_hi - hist_lo`), matching the serial pool-accumulation argument.
+4. **Single ion-pass → single neutron-drain per worker.** The serial path
+   runs the *family scheduler* (`run_families_over_range`,
+   `osh_transport.c`) with has-work discipline; the worker function instead
+   hard-codes one ion range + one neutron drain (`:352-381`). Today that is
+   equivalent (neutron→ion feedback does not exist — N-1), but the moment
+   ion-feedback lands, the parallel path silently loses the fed-back
+   charged secondaries. Workers should call the same family scheduler over
+   their range, not a hand-rolled subset of it.
+5. Cosmetics with teeth: `parallel_alloc_worker_fragment_pool` "clones"
+   nothing (fine only because `struct osh_fragment_pool` is counters-only —
+   worth a comment); `worst_rc` keeps the *last* failure, not the worst;
+   the smoke tests write outputs to the CWD and don't clean up (see T-3).
+
+Also verified on the branch: the per-worker accumulator alloc mirrors
+`master_acc` shape including `data2` presence (`:92-126`), the merge loop
+uses `osh_scoring_accumulator_merge` per page (`:608-613`), and worker slices
+`[nstat·i/n, nstat·(i+1)/n)` are exact and disjoint — the core of the design
+is right.
+
+### R-5 (info, high) Reproducibility (#168) status
+
+- Per-history streams are pure functions of the global index — verified at
+  the fill site (`osh_transport_ion.c:192-197`) and by the seeding design
+  (R-1); range splitting/replay reproduces canonical streams.
+- Bitwise reproducibility across different `nthreads` is impossible by
+  design (FP summation order in merge); for *fixed* worker count the branch
+  driver's ordered merge (worker 0..n-1, `:600-620`) is deterministic. The
+  #168 CI gate should therefore pin `nthreads` and assert byte-identical
+  output, plus a statistical-tolerance check across thread counts — exactly
+  what the branch's `test_serial_matches_parallel` (rel 1e-9) already
+  sketches.
+- One genuine nondeterminism source to keep out of the physics path:
+  time-based decisions. The run-control stop/dump checks read wall time but
+  only at wavefront-pass boundaries and only affect *how many* primaries run
+  (counted exactly), never a history's own randoms — sound.
+
+---
+
 *(Sections below are appended as the audit proceeds.)*
