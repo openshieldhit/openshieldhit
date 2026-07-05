@@ -433,4 +433,115 @@ writer header, which advertises "immediately human-readable".
 
 ---
 
+## 3. Nuclear physics & neutron transport
+
+Scope: `src/physics/nuclear/` (handler, Tripathi, pp/pA elastic, abrasion,
+Fermi break-up), `src/physics/neutron/` (JEFF Tier-1 tables, reaction
+sampling), `src/transport/osh_transport_neutron.c`, `osh_neutron_pool.c`.
+
+### N-1 (high, high) Neutron interactions deposit **zero** energy — and n–p elastic recoil energy vanishes entirely
+
+`apply_event()` (`osh_transport_neutron.c:166-202`) discards
+`ev->local_deposit_mev` on **every** channel (comments say "deposit when
+scoring wired"), and drops all non-neutron secondaries. The n–H elastic case
+is actively wrong rather than just unwired: `do_elastic()` builds the recoil
+proton secondary and **zeroes the local deposit** on the assumption the
+proton carries the energy (`osh_neutron_reaction.c:91-108`,
+`ev->local_deposit_mev = 0.0; /* proton secondary carries the recoil */`) —
+then `apply_event`'s ELASTIC branch ignores `ev->secondaries` entirely
+(`osh_transport_neutron.c:171-178`). Net effect:
+
+- The dominant neutron dose mechanism in tissue (n–p recoil) contributes
+  **nothing** — the energy is neither deposited nor transported; energy
+  conservation is broken at every n–H collision.
+- Capture, (n,p)/(n,α), compound-residual channels likewise deposit nothing.
+- Neutron transport today only attenuates and redirects neutrons (fluence
+  scorers work); every energy/dose scorer sees zero from the neutron family.
+- The neutron **cutoff kill** (`osh_transport_neutron.c:287-291`, default
+  `ncut = 1 keV`, `osh_transport.h:48`) also discards the remaining energy —
+  same class as P-1.
+- **TODO.md misdescribes this**: the "What is implemented" list says "elastic
+  (isotropic CM; n-p recoil proton returned)" and "(currently deposited
+  locally)" for charged secondaries. Neither is true in code — only the
+  *open-items* list ("Local neutron energy deposits scored") matches reality.
+  Anyone reading TODO.md (or the #154 merge summary) will assume neutron
+  dose exists.
+- Fix direction: point-deposit `local_deposit_mev` at the interaction site
+  now (the #179 point-deposit path already exists and is exactly this
+  mechanism); feed the recoil proton into the ion pool when ion-feedback
+  lands. Until then, correct TODO.md.
+
+### N-2 (high, high) Tier-1 cross sections are clamped at the 20 MeV table edge — fast neutrons interact with σ(20 MeV)
+
+`interp_one()` clamps: `e ≥ egrid[last] → arr[last]`
+(`osh_neutron_xsec.c:84-87`), and Tier-1 entries always win over Tier-2 for
+tabulated nuclides (`osh_neutron_xsec_lookup`, `:264-276`). Abrasion neutrons
+from a 130–230 MeV proton beam populate the spectrum up to near beam energy,
+far above the 1 meV–20 MeV JEFF grid. For n–p, σ_tot(20 MeV) ≈ 0.48 b vs
+σ_tot(100 MeV) ≈ 0.075 b — a ×6 overestimate; O-16 is similar (×~5). Fast
+neutrons therefore interact much too often and are attenuated on far too
+short a mean free path — their fluence map is systematically compressed
+toward the production site. (Today the *dose* consequence is masked by N-1;
+fixing N-1 without N-2 will bake this bias into neutron dose.)
+
+- Fix direction: above the Tier-1 grid, dispatch to the Tier-2
+  Tripathi σ_R + geometric σ_el path (already implemented for missing
+  nuclides), or extend the condensed tables; at minimum warn once when a
+  lookup exceeds the grid.
+
+### N-3 (medium, high) Lazily-initialized `static` species cache — explicit single-thread assumption inside the neutron family
+
+`osh_neutron_reaction.c:20-33`: `static struct particle s_proton, s_alpha;
+static int s_species_ready;` filled by `ensure_species()` on first call,
+commented "all transport is single-threaded". The WIP parallel driver
+(branch `feat/parallel-threads`) drains per-worker neutron pools
+**concurrently** — this becomes a data race (benign-looking but UB, and
+TSan-fatal) the day `--threads` ships. Same pattern to audit elsewhere
+(`osh_neutron_xsec` warn-once state is per-instance and fine; Molière tables
+are built once on the setup thread before transport starts —
+`osh_transport_ion.c:562-566` — which is the right pattern).
+
+- Fix: initialise at handler compile time (setup thread), or make them
+  `const` compile-time tables.
+
+### N-4 (low, medium) Number densities use the integer mass number, not atomic mass
+
+`neutron_sigma_tot_cm()`: `nd_i = mass_fraction·ρ·N_A / A_int`
+(`osh_transport_neutron.c:58`); the nuclear handler's rate loops use
+`ai = elems[i].a` or the `z*2` fallback (`osh_nuclear_handler.c:305,344`).
+Using A instead of the isotope atomic mass in g/mol overestimates hydrogen
+number density by ~0.8% (1 vs 1.008) and <0.1% for heavier isotopes —
+systematic, though small against the model's other approximations. The
+`a=0 → 2Z` fallback deserves a diagnostic if it can ever fire in practice.
+
+### N-5 (info) Physics-approximation register (documented, not bugs — should stay visible)
+
+- Elastic scattering is isotropic in CM (P0) at all energies
+  (`osh_neutron_reaction.c:60-62`); real n–A angular distributions are
+  strongly forward-peaked above ~1 MeV, so energy transfer per collision (and
+  hence moderation rate) is overestimated at high energy.
+- Non-relativistic elastic kinematics (fine below 20 MeV; not above — ties
+  into N-2).
+- No thermal treatment below 1 eV (#178, known).
+
+### N-6 (info, high) Verified-OK notes
+
+- Free-path sampling guards `u = 0` explicitly with the HUGE_VAL fall-through
+  (`osh_transport_neutron.c:338-345`) — correct and well-commented.
+- The Kopylov N-body phase-space generator mirrors G4FermiPhaseSpaceDecay:
+  momentum conservation by construction (back-to-back subsystem CM + boosts),
+  fragment 0 closed on-shell (`osh_nuclear_fermi_breakup.c:424-508`);
+  `beta_kopylov` rejection envelope is correct.
+- pp-elastic channel bookkeeping is consistent: kinetic energy split
+  `e1 + e2` with equal-mass lab kinematics, Møller-convention swap keeps the
+  primary on the forward proton (`osh_nuclear_handler.c:370-401`).
+- Channel competition (`rate_inel + rate_pp + rate_pa`), the struck-element
+  selection proportional to per-element hazard, and the RNG-stream-stability
+  comment (channel draw only when elastic competes) are all sound.
+- Neutron pool: `n_created`/`n_dropped` accounting, per-slot RNG streams via
+  `osh_rng_split`, `prim_idx`/`gen` propagation (good for future per-primary
+  statistics), wavefront batching bounded by shared scratch capacity.
+
+---
+
 *(Sections below are appended as the audit proceeds.)*
