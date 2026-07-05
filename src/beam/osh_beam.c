@@ -511,7 +511,11 @@ void osh_beam_print(struct beam_workspace const *wb, struct osh_diag_sink const 
     OSH_DIAG_INFOF(diag, "%-40s : %i", "Random seed offset", wb->rndoffset);
     OSH_DIAG_INFOF(diag, "%s", "");
     OSH_DIAG_INFOF(diag, "%-18s : %f", "DeltaE/E", wb->deltae);
-    OSH_DIAG_INFOF(diag, "%-18s : %f MeV", "Neutron cut", wb->ncut);
+    if (wb->ncut > 0.0f) {
+        OSH_DIAG_INFOF(diag, "%-18s : %g MeV", "Neutron cut", (double) wb->ncut);
+    } else {
+        OSH_DIAG_INFOF(diag, "%-18s : %s", "Neutron cut", "auto (transport default)");
+    }
     OSH_DIAG_INFOF(diag, "%-18s : %f MeV/nucleon", "DeltaE min", wb->demin);
     OSH_DIAG_INFOF(diag, "%s", "");
     OSH_DIAG_INFOF(diag, "%-18s : %s", "Scatter mode", osh_beam_mscat_names[(int) wb->scatter]);

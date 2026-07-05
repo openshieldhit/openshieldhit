@@ -12,6 +12,7 @@
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
+#include "physics/neutron/osh_neutron_const.h"
 #include "physics/neutron/osh_neutron_reaction.h"
 #include "physics/neutron/osh_neutron_xsec.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
@@ -252,7 +253,7 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
         return rc;
     }
     e_cutoff_mev = (transport_ctx->params.ncut > 0.0f) ? (double) transport_ctx->params.ncut
-                                                       : (double) OSH_TRANSPORT_NEUTRON_CUTOFF_DEFAULT_MEV;
+                                                       : (double) OSH_NEUTRON_CUTOFF_DEFAULT_MEV;
     n_cutoff = 0u;
     n_escape = 0u;
     n_steps = 0u;
@@ -268,7 +269,10 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
         return OSH_EINVAL;
     }
 
-    OSH_DIAG_INFOF(transport_ctx->diag, "Neutron transport: starting with %zu neutrons", pool->n);
+    OSH_DIAG_INFOF(transport_ctx->diag,
+                   "Neutron transport: starting with %zu neutrons, energy cutoff %g MeV",
+                   pool->n,
+                   e_cutoff_mev);
 
     /* ---- Wavefront loop -------------------------------------------------- */
     while (pool->n > 0u) {

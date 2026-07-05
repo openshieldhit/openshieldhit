@@ -7,6 +7,7 @@
 #include "particle/osh_particle.h"
 #include "particle/osh_particle_const.h"
 #include "particle/osh_particle_pdg.h"
+#include "physics/neutron/osh_neutron_const.h"
 #include "physics/neutron/osh_neutron_xsec.h"
 #include "physics/nuclear/osh_nuclear_compound.h"
 #include "physics/osh_kinematics.h"
@@ -53,6 +54,30 @@ static void do_elastic(
     double af;    /* A as double — appears repeatedly in NR energy formula */
     double denom; /* (1 + A)², common denominator in NR kinematics */
 
+    ev->kind = OSH_NEUTRON_REACTION_ELASTIC;
+    ev->n_secondaries = 0u;
+
+    /* Thermal regime: at or below the thermal energy the neutron scatters with its
+     * energy frozen (one-group thermal model — see osh_neutron_const.h). It changes
+     * direction only, sampled isotropically in the lab; the sub-eV recoil is
+     * negligible, so no secondary is emitted and nothing is deposited. Thermal
+     * neutrons therefore live at a fixed energy (above the transport cutoff) until
+     * they capture or escape, rather than the free-gas 0 K cross sections
+     * down-scattering them unphysically toward zero. */
+    if (e_mev <= OSH_NEUTRON_THERMAL_E_MEV) {
+        double cos_iso; /* isotropic lab polar cosine: uniform cos + uniform φ = isotropic */
+        double sin_iso;
+
+        cos_iso = 2.0 * osh_rng_double(rng) - 1.0;
+        sin_iso = sqrt(fmax(0.0, 1.0 - cos_iso * cos_iso));
+        osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
+        osh_kinematics_rotate_dir_cos(dir, ev->neutron_dir, cos_iso, sin_iso, cos_phi, sin_phi);
+
+        ev->neutron_e_mev = e_mev; /* energy frozen */
+        ev->local_deposit_mev = 0.0;
+        return;
+    }
+
     af = (double) a;
 
     /* isotropic CM (P0 — no JEFF angular distribution for minimal model) */
@@ -79,8 +104,14 @@ static void do_elastic(
         ev->neutron_dir[2] = dir[2];
     }
 
-    ev->kind = OSH_NEUTRON_REACTION_ELASTIC;
-    ev->n_secondaries = 0u;
+    /* Thermalisation: pin a sub-thermal outgoing energy up to the single thermal
+     * energy (kept above the transport cutoff) so the neutron keeps transporting
+     * instead of being cut off. Done after the direction guard above so the E'=0
+     * backward-scatter case (a=1, cosθ_CM=-1) is still handled correctly. The
+     * energy actually lost is e_mev - neutron_e_mev, accounted below. */
+    if (ev->neutron_e_mev < OSH_NEUTRON_THERMAL_E_MEV)
+        ev->neutron_e_mev = OSH_NEUTRON_THERMAL_E_MEV;
+
     /* heavy recoil below transport threshold: deposit locally.
      * Future: push to fragment pool and score with score_point(). */
     ev->local_deposit_mev = fmax(0.0, e_mev - ev->neutron_e_mev);
