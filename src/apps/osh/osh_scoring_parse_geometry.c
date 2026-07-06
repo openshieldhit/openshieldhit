@@ -149,9 +149,9 @@ append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, 
  * transport zone indices (fills geo->zone_indices) once geo.dat is available.
  */
 static enum osh_status append_zone_name(struct osh_scoring_geometry_def *geo, char const *name) {
-    char **name_tmp;
-    double *vol_tmp;
-    char *dup;
+    char **name_tmp; /* Resized zone-name table, committed after realloc succeeds. */
+    double *vol_tmp; /* Resized per-zone volume table kept parallel to zone_names. */
+    char *dup;       /* Owned copy stored in geo->zone_names[]. */
 
     dup = strdup(name);
     if (!dup) {

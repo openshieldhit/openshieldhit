@@ -58,9 +58,9 @@ enum osh_status score_point_dose(struct osh_scoring_runtime const *rt,
     size_t i;
     size_t db;
     size_t db2;
-    size_t score_idx;
-    double sp_ratio;
-    double dose_score;
+    size_t score_idx;  /* Index into the scoring array for the current spatial bin */
+    double sp_ratio;   /* Stopping-power ratio for converting dose-to-transport into dose-to-medium */
+    double dose_score; /* Score for the current spatial bin */
     struct osh_scoring_dose_sp_ctx sp;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;

@@ -49,10 +49,10 @@ static int test_pid(void) {
 }
 
 static void detect_path(char *path, size_t cap) {
-    char const *dir;
-    char sep;
-    size_t len;
-    int n;
+    char const *dir; /* Runtime temp directory selected from the environment. */
+    char sep;        /* Path separator to insert, or NUL when dir already ends with one. */
+    size_t len;      /* Length of dir for trailing-separator detection. */
+    int n;           /* snprintf result used to reject truncation. */
 
     dir = getenv("TMPDIR");
     if (!dir || dir[0] == '\0') {
@@ -103,7 +103,7 @@ static char const *const DETECT_TEXT = "Geometry Cyl\n"
                                        "    Quantity Dose\n";
 
 static void write_detect(void) {
-    char path[512];
+    char path[512]; /* Runtime-only detect.dat path in the temp directory. */
     FILE *fp;
 
     detect_path(path, sizeof(path));
@@ -115,7 +115,7 @@ static void write_detect(void) {
 
 static void build(struct osh_scoring_workspace **ws, struct osh_scoring_runtime *rt) {
     enum osh_status rc;
-    char path[512];
+    char path[512]; /* Same temp detect.dat path written by write_detect(). */
 
     write_detect();
     *ws = NULL;
@@ -129,7 +129,7 @@ static void build(struct osh_scoring_workspace **ws, struct osh_scoring_runtime 
 }
 
 static void teardown(struct osh_scoring_workspace *ws, struct osh_scoring_runtime *rt) {
-    char path[512];
+    char path[512]; /* Temp detect.dat path to remove after the test. */
 
     osh_scoring_runtime_free(rt);
     osh_scoring_workspace_free(ws);
