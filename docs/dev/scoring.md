@@ -278,7 +278,7 @@ quantity; the *only* geometry-specific normalisation, ÷volume, lives in
 
 | `Quantity` (score kind) | `score_step_` | `score_point_` | `postprocess_` | deposits → finalises |
 |---|---|---|---|---|
-| `ENERGY`  | `score_step_energy`  | `score_step_energy` | — | `de·(path/score_len)` → already final [MeV] |
+| `ENERGY`  | `score_step_energy`  | `score_point_energy` | — | `de·(path/score_len)` → already final [MeV] |
 | `FLUENCE` | `score_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
 | `DOSE`    | `score_step_dose`    | `score_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
 | `DOSEGY`  | `score_step_dose`    | `score_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
