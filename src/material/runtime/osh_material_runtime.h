@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stddef.h>
 
+#include "common/osh_hd.h"
 #include "openshieldhit/geometry.h"
 
 #ifdef __cplusplus
@@ -105,7 +106,7 @@ enum { OSH_MATERIAL_RUNTIME_NENERGY = 500 };
  *
  * @returns Mass stopping power [MeV cm^2/g].
  */
-static inline double osh_material_runtime_sp_lookup(struct osh_material_runtime const *tables,
+OSH_HD static inline double osh_material_runtime_sp_lookup(struct osh_material_runtime const *tables,
                                                     size_t mat_idx,
                                                     size_t proj_idx,
                                                     double e_per_nuc) {
@@ -151,10 +152,10 @@ static inline double osh_material_runtime_sp_lookup(struct osh_material_runtime 
  * a batch/SIMD sibling for lanes sharing the same material/projectile column,
  * so the ion stepper can amortize the paired forward and inverse range lookups.
  */
-static inline double osh_material_runtime_range_lookup(struct osh_material_runtime const *tables,
-                                                       size_t mat_idx,
-                                                       size_t proj_idx,
-                                                       double e_per_nuc) {
+OSH_HD static inline double osh_material_runtime_range_lookup(struct osh_material_runtime const *tables,
+                                                        size_t mat_idx,
+                                                        size_t proj_idx,
+                                                        double e_per_nuc) {
     double x;
     size_t idx;
     double frac;
@@ -190,8 +191,8 @@ static inline double osh_material_runtime_range_lookup(struct osh_material_runti
  *
  * @returns Density [g/cm³].
  */
-static inline double osh_material_runtime_get_rho(struct osh_material_runtime const *tables,
-                                                  struct osh_zone_ref const *zr) {
+OSH_HD static inline double osh_material_runtime_get_rho(struct osh_material_runtime const *tables,
+                                                   struct osh_zone_ref const *zr) {
     if (zr->has_hu) {
         int hu;
         assert(tables->hu_rho_lut != NULL);

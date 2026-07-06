@@ -1,4 +1,5 @@
 #include "osh_vect.h"
+#include "osh_vect_hd.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -39,29 +40,11 @@ void osh_vect_reverse(double const *u, double *v) {
 }
 
 double osh_vect_len2(double const *u) {
-
-    int i;
-    double l = 0;
-
-    for (i = 0; i < OSH_VECT_DIM; i++) {
-        l += u[i] * u[i];
-    }
-    return l;
-}
-
-double osh_vect_dot(double const *u, double const *v) {
-    int i;
-    double dot = 0;
-    for (i = 0; i < OSH_VECT_DIM; i++) {
-        dot += u[i] * v[i];
-    }
-    return dot;
+    return _osh_vect_len2_hd(u);
 }
 
 void osh_vect_cross(double const *u, double const *v, double *w) {
-    w[0] = u[1] * v[2] - u[2] * v[1];
-    w[1] = u[2] * v[0] - u[0] * v[2];
-    w[2] = u[0] * v[1] - u[1] * v[0];
+    _osh_vect_cross_hd(u, v, w);
 }
 
 double osh_vect_sproj(double const *u, double const *v) {
@@ -72,120 +55,20 @@ double osh_vect_sproj(double const *u, double const *v) {
 }
 
 void osh_vect_norm(double *u) {
-    double d = 0;
-    int i;
-
-    for (i = 0; i < OSH_VECT_DIM; i++) {
-        d += u[i] * u[i];
-    }
-    if (d > 0.0) {
-        d = 1.0 / sqrt(d);
-    }
-
-    for (i = 0; i < OSH_VECT_DIM; i++) {
-        u[i] *= d;
-    }
-    return;
+    _osh_vect_norm_hd(u);
 }
 
 void osh_vect_norm2(double const *u, double *v) {
-    double d = 0;
-    int i;
-
-    for (i = 0; i < OSH_VECT_DIM; i++) {
-        d += u[i] * u[i];
-    }
-
-    if (d > 0.0) {
-        d = 1.0 / sqrt(d);
-    }
-
-    for (i = 0; i < OSH_VECT_DIM; i++) {
-        v[i] = u[i] * d;
-    }
-
-    return;
+    _osh_vect_norm2_hd(u, v);
 }
 
 /* TODO: new code should use osh_vect_orthogonal_basis_norm instead. */
 void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
-
-    int i;
-    /* define unit vectors e1, e2 and e3 forming standard basis */
-    double const im[3][3] = {
-        {1, 0, 0},
-        {0, 1, 0},
-        {0, 0, 1},
-    };
-    double sign = 1.;
-    /*
-       We need to maintain certain orientation of the basis, namely
-       u x v = w
-       v x w = u
-       w x u = v
-     */
-
-    /*
-       First lets check if w is colinear with w_1 (if it lies along X axis)
-       u = w x e3
-     */
-    osh_vect_cross(w, im[2], u);
-
-    /*
-       If |u| == 0 then u = 0 which means that w is colinear with e3.
-       If |u| > 0 then u and e3 span a plane in 3D space and v is well defined
-       normal vector. It is safe here to compare with zero, as this is in fact
-       check for non-zero vector afterwards only multiplications are used, so
-       even if `u` has a small norm, the numerical error won't propagate.
-     */
-    if (osh_vect_len2(u) > 0) {
-        /* v = w x u */
-        osh_vect_cross(w, u, v);
-    } else {
-        if (u[2] < 0) {
-            sign = -1.;
-        }
-        /*
-           If u is oriented in the same direction as e1 (u==e1, as both are unit
-           vectors) then we create a standard basis (u=e1, v=e2, w=e3). If u is
-           oriented in opposite direction as e1(u == -e1, as both are unit
-           vectors) then we choose another basis which has the same orientation
-           as standard basis (u=-e1, v=-e2, w=e3).
-         */
-        for (i = 0; i < OSH_VECT_DIM; i++) {
-            u[i] = sign * im[0][i];
-            v[i] = im[1][i];
-        }
-    }
+    _osh_vect_orthogonal_basis_hd(w, u, v);
 }
 
 void osh_vect_orthogonal_basis_norm(double const *w, double *u, double *v) {
-    double ax = fabs(w[0]);
-    double ay = fabs(w[1]);
-    double az = fabs(w[2]);
-    double norm_inv;
-
-    if (ax <= ay && ax <= az) {
-        u[0] = 1.0 - w[0] * w[0];
-        u[1] = 0.0 - w[1] * w[0];
-        u[2] = 0.0 - w[2] * w[0];
-    } else if (ay <= az) {
-        u[0] = 0.0 - w[0] * w[1];
-        u[1] = 1.0 - w[1] * w[1];
-        u[2] = 0.0 - w[2] * w[1];
-    } else {
-        u[0] = 0.0 - w[0] * w[2];
-        u[1] = 0.0 - w[1] * w[2];
-        u[2] = 1.0 - w[2] * w[2];
-    }
-    norm_inv = 1.0 / sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
-    u[0] *= norm_inv;
-    u[1] *= norm_inv;
-    u[2] *= norm_inv;
-
-    v[0] = w[1] * u[2] - w[2] * u[1];
-    v[1] = w[2] * u[0] - w[0] * u[2];
-    v[2] = w[0] * u[1] - w[1] * u[0];
+    _osh_vect_orthogonal_basis_norm_hd(w, u, v);
 }
 
 void osh_vect_eqpln(double const *p, double const *u, double *pp) {
@@ -285,25 +168,21 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
      *       Sz  Tz  Rz
      * quick crosscheck how M works
      *
-     *  M e1 = M * [1,0,0]^T = [Sx*1 + Tx*0 + Rx*0,Sy*1 + Ty*0 + Ry*0,Sz*1 +
-     Tz*0 + Rz*0]=[Sx,Sy,Sz] = S
-     *  M e2 = M * [0,1,0]^T = [Sx*0 + Tx*1 + Rx*0,Sy*0 + Ty*1 + Ry*0,Sz*0 +
-     Tz*1 + Rz*0]=[Tx,Ty,Tz] = T
-     *  M e3 = M * [0,0,1]^T = [Sx*0 + Tx*0 + Rx*1,Sy*0 + Ty*0 + Ry*1,Sz*0 +
-     Tz*0 + Rz*1]=[Rx,Ry,Rz] = R
+     *  M e1 = M * [1,0,0]^T = [Sx*1 + Tx*0 + Rx*0,Sy*1 + Ty*0 + Ry*0,Sz*1 + Tz*0 + Rz*0]=[Sx,Sy,Sz] = S
+     *  M e2 = M * [0,1,0]^T = [Sx*0 + Tx*1 + Rx*0,Sy*0 + Ty*1 + Ry*0,Sz*0 + Tz*1 + Rz*0]=[Tx,Ty,Tz] = T
+     *  M e3 = M * [0,0,1]^T = [Sx*0 + Tx*0 + Rx*1,Sy*0 + Ty*0 + Ry*1,Sz*0 + Tz*0 + Rz*1]=[Rx,Ry,Rz] = R
      */
 
     /**
      * Affine transformation matrix has following indices
      *     C-specific: in a double loop, col must increase faster than row, to
-     use caching.
+     * use caching.
      *   t[row][col] ...
      *   int a[3][4] = {
      *       {0, 1, 2, 3} ,          initializers for row indexed by 0
      *       {4, 5, 6, 7},           initializers for row indexed by 1
      *       {8, 9, 10, 11}          initializers for row indexed by 2
-     */
-
+     * */
     /* First row: x coordindates and translation vector */
     tm[0] = s[0];
     tm[1] = t[0];
@@ -375,4 +254,8 @@ void osh_vect_trans_vector_affine(double const *v, double *vt, double const *tm)
     vt[0] = v[0] * tm[0] + v[1] * tm[1] + v[2] * tm[2];
     vt[1] = v[0] * tm[4] + v[1] * tm[5] + v[2] * tm[6];
     vt[2] = v[0] * tm[8] + v[1] * tm[9] + v[2] * tm[10];
+}
+
+double osh_vect_dot(double const *u, double const *v) {
+    return _osh_vect_dot_hd(u, v);
 }
