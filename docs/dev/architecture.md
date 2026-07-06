@@ -48,8 +48,9 @@ docs; they have precise meanings here, so pin them down once:
 | **final-only** vs **live** | The two `osh_checkpoint_policy` modes: *final-only* is one batch of `K = nstat` (no intermediate checkpoints — today's fastest path); *live* runs several checkpointed batches at a cadence. |
 
 The mental model in one line: a **cadence** sets how often the run reaches a
-**checkpoint**, and a checkpoint is the only place a **dump** (or a future merge /
-variance fold) may happen, because it is the only **family-complete** point.
+**checkpoint**, and a checkpoint is the only place a **dump** or a **variance
+fold** (and a future per-worker merge) may happen, because it is the only
+**family-complete** point.
 
 ### The batch loop
 
@@ -67,9 +68,10 @@ observed there is physically complete — not an ion-only fraction.  This matter
 because ratio quantities such as `DLET = Σ(LET·dose)/Σdose` are **biased**, not
 merely noisier, if the neutron/fragment contribution is missing from one
 `completed_nstat`.  A checkpoint is therefore the correct — and only — place to
-observe or dump a partial result.  It is also the natural sync point for the
-parallel work to come: per-worker accumulator merges, a variance-batch fold, and
-optional periodic dumps all hang off this one boundary.
+observe or dump a partial result.  It is also the natural sync point that every
+partial-result mechanism hangs off: periodic dumps and the per-batch **variance
+fold** (issue #209) already do, and the per-worker accumulator merges of the
+coming threaded/MPI backends will too.
 
 ### The one dial
 

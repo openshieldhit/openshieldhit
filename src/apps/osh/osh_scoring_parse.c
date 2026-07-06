@@ -35,6 +35,8 @@
 
 #include "apps/osh/osh_scoring_parse.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -137,10 +139,19 @@ osh_scoring_parse(struct oshfile *oshf, struct osh_diag_sink const *diag, struct
             long nbatches = OSH_SCORING_VARIANCE_DEFAULT_BATCHES;
             if (nwords >= 2) {
                 char *endp = NULL;
-                long v = strtol(words[1], &endp, 10);
-                if (endp == words[1] || *endp != '\0' || v < 1) {
-                    OSH_DIAG_ERRORF(
-                        diag, "%s:%u: VARIANCE batch count must be a positive integer", path, (unsigned int) lineno);
+                long v;
+                /* Bound the count to a positive int: ws->variance is an int, so a
+                 * value that overflowed strtol (ERANGE) or simply does not fit would
+                 * truncate/wrap on the cast below and silently enable variance with
+                 * an unintended (or zero) batch count. */
+                errno = 0;
+                v = strtol(words[1], &endp, 10);
+                if (endp == words[1] || *endp != '\0' || errno == ERANGE || v < 1 || v > INT_MAX) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "%s:%u: VARIANCE batch count must be an integer in [1, %d]",
+                                    path,
+                                    (unsigned int) lineno,
+                                    INT_MAX);
                     rc = OSH_EPARSE;
                     goto fail;
                 }

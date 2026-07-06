@@ -3,7 +3,7 @@
 #
 # Invoked by CMake as:
 #   cmake -DOSH_EXECUTABLE=<path> -DCASE_DIR=<path> -DWORK_DIR=<path>
-#         -DNSTAT=<n> [-DNBATCHES=<n>] -P run_variance.cmake
+#         -DNSTAT=<n> [-DNBATCHES=<n>] [-DREPLICAS=<n>] -P run_variance.cmake
 #
 # It copies the case, enables error tracking by appending a "VARIANCE <N>" card to
 # the copied detect.dat, and runs real transport.  It then asserts:
@@ -15,6 +15,10 @@
 #   * the VARIANCE run is BYTE-IDENTICAL across two invocations — the fixed
 #     count-cadence partition is deterministic, the reproducibility guard of #168
 #     (and the regression guard against leftover shared-mutable state).
+#
+# When -DREPLICAS=<n> is given it also runs the same VARIANCE case under
+# --score-replicas <n> and checks its error columns the same way, confirming the
+# replica split doubles as the batch-means source (no dump cadence required).
 
 cmake_minimum_required(VERSION 3.14)
 
@@ -65,6 +69,13 @@ run_variant("${PLAIN_SRC}" "plain")
 run_variant("${VAR_SRC}"   "var_a")
 run_variant("${VAR_SRC}"   "var_b")
 
+# Optional --score-replicas variant: with the VARIANCE card active, the replica
+# split doubles as the batch-means source (issue #209) — no dump cadence needed.
+# It must produce the same sane error columns as the derived-cadence run.
+if(DEFINED REPLICAS)
+    run_variant("${VAR_SRC}" "var_repl" --score-replicas "${REPLICAS}")
+endif()
+
 # ---- Validate the error columns against the plain run ------------------------
 file(GLOB _plain_dats "${WORK_DIR}/plain/*.dat")
 if(_plain_dats STREQUAL "")
@@ -85,6 +96,25 @@ foreach(_plain IN LISTS _plain_dats)
         message(FATAL_ERROR "standard-error validation failed for ${_name}")
     endif()
 endforeach()
+
+# ---- Validate the --score-replicas run's error columns too (if requested) ----
+if(DEFINED REPLICAS)
+    foreach(_plain IN LISTS _plain_dats)
+        get_filename_component(_name "${_plain}" NAME)
+        set(_var "${WORK_DIR}/var_repl/${_name}")
+        if(NOT EXISTS "${_var}")
+            message(FATAL_ERROR "--score-replicas VARIANCE run did not produce ${_name}")
+        endif()
+        execute_process(
+            COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/check_variance.py"
+                    "${_var}" "${_plain}" --label "replicas:${_name}"
+            RESULT_VARIABLE _chk_rc
+        )
+        if(NOT _chk_rc EQUAL 0)
+            message(FATAL_ERROR "standard-error validation failed for ${_name} (--score-replicas)")
+        endif()
+    endforeach()
+endif()
 
 # ---- Reproducibility: the two VARIANCE runs must be byte-identical -----------
 file(GLOB _var_dats "${WORK_DIR}/var_a/*.dat")

@@ -11,6 +11,8 @@
  *   test_merge_null            — NULL operands and freed/uninitialised data are rejected
  *   test_merge_shape_mismatch  — mismatched optional-array presence is rejected
  *   test_zero                  — zero() clears every allocated array, keeps len
+ *   test_zero_variance_arrays  — zero() also clears the M2 arrays + batch bookkeeping
+ *   test_variance_alloc_guards — alloc_variance(NULL)/free(NULL) guards
  *   test_rescale               — rescale() scales data in place, NULL-safe
  *   test_finalize_average      — finalize_average() divides data/data2, guards eps
  *   test_merge_variance_two_batches        — Welford M2 merge: exact dyadic case
@@ -527,6 +529,39 @@ static void test_merge_variance_via_alloc(void) {
     osh_scoring_accumulator_free(&b);
 }
 
+/* zero() must also clear the variance (M2) arrays and the batch bookkeeping when
+ * present, so a reused accumulator starts each batch from a clean slate (the
+ * transport variance path zeroes its private set once per batch). */
+static void test_zero_variance_arrays(void) {
+    struct osh_scoring_accumulator acc;
+
+    ASSERT_TRUE(osh_scoring_accumulator_alloc_variance(&acc, 3u, 1, 1) == OSH_OK);
+    ASSERT_TRUE(acc.data_var != NULL && acc.data2_var != NULL);
+    acc.data[0] = 1.0;
+    acc.data2[0] = 2.0;
+    acc.data_var[0] = 3.0;
+    acc.data2_var[0] = 4.0;
+    acc.weight = 5.0;
+    acc.nbatch = 2u;
+
+    osh_scoring_accumulator_zero(&acc);
+    ASSERT_TRUE(acc.data[0] == 0.0);
+    ASSERT_TRUE(acc.data2[0] == 0.0);
+    ASSERT_TRUE(acc.data_var[0] == 0.0);
+    ASSERT_TRUE(acc.data2_var[0] == 0.0);
+    ASSERT_TRUE(acc.weight == 0.0);
+    ASSERT_TRUE(acc.nbatch == 0u);
+
+    osh_scoring_accumulator_free(&acc);
+}
+
+/* NULL-operand guards on the allocator and the destructor must not crash and must
+ * report EINVAL where a status is returned. */
+static void test_variance_alloc_guards(void) {
+    ASSERT_TRUE(osh_scoring_accumulator_alloc_variance(NULL, 4u, 1, 1) == OSH_EINVAL);
+    osh_scoring_accumulator_free(NULL); /* no-op, must not crash */
+}
+
 int main(void) {
     test_merge_identity();
     test_merge_correctness();
@@ -535,6 +570,8 @@ int main(void) {
     test_merge_null();
     test_merge_shape_mismatch();
     test_zero();
+    test_zero_variance_arrays();
+    test_variance_alloc_guards();
     test_rescale();
     test_finalize_average();
     test_merge_variance_two_batches();
