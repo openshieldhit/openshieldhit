@@ -152,6 +152,16 @@ add_subdirectory(src/dicom)
 add_subdirectory(src/apps/osh)
 add_subdirectory(src/apps/dicominspect)
 
+# ---- Optional experimental CUDA backend ----
+# Off by default: enabling adds src/gpu/ and the CUDA language; no existing
+# target changes. See docs/dev/gpu_port_plan.md.
+option(OSH_ENABLE_CUDA "Build the experimental CUDA backend" OFF)
+if(OSH_ENABLE_CUDA)
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    add_subdirectory(src/gpu)
+endif()
+
 # ---- Umbrella target AFTER the libs exist ----
 add_library(osh_all INTERFACE)
 target_link_libraries(osh_all INTERFACE
