@@ -49,9 +49,12 @@ configure_file(
     @ONLY
 )
 
-# Compiler-specific warning flags
+# Compiler-specific warning flags.
+# GNU/Clang flags are scoped to the C language: with OSH_ENABLE_CUDA=ON these
+# options would otherwise reach nvcc, which rejects gcc-only spellings such as
+# -Og and -pedantic. Device code gets its flags in src/gpu/CMakeLists.txt.
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    add_compile_options(-pedantic -Wall -Wextra)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C>:-pedantic;-Wall;-Wextra>")
 elseif(MSVC)
     add_compile_options(/W4)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)   # fopen etc. are standard C; fopen_s is Annex K (optional)
@@ -66,15 +69,15 @@ endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(
-        $<$<CONFIG:Debug>:-Og>
-        $<$<CONFIG:Debug>:-g3>
-        $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:Debug>>:-Og>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:Debug>>:-g3>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:Debug>>:-fno-omit-frame-pointer>
 
-        $<$<CONFIG:RelWithDebInfo>:-O3>
-        $<$<CONFIG:RelWithDebInfo>:-g1>
-        $<$<CONFIG:RelWithDebInfo>:-fno-omit-frame-pointer>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RelWithDebInfo>>:-O3>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RelWithDebInfo>>:-g1>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:RelWithDebInfo>>:-fno-omit-frame-pointer>
 
-        $<$<CONFIG:Release>:-O3>
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<CONFIG:Release>>:-O3>
     )
 endif()
 
@@ -95,9 +98,9 @@ message(STATUS "Voxel layout default: ${OSH_VOXEL_LAYOUT}")
 option(OSH_ENABLE_COVERAGE "Enable GCC/Clang coverage instrumentation" OFF)
 if(OSH_ENABLE_COVERAGE)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        add_compile_options(--coverage -O0 -g)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C>:--coverage;-O0;-g>")
         if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-            add_compile_options(-fprofile-update=atomic)
+            add_compile_options($<$<COMPILE_LANGUAGE:C>:-fprofile-update=atomic>)
         endif()
         add_link_options(--coverage)
     else()
@@ -115,7 +118,7 @@ endif()
 option(OSH_ENABLE_SANITIZERS "Enable AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 if(OSH_ENABLE_SANITIZERS)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C>:-fsanitize=address,undefined;-fno-sanitize-recover=all;-fno-omit-frame-pointer>")
         add_link_options(-fsanitize=address,undefined)
     elseif(MSVC)
         # MSVC ships AddressSanitizer only (no UBSan). Two MSVC-specific
