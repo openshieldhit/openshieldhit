@@ -13,7 +13,7 @@ Method: manual code audit of the hot path outward, plus hands-on experiments:
 debug + ASan/UBSan instrumented builds, full `ctest` runs, targeted standalone
 harnesses. Every finding cites `file:line` evidence.
 
-Status: **in progress** — sections are appended step by step, one commit each.
+Status: **complete** (7 sections + executive summary; one commit per audit step).
 
 ---
 
@@ -742,4 +742,179 @@ negligible, worth a one-line comment at most).
 
 ---
 
-*(Sections below are appended as the audit proceeds.)*
+## 6. Parsers & I/O (beyond the known #235/#236/#237)
+
+Scope: `src/dicom/`, `src/apps/osh/*_parse.c`, `src/common/osh_readline.c`,
+save writers. Overall verdict: this layer is in noticeably good shape — the
+findings below are minor relative to §1–§5.
+
+### IO-1 (low, high) DICOM walker length guard can wrap on 32-bit `size_t`
+
+`osh_dicom_walk()` guards each tag with `if (pos + length > size)`
+(`osh_dicom_parse.c:124-131`). `length` is attacker-controlled `uint32_t`; on
+an LP32/ILP32 target (`size_t` 32-bit) `pos + length` can wrap and bypass the
+guard → OOB read of up to 4 GB offsets in the tag callback. 64-bit builds
+are safe. Fix: `if (length > size - pos)` (pos ≤ size holds by loop
+invariant).
+
+### IO-2 (low, high) CT slice with rejected Pixel Data proceeds with `pixels == NULL`
+
+In `_tag_cb`, if `_slice_pixel_count()` fails or the declared length is short
+(`osh_dicom_ct.c:99-107`), the slice is silently kept with `pixels = NULL`;
+the volume assembler then dereferences `slices[i].pixels`. A malformed CT
+(pixel-data length lied about) is a NULL-deref crash rather than a
+diagnostic. The #235 fix (uniform-dims validation) should also reject
+pixel-less slices — same validation loop, one more condition.
+
+### IO-3 (low, medium) RTDOSE `NumberOfFrames` parsed with unchecked `atoi`
+
+`rd->n_frames = atoi(tmp)` (`osh_dicom_rtdose.c:89`): garbage/negative values
+flow onward (the frame-offset capacity logic happens to clamp ≥ 1, and a
+mismatch only warns). Validate `n_frames ≥ 1` and consistency with
+rows/cols/frame-offset count before assembling the dose grid.
+
+### IO-4 (low, medium) `osh_readline` silently splits over-long lines
+
+`fgets(buff, OSH_MAX_LINE_LENGTH, …)` (`osh_readline.c:47`): an input line
+longer than the buffer is processed as two lines with no warning — the
+eventual parse error (if any) points at a confusing place. Detect a missing
+`\n` and emit a truncation diagnostic with the line number.
+
+### IO-5 (info, high) Verified-OK
+
+- All `sscanf` uses in the apps parse layer are width-bounded with the
+  `%c`-sentinel trailing-garbage idiom (`osh_material_parse.c:259,493,674,…`)
+  — consistent and safe.
+- The DICOM walker bounds-checks every tag header and value, handles long/short
+  VR forms, and stops cleanly on undefined-length sequences.
+- OOM policy is uniform (`osh_abort_oomf`), so no unchecked-malloc NULL
+  derefs in the parse layer.
+- One environmental note: numeric parsing (`strtod`/`sscanf %lf`) assumes the
+  C locale. The CLI never calls `setlocale`, so it is fine standalone — but if
+  `libopenshieldhit` is embedded in a host that sets `LC_NUMERIC` (Qt/GUI
+  apps do), every `geo.dat`/DICOM DS parse breaks. Worth pinning with
+  `strtod_l`/`_configthreadlocale` or documenting the embedding requirement.
+
+---
+
+## 7. Architecture, layering & plans (TODO.md, #161/#169/#195)
+
+### A-1 (medium, high) Layering rule violations: two dead `transport/` includes in lower layers
+
+The declared rule (module READMEs, DEVELOPER.md §9; "runtime/ must not depend
+on transport/") is violated twice — both **dead** includes (no transport
+symbol is used in either file):
+
+- `src/beam/osh_beam_model.h:7` → `#include "transport/osh_transport.h"`
+  (and it is a *header*, so every beam consumer inherits the back-edge);
+- `src/gemca/osh_gemca2_calc_zone.c:10` → same include.
+
+Trivial to remove; the real finding is that nothing enforces the rule. A
+20-line CI script asserting the module dependency DAG (grep `#include`
+per module, compare against an allowlist) would keep this from regressing.
+
+### A-2 (info, high) Hot-path allocation rule (§10) verified clean
+
+No `malloc/calloc/realloc/free` anywhere under `osh_scoring_score_step()`,
+`osh_scoring_score_point()` or `osh_transport_ion_step()`; the neutron
+xsec state is allocation-free and per-run. Scratch is caller-owned as the
+rule demands. (The only per-batch allocation is `osh_neutron_xsec_compile`
+once per neutron drain — setup-scale, acceptable.)
+
+### A-3 (medium, high) TODO.md contradicts the code in load-bearing places
+
+- The **neutron section's "What is implemented" list is wrong** about the two
+  points that matter most for dose: "n-p recoil proton returned" and charged
+  secondaries "(currently deposited locally)" — see N-1; neither deposits nor
+  feedback exist. The open-items list is accurate; the implemented list will
+  mislead anyone triaging validation discrepancies.
+- **STRAGG 2 "validated vs SH12A"** is cited with numbers, but the entire
+  `reference::idd_*` tier that would lock those numbers in never runs (T-2).
+- "**Lazy extension of material/projectile runtime tables at batch
+  boundaries**" (Material section) conflicts with the parallel plan: under
+  `--threads N` the material runtime is a shared read-only structure; lazy
+  extension mid-run means either per-worker table copies or a
+  stop-the-world barrier — this needs to be reconciled with #161's memory
+  policies *before* someone implements it as a simple `realloc`.
+- The checkpoint/batch scheduler items marked done are consistent with the
+  code (`osh_transport.c` outer loop, K = nstat fast path, family-exact dumps,
+  completeness labels in the BDO writer) — verified, good.
+
+### A-4 (info, high) Placement and design notes (no action forced)
+
+- `osh_checkpoint_policy` / `osh_run_control` living in `src/transport/` is
+  defensible (they gate the transport outer loop); when #161's merge step
+  lands they will also coordinate scoring — if they start including scoring
+  headers beyond the snapshot API, revisit ownership (a thin
+  `simulation/`-level driver is the natural home).
+- The #195 quiescence contract is honestly implemented: dumps fire only at
+  family-quiescent checkpoint boundaries; `completed_nstat` is exact on all
+  paths including clean stops; the BDO completeness label exists.
+- The variance scaffold (see S-5) already matches the right #169 answer
+  (batch-means M2 + Schubert–Gertz pairwise merge). The remaining #169
+  decisions are: batch weight semantics under weighted particles (couples to
+  S-1), and who allocates `data_var` (extend
+  `osh_scoring_accumulator_alloc`, currently impossible).
+
+### A-5 (info) Test architecture
+
+Covered as T-1..T-3 in §0: glob-registered phantom cases, never-running
+reference tier, CWD-writing tests. One addition: `tests/unit` auto-discovery
+by glob is fine (a stray unit file fails loudly at compile, unlike a stray
+case dir which fails at *someone else's* `ctest`).
+
+---
+
+## 8. Executive summary & suggested issue breakdown
+
+### Highest-impact findings (result-correctness)
+
+| # | Finding | Severity | Where |
+|---|---|---|---|
+| G-1 | Ellipsoid/elliptic-cyl/cone distances wrong (missing ×2 on linear coefficient); empirically confirmed 0.651 vs 0.500 | **critical** (for ELL/ELLZ/CONE users) | `osh_gemca2_dist.c:413,443,467` |
+| N-1 | Neutron interactions deposit zero energy; n–p recoil energy vanishes; TODO.md claims otherwise | **high** | `osh_transport_neutron.c:166-202`, `osh_neutron_reaction.c:91-108` |
+| N-2 | Neutron σ clamped at 20 MeV table edge — fast neutrons ×5–6 over-attenuated | **high** | `osh_neutron_xsec.c:84-87` |
+| P-2 | Isotope conflation: deuteron/triton/³He use wrong range table (×2/×3/×¾) and wrong rest mass | **high** | `osh_transport_ion_step.c:1258`, `osh_material_compile.c:698-716` |
+| P-1 | Residual energy deleted at cutoff kill (scales with TCUT0) | **high** | `osh_transport_ion_step.c:539-543` |
+| S-1 | `st->wt` ignored by every scorer — latent for MCPL (#41)/VR | **high (latent)** | `src/scoring/runtime/*` |
+| P-3 | Bohr straggling missing relativistic factor; κ-dispatch variance discontinuity | medium | `osh_physics_strag_gauss.c:25-37` |
+| P-4 | Nuclear vertex at step endpoint (even past boundary nudge) | medium | `osh_transport_ion_step.c:307-484` |
+| S-2 | LET/spectra midpoint energy uses `q[3]=0` on nuclear-kill steps | medium | `osh_scoring_step.c:441` vs `osh_transport_ion_step.c:1092` |
+| S-3 | CT dose uses step-start density for all crossings (known TODO, confirmed) | medium | `osh_scoring_step.c:838-841` |
+
+### Parallelization (#161) blockers found beyond the tracked ones
+
+R-3 statics table (`s_proton/s_alpha` lazy init, `s_n_warned`, Molière init
+race in the WIP driver) and R-4's four concrete bugs in
+`feat/parallel-threads:osh_transport_parallel.c` (join-on-uncreated-thread UB,
+two leaky error paths, O(threads·nstat) neutron pools, hand-rolled family
+scheduling that will silently drop ion-feedback secondaries once N-1 is
+fixed).
+
+### Infrastructure
+
+T-1 phantom test dirs, T-2 physics-validation tier never runs (no reference
+curves committed), T-3 CWD-writing tests, A-1 dead layering back-edges,
+PR #239 validated and worth merging as-is (T-4).
+
+### Suggested issue slicing (one issue each, in priority order)
+
+1. GEMCA quadric linear-coefficient bug + per-surface distance unit tests (G-1, G-2).
+2. Neutron energy deposition: point-deposit `local_deposit_mev` + fix TODO.md claims (N-1); follow-up: recoil-proton ion feedback.
+3. Neutron σ above 20 MeV: Tier-2 dispatch above Tier-1 grid (N-2).
+4. Isotope-aware range/mass in transport (A-rescale within Z column + `part->mass` kinematics + once-per-species warning) (P-2).
+5. Deposit residual energy at all cutoff/species kills (P-1, and neutron cutoff from N-1).
+6. Weight-aware scoring + weighted-variance contract (S-1, feeds #169 and #41).
+7. Relativistic Bohr straggling factor (P-3).
+8. Nuclear vertex sampling within the step (P-4) + step-midpoint energy for scoring on kill steps (S-2).
+9. Reference-test data: commit IDD curves, wire `ctest -L reference` into CI (T-2); case-dir input validation (T-1); test tmpdir hygiene (T-3).
+10. Parallel-driver fixes on `feat/parallel-threads` before merge (R-4 + R-3 statics).
+11. Housekeeping: dead transport includes (A-1), dead `accumulator_rescale` (S-5), HU>1600 clamp warning (G-4), DICOM robustness nits (IO-1..IO-4).
+
+### Method note
+
+Everything above was verified by direct code reading with exact line
+references, plus: full debug + ASan/UBSan builds and test runs (only PR #239's
+two known test bugs fail), and a standalone numerical harness for G-1
+(`0.6513878189` vs true `0.5`; `b×2` restores correctness). Severities assume
+current usage; "latent" items are correct today but break planned features.
