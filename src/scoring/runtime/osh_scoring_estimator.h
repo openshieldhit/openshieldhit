@@ -34,30 +34,6 @@ struct osh_voxel_crossing;
 struct particle;
 struct step;
 
-/** Deposit handler: books this estimator's raw quantity over @p ncross bin
- *  crossings.
- *
- * This single function type is an implementation convenience shared by the step
- * path and point path.  Step handlers receive raytraced crossings and a physical
- * score length.  Point handlers receive one already-located "crossing" whose
- * idx is the destination bin; point-specific kernels must not infer track
- * semantics from score_len.  If the point path grows more independent, split
- * this into separate step and point function pointer types. */
-typedef enum osh_status (*osh_scoring_deposit_fn)(struct osh_scoring_runtime const *rt,
-                                                  struct osh_scoring_accumulator *acc_set,
-                                                  struct osh_scoring_geometry_score_group const *group,
-                                                  struct osh_voxel_crossing const *crossings,
-                                                  size_t ncross,
-                                                  struct particle const *part,
-                                                  struct step const *st,
-                                                  double score_len);
-
-/** Postprocess handler: finalise one page's accumulator into presentation form
- *  (@p geo carries the per-bin volume for volume-normalised estimators). */
-typedef enum osh_status (*osh_scoring_postprocess_fn)(struct osh_scoring_page_runtime *dst,
-                                                      struct osh_scoring_page_runtime const *src,
-                                                      struct osh_scoring_geometry_runtime const *geo);
-
 /**
  * One estimator's handler trio.  A NULL handler means the estimator is not active
  * on that path:
@@ -66,9 +42,33 @@ typedef enum osh_status (*osh_scoring_postprocess_fn)(struct osh_scoring_page_ru
  *   postprocess == NULL : accumulator is already final (e.g. ENERGY, COUNT)
  */
 struct osh_scoring_estimator {
-    osh_scoring_deposit_fn score_step;
-    osh_scoring_deposit_fn score_point;
-    osh_scoring_postprocess_fn postprocess;
+    /** Step handler: books this estimator's raw quantity over @p ncross raytraced
+     * bin crossings.  @p score_len is the geometric scoring chord length used to
+     * turn crossing lengths into fractions of the step. */
+    enum osh_status (*score_step)(struct osh_scoring_runtime const *rt,
+                                  struct osh_scoring_accumulator *acc_set,
+                                  struct osh_scoring_geometry_score_group const *group,
+                                  struct osh_voxel_crossing const *crossings,
+                                  size_t ncross,
+                                  struct particle const *part,
+                                  struct step const *st,
+                                  double score_len);
+
+    /** Point handler: books this estimator's raw quantity into one already
+     * located spatial bin.  There is no path length, crossing array, or score
+     * length on the point path. */
+    enum osh_status (*score_point)(struct osh_scoring_runtime const *rt,
+                                   struct osh_scoring_accumulator *acc_set,
+                                   struct osh_scoring_geometry_score_group const *group,
+                                   size_t spatial_idx,
+                                   struct particle const *part,
+                                   struct step const *st);
+
+    /** Postprocess handler: finalise one page's accumulator into presentation
+     * form (@p geo carries per-bin volume for volume-normalised estimators). */
+    enum osh_status (*postprocess)(struct osh_scoring_page_runtime *dst,
+                                   struct osh_scoring_page_runtime const *src,
+                                   struct osh_scoring_geometry_runtime const *geo);
 };
 
 /** Registry lookup by Quantity / score kind.  Returns NULL for an unknown kind. */

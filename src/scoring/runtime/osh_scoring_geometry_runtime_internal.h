@@ -1,12 +1,11 @@
-#ifndef OSH_SCORING_STEP_INTERNAL_H
-#define OSH_SCORING_STEP_INTERNAL_H
+#ifndef OSH_SCORING_GEOMETRY_RUNTIME_INTERNAL_H
+#define OSH_SCORING_GEOMETRY_RUNTIME_INTERNAL_H
 
 /*
- * Module-internal scoring declarations.
+ * Module-internal scoring geometry helpers.
  *
  * NOT part of the public scoring API; do not include outside src/scoring.
- * Geometry helpers are shared by the step and point geometry drivers.
- * Estimator handlers live behind osh_scoring_estimator_internal.h.
+ * These helpers are shared by the step and point geometry drivers.
  */
 
 #include "common/osh_step.h"
@@ -36,4 +35,4 @@ int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, siz
  */
 enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo, struct osh_raytrace_grid *grid);
 
-#endif /* OSH_SCORING_STEP_INTERNAL_H */
+#endif /* OSH_SCORING_GEOMETRY_RUNTIME_INTERNAL_H */

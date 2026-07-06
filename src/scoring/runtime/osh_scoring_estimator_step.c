@@ -1,7 +1,6 @@
 #include "material/runtime/osh_material_runtime.h"
 #include "scoring/runtime/osh_scoring_estimator_common.h"
 #include "scoring/runtime/osh_scoring_estimator_internal.h"
-#include "scoring/runtime/osh_scoring_kernels.h"
 
 /**
  * @brief Accumulate energy deposition [MeV] into the ENERGY scorer pages.
@@ -20,6 +19,8 @@ enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
     size_t j;
     size_t db;
     size_t db2;
+    size_t score_idx;
+    double energy_score;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
 
@@ -40,9 +41,11 @@ enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            osh_score_deposit(acc->data,
-                              osh_scoring_estimator_flat_bin(page, crossings[j].idx, db, db2),
-                              osh_kernel_step_energy(st->de, crossings[j].path_len, score_len));
+            /* ENERGY is extensive.  A transport step releases st->de [MeV];
+             * each crossed bin receives the path fraction path_len/score_len. */
+            score_idx = osh_scoring_estimator_flat_bin(page, crossings[j].idx, db, db2);
+            energy_score = st->de * (crossings[j].path_len / score_len);
+            osh_score_deposit(acc->data, score_idx, energy_score);
         }
     }
     return OSH_OK;
@@ -66,6 +69,8 @@ enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
     size_t j;
     size_t db;
     size_t db2;
+    size_t score_idx;
+    double fluence_score;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
     (void) score_len; /* fluence books raw track length; volume division is done in postprocess */
@@ -87,9 +92,11 @@ enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            osh_score_deposit(acc->data,
-                              osh_scoring_estimator_flat_bin(page, crossings[j].idx, db, db2),
-                              osh_kernel_step_fluence(crossings[j].path_len));
+            /* FLUENCE raw score is track length [cm].  Postprocess divides the
+             * accumulated length by bin volume to obtain fluence [1/cm2]. */
+            score_idx = osh_scoring_estimator_flat_bin(page, crossings[j].idx, db, db2);
+            fluence_score = crossings[j].path_len;
+            osh_score_deposit(acc->data, score_idx, fluence_score);
         }
     }
     return OSH_OK;
@@ -118,8 +125,10 @@ enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
     size_t j;
     size_t db;
     size_t db2;
+    size_t score_idx;
     double base_scale;
     double dose_scale;
+    double dose_score;
     struct osh_scoring_dose_sp_ctx sp;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
@@ -153,9 +162,12 @@ enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            osh_score_deposit(acc->data,
-                              osh_scoring_estimator_flat_bin(page, crossings[j].idx, db, db2),
-                              osh_kernel_step_dose(crossings[j].path_len, dose_scale));
+            /* DOSE raw score is path_len * de/(score_len*rho) [MeV*cm3/g],
+             * with any dose-to-medium stopping-power ratio folded into
+             * dose_scale.  Postprocess divides by bin volume. */
+            score_idx = osh_scoring_estimator_flat_bin(page, crossings[j].idx, db, db2);
+            dose_score = crossings[j].path_len * dose_scale;
+            osh_score_deposit(acc->data, score_idx, dose_score);
         }
     }
     return OSH_OK;
@@ -190,6 +202,8 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
     double e_per_nuc;
     double rho_ovr; /* density used for the per-page LET override */
     double dose_weight;
+    double dlet_numerator;
+    double dlet_denominator;
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime const *page;
@@ -259,9 +273,11 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            dose_weight = osh_kernel_dose_weight(st->de, crossings[j].path_len, score_len);
-            osh_score_deposit(acc->data, crossings[j].idx, let_step * dose_weight);
-            osh_score_deposit(acc->data2, crossings[j].idx, dose_weight);
+            dose_weight = st->de * crossings[j].path_len / score_len;
+            dlet_numerator = let_step * dose_weight;
+            dlet_denominator = dose_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, dlet_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, dlet_denominator);
         }
     }
     return OSH_OK;
@@ -296,6 +312,8 @@ enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
     double e_per_nuc;
     double rho_ovr; /* density used for the per-page LET override */
     double track_weight;
+    double tlet_numerator;
+    double tlet_denominator;
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime const *page;
@@ -365,9 +383,11 @@ enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            track_weight = osh_kernel_track_weight(st->ds, crossings[j].path_len, score_len);
-            osh_score_deposit(acc->data, crossings[j].idx, let_step * track_weight);
-            osh_score_deposit(acc->data2, crossings[j].idx, track_weight);
+            track_weight = st->ds * crossings[j].path_len / score_len;
+            tlet_numerator = let_step * track_weight;
+            tlet_denominator = track_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, tlet_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, tlet_denominator);
         }
     }
     return OSH_OK;
@@ -402,6 +422,8 @@ enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
     double beta;
     double qeff;
     double dose_weight;
+    double dqeff_numerator;
+    double dqeff_denominator;
     size_t proj_idx;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
@@ -451,9 +473,11 @@ enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            dose_weight = osh_kernel_dose_weight(st->de, crossings[j].path_len, score_len);
-            osh_score_deposit(acc->data, crossings[j].idx, qeff * dose_weight);
-            osh_score_deposit(acc->data2, crossings[j].idx, dose_weight);
+            dose_weight = st->de * crossings[j].path_len / score_len;
+            dqeff_numerator = qeff * dose_weight;
+            dqeff_denominator = dose_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, dqeff_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, dqeff_denominator);
         }
     }
     return OSH_OK;
@@ -487,6 +511,8 @@ enum osh_status score_step_tqeff(struct osh_scoring_runtime const *rt,
     double beta;
     double qeff;
     double track_weight;
+    double tqeff_numerator;
+    double tqeff_denominator;
     size_t proj_idx;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
@@ -536,9 +562,11 @@ enum osh_status score_step_tqeff(struct osh_scoring_runtime const *rt,
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            track_weight = osh_kernel_track_weight(st->ds, crossings[j].path_len, score_len);
-            osh_score_deposit(acc->data, crossings[j].idx, qeff * track_weight);
-            osh_score_deposit(acc->data2, crossings[j].idx, track_weight);
+            track_weight = st->ds * crossings[j].path_len / score_len;
+            tqeff_numerator = qeff * track_weight;
+            tqeff_denominator = track_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, tqeff_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, tqeff_denominator);
         }
     }
     return OSH_OK;

@@ -8,7 +8,7 @@
 #include "common/raytrace/osh_raytrace.h"
 #include "common/raytrace/osh_raytrace_cyl.h"
 #include "scoring/runtime/osh_scoring_estimator.h"
-#include "scoring/runtime/osh_scoring_step_internal.h"
+#include "scoring/runtime/osh_scoring_geometry_runtime_internal.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
 static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out);

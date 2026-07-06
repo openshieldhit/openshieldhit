@@ -26,8 +26,20 @@
         }                                                                                                              \
     } while (0)
 
+static int tmp_counter = 0;
+
 static void assert_close(double a, double b) {
     ASSERT_TRUE(fabs(a - b) < 1.0e-12);
+}
+
+static void write_temp_file(char *path, size_t path_cap, char const *content) {
+    FILE *fp;
+
+    snprintf(path, path_cap, "osh_scoring_step_test_%d.tmp", tmp_counter++);
+    fp = fopen(path, "w");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fputs(content, fp) >= 0);
+    ASSERT_TRUE(fclose(fp) == 0);
 }
 
 static void test_score_mesh_energy_and_fluence_with_filters(void) {
@@ -536,6 +548,134 @@ static void test_score_mesh_dqeff_tqeff(void) {
     osh_scoring_workspace_free(ws);
 }
 
+/* LET and QEFF can be differential-axis values for ordinary extensive scores
+ * such as FLUENCE.  They are not the same thing as the averaged quantities DLET,
+ * TLET, DQEFF, and TQEFF.  This test verifies that a FLUENCE page can bin track
+ * length by LET and by QEFF. */
+static void test_score_mesh_fluence_diff_let_qeff(void) {
+    char path[512];
+    char const *detect = "Geometry Mesh\n"
+                         "    Name G\n"
+                         "    X -0.5 0.5 1\n"
+                         "    Y -0.5 0.5 1\n"
+                         "    Z  0.0 2.0 1\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename out.bdo\n"
+                         "    Geo G\n"
+                         "    Quantity Fluence\n"
+                         "    Diff1 0.0 10.0 5\n"
+                         "    Diff1Type LET\n"
+                         "    Quantity Fluence\n"
+                         "    Diff1 0.0 8.0 8\n"
+                         "    Diff1Type QEFF\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *let_page;
+    struct osh_scoring_page_runtime *qeff_page;
+    double proton_mass_mev;
+    unsigned int proj_z[1];
+    unsigned int proj_a[1];
+    double proj_mass[1];
+    float rho_arr[1];
+    float sp_values[2];
+    struct osh_material_runtime mat_rt;
+    double mean_energy;
+    double gamma_inv;
+    double beta;
+    double qeff;
+    size_t qeff_bin;
+    enum osh_status rc;
+    size_t i;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    proton_mass_mev = 938.272046;
+    proj_z[0] = 1u;
+    proj_a[0] = 1u;
+    proj_mass[0] = proton_mass_mev;
+    rho_arr[0] = 1.0f;
+    sp_values[0] = 4.0f;
+    sp_values[1] = 4.0f;
+
+    memset(&mat_rt, 0, sizeof(mat_rt));
+    mat_rt.nprojectiles = 1u;
+    mat_rt.nmaterials = 1u;
+    mat_rt.nenergy = 2u;
+    mat_rt.emin = 1.0;
+    mat_rt.emax = 1000.0;
+    mat_rt.log_emin = log(mat_rt.emin);
+    mat_rt.inv_dlog = 1.0 / (log(mat_rt.emax) - log(mat_rt.emin));
+    mat_rt.projectile_z = proj_z;
+    mat_rt.projectile_a = proj_a;
+    mat_rt.projectile_mass_mev = proj_mass;
+    mat_rt.rho = rho_arr;
+    mat_rt.mass_stopping_power = sp_values;
+    rt.mat_tables = &mat_rt;
+
+    memset(&part, 0, sizeof(part));
+    part.z = 1u;
+    part.a = 1u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[0] = 0.0;
+    st.p[1] = 0.0;
+    st.p[2] = 0.5;
+    st.p[3] = 150.0;
+    st.q[0] = 0.0;
+    st.q[1] = 0.0;
+    st.q[2] = 1.5;
+    st.q[3] = 150.0;
+    st.v[2] = 1.0;
+    st.ds = 1.0;
+    st.de = 1.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    ASSERT_TRUE(rt.noutputs == 1u);
+    ASSERT_TRUE(rt.outputs[0].npages == 2u);
+    let_page = &rt.pages[rt.outputs[0].page_indices[0]];
+    qeff_page = &rt.pages[rt.outputs[0].page_indices[1]];
+
+    /* LET axis: SP is constant 4 MeV*cm2/g and rho is 1 g/cm3, so LET is
+     * 4 MeV/cm.  Diff1 0..10 with 5 bins has width 2, so LET=4 lands in bin 2.
+     * The raw FLUENCE deposit is the crossed track length, here 1 cm. */
+    ASSERT_TRUE(let_page->len == 5u);
+    for (i = 0u; i < let_page->len; ++i) {
+        assert_close(let_page->acc.data[i], (i == 2u) ? 1.0 : 0.0);
+    }
+
+    /* QEFF axis: qeff is computed at the step midpoint and used only as the
+     * differential-axis coordinate.  The scored quantity is still raw FLUENCE,
+     * so the selected spectrum bin receives 1 cm of track length. */
+    mean_energy = 150.0;
+    gamma_inv = proton_mass_mev / (mean_energy + proton_mass_mev);
+    beta = sqrt(1.0 - gamma_inv * gamma_inv);
+    qeff = 1.0 / (beta * beta);
+    qeff_bin = (size_t) ((qeff - 0.0) / (8.0 - 0.0) * 8.0);
+    ASSERT_TRUE(qeff_bin < qeff_page->len);
+    for (i = 0u; i < qeff_page->len; ++i) {
+        assert_close(qeff_page->acc.data[i], (i == qeff_bin) ? 1.0 : 0.0);
+    }
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 /* Allocate a private accumulator set cloning the shape of every page in rt
  * (same len and data2 presence), zero-initialised.  Mirrors what a future
  * worker_accumulators_alloc() does, but inline for the test. */
@@ -651,6 +791,7 @@ int main(void) {
     test_score_mesh_neutron_id_filter();
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
+    test_score_mesh_fluence_diff_let_qeff();
     /* Zone scoring test deferred to Stage C: it needs app-level name resolution
      * (a geometry workspace) which this unit test does not construct. */
     test_score_private_then_merge_equals_direct();
