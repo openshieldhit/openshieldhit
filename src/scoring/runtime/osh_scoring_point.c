@@ -107,6 +107,9 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         one.path_len = 1.0;
         one.vol_inv = voxel_volume_inv;
 
+        /* Each group is a run of pages with the same score kind for this
+         * geometry.  Point scoring dispatches only estimators that define a
+         * point meaning; track-only quantities expose score_point == NULL. */
         for (g = 0; g < geo->ngroups; ++g) {
             struct osh_scoring_estimator const *est;
 

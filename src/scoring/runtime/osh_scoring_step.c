@@ -56,7 +56,8 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
     struct osh_voxel_crossing *crossings;
     enum osh_status rc;
     int hit;
-    int is_cyl;
+
+    /* ---- Validate caller-owned state ------------------------------------ */
 
     if (!rt || !part || !st) {
         return OSH_EINVAL;
@@ -73,10 +74,14 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
         return OSH_EINVAL;
     }
 
+    /* ---- Choose the geometric chord used for scoring -------------------- */
+
     step_scoring_segment(st, score_dir, &score_len);
     if (!(score_len > 0.0)) {
         return OSH_EINVAL;
     }
+
+    /* ---- Visit each scoring geometry ------------------------------------ */
 
     for (i = 0; i < rt->ngeometries; ++i) {
         struct osh_scoring_geometry_runtime const *geo = &rt->geometries[i];
@@ -94,18 +99,12 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             continue;
         }
 
-        /* Universe→local rotation (shared by Mesh and Cyl: same t[16] layout). */
-        if (geo->has_rotation) {
-            osh_vect_trans_point_affine(st->p, p_local, geo->t);
-            osh_vect_trans_vector_affine(score_dir, dir_local, geo->t);
-            p_trace = p_local;
-            dir_trace = dir_local;
-        } else {
-            p_trace = st->p;
-            dir_trace = score_dir;
-        }
+        /* ---- Zone geometry: already classified by transport ------------- */
 
         if (geo->geo_kind == OSH_SCORING_GEO_ZONE) {
+            /* Zone scoring does not raytrace the step.  Transport has already
+             * assigned st->zone; map that transport zone id to this scorer's
+             * dense Zone-bin index and book one whole-step crossing. */
             if (!zone_bin_index(geo, st->zone, &one.idx)) {
                 continue;
             }
@@ -120,8 +119,26 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             continue;
         }
 
-        is_cyl = (geo->geo_kind == OSH_SCORING_GEO_CYL);
-        if (!is_cyl) {
+        /* ---- Mesh/Cyl geometry: raytrace in local scoring coordinates ---- */
+
+        /* Mesh and Cyl geometries raytrace in the scoring geometry's local
+         * coordinate frame.  Zone was handled above because it has no local
+         * coordinate lookup. */
+        if (geo->has_rotation) {
+            osh_vect_trans_point_affine(st->p, p_local, geo->t);
+            osh_vect_trans_vector_affine(score_dir, dir_local, geo->t);
+            p_trace = p_local;
+            dir_trace = dir_local;
+        } else {
+            p_trace = st->p;
+            dir_trace = score_dir;
+        }
+
+        /* ---- Cartesian mesh traversal ----------------------------------- */
+
+        if (geo->geo_kind == OSH_SCORING_GEO_MESH) {
+            /* Cartesian mesh: build an X/Y/Z raytrace grid and assign the same
+             * voxel-volume inverse to every crossing. */
             rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
             if (rc != OSH_OK) {
                 return rc;
@@ -141,7 +158,11 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             for (j = 0; j < ncross; ++j) {
                 crossings[j].vol_inv = voxel_volume_inv;
             }
-        } else {
+        } else if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
+            /* ---- Cylindrical mesh traversal ----------------------------- */
+
+            /* Cylindrical mesh: trace in R/Z, then recover the per-R-bin volume
+             * using flat_idx % nr. */
             rc = cyl_geometry_to_grid(geo, &grid);
             if (rc != OSH_OK) {
                 return rc;
@@ -163,7 +184,11 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             for (j = 0; j < ncross; ++j) {
                 crossings[j].vol_inv = lut[crossings[j].idx % nr_cyl];
             }
+        } else {
+            return OSH_ENOTSUP;
         }
+
+        /* ---- Dispatch estimator groups over the located crossings -------- */
 
         for (g = 0; g < geo->ngroups; ++g) {
             rc = dispatch_step(rt, acc_set, &geo->groups[g], crossings, ncross, part, st, score_len);
@@ -634,14 +659,19 @@ static double diff2_step_val(struct osh_scoring_page_runtime const *page,
 
 /* ---- Shared estimator-driver helpers -------------------------------------
  * The score_step_* / score_point_* handlers below are "drivers": they gather the
- * per-step / per-page scalars, walk pages (filter + differential bins), then book
- * a tiny pure kernel (osh_scoring_kernels.h) per deposit.  These helpers hold the
- * machinery all estimators share, so each handler stays small and the quantity math
- * lives in the kernel. */
+ * per-step / per-page scalars, walk the pages in one score group, then book a
+ * tiny pure kernel (osh_scoring_kernels.h) per deposit.  These helpers hold the
+ * machinery shared by extensive, single-valued score quantities such as ENERGY,
+ * FLUENCE, DOSE, and DOSEGY.  Averaged quantities (DLET/TLET/DQEFF/TQEFF) keep
+ * their own two-pass loops because compile-time validation rejects differential
+ * axes on those pages. */
 
-/* Resolve the per-page differential-axis bin offsets for this step.  Returns 1 with
- * *db / *db2 set (each 0 when its axis is inactive), or 0 to skip the page: the axis
- * value is undefined (e.g. LET for a neutral) or falls outside its [lo, hi). */
+/* Resolve the per-page differential-axis bin offsets for this step.
+ *
+ * LET and QEFF appear here as axis values (Diff1Type/Diff2Type) for spectra of
+ * ENERGY/FLUENCE/DOSE/DOSEGY.  They are not score quantities in this helper.
+ * Returns 1 with *db / *db2 set (each 0 when inactive), or 0 to skip the page
+ * when the axis value is undefined (e.g. LET for a neutral) or out of range. */
 static int resolve_diff_bins(struct osh_scoring_page_runtime const *page,
                              struct osh_scoring_runtime const *rt,
                              struct particle const *part,
@@ -689,8 +719,12 @@ static inline void deposit_two_pass(struct osh_scoring_accumulator *acc, size_t 
     osh_score_deposit(acc->data2, idx, weight);
 }
 
-/* Per-step projectile stopping-power context for the DOSE dose-to-medium override,
- * gathered once per step and reused by the step and point dose drivers. */
+/* Per-step projectile stopping-power context for DOSE dose-to-medium overrides.
+ *
+ * The expensive/common lookup is S(transport medium, E) for this projectile and
+ * step midpoint.  Each page may then request a different scoring medium through
+ * Settings; dose_sp_ratio() only needs one additional lookup for that page and
+ * returns S(scoring medium, E) / S(transport medium, E). */
 struct dose_sp_ctx {
     int have_proj;    /* projectile has an SP-table entry in the transport medium */
     size_t proj_idx;  /* projectile index into the SP tables */
@@ -709,10 +743,14 @@ dose_sp_gather(struct osh_scoring_runtime const *rt, struct particle const *part
     c.sp_tr = 0.0;
     c.e_per_nuc = 0.0;
     if (mat && part->z > 0 && part->a > 0 && st->medium >= 0) {
+        /* Use the same representative energy as the LET/QEFF axis code: the
+         * midpoint between pre-step and post-step kinetic energy. */
         mean_energy = 0.5 * (st->p[3] + st->q[3]);
         c.e_per_nuc = mean_energy / (double) part->a;
         if (find_proj_idx(mat, (unsigned int) part->z, &c.proj_idx)) {
             c.have_proj = 1;
+            /* Baseline stopping power in the actual transport medium.  If this
+             * is zero, a dose-to-medium ratio is undefined and contributes 0. */
             c.sp_tr = osh_material_runtime_sp_lookup(mat, (size_t) st->medium, c.proj_idx, c.e_per_nuc);
         }
     }
@@ -727,6 +765,8 @@ static double dose_sp_ratio(struct dose_sp_ctx const *c,
     double sp_ovr;
 
     if (c->have_proj && page->has_sset && page->sset.has_medium && page->sset.medium >= 0) {
+        /* Page-local Settings override: convert dose-to-transport into
+         * dose-to-medium by multiplying each raw page deposit by this ratio. */
         sp_ovr = osh_material_runtime_sp_lookup(rt->mat_tables, (size_t) page->sset.medium, c->proj_idx, c->e_per_nuc);
         if (c->sp_tr > 0.0) {
             return sp_ovr / c->sp_tr;
@@ -856,6 +896,9 @@ enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
     base_scale = st->de / (score_len * st->rho);
     sp = dose_sp_gather(rt, part, st);
 
+    /* group is a run of DOSE or DOSEGY pages for this geometry, not a run of
+     * bins.  Each page may have different filters, Settings overrides, and
+     * differential axes, so dose_scale and diff bins are page-local. */
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
         acc = &acc_set[group->first_page + i];
@@ -939,6 +982,10 @@ enum osh_status score_point_dose(OSH_SCORING_DEPOSIT_PARAMS) {
     }
     sp = dose_sp_gather(rt, part, st);
 
+    /* group is a run of DOSE or DOSEGY pages for the same geometry, not a run of
+     * bins.  Each page may have different filters, Settings overrides, and
+     * differential axes, so the page loop remains even though a point deposit
+     * normally has only one located crossing. */
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
         acc = &acc_set[group->first_page + i];

@@ -317,9 +317,14 @@ static enum osh_scoring_diff_kind diff_kind_from_str(char const *s) {
         return OSH_SCORING_DIFF_EAMU;
     }
     if (strcmp(s, "let") == 0 || strcmp(s, "dedx") == 0) {
+        /* LET/DEDX is a differential-axis value (Diff1Type/Diff2Type), not a
+         * standalone score quantity.  The averaged score quantities are DLET
+         * and TLET. */
         return OSH_SCORING_DIFF_LET;
     }
     if (strcmp(s, "qeff") == 0 || strcmp(s, "zeff2beta2") == 0) {
+        /* Same distinction as LET: QEFF is an axis value; DQEFF/TQEFF are the
+         * averaged scored quantities. */
         return OSH_SCORING_DIFF_QEFF;
     }
     return OSH_SCORING_DIFF_NONE;

@@ -24,9 +24,13 @@ struct osh_scoring_axis_runtime {
  * @brief A contiguous span of pages sharing the same geometry and score kind.
  *
  * @details
- * Pages are laid out so all pages of the same geometry are contiguous.
- * Groups subdivide that span by score kind so the hot path can loop over
- * pages of one kind without branching on kind per step.
+ * A group is not a set of spatial bins or ray crossings.  It is a run of output
+ * pages that all refer to the same geometry and the same score kind, e.g. several
+ * DOSE pages with different filters, Settings overrides, or differential axes.
+ *
+ * Pages are laid out so all pages of the same geometry are contiguous.  Groups
+ * subdivide that span by score kind so the hot path can select the estimator once
+ * and then loop only over compatible pages.
  */
 struct osh_scoring_geometry_score_group {
     size_t first_page;                      /* Index of first page in this group. */

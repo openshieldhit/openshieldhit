@@ -35,8 +35,14 @@ struct particle;
 struct step;
 
 /** Deposit handler: books this estimator's raw quantity over @p ncross bin
- *  crossings.  Shared by the step path (raytraced crossings) and the point path
- *  (a single crossing with score_len = 1). */
+ *  crossings.
+ *
+ * This single function type is an implementation convenience shared by the step
+ * path and point path.  Step handlers receive raytraced crossings and a physical
+ * score length.  Point handlers receive one already-located "crossing" whose
+ * idx is the destination bin; point-specific kernels must not infer track
+ * semantics from score_len.  If the point path grows more independent, split
+ * this into separate step and point function pointer types. */
 typedef enum osh_status (*osh_scoring_deposit_fn)(struct osh_scoring_runtime const *rt,
                                                   struct osh_scoring_accumulator *acc_set,
                                                   struct osh_scoring_geometry_score_group const *group,
