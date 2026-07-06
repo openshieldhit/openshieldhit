@@ -454,10 +454,10 @@ static void fprint_quantity_names(FILE *fp,
                                   struct osh_scoring_runtime const *rt,
                                   struct osh_scoring_output_runtime const *out,
                                   int with_err) {
-    size_t ip;
-    size_t page_idx;
-    char const *qty;
-    char const *c;
+    size_t ip;       /* index over this output's pages (one scored quantity per page) */
+    size_t page_idx; /* out->page_indices[ip]: the page's slot in rt->pages */
+    char const *qty; /* the page's quantity keyword to print, e.g. "Dose" */
+    char const *c;   /* cursor while upper-casing the quantity name char by char */
 
     for (ip = 0; ip < out->npages; ++ip) {
         struct osh_scoring_page_runtime const *page;

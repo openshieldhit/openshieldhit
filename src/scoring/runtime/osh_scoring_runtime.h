@@ -182,7 +182,10 @@ static inline struct osh_scoring_scratch *osh_score_target_scratch(struct osh_sc
  * as before.
  */
 static inline int osh_scoring_runtime_tracks_variance(struct osh_scoring_runtime const *rt) {
-    return (rt && rt->npages > 0u && rt->pages && rt->pages[0].acc.data_var != NULL) ? 1 : 0;
+    if (rt && rt->npages > 0u && rt->pages && rt->pages[0].acc.data_var != NULL) {
+        return 1;
+    }
+    return 0;
 }
 
 /**

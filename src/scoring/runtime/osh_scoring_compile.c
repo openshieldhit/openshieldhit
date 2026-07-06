@@ -217,11 +217,19 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
         for (j = 0u; j < output->npages; ++j) {
             struct osh_scoring_page_def const *page = &output->pages[j];
             enum osh_scoring_score_kind const kind = quantity_to_score_kind(page->quantity);
-            unsigned const sum_arrays = score_kind_uses_data2(kind) ? 2u : 1u;
-            /* Variance doubles the arrays: data_var mirrors data, data2_var mirrors data2. */
-            unsigned const arrays = ws->variance ? (sum_arrays * 2u) : sum_arrays;
+            unsigned sum_arrays = 1u; /* # of sum arrays: data, plus data2 for two-pass averages */
+            unsigned arrays;          /* sum arrays, plus their M2 companions when variance is on */
             uint64_t len = (uint64_t) bins;
             uint64_t page_bytes;
+
+            if (score_kind_uses_data2(kind)) {
+                sum_arrays = 2u;
+            }
+            /* Variance doubles the arrays: data_var mirrors data, data2_var mirrors data2. */
+            arrays = sum_arrays;
+            if (ws->variance) {
+                arrays = sum_arrays * 2u;
+            }
 
             if (len > 0u && page->diff_nbins > 0u) {
                 uint64_t const d1 = (uint64_t) page->diff_nbins;
@@ -985,7 +993,10 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
          * VARIANCE card turns it on for every page.  The batch-means M2 arrays are
          * allocated below; the per-batch fold and finalize happen in transport and
          * postprocess.  0 keeps the accumulator exactly as before (no var arrays). */
-        dst_page->variance = ws->variance ? 1 : 0;
+        dst_page->variance = 0;
+        if (ws->variance) {
+            dst_page->variance = 1;
+        }
 
         /* Differential axis — expand data[] to geo_nbins × diff_nbins. */
         dst_page->diff_stride = rt->geometries[dst_page->geometry_idx].nbins;
