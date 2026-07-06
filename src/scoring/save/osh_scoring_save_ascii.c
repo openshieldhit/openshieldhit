@@ -40,6 +40,8 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
                                        size_t output_idx,
                                        struct osh_scoring_output_runtime const **out_out,
                                        struct osh_scoring_geometry_runtime const **geo_out);
+static int ascii_diff_layout_matches(struct osh_scoring_page_runtime const *a,
+                                     struct osh_scoring_page_runtime const *b);
 static void format_now_rfc2822(char *buf, size_t cap);
 static void
 fprint_quantity_names(FILE *fp, struct osh_scoring_runtime const *rt, struct osh_scoring_output_runtime const *out);
@@ -504,8 +506,28 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         return OSH_ENOTSUP;
     }
     for (ip = 0; ip < out->npages; ++ip) {
-        struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
+        size_t page_idx;
+        struct osh_scoring_page_runtime const *page;
+
+        if (!out->page_indices) {
+            return OSH_ESTATE;
+        }
+        page_idx = out->page_indices[ip];
+        if (page_idx >= rt->npages) {
+            return OSH_ESTATE;
+        }
+        page = &rt->pages[page_idx];
+        if (page->geometry_idx != out->geometry_idx) {
+            return OSH_ESTATE;
+        }
         if (!page->acc.data || page->variance || page->has_data2 || page->divide) {
+            return OSH_ENOTSUP;
+        }
+        /* ASCII output writes one rectangular table per Output and takes the
+         * diff-axis columns from page 0.  Mixed page-local diff layouts cannot
+         * be represented safely in that table; BDO writes page metadata
+         * independently and should be used for such cases. */
+        if (ip > 0u && !ascii_diff_layout_matches(&rt->pages[out->page_indices[0]], page)) {
             return OSH_ENOTSUP;
         }
     }
@@ -513,6 +535,28 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
     *out_out = out;
     *geo_out = geo;
     return OSH_OK;
+}
+
+static int ascii_diff_layout_matches(struct osh_scoring_page_runtime const *a,
+                                     struct osh_scoring_page_runtime const *b) {
+    if (!a || !b) {
+        return 0;
+    }
+    if (a->diff_nbins != b->diff_nbins || a->diff_kind != b->diff_kind || a->diff_lo != b->diff_lo
+        || a->diff_hi != b->diff_hi || a->diff_log != b->diff_log || a->has_diff_sset != b->has_diff_sset) {
+        return 0;
+    }
+    if (a->has_diff_sset && a->diff_sset_idx != b->diff_sset_idx) {
+        return 0;
+    }
+    if (a->diff2_nbins != b->diff2_nbins || a->diff2_kind != b->diff2_kind || a->diff2_lo != b->diff2_lo
+        || a->diff2_hi != b->diff2_hi || a->diff2_log != b->diff2_log || a->has_diff2_sset != b->has_diff2_sset) {
+        return 0;
+    }
+    if (a->has_diff2_sset && a->diff2_sset_idx != b->diff2_sset_idx) {
+        return 0;
+    }
+    return 1;
 }
 
 static void format_now_rfc2822(char *buf, size_t cap) {
