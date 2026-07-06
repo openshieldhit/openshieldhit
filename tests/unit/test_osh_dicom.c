@@ -152,17 +152,23 @@ static void write_tag_header(FILE *fp, uint16_t group, uint16_t element, char co
         write_u16_le(fp, 0u);
         write_u32_le(fp, length);
     } else {
+        ASSERT_TRUE(length <= UINT16_MAX);
         write_u16_le(fp, (uint16_t) length);
     }
 }
 
 static void write_tag_string(FILE *fp, uint16_t group, uint16_t element, char const vr[2], char const *value) {
-    size_t len; /* Raw DICOM element byte count for the ASCII value. */
+    size_t len;        /* Raw byte count of the ASCII value before DICOM padding. */
+    size_t padded_len; /* Even byte count written into the DICOM element header. */
 
     len = strlen(value);
-    ASSERT_TRUE(len <= UINT16_MAX);
-    write_tag_header(fp, group, element, vr, (uint32_t) len);
+    padded_len = len + (len % 2u);
+    ASSERT_TRUE(padded_len <= UINT16_MAX);
+    write_tag_header(fp, group, element, vr, (uint32_t) padded_len);
     ASSERT_TRUE(fwrite(value, 1u, len, fp) == len);
+    if (padded_len != len) {
+        ASSERT_TRUE(fputc(' ', fp) != EOF);
+    }
 }
 
 static void write_tag_us(FILE *fp, uint16_t group, uint16_t element, uint16_t value) {
