@@ -394,6 +394,26 @@ void osh_gemca_runtime_check_surface_batch(struct gemca_rt_surface const *sf,
                                            int *inside_out);
 
 /**
+ * @brief Distance along a ray to a single flat surface, for testing/validation.
+ *
+ * @details
+ * Thin public wrapper over the internal per-surface distance math the transport
+ * hot path uses. Exposed so per-surface distance behaviour (inside/outside/
+ * tangent/grazing) can be unit-tested directly, mirroring
+ * osh_gemca_runtime_check_surface_batch() for the membership predicate.
+ *
+ * The ray must already be in the surface's local body coordinate system with a
+ * normalised direction; no body transform is applied here.
+ *
+ * @param[in] sf  Flat surface to intersect.
+ * @param[in] r   Ray (position and normalised direction) in surface-local coords.
+ *
+ * @returns Smallest positive distance to the surface, or OSH_GEMCA_INFINITY if
+ *          the ray does not cross it.
+ */
+double osh_gemca_runtime_surface_distance(struct gemca_rt_surface const *sf, struct ray const *r);
+
+/**
  * @brief Body-membership query for a batch of @p n rays in OSH_COORD_UNIVERSE.
  *
  * @details

@@ -133,7 +133,7 @@ static inline double _dist_cone_rt(double ra2, double rb2, struct ray const *r);
 static inline double _dist_ellipsoid_rt(double ra2, double rb2, double rc2, struct ray const *r);
 static inline double _dist_plane_xyz_rt(int axis, struct gemca_rt_surface const *sf, struct ray const *r);
 static inline double _dist_plane_rt(struct gemca_rt_surface const *sf, struct ray const *r);
-static inline double _quad_solver(double a, double b, double c);
+static inline double _quad_solver(double a, double h, double c);
 static inline double _minpos(double a, double b);
 
 /* ---- Public API: Lifecycle ----------------------------------------------- */
@@ -2299,56 +2299,63 @@ static inline double _dist_surface_rt(struct gemca_rt_surface const *sf, struct 
     }
 }
 
+double osh_gemca_runtime_surface_distance(struct gemca_rt_surface const *sf, struct ray const *r) {
+    return _dist_surface_rt(sf, r);
+}
+
 /* ---- Distance math (pure functions, no state) ---------------------------- */
 
 static inline double _dist_sphere_rt(double r2, struct ray const *r) {
-    double b;
+    double h;
     double c;
-    b = 2.0 * osh_vect_dot(r->cp, r->p);
+    h = osh_vect_dot(r->cp, r->p); /* half linear coefficient */
     c = osh_vect_len2(r->p) - r2;
-    return _quad_solver(1.0, b, c);
+    return _quad_solver(1.0, h, c);
 }
 
 static inline double _dist_cyl_rt(double r2, struct ray const *r) {
     double a;
-    double b;
+    double h;
     double c;
     a = r->cp[0] * r->cp[0] + r->cp[1] * r->cp[1];
-    b = 2.0 * (r->cp[0] * r->p[0] + r->cp[1] * r->p[1]);
+    h = r->cp[0] * r->p[0] + r->cp[1] * r->p[1]; /* half linear coefficient */
     c = r->p[0] * r->p[0] + r->p[1] * r->p[1] - r2;
-    return _quad_solver(a, b, c);
+    return _quad_solver(a, h, c);
 }
 
 static inline double _dist_elipcyl_rt(double ra2, double rb2, struct ray const *r) {
     double a;
-    double b;
+    double h;
     double c;
+    /* surface x^2/ra2 + y^2/rb2 - 1 = 0; h is the half linear coefficient */
     a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2;
-    b = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2;
+    h = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2;
     c = (r->p[0] * r->p[0]) / ra2 + (r->p[1] * r->p[1]) / rb2 - 1.0;
-    return _quad_solver(a, b, c);
+    return _quad_solver(a, h, c);
 }
 
 static inline double _dist_cone_rt(double ra2, double rb2, struct ray const *r) {
     double a;
-    double b;
+    double h;
     double c;
-    double t;
-    t = (r->p[2] - ra2) / rb2;
-    a = (r->cp[0] * r->cp[0]) + (r->cp[1] * r->cp[1]) + (r->cp[2] * r->cp[2]) / rb2;
-    b = (r->cp[0] * r->p[0]) + (r->cp[1] * r->p[1]) - t * r->cp[2];
-    c = (r->p[0] * r->p[0]) + (r->p[1] * r->p[1]) - t * t * rb2;
-    return _quad_solver(a, b, c);
+    /* cone surface x^2 + y^2 - rb2*z^2 = 0, matching the membership test
+       (_check_surface_avx2 / _inside_cone). ra2 (apex offset) is unused there. */
+    (void) ra2;
+    a = (r->cp[0] * r->cp[0]) + (r->cp[1] * r->cp[1]) - rb2 * (r->cp[2] * r->cp[2]);
+    h = (r->cp[0] * r->p[0]) + (r->cp[1] * r->p[1]) - rb2 * (r->cp[2] * r->p[2]);
+    c = (r->p[0] * r->p[0]) + (r->p[1] * r->p[1]) - rb2 * (r->p[2] * r->p[2]);
+    return _quad_solver(a, h, c);
 }
 
 static inline double _dist_ellipsoid_rt(double ra2, double rb2, double rc2, struct ray const *r) {
     double a;
-    double b;
+    double h;
     double c;
+    /* surface x^2/ra2 + y^2/rb2 + z^2/rc2 - 1 = 0; h is the half linear coefficient */
     a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2 + (r->cp[2] * r->cp[2]) / rc2;
-    b = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2 + (r->cp[2] * r->p[2]) / rc2;
+    h = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2 + (r->cp[2] * r->p[2]) / rc2;
     c = (r->p[0] * r->p[0]) / ra2 + (r->p[1] * r->p[1]) / rb2 + (r->p[2] * r->p[2]) / rc2 - 1.0;
-    return _quad_solver(a, b, c);
+    return _quad_solver(a, h, c);
 }
 
 static inline double _dist_plane_xyz_rt(int axis, struct gemca_rt_surface const *sf, struct ray const *r) {
@@ -2387,40 +2394,55 @@ static inline double _dist_plane_rt(struct gemca_rt_surface const *sf, struct ra
 }
 
 /**
- * @brief Return the smallest positive root of a*x^2 + b*x + c = 0.
+ * @brief Return the smallest positive root of a*t^2 + 2*h*t + c = 0.
  *
  * @details
+ * The middle argument is the *half* linear coefficient h (the equation is
+ * `a*t^2 + 2*h*t + c = 0`). Every quadric surface distance produces the half
+ * coefficient naturally, so taking h here removes the "multiply by 2 or not?"
+ * ambiguity that made the elliptic-cylinder, cone and ellipsoid distances wrong
+ * (issue #255, bug-hunt finding G-1).
+ *
+ * Roots use the numerically stable sign-split (citardauq) form
+ *   q  = -(h + sign(h)*sqrt(h*h - a*c));  t1 = q/a;  t2 = c/q;
+ * which avoids the cancellation of the naive (-h +/- sqrt)/a form when c is
+ * close to 0 -- the post-nudge state every boundary crossing produces (G-2).
+ *
  * Returns OSH_GEMCA_INFINITY if there are no real roots or both roots are
  * non-positive.  The tangential case (discriminant == 0) produces a repeated
- * root at -b/(2a); if that root is positive it is returned as the hit distance
+ * root at -h/a; if that root is positive it is returned as the hit distance
  * (grazing contact counts as a boundary crossing).
  *
- * @param[in] a,b,c  Quadratic coefficients.
+ * @param[in] a  Quadratic coefficient.
+ * @param[in] h  Half of the linear coefficient.
+ * @param[in] c  Constant coefficient.
  *
  * @returns Smallest positive root, or OSH_GEMCA_INFINITY.
  */
-static inline double _quad_solver(double a, double b, double c) {
+static inline double _quad_solver(double a, double h, double c) {
     double disc;
     double sq;
+    double q;
     double r1;
     double r2;
 
-    if (fabs(a) < OSH_GEMCA_SMALL) {
-        if (fabs(b) > OSH_GEMCA_SMALL) {
-            r1 = -c / b;
+    if (fabs(a) < OSH_GEMCA_SMALL) { /* degenerate: linear equation 2*h*t + c = 0 */
+        if (fabs(h) > OSH_GEMCA_SMALL) {
+            r1 = -c / (2.0 * h);
             return (r1 > 0.0) ? r1 : OSH_GEMCA_INFINITY;
         }
         return OSH_GEMCA_INFINITY;
     }
 
-    disc = b * b - 4.0 * a * c;
+    disc = h * h - a * c; /* discriminant / 4 */
     if (disc < 0.0) {
         return OSH_GEMCA_INFINITY;
     }
 
     sq = sqrt(disc);
-    r1 = (-b + sq) / (2.0 * a);
-    r2 = (-b - sq) / (2.0 * a);
+    q = -(h + (h >= 0.0 ? sq : -sq));                /* add same-sign sqrt: no cancellation */
+    r1 = q / a;                                      /* one root */
+    r2 = (fabs(q) > OSH_GEMCA_SMALL) ? (c / q) : r1; /* other root via product r1*r2 = c/a */
     return _minpos(r1, r2);
 }
 

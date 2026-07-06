@@ -28,7 +28,7 @@ static inline double _dist_elipcyl(double ra2, double rb2, struct ray const *r);
 static inline double _dist_cone(double ra2, double rb2, struct ray const *r);
 static inline double _dist_ellipsoid(double ra2, double rb2, double rc2, struct ray const *r);
 
-static inline double _quadratic_solver(double a, double b, double c);
+static inline double _quadratic_solver(double a, double h, double c);
 static inline double _minpos(double a, double b);
 
 double osh_gemca_get_distance(struct zone *z, struct ray const *r) {
@@ -351,15 +351,15 @@ static inline double _dist_plane(struct surface const *sf, struct ray const *r) 
  * @author Niels Bassler
  */
 static inline double _dist_sphere(double r2, struct ray const *r) {
-    double b;
+    double h;
     double c;
 
-    // Compute quadratic coefficients
-    b = 2.0 * osh_vect_dot(r->cp, r->p); // 2(l · o)
-    c = osh_vect_len2(r->p) - r2;        // ||o||^2 - r^2
+    /* half linear coefficient h = (l . o), constant c = ||o||^2 - r^2 */
+    h = osh_vect_dot(r->cp, r->p);
+    c = osh_vect_len2(r->p) - r2;
 
-    // Use the quadratic solver to find the smallest positive root
-    return _quadratic_solver(1.0, b, c);
+    /* smallest positive root of t^2 + 2*h*t + c = 0 */
+    return _quadratic_solver(1.0, h, c);
 }
 
 /**
@@ -379,14 +379,14 @@ static inline double _dist_sphere(double r2, struct ray const *r) {
 static inline double _dist_cyl(double r2, struct ray const *r) {
 
     double a;
-    double b;
+    double h;
     double c;
 
     a = r->cp[0] * r->cp[0] + r->cp[1] * r->cp[1];
-    b = 2.0 * (r->cp[0] * r->p[0] + r->cp[1] * r->p[1]);
+    h = r->cp[0] * r->p[0] + r->cp[1] * r->p[1]; /* half linear coefficient */
     c = r->p[0] * r->p[0] + r->p[1] * r->p[1] - r2;
 
-    return _quadratic_solver(a, b, c);
+    return _quadratic_solver(a, h, c);
 }
 
 /**
@@ -405,45 +405,53 @@ static inline double _dist_cyl(double r2, struct ray const *r) {
 static inline double _dist_elipcyl(double ra2, double rb2, struct ray const *r) {
 
     double a;
-    double b;
+    double h;
     double c;
 
-    // TODO vectorize me
-    a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2; /* a in gemca */
-    b = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2;   /* b in gemca */
-    c = (r->p[0] * r->p[0]) / ra2 + (r->p[1] * r->p[1]) / rb2 - 1; /* c in gemca */
+    /* surface x^2/ra2 + y^2/rb2 - 1 = 0; h is the half linear coefficient */
+    a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2;
+    h = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2;
+    c = (r->p[0] * r->p[0]) / ra2 + (r->p[1] * r->p[1]) / rb2 - 1.0;
 
-    return _quadratic_solver(a, b, c);
+    return _quadratic_solver(a, h, c);
 }
 
 /**
- * @brief For a given ray and a cone, calculate the closest positve distance to an elliptical cylinder
+ * @brief For a given ray and a cone, calculate the closest positive distance to the cone surface.
  *
  * @details
+ * The cone surface is x^2 + y^2 - rb2 * z^2 = 0 (apex at z = 0, opening along
+ * z with slope^2 = rb2). This is exactly the surface the membership test uses
+ * (see _inside_cone() in osh_gemca2_calc_surface.c and the AVX2 evaluator), so
+ * a ray crosses the cone precisely where inside/outside flips. Substituting the
+ * ray p + t*cp gives a*t^2 + 2*h*t + c = 0 with the coefficients below.
  *
- * @param[in] ra2 - radius1^2 of cone
- * @param[in] rb2 - radius2^2 of cone
+ * @note ra2 (surface p[0], the TRC apex offset) is deliberately unused: the
+ *       membership surface ignores it too. Whether that apex convention matches
+ *       the TRC body setup is a separate, pre-existing question, out of scope
+ *       for the G-1/G-2 distance fix.
+ *
+ * @param[in] ra2 - unused apex offset (kept for call-site symmetry with the dispatch)
+ * @param[in] rb2 - cone slope^2 (surface p[1])
  * @param[in] r - ray which may or may not intersect. ray->cp must be normalized.
  *
- * @returns signed distance to intersection, 0.0 if no or only touching the suface (1 intersection).
+ * @returns signed distance to intersection, 0.0 if no or only touching the surface (1 intersection).
  *
  * @author Niels Bassler
  */
 static inline double _dist_cone(double ra2, double rb2, struct ray const *r) {
 
     double a;
-    double b;
+    double h;
     double c;
-    double t;
 
-    t = (r->p[2] - ra2) / rb2;
+    (void) ra2; /* apex offset is not part of the x^2 + y^2 - rb2*z^2 membership surface */
 
-    // TODO vectorize me
-    a = (r->cp[0] * r->cp[0]) + (r->cp[1] * r->cp[1]) + (r->cp[2] * r->cp[2]) / rb2; /* a in gemca */
-    b = (r->cp[0] * r->p[0]) + (r->cp[1] * r->p[1]) - t * r->cp[2];                  /* b in gemca */
-    c = (r->p[0] * r->p[0]) + (r->p[1] * r->p[1]) - t * t * rb2;                     /* c in gemca */
+    a = (r->cp[0] * r->cp[0]) + (r->cp[1] * r->cp[1]) - rb2 * (r->cp[2] * r->cp[2]);
+    h = (r->cp[0] * r->p[0]) + (r->cp[1] * r->p[1]) - rb2 * (r->cp[2] * r->p[2]);
+    c = (r->p[0] * r->p[0]) + (r->p[1] * r->p[1]) - rb2 * (r->p[2] * r->p[2]);
 
-    return _quadratic_solver(a, b, c);
+    return _quadratic_solver(a, h, c);
 }
 
 /**
@@ -459,36 +467,55 @@ static inline double _dist_cone(double ra2, double rb2, struct ray const *r) {
 static inline double _dist_ellipsoid(double ra2, double rb2, double rc2, struct ray const *r) {
 
     double a;
-    double b;
+    double h;
     double c;
 
-    // TODO vectorize me
-    a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2 + (r->cp[2] * r->cp[2]) / rc2; /* a in gemca */
-    b = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2 + (r->cp[2] * r->p[2]) / rc2;    /* b in gemca */
-    c = (r->p[0] * r->p[0]) / ra2 + (r->p[1] * r->p[1]) / rb2 + (r->p[2] * r->p[2]) / rc2 - 1;   /* c in gemca */
+    /* surface x^2/ra2 + y^2/rb2 + z^2/rc2 - 1 = 0; h is the half linear coefficient */
+    a = (r->cp[0] * r->cp[0]) / ra2 + (r->cp[1] * r->cp[1]) / rb2 + (r->cp[2] * r->cp[2]) / rc2;
+    h = (r->cp[0] * r->p[0]) / ra2 + (r->cp[1] * r->p[1]) / rb2 + (r->cp[2] * r->p[2]) / rc2;
+    c = (r->p[0] * r->p[0]) / ra2 + (r->p[1] * r->p[1]) / rb2 + (r->p[2] * r->p[2]) / rc2 - 1.0;
 
-    return _quadratic_solver(a, b, c);
+    return _quadratic_solver(a, h, c);
 }
 
 /**
- * @brief return smallest positive solution to a*x^2 + b*x + c = 0
+ * @brief return smallest positive solution to a*t^2 + 2*h*t + c = 0
  *
- * @param[in] a,b,c -
+ * @details
+ * The middle argument is the *half* linear coefficient h, i.e. the equation
+ * solved is `a*t^2 + 2*h*t + c = 0`, not `a*t^2 + b*t + c = 0`. Every quadric
+ * surface distance below produces the half coefficient naturally (it is
+ * grad(f).dot(dir), with the factor of 2 from d/dt cancelled), so taking h
+ * here removes the "does this call site multiply by 2 or not?" ambiguity that
+ * made the elliptic-cylinder, cone and ellipsoid distances wrong (see issue
+ * #255, bug-hunt finding G-1).
  *
- * @return the smallest positive number of two, or 0 if all 0 or negative..
+ * Roots use the numerically stable sign-split (citardauq) form
+ *   q  = -(h + sign(h) * sqrt(h*h - a*c));  t1 = q / a;  t2 = c / q;
+ * which avoids the catastrophic cancellation of the naive (-h +/- sqrt)/a form
+ * when c is close to 0 -- exactly the post-nudge state every boundary crossing
+ * produces (bug-hunt finding G-2).
+ *
+ * @param[in] a  quadratic coefficient
+ * @param[in] h  half of the linear coefficient
+ * @param[in] c  constant coefficient
+ *
+ * @return the smallest positive root, OSH_GEMCA_INFINITY if there are no real
+ *         roots, or 0.0 if both roots are 0 or negative.
  *
  * @author Niels Bassler
  */
-static inline double _quadratic_solver(double a, double b, double c) {
+static inline double _quadratic_solver(double a, double h, double c) {
 
-    double d;
-    double _d;
+    double disc;
+    double sq;
+    double q;
     double r1;
     double r2;
 
-    if (fabs(a) < OSH_GEMCA_SMALL) {
-        if (fabs(b) > OSH_GEMCA_SMALL) {
-            r1 = -c / b;
+    if (fabs(a) < OSH_GEMCA_SMALL) { /* degenerate: linear equation 2*h*t + c = 0 */
+        if (fabs(h) > OSH_GEMCA_SMALL) {
+            r1 = -c / (2.0 * h);
             if (r1 > 0.0) {
                 return r1;
             } else {
@@ -498,15 +525,16 @@ static inline double _quadratic_solver(double a, double b, double c) {
         return OSH_GEMCA_INFINITY;
     }
 
-    d = b * b - 4.0 * a * c; /* discriminant */
+    disc = h * h - a * c; /* discriminant / 4 */
 
-    if (d < 0.0) {
+    if (disc < 0.0) {
         return OSH_GEMCA_INFINITY; /* no real roots */
     }
 
-    _d = sqrt(d);
-    r1 = (-b + _d) / (2.0 * a);
-    r2 = (-b - _d) / (2.0 * a);
+    sq = sqrt(disc);
+    q = -(h + (h >= 0.0 ? sq : -sq));                /* add same-sign sqrt: no cancellation */
+    r1 = q / a;                                      /* one root */
+    r2 = (fabs(q) > OSH_GEMCA_SMALL) ? (c / q) : r1; /* other root via product r1*r2 = c/a */
     return _minpos(r1, r2);
 }
 
