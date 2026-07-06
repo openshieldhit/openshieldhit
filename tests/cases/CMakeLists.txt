@@ -82,7 +82,8 @@ endforeach()
 # "VARIANCE N" run are cross-checked (value columns agree; a sane non-negative
 # standard-error column is added per quantity), and the VARIANCE run is asserted
 # byte-identical across two invocations (the deterministic count-cadence guard of
-# #168).  Driven by run_variance.cmake.
+# #168).  REPLICAS additionally runs a --score-replicas variant to confirm the
+# replica split doubles as the batch-means source.  Driven by run_variance.cmake.
 foreach(var_case "00_minimal" "13_minimal_nucre")
     add_test(
         NAME "cases::variance::${var_case}"
@@ -92,6 +93,7 @@ foreach(var_case "00_minimal" "13_minimal_nucre")
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/variance_${var_case}
             -DNSTAT=200
             -DNBATCHES=5
+            -DREPLICAS=5
             -P ${CMAKE_CURRENT_SOURCE_DIR}/run_variance.cmake
     )
     set_tests_properties("cases::variance::${var_case}" PROPERTIES LABELS "cases")

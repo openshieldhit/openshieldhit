@@ -161,17 +161,30 @@ def depth_quantities(out_dir: Path, code: str):
     """
     d = load_numeric(out_dir / "idd.dat")
     nq = len(QUANTITIES)
+    ncols = d.shape[1]
     if code == "osh":
         z = d[:, 2]
         base = 3
-        paired = d.shape[1] >= base + 2 * nq  # value/error pairs present?
-        if paired:
+        plain_cols = base + nq  # X Y Z DOSE FLUENCE DLET TLET
+        paired_cols = base + 2 * nq  # ... each quantity followed by its _ERR column
+        # Require an exact match for one of the two known layouts and fail fast
+        # otherwise: a loose ">=" would mis-read an unexpected/extra-column idd.dat
+        # as paired and silently index the wrong columns.
+        if ncols == paired_cols:
             cols = {q: d[:, base + 2 * i] for i, q in enumerate(QUANTITIES)}
             cols.update({q + "_err": d[:, base + 2 * i + 1] for i, q in enumerate(QUANTITIES)})
-        else:  # X Y Z DOSE FLUENCE DLET TLET
+        elif ncols == plain_cols:
             cols = {q: d[:, base + i] for i, q in enumerate(QUANTITIES)}
+        else:
+            raise ValueError(
+                f"{out_dir / 'idd.dat'}: expected {plain_cols} columns (plain) or {paired_cols} "
+                f"(value/error pairs) for {nq} quantities, got {ncols}")
     else:  # SH12A: Z DOSE FLUENCE DLET TLET
         z = d[:, 0]
+        expect = 1 + nq
+        if ncols != expect:
+            raise ValueError(
+                f"{out_dir / 'idd.dat'}: expected {expect} columns (Z + {nq} quantities), got {ncols}")
         cols = {q: d[:, 1 + i] for i, q in enumerate(QUANTITIES)}
     cols["z"] = z
     return cols

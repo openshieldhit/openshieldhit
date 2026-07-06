@@ -187,6 +187,12 @@ contract** testable before any threading exists:
 history); `0` or `n > nstat` is rejected. With the flag absent, the run takes the
 ordinary shared-master path, byte-for-byte unchanged.
 
+When the `detect.dat` `VARIANCE` card is also set, `--score-replicas <n>` doubles
+as an **`n`-batch standard-error source**: each replica is folded as one
+batch-means observation, so the run reports per-bin error bars without needing a
+dump cadence (see
+[detect.dat.md](detect.dat.md#statistical-uncertainty-error-bars)).
+
 ## Notes
 
 - `WORKDIR` and `--workdir` serve the same purpose: selecting the default

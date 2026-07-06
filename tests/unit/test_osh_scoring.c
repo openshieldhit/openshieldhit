@@ -282,6 +282,89 @@ static void test_fixture_test01_filter_rules(void) {
     osh_scoring_workspace_free(ws);
 }
 
+/* ---- VARIANCE card (issue #209): global Monte-Carlo standard-error toggle ---- */
+
+/* Build a minimal valid deck, splicing @p variance_line (which may be "") in
+ * ahead of a one-page Output so the parse otherwise succeeds. */
+static void write_variance_deck(char *path, size_t cap, char const *variance_line) {
+    char text[512];
+    snprintf(text,
+             sizeof(text),
+             "%s"
+             "Geometry Mesh\n"
+             "    Name G\n"
+             "    Z 0.0 30.0 60\n"
+             "\n"
+             "Output\n"
+             "    Filename out.bdo\n"
+             "    Geo G\n"
+             "    Quantity DOSE\n",
+             variance_line);
+    write_temp_file(path, cap, text);
+}
+
+/* No card leaves tracking off (0); a bare card selects the documented default
+ * batch count; "VARIANCE N" sets it explicitly. */
+static void test_variance_card_default_and_explicit(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws;
+    enum osh_status rc;
+
+    /* No card → off. */
+    write_variance_deck(path, sizeof(path), "");
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK && ws != NULL);
+    ASSERT_TRUE(ws->variance == 0);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+
+    /* Bare card → default (OSH_SCORING_VARIANCE_DEFAULT_BATCHES == 10). */
+    write_variance_deck(path, sizeof(path), "VARIANCE\n");
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK && ws != NULL);
+    ASSERT_TRUE(ws->variance == 10);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+
+    /* Explicit count. */
+    write_variance_deck(path, sizeof(path), "VARIANCE 20\n");
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK && ws != NULL);
+    ASSERT_TRUE(ws->variance == 20);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* A malformed batch count is rejected rather than silently truncated/wrapped into
+ * ws->variance (an int): non-numeric, non-positive, trailing junk, and values that
+ * overflow strtol or exceed INT_MAX all fail the parse. */
+static void test_variance_card_rejects_bad_count(void) {
+    char const *const bad[] = {
+        "VARIANCE abc\n",                  /* not a number */
+        "VARIANCE 0\n",                    /* below the minimum of 1 */
+        "VARIANCE -3\n",                   /* negative */
+        "VARIANCE 12x\n",                  /* trailing junk */
+        "VARIANCE 2147483648\n",           /* INT_MAX + 1: would wrap the int cast */
+        "VARIANCE 99999999999999999999\n", /* out of strtol range (ERANGE) */
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        char path[512];
+        struct osh_scoring_workspace *ws = NULL;
+        enum osh_status rc;
+
+        write_variance_deck(path, sizeof(path), bad[i]);
+        rc = osh_scoring_setup_from_path(path, NULL, &ws);
+        ASSERT_TRUE(rc == OSH_EPARSE);
+        ASSERT_TRUE(ws == NULL);
+        remove(path);
+    }
+}
+
 int main(void) {
     test_parse_fixture_test01_detect();
     test_parse_settings_section();
@@ -289,5 +372,7 @@ int main(void) {
     test_parse_filter_rules();
     test_parse_geometry_axes();
     test_fixture_test01_filter_rules();
+    test_variance_card_default_and_explicit();
+    test_variance_card_rejects_bad_count();
     return 0;
 }

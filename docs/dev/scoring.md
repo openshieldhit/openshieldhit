@@ -157,10 +157,12 @@ once, depositing per step). So instead a **batch** — one independent unit of w
 — is treated as a single (weighted) observation, and the spread *between batches*
 estimates the error. A batch is any of:
 
-- a parallel worker's history range (threads / MPI ranks),
-- a periodic partial-dump interval (see the run-control work, #170),
-- an internal sub-split of a single serial run,
-- a separate independent run.
+- a parallel worker's history range (threads / MPI ranks — still to come),
+- a periodic partial-dump / checkpoint interval — the batch loop folds one
+  observation per checkpoint (see the run-control work, #170),
+- an internal sub-split of a single serial run — a plain `VARIANCE` run derives a
+  count cadence that yields `N` batches out of the box (issue #209),
+- a `--score-replicas N` range, or a separate independent run.
 
 Because every bin is exposed to the **same** set of histories (most depositing
 zero), the observation count is identical across bins — so the batch weight `W`
@@ -199,10 +201,27 @@ SE = sqrt( M2 / ((nbatch − 1) · weight) )
 
 so a single batch (`nbatch == 1`, e.g. a plain serial run with no sub-splitting)
 has **zero degrees of freedom and no error estimate** — at least two batches are
-required. This finalisation, and the deposit-side writes into `data_var`, are the
-*variance feature* itself, still unwired; this section and the merge define the
-**contract** the feature will plug into, so wiring it later is a local change, not
-a representation hunt.
+required.
+
+`osh_scoring_finalize_errors()` (issue #209) applies this once, **before**
+`osh_scoring_postprocess()` rescales `data` or collapses the two-pass ratios,
+because it reads the raw sums. Rather than the absolute `SE` it stores the per-bin
+**relative** error `SE / |mean| = sqrt(M2 · weight / (nbatch−1)) / |data|` back
+into `data_var`; the save layer then emits the absolute error column as
+`|value| · data_var`, so whatever per-primary / physical-mean / unit scaling the
+writer applies to the value applies to its error automatically — the stored error
+is normalisation-invariant. For the two-pass **AVER** quantities (DLET/TLET/Qeff)
+the reported value is the ratio `data / data2`, so the numerator and denominator
+relative errors are combined in quadrature (`rel² = rel_num² + rel_den²`); this
+ignores their strong positive correlation and is therefore deliberately
+**conservative** — an over-estimate, never an under-estimate. A bin with
+`nbatch < 2`, a zero mean, or zero weight finalises to a `0` error.
+
+The feature is off by default and enabled per run by the global `VARIANCE [N]`
+card in `detect.dat` (see [`detect.dat.md`](../user/detect.dat.md)), which
+allocates the companion `M2` (`data_var`) arrays via
+`osh_scoring_accumulator_alloc_variance()`. With it off, the `M2` arrays are never
+allocated and the accumulators and hot path are byte-for-byte unchanged.
 
 > **MPI / GPU note.** The additive fields can ride `MPI_Reduce(MPI_SUM)`, but the
 > `M2` arrays cannot — a rank reduction needs a custom `MPI_Op_create` that
@@ -223,6 +242,11 @@ particle** (divided by `nstat`) at write time, except averaged quantities
 (DLET, TLET) which are already physical means after post-processing and are
 written as-is. ASCII output is **not** suitable for merging partial results:
 once divided by `nstat`, each run's absolute weight is lost.
+
+When the `VARIANCE` card is active each quantity gains a paired `NAME_ERR` column
+immediately after its value — the batch-means standard error from §4, in the same
+units (the writer emits `|value| · data_var`). BDO 2019 tolerates variance pages
+but writes values only for now; its standard-error field is a planned addition.
 
 ### BDO 2019 (`bdo`, `bdo2019`, `binary`, `bin`; default)
 
