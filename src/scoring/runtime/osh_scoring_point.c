@@ -7,23 +7,12 @@
 #include "scoring/runtime/osh_scoring_estimator.h"
 #include "scoring/runtime/osh_scoring_step_internal.h"
 
-/* Point counterpart of score_step_dose: a neutral point deposit (e.g. a
- * de-excitation gamma) releases its energy here but carries it away without
- * depositing dose locally, so it books energy but never dose.  For charged
- * particles the deposit maths is identical to score_step_dose. */
-enum osh_status score_point_dose(OSH_SCORING_DEPOSIT_PARAMS) {
-    if (part->charge == 0) {
-        return OSH_OK;
-    }
-    return score_step_dose(rt, acc_set, group, crossings, ncross, part, st, score_len);
-}
-
 /*
  * Point scorer: deposit a particle's energy at a single location with no track
- * length (c.f. issue #179).  Reuses the step scorer's per-group ENERGY and DOSE
- * deposit helpers (osh_scoring_step_internal.h) so filters, differential axes
- * and dose-to-medium overrides behave identically to score_step — the only
- * difference is a single located voxel instead of a raytraced set of crossings.
+ * length (c.f. issue #179).  It locates one bin per geometry, then dispatches to
+ * each estimator's score_point handler (osh_scoring_estimator.c) — point kernels
+ * that book the whole quantity at that bin, distinct from the path-weighted step
+ * kernels (energy: de vs de·path/score_len; dose: de/rho vs path·dose_scale).
  */
 enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
                                         struct osh_scoring_accumulator *acc_set,

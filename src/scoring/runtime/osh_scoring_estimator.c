@@ -11,7 +11,7 @@
  * See docs/dev/scoring.md for the tabulated score_step / score_point / postprocess
  * contract that this table implements.
  */
-static struct osh_scoring_estimator const k_energy = {score_step_energy, score_step_energy, NULL};
+static struct osh_scoring_estimator const k_energy = {score_step_energy, score_point_energy, NULL};
 static struct osh_scoring_estimator const k_fluence = {score_step_fluence, NULL, postprocess_volume};
 static struct osh_scoring_estimator const k_dose = {score_step_dose, score_point_dose, postprocess_volume};
 static struct osh_scoring_estimator const k_dosegy = {score_step_dose, score_point_dose, postprocess_dosegy};

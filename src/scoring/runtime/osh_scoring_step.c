@@ -9,6 +9,7 @@
 #include "common/raytrace/osh_raytrace_cyl.h"
 #include "material/runtime/osh_material_runtime.h"
 #include "scoring/runtime/osh_scoring_estimator.h"
+#include "scoring/runtime/osh_scoring_kernels.h"
 #include "scoring/runtime/osh_scoring_step_internal.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
@@ -631,6 +632,110 @@ static double diff2_step_val(struct osh_scoring_page_runtime const *page,
     }
 }
 
+/* ---- Shared estimator-driver helpers -------------------------------------
+ * The score_step_* / score_point_* handlers below are "drivers": they gather the
+ * per-step / per-page scalars, walk pages (filter + differential bins), then book
+ * a tiny pure kernel (osh_scoring_kernels.h) per deposit.  These helpers hold the
+ * machinery all estimators share, so each handler stays small and the quantity math
+ * lives in the kernel. */
+
+/* Resolve the per-page differential-axis bin offsets for this step.  Returns 1 with
+ * *db / *db2 set (each 0 when its axis is inactive), or 0 to skip the page: the axis
+ * value is undefined (e.g. LET for a neutral) or falls outside its [lo, hi). */
+static int resolve_diff_bins(struct osh_scoring_page_runtime const *page,
+                             struct osh_scoring_runtime const *rt,
+                             struct particle const *part,
+                             struct step const *st,
+                             size_t *db,
+                             size_t *db2) {
+    int dv_ok;
+    double dv;
+
+    *db = 0u;
+    *db2 = 0u;
+    if (page->diff_nbins > 0u) {
+        dv = diff_step_val(page, rt, part, st, &dv_ok);
+        if (!dv_ok) {
+            return 0;
+        }
+        *db = diff_axis_bin(page, dv);
+        if (*db >= page->diff_nbins) {
+            return 0;
+        }
+    }
+    if (page->diff2_nbins > 0u) {
+        dv = diff2_step_val(page, rt, part, st, &dv_ok);
+        if (!dv_ok) {
+            return 0;
+        }
+        *db2 = diff2_axis_bin(page, dv);
+        if (*db2 >= page->diff2_nbins) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Flat accumulator index of spatial bin @p spatial_idx at diff offsets (db, db2);
+ * an inactive differential axis has offset 0 so its term vanishes. */
+static inline size_t flat_bin(struct osh_scoring_page_runtime const *page, size_t spatial_idx, size_t db, size_t db2) {
+    return spatial_idx + (db * page->diff_stride) + (db2 * page->diff2_stride);
+}
+
+/* Book one crossing into a two-pass average page (LET/Qeff):
+ * data += value·weight (numerator), data2 += weight (denominator). */
+static inline void deposit_two_pass(struct osh_scoring_accumulator *acc, size_t idx, double value, double weight) {
+    osh_score_deposit(acc->data, idx, value * weight);
+    osh_score_deposit(acc->data2, idx, weight);
+}
+
+/* Per-step projectile stopping-power context for the DOSE dose-to-medium override,
+ * gathered once per step and reused by the step and point dose drivers. */
+struct dose_sp_ctx {
+    int have_proj;    /* projectile has an SP-table entry in the transport medium */
+    size_t proj_idx;  /* projectile index into the SP tables */
+    double sp_tr;     /* S(transport medium, E) [MeV·cm²/g] */
+    double e_per_nuc; /* mean step energy per nucleon [MeV/u] */
+};
+
+static struct dose_sp_ctx
+dose_sp_gather(struct osh_scoring_runtime const *rt, struct particle const *part, struct step const *st) {
+    struct dose_sp_ctx c;
+    double mean_energy;
+    struct osh_material_runtime const *mat = rt->mat_tables;
+
+    c.have_proj = 0;
+    c.proj_idx = 0;
+    c.sp_tr = 0.0;
+    c.e_per_nuc = 0.0;
+    if (mat && part->z > 0 && part->a > 0 && st->medium >= 0) {
+        mean_energy = 0.5 * (st->p[3] + st->q[3]);
+        c.e_per_nuc = mean_energy / (double) part->a;
+        if (find_proj_idx(mat, (unsigned int) part->z, &c.proj_idx)) {
+            c.have_proj = 1;
+            c.sp_tr = osh_material_runtime_sp_lookup(mat, (size_t) st->medium, c.proj_idx, c.e_per_nuc);
+        }
+    }
+    return c;
+}
+
+/* Dose-to-medium stopping-power ratio S(ovr)/S(tr) for a page's medium override;
+ * 1.0 when there is no override (density-only overrides are Fano-invariant). */
+static double dose_sp_ratio(struct dose_sp_ctx const *c,
+                            struct osh_scoring_runtime const *rt,
+                            struct osh_scoring_page_runtime const *page) {
+    double sp_ovr;
+
+    if (c->have_proj && page->has_sset && page->sset.has_medium && page->sset.medium >= 0) {
+        sp_ovr = osh_material_runtime_sp_lookup(rt->mat_tables, (size_t) page->sset.medium, c->proj_idx, c->e_per_nuc);
+        if (c->sp_tr > 0.0) {
+            return sp_ovr / c->sp_tr;
+        }
+        return 0.0;
+    }
+    return 1.0;
+}
+
 /**
  * @brief Accumulate energy deposition [MeV] into the ENERGY scorer pages.
  *
@@ -648,9 +753,6 @@ enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
     size_t j;
     size_t db;
     size_t db2;
-    int dv_ok;
-    double dv;
-    double frac;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
 
@@ -660,41 +762,16 @@ enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
-        /* Determine diff bin indices.  For non-differential pages diff_nbins == 0
-         * so both db and db2 stay 0, and the index offsets below collapse to 0. */
-        db = 0u;
-        db2 = 0u;
-        if (page->diff_nbins > 0u) {
-            /* Skip the page when the axis value cannot be determined (e.g. LET
-             * for a neutral particle) or lies outside the configured [lo, hi). */
-            dv = diff_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok) {
-                continue;
-            }
-            db = diff_axis_bin(page, dv);
-            if (db >= page->diff_nbins) {
-                continue;
-            }
-        }
-        if (page->diff2_nbins > 0u) {
-            dv = diff2_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok) {
-                continue;
-            }
-            db2 = diff2_axis_bin(page, dv);
-            if (db2 >= page->diff2_nbins) {
-                continue;
-            }
+        if (!resolve_diff_bins(page, rt, part, st, &db, &db2)) {
+            continue;
         }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
-             * When differential axes are inactive the extra terms evaluate to 0. */
-            frac = crossings[j].path_len / score_len;
-            osh_score_deposit(
-                acc->data, crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride), st->de * frac);
+            osh_score_deposit(acc->data,
+                              flat_bin(page, crossings[j].idx, db, db2),
+                              osh_kernel_step_energy(st->de, crossings[j].path_len, score_len));
         }
     }
     return OSH_OK;
@@ -716,13 +793,11 @@ enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
                                    double score_len) {
     size_t i;
     size_t j;
-    size_t db;  /* diff1 bin index for current page (0 when no diff axis) */
-    size_t db2; /* diff2 bin index for current page (0 when no second diff axis) */
-    int dv_ok;  /* flag: differential axis value is physically valid for this step */
-    double dv;  /* value on the diff axis (energy, LET, or Qeff at step midpoint) */
+    size_t db;
+    size_t db2;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
-    (void) score_len; /* unused for non-differential fluence; kept for diff LET/QEFF */
+    (void) score_len; /* fluence books raw track length; ÷volume is done in postprocess */
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
@@ -730,41 +805,15 @@ enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
-        /* Determine diff bin indices.  For non-differential pages diff_nbins == 0
-         * so both db and db2 stay 0, and the index offsets below collapse to 0. */
-        db = 0u;
-        db2 = 0u;
-        if (page->diff_nbins > 0u) {
-            /* Skip the page when the axis value cannot be determined (e.g. LET
-             * for a neutral particle) or lies outside the configured [lo, hi). */
-            dv = diff_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok) {
-                continue;
-            }
-            db = diff_axis_bin(page, dv);
-            if (db >= page->diff_nbins) {
-                continue;
-            }
-        }
-        if (page->diff2_nbins > 0u) {
-            dv = diff2_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok) {
-                continue;
-            }
-            db2 = diff2_axis_bin(page, dv);
-            if (db2 >= page->diff2_nbins) {
-                continue;
-            }
+        if (!resolve_diff_bins(page, rt, part, st, &db, &db2)) {
+            continue;
         }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
-             * When differential axes are inactive the extra terms evaluate to 0. */
-            osh_score_deposit(acc->data,
-                              crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride),
-                              crossings[j].path_len);
+            osh_score_deposit(
+                acc->data, flat_bin(page, crossings[j].idx, db, db2), osh_kernel_step_fluence(crossings[j].path_len));
         }
     }
     return OSH_OK;
@@ -791,44 +840,21 @@ enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
                                 double score_len) {
     size_t i;
     size_t j;
-    size_t db;  /* diff1 bin index for current page (0 when no diff axis) */
-    size_t db2; /* diff2 bin index for current page (0 when no second diff axis) */
-    int dv_ok;  /* flag: differential axis value is physically valid for this step */
-    double dv;  /* value on the diff axis (energy, LET, or Qeff at step midpoint) */
+    size_t db;
+    size_t db2;
     double base_scale;
     double dose_scale;
-    double mean_energy;
-    double e_per_nuc;
-    double sp_tr;
-    double sp_ovr;
-    size_t proj_idx;
-    int have_proj;
+    struct dose_sp_ctx sp;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
-    struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
-    struct osh_material_runtime const *mat_tables = rt->mat_tables;
-    e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table-based projectile data is available */
 
     if (!(st->rho > 0.0)) {
         return OSH_OK;
     }
-    /* base_scale = de / (rho * score_len).  The division by bin volume is NOT done
-     * here; the estimator postprocess multiplies each bin by geo->bin_vol_inv once
-     * (accumulates in [MeV·cm³/g], postprocess yields [MeV/g], DOSEGY then × Gy). */
+    /* base_scale = de / (rho * score_len).  ÷volume is deferred to postprocess
+     * (accumulates in [MeV·cm³/g]; postprocess yields [MeV/g], DOSEGY then × Gy). */
     base_scale = st->de / (score_len * st->rho);
-
-    /* Precompute projectile index and transport SP once per step. */
-    have_proj = 0;
-    proj_idx = 0;
-    sp_tr = 0.0;
-    if (mat_tables && part->z > 0 && part->a > 0 && st->medium >= 0) {
-        mean_energy = 0.5 * (st->p[3] + st->q[3]);
-        e_per_nuc = mean_energy / (double) part->a;
-        if (find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx)) {
-            have_proj = 1;
-            sp_tr = osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc);
-        }
-    }
+    sp = dose_sp_gather(rt, part, st);
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
@@ -836,52 +862,99 @@ enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
-        dose_scale = base_scale;
-        if (have_proj && page->has_sset) {
-            sset = &page->sset;
-            if (sset->has_medium && sset->medium >= 0) {
-                /* Dose-to-medium: multiply by stopping-power ratio S(ovr)/S(tr). */
-                sp_ovr = osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc);
-                dose_scale *= (sp_tr > 0.0) ? sp_ovr / sp_tr : 0.0;
-            }
-            /* Density-only override: Fano theorem — dose is density-independent,
-             * so no correction is needed for pure density overrides. */
-        }
-        /* Determine diff bin indices.  For non-differential pages diff_nbins == 0
-         * so both db and db2 stay 0, and the index offsets below collapse to 0. */
-        db = 0u;
-        db2 = 0u;
-        if (page->diff_nbins > 0u) {
-            /* Skip the page when the axis value cannot be determined (e.g. LET
-             * for a neutral particle) or lies outside the configured [lo, hi). */
-            dv = diff_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok) {
-                continue;
-            }
-            db = diff_axis_bin(page, dv);
-            if (db >= page->diff_nbins) {
-                continue;
-            }
-        }
-        if (page->diff2_nbins > 0u) {
-            dv = diff2_step_val(page, rt, part, st, &dv_ok);
-            if (!dv_ok) {
-                continue;
-            }
-            db2 = diff2_axis_bin(page, dv);
-            if (db2 >= page->diff2_nbins) {
-                continue;
-            }
+        /* Dose-to-medium: scale by S(ovr)/S(tr) (1.0 when no override). */
+        dose_scale = base_scale * dose_sp_ratio(&sp, rt, page);
+        if (!resolve_diff_bins(page, rt, part, st, &db, &db2)) {
+            continue;
         }
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
             }
-            /* Flat index: spatial_idx + db * diff_stride + db2 * diff2_stride.
-             * When differential axes are inactive the extra terms evaluate to 0. */
             osh_score_deposit(acc->data,
-                              crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride),
-                              crossings[j].path_len * dose_scale);
+                              flat_bin(page, crossings[j].idx, db, db2),
+                              osh_kernel_step_dose(crossings[j].path_len, dose_scale));
+        }
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Point-deposit counterpart of score_step_energy.
+ *
+ * Books the whole released energy (st->de) at the single located bin — a point has
+ * no track, so there is no path fraction.  Shares the page/filter/diff machinery.
+ */
+enum osh_status score_point_energy(OSH_SCORING_DEPOSIT_PARAMS) {
+    size_t i;
+    size_t j;
+    size_t db;
+    size_t db2;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+    (void) score_len; /* a point deposit has no track length */
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        if (!resolve_diff_bins(page, rt, part, st, &db, &db2)) {
+            continue;
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            osh_score_deposit(acc->data, flat_bin(page, crossings[j].idx, db, db2), osh_kernel_point_energy(st->de));
+        }
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Point-deposit counterpart of score_step_dose.
+ *
+ * Books de/ρ (× dose-to-medium SP ratio) at the single located bin — no path.
+ * Neutral particles (e.g. a de-excitation gamma) release energy here but carry it
+ * away without depositing dose locally, so they book energy but never dose.
+ */
+enum osh_status score_point_dose(OSH_SCORING_DEPOSIT_PARAMS) {
+    size_t i;
+    size_t j;
+    size_t db;
+    size_t db2;
+    double sp_ratio;
+    struct dose_sp_ctx sp;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+    (void) score_len; /* a point deposit has no track length */
+
+    if (part->charge == 0) {
+        return OSH_OK;
+    }
+    if (!(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+    sp = dose_sp_gather(rt, part, st);
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        sp_ratio = dose_sp_ratio(&sp, rt, page);
+        if (!resolve_diff_bins(page, rt, part, st, &db, &db2)) {
+            continue;
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            osh_score_deposit(
+                acc->data, flat_bin(page, crossings[j].idx, db, db2), osh_kernel_point_dose(st->de, st->rho, sp_ratio));
         }
     }
     return OSH_OK;
@@ -909,7 +982,6 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
     double mean_energy;
     double e_per_nuc;
     double rho_ovr; /* density used for the per-page LET override */
-    double w;
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime const *page;
@@ -965,9 +1037,8 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
              *   data  = sum(LET · dose_weight)   [MeV/cm · MeV]
              *   data2 = sum(dose_weight)          [MeV]
              * osh_scoring_postprocess() divides data by data2 to yield LETd. */
-            w = st->de * crossings[j].path_len / score_len;
-            osh_score_deposit(acc->data, crossings[j].idx, let_step * w);
-            osh_score_deposit(acc->data2, crossings[j].idx, w);
+            deposit_two_pass(
+                acc, crossings[j].idx, let_step, osh_kernel_dose_weight(st->de, crossings[j].path_len, score_len));
         }
     }
     return OSH_OK;
@@ -995,7 +1066,6 @@ enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
     double mean_energy;
     double e_per_nuc;
     double rho_ovr; /* density used for the per-page LET override */
-    double ds_vox;
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime const *page;
@@ -1049,9 +1119,8 @@ enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
              *   data  = sum(LET · ds_vox)   [MeV/cm · cm = MeV]
              *   data2 = sum(ds_vox)         [cm]
              * osh_scoring_postprocess() divides data by data2 to yield LETt. */
-            ds_vox = st->ds * crossings[j].path_len / score_len;
-            osh_score_deposit(acc->data, crossings[j].idx, let_step * ds_vox);
-            osh_score_deposit(acc->data2, crossings[j].idx, ds_vox);
+            deposit_two_pass(
+                acc, crossings[j].idx, let_step, osh_kernel_track_weight(st->ds, crossings[j].path_len, score_len));
         }
     }
     return OSH_OK;
@@ -1080,7 +1149,6 @@ enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
     double mean_energy;
     double beta;
     double qeff;
-    double w;
     size_t proj_idx;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
@@ -1117,9 +1185,8 @@ enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
              *   data  = sum(qeff · dose_weight)
              *   data2 = sum(dose_weight)           [MeV]
              * osh_scoring_postprocess() divides to yield the dose-averaged value. */
-            w = st->de * crossings[j].path_len / score_len;
-            osh_score_deposit(acc->data, crossings[j].idx, qeff * w);
-            osh_score_deposit(acc->data2, crossings[j].idx, w);
+            deposit_two_pass(
+                acc, crossings[j].idx, qeff, osh_kernel_dose_weight(st->de, crossings[j].path_len, score_len));
         }
     }
     return OSH_OK;
@@ -1147,7 +1214,6 @@ enum osh_status score_step_tqeff(struct osh_scoring_runtime const *rt,
     double mean_energy;
     double beta;
     double qeff;
-    double ds_vox;
     size_t proj_idx;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
@@ -1184,9 +1250,8 @@ enum osh_status score_step_tqeff(struct osh_scoring_runtime const *rt,
              *   data  = sum(qeff · ds_vox)
              *   data2 = sum(ds_vox)           [cm]
              * osh_scoring_postprocess() divides to yield the track-averaged value. */
-            ds_vox = st->ds * crossings[j].path_len / score_len;
-            osh_score_deposit(acc->data, crossings[j].idx, qeff * ds_vox);
-            osh_score_deposit(acc->data2, crossings[j].idx, ds_vox);
+            deposit_two_pass(
+                acc, crossings[j].idx, qeff, osh_kernel_track_weight(st->ds, crossings[j].path_len, score_len));
         }
     }
     return OSH_OK;

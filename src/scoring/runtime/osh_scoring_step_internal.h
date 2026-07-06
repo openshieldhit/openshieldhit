@@ -82,6 +82,7 @@ enum osh_status score_step_dlet(OSH_SCORING_DEPOSIT_PARAMS);
 enum osh_status score_step_tlet(OSH_SCORING_DEPOSIT_PARAMS);
 enum osh_status score_step_dqeff(OSH_SCORING_DEPOSIT_PARAMS);
 enum osh_status score_step_tqeff(OSH_SCORING_DEPOSIT_PARAMS);
+enum osh_status score_point_energy(OSH_SCORING_DEPOSIT_PARAMS);
 enum osh_status score_point_dose(OSH_SCORING_DEPOSIT_PARAMS);
 
 #endif /* OSH_SCORING_STEP_INTERNAL_H */
