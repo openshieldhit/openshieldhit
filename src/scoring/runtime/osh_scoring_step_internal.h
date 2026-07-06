@@ -2,12 +2,11 @@
 #define OSH_SCORING_STEP_INTERNAL_H
 
 /*
- * Module-internal deposit helpers shared between the step-based scorer
- * (osh_scoring_step.c) and the point-based scorer (osh_scoring_point.c).
+ * Module-internal scoring declarations.
  *
- * NOT part of the public scoring API — do not include outside src/scoring.
- * These carry the filter, differential-axis and dose-override logic so the
- * point scorer can reuse it instead of duplicating it.
+ * NOT part of the public scoring API; do not include outside src/scoring.
+ * Geometry helpers are shared by the step and point geometry drivers.
+ * Estimator handlers live behind osh_scoring_estimator_internal.h.
  */
 
 #include "common/osh_step.h"
@@ -36,53 +35,5 @@ int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, siz
  * r_bin = flat_idx % nr and flat_idx = z_bin * nr + r_bin.
  */
 enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo, struct osh_raytrace_grid *grid);
-
-/**
- * Deposit st->de into the ENERGY pages of one score group over @p crossings.
- * Per crossing the contribution is st->de * (crossing.path_len / score_len).
- */
-enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
-                                  struct osh_scoring_accumulator *acc_set,
-                                  struct osh_scoring_geometry_score_group const *group,
-                                  struct osh_voxel_crossing const *crossings,
-                                  size_t ncross,
-                                  struct particle const *part,
-                                  struct step const *st,
-                                  double score_len);
-
-/**
- * Deposit st->de into the DOSE pages of one score group over @p crossings.
- * Per crossing the contribution is crossing.path_len * crossing.vol_inv *
- * st->de / (score_len * st->rho) [MeV/g], with per-page stopping-power-ratio
- * overrides (dose-to-medium) applied.
- */
-enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
-                                struct osh_scoring_accumulator *acc_set,
-                                struct osh_scoring_geometry_score_group const *group,
-                                struct osh_voxel_crossing const *crossings,
-                                size_t ncross,
-                                struct particle const *part,
-                                struct step const *st,
-                                double score_len);
-
-/* Shared parameter list of every per-estimator deposit handler (step and point),
- * so a new estimator declares/defines its handler with one token. */
-#define OSH_SCORING_DEPOSIT_PARAMS                                                                                     \
-    struct osh_scoring_runtime const *rt, struct osh_scoring_accumulator *acc_set,                                     \
-        struct osh_scoring_geometry_score_group const *group, struct osh_voxel_crossing const *crossings,              \
-        size_t ncross, struct particle const *part, struct step const *st, double score_len
-
-/* The remaining per-estimator deposit handlers share the same signature and are
- * registered in osh_scoring_estimator.c.  FLUENCE deposits track length; the LET
- * and Qeff handlers fill a two-pass (data, data2) accumulator finalised as a ratio
- * in postprocess.  score_point_dose is the point counterpart of score_step_dose
- * (skips neutral particles, which deposit energy but no local dose). */
-enum osh_status score_step_fluence(OSH_SCORING_DEPOSIT_PARAMS);
-enum osh_status score_step_dlet(OSH_SCORING_DEPOSIT_PARAMS);
-enum osh_status score_step_tlet(OSH_SCORING_DEPOSIT_PARAMS);
-enum osh_status score_step_dqeff(OSH_SCORING_DEPOSIT_PARAMS);
-enum osh_status score_step_tqeff(OSH_SCORING_DEPOSIT_PARAMS);
-enum osh_status score_point_energy(OSH_SCORING_DEPOSIT_PARAMS);
-enum osh_status score_point_dose(OSH_SCORING_DEPOSIT_PARAMS);
 
 #endif /* OSH_SCORING_STEP_INTERNAL_H */

@@ -1,7 +1,7 @@
 #include "scoring/runtime/osh_scoring_estimator.h"
 
-#include "scoring/runtime/osh_scoring_postprocess.h"   /* postprocess_* handlers   */
-#include "scoring/runtime/osh_scoring_step_internal.h" /* score_step_* / score_point_* */
+#include "scoring/runtime/osh_scoring_estimator_internal.h" /* estimator handler declarations */
+#include "scoring/runtime/osh_scoring_postprocess.h"        /* postprocess_* handlers   */
 
 /*
  * The estimator table.  One entry per Quantity; adding support for a new one is a
