@@ -4,6 +4,7 @@
 
 #include "openshieldhit/const.h"
 #include "scoring/runtime/osh_scoring_accumulator.h"
+#include "scoring/runtime/osh_scoring_estimator.h"
 
 /* Guard for near-zero denominators in LET averaging. */
 #define OSH_LET_DENOM_EPS 1.0e-300
@@ -65,13 +66,57 @@ static enum osh_status page_scale_by_bin_volume(struct osh_scoring_page_runtime 
     return OSH_OK;
 }
 
+/* ---- Per-estimator postprocess handlers (registered in osh_scoring_estimator.c) ---- */
+
+enum osh_status postprocess_volume(struct osh_scoring_page_runtime *dst,
+                                   struct osh_scoring_page_runtime const *src,
+                                   struct osh_scoring_geometry_runtime const *geo) {
+    /* DOSE/FLUENCE/NKERMA: divide each bin by its volume once, turning the extensive
+     * deposit (energy/rho, track length) into the intensive quantity. */
+    return page_scale_by_bin_volume(dst, src, geo, 1.0);
+}
+
+enum osh_status postprocess_dosegy(struct osh_scoring_page_runtime *dst,
+                                   struct osh_scoring_page_runtime const *src,
+                                   struct osh_scoring_geometry_runtime const *geo) {
+    /* As DOSE, then convert MeV/g -> Gy once per bin. */
+    return page_scale_by_bin_volume(dst, src, geo, OSH_MEVG2GY);
+}
+
+enum osh_status postprocess_ratio(struct osh_scoring_page_runtime *dst,
+                                  struct osh_scoring_page_runtime const *src,
+                                  struct osh_scoring_geometry_runtime const *geo) {
+    /* DLET/TLET/DQEFF/TQEFF: finalise the two-pass average data/data2 (weighted sum
+     * over weight sum).  Volume cancels in the ratio, so geo is unused. */
+    size_t i;
+    size_t len;
+
+    (void) geo;
+    if (!dst->acc.data || !src->acc.data || !src->acc.data2) {
+        return OSH_EINVAL;
+    }
+    len = src->acc.len;
+    for (i = 0; i < len; ++i) {
+        if (src->acc.data2[i] > OSH_LET_DENOM_EPS) {
+            dst->acc.data[i] = src->acc.data[i] / src->acc.data2[i];
+        } else {
+            dst->acc.data[i] = 0.0;
+        }
+    }
+    /* Clear flags on dst so save-layer validation passes; src is left untouched so
+     * live accumulation continues correctly. */
+    dst->has_data2 = 0;
+    dst->divide = 0;
+    return OSH_OK;
+}
+
 /* Compute the presentation form of one page: read src, write dst->acc.data.
  * dst and src may be the same page (in-place) or dst->acc.data may alias / own a
  * separate buffer (out-of-place shadow). */
 static enum osh_status page_postprocess_into(struct osh_scoring_page_runtime *dst,
                                              struct osh_scoring_page_runtime const *src,
                                              struct osh_scoring_geometry_runtime const *geo) {
-    size_t i;
+    struct osh_scoring_estimator const *est;
     size_t len;
 
     if (!dst || !src) {
@@ -89,63 +134,32 @@ static enum osh_status page_postprocess_into(struct osh_scoring_page_runtime *ds
         return OSH_EINVAL;
     }
 
-    switch (src->score_kind) {
+    /* Dispatch to the estimator's postprocess handler.  A NULL handler means the
+     * accumulator is already in its final per-step form (ENERGY, COUNT, …). */
+    est = osh_scoring_estimator_for(src->score_kind);
+    if (est && est->postprocess) {
+        return est->postprocess(dst, src, geo);
+    }
 
-    case OSH_SCORING_SCORE_DOSE:
-    case OSH_SCORING_SCORE_FLUENCE:
-    case OSH_SCORING_SCORE_NKERMA:
-        /* Divide each bin by its volume once: the scorer deposited the extensive
-         * quantity (energy/rho, track length) and postprocess makes it intensive —
-         * dose [MeV/g], fluence [1/cm^2], kerma [MeV/g]. */
-        return page_scale_by_bin_volume(dst, src, geo, 1.0);
-
-    case OSH_SCORING_SCORE_DOSEGY:
-        /* As DOSE, then convert MeV/g -> Gy, once per bin. */
-        return page_scale_by_bin_volume(dst, src, geo, OSH_MEVG2GY);
-
-    case OSH_SCORING_SCORE_DLET:
-    case OSH_SCORING_SCORE_TLET:
-    case OSH_SCORING_SCORE_DQEFF:
-    case OSH_SCORING_SCORE_TQEFF:
-        /* Finalise two-pass average: data = weighted sum, data2 = weight sum.
-         * data2 is read as the divisor and never written. */
-        if (!dst->acc.data || !src->acc.data || !src->acc.data2) {
-            return OSH_EINVAL;
+    /* No transform.  Guard against an unhandled two-pass accumulator, then mirror
+     * the raw values when dst owns a distinct buffer.  The postproc mode
+     * (NORM/SUM/APPEND) describes cross-run combination and belongs in the
+     * merge/save layer, not here. */
+    if (src->divide || src->has_data2) {
+        return OSH_ENOTSUP;
+    }
+    switch (src->postproc) {
+    case OSH_SCORING_POSTPROC_NONE:
+    case OSH_SCORING_POSTPROC_SUM:
+    case OSH_SCORING_POSTPROC_NORM:
+    case OSH_SCORING_POSTPROC_APPEND:
+        if (dst->acc.data != src->acc.data && dst->acc.data && src->acc.data) {
+            memcpy(dst->acc.data, src->acc.data, len * sizeof(*dst->acc.data));
         }
-        for (i = 0; i < len; ++i) {
-            dst->acc.data[i] = (src->acc.data2[i] > OSH_LET_DENOM_EPS) ? (src->acc.data[i] / src->acc.data2[i]) : 0.0;
-        }
-        /* Clear flags on the dst page so save-layer validation passes; the src
-         * page is left untouched, so live accumulation continues correctly. */
-        dst->has_data2 = 0;
-        dst->divide = 0;
         return OSH_OK;
-
+    case OSH_SCORING_POSTPROC_AVER:
     default:
-        /* Guard against unhandled two-pass accumulators. */
-        if (src->divide || src->has_data2) {
-            return OSH_ENOTSUP;
-        }
-
-        /* Simple accumulators (ENERGY, FLUENCE, COUNT, …) are already in their
-         * final per-step form.  When dst aliases src->acc.data (the in-place
-         * wrapper, or a shadow's non-transformed page) there is nothing to do;
-         * when dst owns a distinct buffer, mirror the raw values so the saved
-         * view is complete.  The postproc mode (NORM/SUM/APPEND) describes how to
-         * combine across runs — that belongs in the merge/save layer, not here. */
-        switch (src->postproc) {
-        case OSH_SCORING_POSTPROC_NONE:
-        case OSH_SCORING_POSTPROC_SUM:
-        case OSH_SCORING_POSTPROC_NORM:
-        case OSH_SCORING_POSTPROC_APPEND:
-            if (dst->acc.data != src->acc.data && dst->acc.data && src->acc.data) {
-                memcpy(dst->acc.data, src->acc.data, len * sizeof(*dst->acc.data));
-            }
-            return OSH_OK;
-        case OSH_SCORING_POSTPROC_AVER:
-        default:
-            return OSH_ENOTSUP;
-        }
+        return OSH_ENOTSUP;
     }
 }
 

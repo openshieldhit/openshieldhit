@@ -4,7 +4,19 @@
 
 #include "common/osh_vect.h"
 #include "common/raytrace/osh_raytrace.h"
+#include "scoring/runtime/osh_scoring_estimator.h"
 #include "scoring/runtime/osh_scoring_step_internal.h"
+
+/* Point counterpart of score_step_dose: a neutral point deposit (e.g. a
+ * de-excitation gamma) releases its energy here but carries it away without
+ * depositing dose locally, so it books energy but never dose.  For charged
+ * particles the deposit maths is identical to score_step_dose. */
+enum osh_status score_point_dose(OSH_SCORING_DEPOSIT_PARAMS) {
+    if (part->charge == 0) {
+        return OSH_OK;
+    }
+    return score_step_dose(rt, acc_set, group, crossings, ncross, part, st, score_len);
+}
 
 /*
  * Point scorer: deposit a particle's energy at a single location with no track
@@ -107,26 +119,16 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         one.vol_inv = voxel_volume_inv;
 
         for (g = 0; g < geo->ngroups; ++g) {
-            switch (geo->groups[g].score_kind) {
-            case OSH_SCORING_SCORE_ENERGY:
-                rc = score_group_energy(rt, acc_set, &geo->groups[g], &one, 1u, part, st, 1.0);
-                break;
-            case OSH_SCORING_SCORE_DOSE:
-            case OSH_SCORING_SCORE_DOSEGY:
-                /* Neutral point deposits (e.g. a de-excitation gamma) release
-                 * their energy here but carry it away without depositing dose
-                 * locally, so they book energy but never dose. */
-                rc = (part->charge == 0) ? OSH_OK
-                                         : score_group_dose(rt, acc_set, &geo->groups[g], &one, 1u, part, st, 1.0);
-                break;
-            default:
-                /* Fluence / LET / QEFF need a track length; wired in later via
-                 * precomputed LETd/LETt-vs-Ekin tables.  Skip for now. */
-                rc = OSH_OK;
-                break;
-            }
-            if (rc != OSH_OK) {
-                return rc;
+            struct osh_scoring_estimator const *est;
+
+            /* A NULL score_point means the estimator has no point meaning (FLUENCE
+             * and LET/Qeff need a track length): skip it. */
+            est = osh_scoring_estimator_for(geo->groups[g].score_kind);
+            if (est && est->score_point) {
+                rc = est->score_point(rt, acc_set, &geo->groups[g], &one, 1u, part, st, 1.0);
+                if (rc != OSH_OK) {
+                    return rc;
+                }
             }
         }
     }
