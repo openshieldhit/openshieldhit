@@ -32,8 +32,10 @@
 
 - [ ] Add AVX2 batch path for `eval_distance` /
       `osh_gemca_runtime_get_distance_batch`
-- [ ] Flatten `insns_flat[]` + `insn_begin[]` in GEMCA runtime to remove
-      per-zone heap-pointer layout
+- [x] Flatten `insns_flat[]` + `insn_begin[]` in GEMCA runtime to remove
+      per-zone heap-pointer layout — done together with hoisting the
+      membership evaluators into `OSH_HD` headers (shared with the CUDA
+      backend; exact-parity zone kernel in `src/gpu/`)
 - [ ] Rename the remaining voxel distance helper to reflect its role as a
       geometry/runtime current-voxel boundary query
 
@@ -95,6 +97,14 @@ by abrasion and Fermi break-up are banked in the neutron pool and drained by
 - Neutron kerma scorer (fluence × kerma factor, like sh12A) — a scorer, not
   transport; independent of the above
 - U-235/238 fission kinematics
+
+## GPU backend ([#231])
+
+Measured plan with milestones, revised decisions, and the post-mortem of
+the first attempt: `docs/dev/gpu_port_plan.md`.  State: device-compilable
+core slice (RNG, vector, material, atomic physics, GEMCA membership) with
+nvcc compile guards; exact-parity zone kernel + RNG/atomics benches on
+A100.  Next milestone: G1 tracer bullet (c1 depth-dose fully on device).
 
 ## Scoring
 
@@ -172,3 +182,4 @@ Positioning in `osh_sim` (manual / current design):
 [#207]: https://github.com/openshieldhit/openshieldhit/pull/207
 [#211]: https://github.com/openshieldhit/openshieldhit/issues/211
 [#230]: https://github.com/openshieldhit/openshieldhit/issues/230
+[#231]: https://github.com/openshieldhit/openshieldhit/issues/231
