@@ -112,6 +112,15 @@ endif()
 # compare_dat.py checks each numeric column within a 2 % relative tolerance,
 # skipping comment lines (#).  The reference must be generated with the same
 # geometry and particle type; nstat and RNG seed may differ.
+#
+# The number of leading coordinate columns defaults to 3 (Mesh X/Y/Z).  A case
+# whose output has a different coordinate layout — e.g. Zone output, whose single
+# leading column is the zone id — can override it with expected/coord_cols.txt.
+set(_coord_cols 3)
+if(EXISTS "${CASE_DIR}/expected/coord_cols.txt")
+    file(READ "${CASE_DIR}/expected/coord_cols.txt" _raw_cc)
+    string(STRIP "${_raw_cc}" _coord_cols)
+endif()
 file(GLOB _expected_dats "${CASE_DIR}/expected/*.dat")
 foreach(_ref_dat IN LISTS _expected_dats)
     get_filename_component(_dat_name "${_ref_dat}" NAME)
@@ -129,6 +138,7 @@ foreach(_ref_dat IN LISTS _expected_dats)
             "${_actual_dat}"
             "${_ref_dat}"
             --rtol 0.02
+            --coord-cols ${_coord_cols}
             --label "${_dat_name}"
         RESULT_VARIABLE _cmp_rc
     )

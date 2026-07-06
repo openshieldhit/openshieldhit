@@ -1,0 +1,11 @@
+# Reference Zone TEXT output for cases::14_minimal_zone.
+# Compared by compare_dat.py with --coord-cols 1 (column 1 = transport zone id)
+# and --rtol 0.02: score columns (ENERGY FLUENCE DOSE) are each L1-normalised
+# before the 2% shape check, so a run at a different nstat/seed still matches.
+# Volatile '# version'/'# Calculated' lines from the writer are '#'-comments and
+# are ignored by the comparator; kept out of the reference on purpose.
+# ZONE ENERGY FLUENCE DOSE
+ 0 6.468558615745e+01 3.183101547306e-03 2.059007895921e-02
+ 1 8.526537933579e+01 1.862107222763e-03 2.714083611668e-02
+ 2 0.000000000000e+00 6.366199048126e-04 0.000000000000e+00
+ 3 0.000000000000e+00 0.000000000000e+00 0.000000000000e+00
