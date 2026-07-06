@@ -77,26 +77,32 @@ For `Geometry Cyl`:
 
 ### Zone
 
-GEMCA zones from `geo.dat`, one output bin per explicitly listed transport zone index.
+Score by `geo.dat` zone, selected **by zone name** — one output bin per listed
+zone. Internal numeric zone indices are never used in input files.
 
 ```text
 Geometry Zone
     Name MyZones
-    Zone 0
-    Zone 3
+    Zone WaterBox
     Volume 13.37
+    Zone Target
+    Volume 2.0
 ```
 
 Rules and semantics:
 
-- `Zone <index>` selects one transport zone index; repeat it for each zone to score.
-- `Volume <cm3>` optionally follows a `Zone` card and sets the volume used for
-  volume-normalized scores for that zone bin. If omitted, the simulation warns
-  and defaults that zone volume to `1.0 cm3`.
-- The output order is exactly the order of `Zone` lines in `detect.dat`.
-- Range shorthand is not implemented in this first milestone.
-- Initial support covers `Quantity Energy`, `Fluence`, `Dose`, and `DoseGy`.
-  `FileFormat BDO` is the default; `FileFormat TEXT` is also supported.
+- `Zone <name>` selects one zone by its `geo.dat` name; repeat it for each zone to
+  score. Unknown names are a hard error at setup.
+- `Volume <cm3>` optionally follows a `Zone` card and sets the volume for that
+  zone's volume-normalized quantities (`Dose`, `DoseGy`). Zone volumes cannot be
+  computed from overlapping CSG primitives, so they must be given explicitly; a
+  zone with no `Volume` warns and defaults to `1.0 cm3`.
+- The output bin order is exactly the order of the `Zone` lines.
+- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`.
+- `FileFormat BDO` (default) records which transport zone each bin is (`GEO_ZONES`
+  tag) for labelling; `FileFormat TEXT` writes one row per zone with a numeric
+  zone-index column. The per-zone volume is not stored in either — it is consumed by
+  the ÷volume in postprocess, so the saved dose/fluence is already final.
 
 ## Differential scoring
 

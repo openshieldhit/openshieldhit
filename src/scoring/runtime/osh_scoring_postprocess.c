@@ -10,7 +10,10 @@
 
 int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind) {
     switch (kind) {
+    case OSH_SCORING_SCORE_DOSE:
     case OSH_SCORING_SCORE_DOSEGY:
+    case OSH_SCORING_SCORE_FLUENCE:
+    case OSH_SCORING_SCORE_NKERMA:
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
     case OSH_SCORING_SCORE_DQEFF:
@@ -21,11 +24,53 @@ int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind) {
     }
 }
 
+/* Volume-normalise an extensive tally in place or out-of-place:
+ * dst[i] = src[i] * bin_vol_inv[i % diff_stride] * extra_factor.  The spatial bin
+ * of flat index i is i % diff_stride (holds for diff1/diff2 layouts).  Used by the
+ * DOSE/FLUENCE/NKERMA/DOSEGY estimators, which deposit the extensive quantity at
+ * score time and divide by the bin volume exactly once here. */
+static enum osh_status page_scale_by_bin_volume(struct osh_scoring_page_runtime *dst,
+                                                struct osh_scoring_page_runtime const *src,
+                                                struct osh_scoring_geometry_runtime const *geo,
+                                                double extra_factor) {
+    size_t i;
+    size_t len;
+    size_t stride;
+    double const *vol;
+
+    if (!dst->acc.data || !src->acc.data) {
+        return OSH_EINVAL;
+    }
+    /* A compiled scored geometry always has bin_vol_inv; a hand-built runtime with
+     * no geometry (e.g. a shadow/postprocess unit test) does not — then there is no
+     * volume to divide by and only the extra factor applies. */
+    vol = NULL;
+    if (geo) {
+        vol = geo->bin_vol_inv;
+    }
+    stride = src->diff_stride;
+    if (vol && stride == 0u) {
+        return OSH_EINVAL; /* real per-bin volume but no spatial stride — malformed */
+    }
+    len = src->acc.len;
+    for (i = 0; i < len; ++i) {
+        double vinv;
+        if (vol) {
+            vinv = vol[i % stride];
+        } else {
+            vinv = 1.0;
+        }
+        dst->acc.data[i] = src->acc.data[i] * vinv * extra_factor;
+    }
+    return OSH_OK;
+}
+
 /* Compute the presentation form of one page: read src, write dst->acc.data.
  * dst and src may be the same page (in-place) or dst->acc.data may alias / own a
  * separate buffer (out-of-place shadow). */
 static enum osh_status page_postprocess_into(struct osh_scoring_page_runtime *dst,
-                                             struct osh_scoring_page_runtime const *src) {
+                                             struct osh_scoring_page_runtime const *src,
+                                             struct osh_scoring_geometry_runtime const *geo) {
     size_t i;
     size_t len;
 
@@ -46,15 +91,17 @@ static enum osh_status page_postprocess_into(struct osh_scoring_page_runtime *ds
 
     switch (src->score_kind) {
 
+    case OSH_SCORING_SCORE_DOSE:
+    case OSH_SCORING_SCORE_FLUENCE:
+    case OSH_SCORING_SCORE_NKERMA:
+        /* Divide each bin by its volume once: the scorer deposited the extensive
+         * quantity (energy/rho, track length) and postprocess makes it intensive —
+         * dose [MeV/g], fluence [1/cm^2], kerma [MeV/g]. */
+        return page_scale_by_bin_volume(dst, src, geo, 1.0);
+
     case OSH_SCORING_SCORE_DOSEGY:
-        /* Convert accumulated MeV/g to Gy once per bin, not per transport step. */
-        if (!dst->acc.data || !src->acc.data) {
-            return OSH_EINVAL;
-        }
-        for (i = 0; i < len; ++i) {
-            dst->acc.data[i] = src->acc.data[i] * OSH_MEVG2GY;
-        }
-        return OSH_OK;
+        /* As DOSE, then convert MeV/g -> Gy, once per bin. */
+        return page_scale_by_bin_volume(dst, src, geo, OSH_MEVG2GY);
 
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
@@ -113,13 +160,20 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
         return OSH_EINVAL;
     }
     /* A non-zero page count with a NULL page array is a malformed runtime; guard
-     * it here so the per-page loop never dereferences NULL. */
+     * it here so the per-page loop never dereferences NULL. The geometries array
+     * may legitimately be absent in a hand-built runtime (unit tests). */
     if (src->npages > 0u && (!dst->pages || !src->pages)) {
         return OSH_EINVAL;
     }
 
     for (i = 0; i < src->npages; ++i) {
-        rc = page_postprocess_into(&dst->pages[i], &src->pages[i]);
+        struct osh_scoring_geometry_runtime const *geo;
+
+        geo = NULL;
+        if (src->geometries) {
+            geo = &src->geometries[src->pages[i].geometry_idx];
+        }
+        rc = page_postprocess_into(&dst->pages[i], &src->pages[i], geo);
         if (rc != OSH_OK) {
             return rc;
         }

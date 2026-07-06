@@ -8,9 +8,8 @@
  * - `Name <string>`
  * - axis lines: `x|y|z|r <lo> <hi> <nbins>`
  * - `Rotation <theta_deg> <phi_deg>` (and legacy alias `rot`)
- * - `Zone <index>`
+ * - `Zone <name>` (geo.dat zone name; resolved to a transport index at app level)
  * - `Volume <cm3>` for the most recent `Zone`
- * - legacy `Zones <start> <stop>`
  *
  * The section parser stores values in raw parsed form; consistency checks
  * against geometry type happen in later validation/finalization stages.
@@ -37,7 +36,7 @@ struct geometry_entry {
 
 static enum osh_status
 append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, double hi, int nbins);
-static enum osh_status append_zone_index(struct osh_scoring_geometry_def *geo, size_t zone_idx);
+static enum osh_status append_zone_name(struct osh_scoring_geometry_def *geo, char const *name);
 static enum osh_status geo_name(struct osh_scoring_geometry_def *geo,
                                 struct osh_diag_sink const *diag,
                                 char **words,
@@ -56,12 +55,6 @@ static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
                                     int nwords,
                                     char const *path,
                                     unsigned int lineno);
-static enum osh_status geo_zones(struct osh_scoring_geometry_def *geo,
-                                 struct osh_diag_sink const *diag,
-                                 char **words,
-                                 int nwords,
-                                 char const *path,
-                                 unsigned int lineno);
 static enum osh_status geo_zone(struct osh_scoring_geometry_def *geo,
                                 struct osh_diag_sink const *diag,
                                 char **words,
@@ -94,8 +87,7 @@ static struct geometry_entry geometry_table[] = {{OSH_SCORING_KEY_NAME, geo_name
                                                  {OSH_SCORING_KEY_GEO_R, geo_axis},
                                                  {OSH_SCORING_KEY_GEO_ROT, geo_rotation},
                                                  {"rot", geo_rotation},
-                                                 {"zone", geo_zone},
-                                                 {OSH_SCORING_KEY_GEO_ZONES, geo_zones},
+                                                 {OSH_SCORING_KEY_GEO_ZONE, geo_zone},
                                                  {OSH_SCORING_KEY_GEO_VOLUME, geo_volume},
                                                  {OSH_SCORING_KEY_GEO_INPUTPATH, geo_inputpath},
                                                  {OSH_SCORING_KEY_GEO_BODY, geo_body},
@@ -151,23 +143,33 @@ append_axis(struct osh_scoring_geometry_def *geo, char const *label, double lo, 
 }
 
 /**
- * @brief Append one explicit zone index to a Zone scoring geometry.
+ * @brief Append one zone name (and an unset volume slot) to a Zone scoring geometry.
+ *
+ * Names are the user-facing selector; the app-level resolution step maps them to
+ * transport zone indices (fills geo->zone_indices) once geo.dat is available.
  */
-static enum osh_status append_zone_index(struct osh_scoring_geometry_def *geo, size_t zone_idx) {
-    size_t *tmp;
+static enum osh_status append_zone_name(struct osh_scoring_geometry_def *geo, char const *name) {
+    char **name_tmp;
     double *vol_tmp;
+    char *dup;
 
-    tmp = (size_t *) realloc(geo->zone_indices, (geo->nzone_indices + 1u) * sizeof(*tmp));
-    if (!tmp) {
+    dup = strdup(name);
+    if (!dup) {
         return OSH_ENOMEM;
     }
-    geo->zone_indices = tmp;
+    name_tmp = (char **) realloc(geo->zone_names, (geo->nzone_indices + 1u) * sizeof(*name_tmp));
+    if (!name_tmp) {
+        free(dup);
+        return OSH_ENOMEM;
+    }
+    geo->zone_names = name_tmp;
     vol_tmp = (double *) realloc(geo->zone_volumes, (geo->nzone_indices + 1u) * sizeof(*vol_tmp));
     if (!vol_tmp) {
+        free(dup);
         return OSH_ENOMEM;
     }
     geo->zone_volumes = vol_tmp;
-    geo->zone_indices[geo->nzone_indices] = zone_idx;
+    geo->zone_names[geo->nzone_indices] = dup;
     geo->zone_volumes[geo->nzone_indices] = 0.0;
     geo->nzone_indices++;
     return OSH_OK;
@@ -253,40 +255,11 @@ static enum osh_status geo_rotation(struct osh_scoring_geometry_def *geo,
 }
 
 /**
- * @brief Parse legacy numeric zone-range form used by `zone` scoring geometries.
- */
-static enum osh_status geo_zones(struct osh_scoring_geometry_def *geo,
-                                 struct osh_diag_sink const *diag,
-                                 char **words,
-                                 int nwords,
-                                 char const *path,
-                                 unsigned int lineno) {
-    int start;
-    int stop;
-    int i;
-    enum osh_status rc;
-
-    if (nwords < 3) {
-        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Zones requires start stop", path, lineno);
-        return OSH_EPARSE;
-    }
-    start = atoi(words[1]);
-    stop = atoi(words[2]);
-    if (start < 0 || stop < start) {
-        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Zones requires non-negative start <= stop", path, lineno);
-        return OSH_EPARSE;
-    }
-    for (i = start; i <= stop; ++i) {
-        rc = append_zone_index(geo, (size_t) i);
-        if (rc != OSH_OK) {
-            return rc;
-        }
-    }
-    return OSH_OK;
-}
-
-/**
- * @brief Parse one explicit zone index for a Zone scoring geometry.
+ * @brief Parse one `Zone <name>` selector for a Zone scoring geometry.
+ *
+ * The name is stored verbatim; resolution against the geo.dat zone table happens
+ * later at app level (osh_scoring_resolve_zone_names). Repeat the line once per
+ * zone to score; output order follows the order of these lines.
  */
 static enum osh_status geo_zone(struct osh_scoring_geometry_def *geo,
                                 struct osh_diag_sink const *diag,
@@ -294,24 +267,11 @@ static enum osh_status geo_zone(struct osh_scoring_geometry_def *geo,
                                 int nwords,
                                 char const *path,
                                 unsigned int lineno) {
-    char *end;
-    unsigned long zone_idx;
-
-    if (nwords < 2) {
-        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Zone requires a zone index", path, lineno);
+    if (nwords < 2 || words[1][0] == '\0') {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Zone requires a zone name", path, lineno);
         return OSH_EPARSE;
     }
-    if (words[1][0] == '-') {
-        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Zone requires a non-negative zone index", path, lineno);
-        return OSH_EPARSE;
-    }
-    end = NULL;
-    zone_idx = strtoul(words[1], &end, 10);
-    if (!end || end == words[1] || *end != '\0') {
-        OSH_DIAG_ERRORF(diag, "%s:%u: Geometry Zone requires a numeric zone index", path, lineno);
-        return OSH_EPARSE;
-    }
-    return append_zone_index(geo, (size_t) zone_idx);
+    return append_zone_name(geo, words[1]);
 }
 
 /**

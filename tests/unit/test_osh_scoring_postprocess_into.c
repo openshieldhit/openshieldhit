@@ -54,9 +54,13 @@ static void test_writes_data_predicate(void) {
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DQEFF) == 1);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TQEFF) == 1);
 
+    /* DOSE/FLUENCE (and NKERMA) now transform in postprocess too — they divide by
+     * the per-bin volume, so they write data out-of-place like DOSEGY/LET. */
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DOSE) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_FLUENCE) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_NKERMA) == 1);
+
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_ENERGY) == 0);
-    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_FLUENCE) == 0);
-    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DOSE) == 0);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_COUNT) == 0);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_UNKNOWN) == 0);
 }

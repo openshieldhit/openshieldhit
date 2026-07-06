@@ -266,3 +266,67 @@ osh_scoring_setup_from_path(char const *path, struct osh_diag_sink const *diag, 
     *ws_out = ws;
     return OSH_OK;
 }
+
+/* ---- Zone scoring name resolution ---------------------------------------- */
+
+enum osh_status osh_scoring_resolve_zone_names(struct osh_scoring_workspace *scoring,
+                                               struct osh_geometry_workspace const *geom,
+                                               struct osh_diag_sink const *diag) {
+    size_t g;
+
+    if (!scoring || !geom) {
+        return OSH_EINVAL;
+    }
+
+    for (g = 0u; g < scoring->ngeometries; ++g) {
+        struct osh_scoring_geometry_def *geo;
+        char const *gname;
+        size_t i;
+
+        geo = &scoring->geometries[g];
+        if (geo->nzone_indices == 0u || geo->zone_names == NULL) {
+            continue; /* not a Zone geometry */
+        }
+        gname = geo->name;
+        if (!gname) {
+            gname = "(unnamed)";
+        }
+
+        /* Names -> dense 0-based transport indices; drop any earlier resolution. */
+        free(geo->zone_indices);
+        geo->zone_indices = (size_t *) calloc(geo->nzone_indices, sizeof(*geo->zone_indices));
+        if (!geo->zone_indices) {
+            return OSH_ENOMEM;
+        }
+
+        for (i = 0u; i < geo->nzone_indices; ++i) {
+            size_t z;
+            int found;
+
+            found = 0;
+            for (z = 0u; z < geom->nzones; ++z) {
+                if (geom->zones[z].name && strcmp(geom->zones[z].name, geo->zone_names[i]) == 0) {
+                    geo->zone_indices[i] = z;
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) {
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring Zone geometry '%s': unknown zone name '%s' (not defined in geo.dat)",
+                                gname,
+                                geo->zone_names[i]);
+                return OSH_EINVAL;
+            }
+            if (!(geo->zone_volumes && geo->zone_volumes[i] > 0.0)) {
+                OSH_DIAG_WARNF(diag,
+                               "Scoring Zone geometry '%s': zone '%s' has no Volume card; "
+                               "volume-normalized quantities (Dose/DoseGy) use 1.0 cm3",
+                               gname,
+                               geo->zone_names[i]);
+            }
+        }
+    }
+
+    return OSH_OK;
+}

@@ -18,6 +18,7 @@
 #include "particle/osh_particle_pdg.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_point.h"
+#include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 
 #define DETECT_PATH "osh_scoring_point_cyl_detect.tmp"
@@ -136,6 +137,10 @@ static void test_cyl_point_locate(void) {
     /* Below the axial stack (z=-0.5): no deposit. */
     point_step(&st, 0.5, 0.0, -0.5, 2.0);
     ASSERT_TRUE(deposit(&rt, &proton, &st) == OSH_OK);
+
+    /* Dose ÷volume happens in postprocess now, so finalise before checking the
+     * radius-dependent ratio (energy is untouched by postprocess). */
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_OK);
 
     /* Energy: exactly de in idx 0 and idx 3, zero elsewhere (no misattribution). */
     assert_close(rt.pages[e_idx].acc.data[0], 2.0);

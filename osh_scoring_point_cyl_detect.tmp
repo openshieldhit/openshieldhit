@@ -1,0 +1,16 @@
+Geometry Cyl
+    Name C
+    R 0.0 2.0 2
+    Z 0.0 2.0 2
+
+Output
+    Filename point_cyl_e.txt
+    Fileformat TEXT
+    Geo C
+    Quantity Energy
+
+Output
+    Filename point_cyl_d.txt
+    Fileformat TEXT
+    Geo C
+    Quantity Dose

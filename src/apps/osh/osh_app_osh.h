@@ -81,4 +81,29 @@ enum osh_status osh_material_setup_from_path(char const *path,
 enum osh_status
 osh_scoring_setup_from_path(char const *path, struct osh_diag_sink const *diag, struct osh_scoring_workspace **ws_out);
 
+/**
+ * @brief Resolve `Geometry Zone` selectors (zone names) to transport zone indices.
+ *
+ * @details
+ * The scoring parser stores `Zone <name>` selectors verbatim because it has no
+ * access to geo.dat. This app-level step maps each name to its 0-based transport
+ * zone index using @p geom's zone table (populating @c zone_indices for every
+ * Zone scoring geometry), so the library scoring/compile path only ever sees
+ * resolved indices — never names. Must be called after both geo.dat and
+ * detect.dat are parsed and before @ref osh_scoring_compile().
+ *
+ * An unknown zone name is a hard error. A zone with no `Volume` card is a warning
+ * (volume-normalized quantities on that zone default to 1.0 cm3).
+ *
+ * @param[in,out] scoring  Scoring workspace whose Zone geometries are resolved.
+ * @param[in]     geom     Prepared geometry workspace providing the zone-name table.
+ * @param[in]     diag     Borrowed diagnostics sink, or NULL.
+ *
+ * @returns OSH_OK on success; OSH_EINVAL on an unknown zone name; OSH_ENOMEM on
+ *          allocation failure.
+ */
+enum osh_status osh_scoring_resolve_zone_names(struct osh_scoring_workspace *scoring,
+                                               struct osh_geometry_workspace const *geom,
+                                               struct osh_diag_sink const *diag);
+
 #endif /* OSH_APP_OSH_H */

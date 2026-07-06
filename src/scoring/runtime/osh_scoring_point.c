@@ -6,8 +6,6 @@
 #include "common/raytrace/osh_raytrace.h"
 #include "scoring/runtime/osh_scoring_step_internal.h"
 
-static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out);
-
 /*
  * Point scorer: deposit a particle's energy at a single location with no track
  * length (c.f. issue #179).  Reuses the step scorer's per-group ENERGY and DOSE
@@ -60,7 +58,7 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
             if (!zone_bin_index(geo, st->zone, &idx)) {
                 continue;
             }
-            voxel_volume_inv = geo->zone_vol_inv ? geo->zone_vol_inv[idx] : 1.0;
+            voxel_volume_inv = 1.0; /* volume division moved to estimator postprocess (geo->bin_vol_inv) */
         } else {
             /* Universe->local rotation (same t[16] layout as score_step). */
             if (geo->has_rotation) {
@@ -133,19 +131,4 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         }
     }
     return OSH_OK;
-}
-
-static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out) {
-    size_t iz;
-
-    if (!geo || !idx_out || zone < 0) {
-        return 0;
-    }
-    for (iz = 0u; iz < geo->nzone_indices; ++iz) {
-        if (geo->zone_indices[iz] == (size_t) zone) {
-            *idx_out = iz;
-            return 1;
-        }
-    }
-    return 0;
 }

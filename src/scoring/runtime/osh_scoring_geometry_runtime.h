@@ -77,6 +77,10 @@ struct osh_scoring_geometry_runtime {
     char *rtdose_template_path; /* Non-NULL when FileFormat RTDOSE; owned; path to RTDOSE template. */
     double *cyl_vol_inv;        /* [cyl_nr] 1/V per R-bin, precomputed at compile; NULL for non-CYL */
     size_t cyl_nr;              /* R bin count (nr); 0 for non-CYL */
+    double *bin_vol_inv;        /* [nbins] 1/volume per spatial bin, precomputed at compile. The single
+                                   geometry-agnostic volume source for volume-normalised estimators; applied
+                                   in postprocess (not at score time). Uniform for Mesh, per-R for Cyl,
+                                   per-zone for Zone. NULL when the geometry has no meaningful volume. */
 };
 
 #ifdef __cplusplus

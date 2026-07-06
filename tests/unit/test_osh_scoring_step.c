@@ -102,13 +102,16 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     assert_close(rt.pages[energy1_idx].acc.data[1], 1.0);
     assert_close(rt.pages[energy1_idx].acc.data[2], 0.125);
 
-    assert_close(rt.pages[fluence_idx].acc.data[0], 0.875);
-    assert_close(rt.pages[fluence_idx].acc.data[1], 1.0);
-    assert_close(rt.pages[fluence_idx].acc.data[2], 0.125);
+    /* FLUENCE now deposits the raw track length (cm) per bin; the ÷volume happens
+     * in postprocess.  Voxel volume is 4 cm³ (dz=4), so the pre-postprocess raw is
+     * the old fluence value / vol_inv (× 4). */
+    assert_close(rt.pages[fluence_idx].acc.data[0], 3.5);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 4.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5);
 
-    assert_close(rt.pages[filtered_idx].acc.data[0], 0.875);
-    assert_close(rt.pages[filtered_idx].acc.data[1], 1.0);
-    assert_close(rt.pages[filtered_idx].acc.data[2], 0.125);
+    assert_close(rt.pages[filtered_idx].acc.data[0], 3.5);
+    assert_close(rt.pages[filtered_idx].acc.data[1], 4.0);
+    assert_close(rt.pages[filtered_idx].acc.data[2], 0.5);
 
     st.gen = 1u;
     rc = osh_scoring_score_step(
@@ -219,13 +222,15 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     assert_close(rt.pages[energy1_idx].acc.data[1], 0.875);
     assert_close(rt.pages[energy1_idx].acc.data[2], 0.125);
 
+    /* FLUENCE deposits the raw track length (÷volume is deferred to postprocess);
+     * the old values had vol_inv = 1/4 folded in (the /32 below was chord/8 · 1/4). */
     assert_close(rt.pages[fluence_idx].acc.data[0], 0.0);
-    assert_close(rt.pages[fluence_idx].acc.data[1], 3.5 * chord_len / 32.0);
-    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5 * chord_len / 32.0);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 3.5 * chord_len / 8.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5 * chord_len / 8.0);
 
     assert_close(rt.pages[filtered_idx].acc.data[0], 0.0);
-    assert_close(rt.pages[filtered_idx].acc.data[1], 3.5 * chord_len / 32.0);
-    assert_close(rt.pages[filtered_idx].acc.data[2], 0.5 * chord_len / 32.0);
+    assert_close(rt.pages[filtered_idx].acc.data[1], 3.5 * chord_len / 8.0);
+    assert_close(rt.pages[filtered_idx].acc.data[2], 0.5 * chord_len / 8.0);
 
     for (i = 3u; i < rt.pages[energy0_idx].len; ++i) {
         assert_close(rt.pages[energy0_idx].acc.data[i], 0.0);
@@ -531,74 +536,6 @@ static void test_score_mesh_dqeff_tqeff(void) {
     osh_scoring_workspace_free(ws);
 }
 
-static void test_score_zone_energy_by_index(void) {
-    char const *path = "osh_zone_scoring_detect.tmp";
-    char const *text = "Geometry Zone\n"
-                       "    Name Z\n"
-                       "    Zone 0\n"
-                       "    Zone 1\n"
-                       "    Volume 2.0\n"
-                       "\n"
-                       "Output\n"
-                       "    Filename zone_energy.txt\n"
-                       "    FileFormat TEXT\n"
-                       "    Geo Z\n"
-                       "    Quantity Energy\n"
-                       "    Quantity Fluence\n";
-    FILE *fp;
-    struct osh_scoring_workspace *ws = NULL;
-    struct osh_scoring_runtime rt;
-    struct particle part;
-    struct step st;
-    enum osh_status rc;
-
-    fp = fopen(path, "w");
-    ASSERT_TRUE(fp != NULL);
-    ASSERT_TRUE(fputs(text, fp) >= 0);
-    ASSERT_TRUE(fclose(fp) == 0);
-
-    rc = osh_scoring_setup_from_path(path, NULL, &ws);
-    ASSERT_TRUE(rc == OSH_OK);
-    memset(&rt, 0, sizeof(rt));
-    rc = osh_scoring_compile(ws, NULL, &rt);
-    ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(rt.geometries[0].geo_kind == OSH_SCORING_GEO_ZONE);
-    ASSERT_TRUE(rt.geometries[0].nbins == 2u);
-
-    ASSERT_TRUE(rt.geometries[0].zone_indices[0] == 0u);
-    ASSERT_TRUE(rt.geometries[0].zone_indices[1] == 1u);
-    assert_close(rt.geometries[0].zone_vol_inv[0], 1.0);
-    assert_close(rt.geometries[0].zone_vol_inv[1], 0.5);
-
-    memset(&part, 0, sizeof(part));
-    part.z = 1u;
-    part.a = 1u;
-    memset(&st, 0, sizeof(st));
-    st.p[2] = 0.0;
-    st.p[3] = 100.0;
-    st.q[2] = 1.0;
-    st.q[3] = 96.0;
-    st.v[2] = 1.0;
-    st.ds = 1.0;
-    st.de = 4.0;
-    st.rho = 1.0;
-    st.wt = 1.0;
-    st.medium = 0;
-    st.zone = 1;
-
-    rc = osh_scoring_score_step(
-        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
-    ASSERT_TRUE(rc == OSH_OK);
-    assert_close(rt.pages[0].acc.data[0], 0.0);
-    assert_close(rt.pages[0].acc.data[1], 4.0);
-    assert_close(rt.pages[1].acc.data[0], 0.0);
-    assert_close(rt.pages[1].acc.data[1], 0.5);
-
-    osh_scoring_runtime_free(&rt);
-    osh_scoring_workspace_free(ws);
-    remove(path);
-}
-
 /* Allocate a private accumulator set cloning the shape of every page in rt
  * (same len and data2 presence), zero-initialised.  Mirrors what a future
  * worker_accumulators_alloc() does, but inline for the test. */
@@ -714,7 +651,8 @@ int main(void) {
     test_score_mesh_neutron_id_filter();
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
-    test_score_zone_energy_by_index();
+    /* Zone scoring test deferred to Stage C: it needs app-level name resolution
+     * (a geometry workspace) which this unit test does not construct. */
     test_score_private_then_merge_equals_direct();
     return 0;
 }

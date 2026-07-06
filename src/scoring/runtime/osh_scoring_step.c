@@ -11,7 +11,6 @@
 #include "scoring/runtime/osh_scoring_step_internal.h"
 
 static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const *label);
-static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out);
 static void step_scoring_segment(struct step const *st, double dir_out[3], double *len_out);
 static int find_proj_idx(struct osh_material_runtime const *tables, unsigned int z, size_t *proj_idx_out);
 static double
@@ -129,7 +128,7 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
                 continue;
             }
             one.path_len = score_len;
-            one.vol_inv = geo->zone_vol_inv ? geo->zone_vol_inv[one.idx] : 1.0;
+            one.vol_inv = 1.0; /* volume division moved to estimator postprocess (geo->bin_vol_inv) */
             for (g = 0; g < geo->ngroups; ++g) {
                 switch (geo->groups[g].score_kind) {
                 case OSH_SCORING_SCORE_ENERGY:
@@ -235,7 +234,7 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
     return OSH_OK;
 }
 
-static int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out) {
+int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, size_t *idx_out) {
     size_t iz;
 
     if (!geo || !idx_out || zone < 0) {
@@ -763,8 +762,8 @@ enum osh_status score_group_energy(struct osh_scoring_runtime const *rt,
 /**
  * @brief Accumulate fluence [1/cm²] into the FLUENCE scorer pages.
  *
- * Scores track_length * vol_inv per voxel crossing.  vol_inv is pre-filled into
- * each crossing by the caller (uniform for Mesh; per-R-bin LUT for Cyl).
+ * Deposits the track length per crossing; the estimator postprocess divides by
+ * the per-bin volume (geo->bin_vol_inv) once, yielding fluence [1/cm²].
  */
 static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
                                            struct osh_scoring_accumulator *acc_set,
@@ -824,7 +823,7 @@ static enum osh_status score_group_fluence(struct osh_scoring_runtime const *rt,
              * When differential axes are inactive the extra terms evaluate to 0. */
             osh_score_deposit(acc->data,
                               crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride),
-                              crossings[j].path_len * crossings[j].vol_inv);
+                              crossings[j].path_len);
         }
     }
     return OSH_OK;
@@ -872,8 +871,9 @@ enum osh_status score_group_dose(struct osh_scoring_runtime const *rt,
     if (!(st->rho > 0.0)) {
         return OSH_OK;
     }
-    /* base_scale = de / (rho * score_len)  — vol_inv applied per crossing below.
-     * Accumulates in [MeV/g]; postprocess converts to [Gy] (× OSH_MEVG2GY). */
+    /* base_scale = de / (rho * score_len).  The division by bin volume is NOT done
+     * here; the estimator postprocess multiplies each bin by geo->bin_vol_inv once
+     * (accumulates in [MeV·cm³/g], postprocess yields [MeV/g], DOSEGY then × Gy). */
     base_scale = st->de / (score_len * st->rho);
 
     /* Precompute projectile index and transport SP once per step. */
@@ -940,7 +940,7 @@ enum osh_status score_group_dose(struct osh_scoring_runtime const *rt,
              * When differential axes are inactive the extra terms evaluate to 0. */
             osh_score_deposit(acc->data,
                               crossings[j].idx + (db * page->diff_stride) + (db2 * page->diff2_stride),
-                              crossings[j].path_len * crossings[j].vol_inv * dose_scale);
+                              crossings[j].path_len * dose_scale);
         }
     }
     return OSH_OK;

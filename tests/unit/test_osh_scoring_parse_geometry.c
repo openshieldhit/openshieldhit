@@ -44,9 +44,14 @@ static struct osh_scoring_geometry_def make_geo(void) {
 }
 
 static void free_geo(struct osh_scoring_geometry_def *geo) {
+    size_t z;
     free(geo->kind);
     free(geo->name);
     free(geo->axes);
+    for (z = 0u; z < geo->nzone_indices; ++z) {
+        free(geo->zone_names[z]);
+    }
+    free(geo->zone_names);
     free(geo->zone_indices);
     free(geo->zone_volumes);
     free(geo->vox_rtdose_path);
@@ -161,9 +166,9 @@ static void test_rotation_identity(void) {
 
 static void test_zones(void) {
     struct osh_scoring_geometry_def geo = make_geo();
-    char line0[] = "zone 0";
+    char line0[] = "zone WaterBox";
     char line0v[] = "volume 13.37";
-    char line1[] = "zone 1";
+    char line1[] = "zone Target";
     char *words[8];
     int nw = tokenize(line0, words, 8);
     int found = 0;
@@ -176,9 +181,11 @@ static void test_zones(void) {
     nw = tokenize(line1, words, 8);
     ASSERT_TRUE(osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 3, &found) == OSH_OK);
 
+    /* The parser stores zone selectors by name verbatim; resolution to transport
+     * indices happens later at app level (osh_scoring_resolve_zone_names). */
     ASSERT_TRUE(geo.nzone_indices == 2u);
-    ASSERT_TRUE(geo.zone_indices[0] == 0u);
-    ASSERT_TRUE(geo.zone_indices[1] == 1u);
+    ASSERT_TRUE(strcmp(geo.zone_names[0], "WaterBox") == 0);
+    ASSERT_TRUE(strcmp(geo.zone_names[1], "Target") == 0);
     ASSERT_TRUE(nearly(geo.zone_volumes[0], 13.37));
     ASSERT_TRUE(nearly(geo.zone_volumes[1], 0.0));
     free_geo(&geo);
