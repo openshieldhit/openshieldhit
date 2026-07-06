@@ -676,6 +676,108 @@ static void test_score_mesh_fluence_diff_let_qeff(void) {
     remove(path);
 }
 
+static void test_score_zone_energy_fluence_dose(void) {
+    char path[512];
+    char const *detect = "Geometry Zone\n"
+                         "    Name Z\n"
+                         "    Zone Entrance\n"
+                         "    Volume 2.0\n"
+                         "    Zone Target\n"
+                         "    Volume 4.0\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename zone.bdo\n"
+                         "    Geo Z\n"
+                         "    Quantity Energy\n"
+                         "    Quantity Fluence\n"
+                         "    Quantity Dose\n"
+                         "    Quantity DoseGy\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *energy_page;
+    struct osh_scoring_page_runtime *fluence_page;
+    struct osh_scoring_page_runtime *dose_page;
+    struct osh_scoring_page_runtime *dosegy_page;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+    ASSERT_TRUE(ws->ngeometries == 1u);
+    ASSERT_TRUE(ws->geometries[0].nzone_indices == 2u);
+
+    /* App-level parsing stores Zone selectors by name.  The OSH app resolves
+     * those names against geo.dat before compile; this unit test fills the same
+     * resolved 0-based transport zone ids directly to exercise the library path. */
+    ws->geometries[0].zone_indices = (size_t *) calloc(2u, sizeof(*ws->geometries[0].zone_indices));
+    ASSERT_TRUE(ws->geometries[0].zone_indices != NULL);
+    ws->geometries[0].zone_indices[0] = 3u;
+    ws->geometries[0].zone_indices[1] = 7u;
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&part, 0, sizeof(part));
+    part.charge = 1;
+    part.z = 1u;
+    part.a = 1u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[2] = 0.0;
+    st.q[2] = 2.0;
+    st.v[2] = 1.0;
+    st.ds = 2.0;
+    st.de = 8.0;
+    st.rho = 2.0;
+    st.wt = 1.0;
+    st.medium = 0;
+    st.zone = 7; /* selected Zone entry #2, dense scorer bin 1 */
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    energy_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_ENERGY);
+    fluence_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_FLUENCE);
+    dose_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSE);
+    dosegy_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSEGY);
+    ASSERT_TRUE(energy_page != NULL);
+    ASSERT_TRUE(fluence_page != NULL);
+    ASSERT_TRUE(dose_page != NULL);
+    ASSERT_TRUE(dosegy_page != NULL);
+
+    /* Before postprocess, Zone scoring has deposited into the dense zone bin
+     * selected by st.zone.  The first selected zone is untouched. */
+    assert_close(energy_page->acc.data[0], 0.0);
+    assert_close(energy_page->acc.data[1], 8.0);
+    assert_close(fluence_page->acc.data[0], 0.0);
+    assert_close(fluence_page->acc.data[1], 2.0);
+    assert_close(dose_page->acc.data[0], 0.0);
+    assert_close(dose_page->acc.data[1], 4.0);
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    /* Target has Volume 4 cm3.  FLUENCE becomes track length / volume = 2/4,
+     * and DOSE becomes energy / (rho*volume) = 8/(2*4). */
+    assert_close(energy_page->acc.data[0], 0.0);
+    assert_close(energy_page->acc.data[1], 8.0);
+    assert_close(fluence_page->acc.data[0], 0.0);
+    assert_close(fluence_page->acc.data[1], 0.5);
+    assert_close(dose_page->acc.data[0], 0.0);
+    assert_close(dose_page->acc.data[1], 1.0);
+    assert_close(dosegy_page->acc.data[0], 0.0);
+    assert_close(dosegy_page->acc.data[1], OSH_MEVG2GY);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 /* Allocate a private accumulator set cloning the shape of every page in rt
  * (same len and data2 presence), zero-initialised.  Mirrors what a future
  * worker_accumulators_alloc() does, but inline for the test. */
@@ -792,8 +894,7 @@ int main(void) {
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
     test_score_mesh_fluence_diff_let_qeff();
-    /* Zone scoring test deferred to Stage C: it needs app-level name resolution
-     * (a geometry workspace) which this unit test does not construct. */
+    test_score_zone_energy_fluence_dose();
     test_score_private_then_merge_equals_direct();
     return 0;
 }
