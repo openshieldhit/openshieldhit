@@ -17,10 +17,10 @@ enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
                                   double score_len) {
     size_t i;
     size_t j;
-    size_t db;
-    size_t db2;
-    size_t score_idx;
-    double energy_score;
+    size_t db;           /* Index into the differential bins for the current spatial bin */
+    size_t db2;          /* Index into the differential bins for the current spatial bin */
+    size_t score_idx;    /* Index into the scoring array for the current spatial bin */
+    double energy_score; /* Score for the current spatial bin */
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
 
@@ -67,10 +67,10 @@ enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
                                    double score_len) {
     size_t i;
     size_t j;
-    size_t db;
-    size_t db2;
-    size_t score_idx;
-    double fluence_score;
+    size_t db;            /* Index into the differential bins for the current spatial bin */
+    size_t db2;           /* Index into the differential bins for the current spatial bin */
+    size_t score_idx;     /* Index into the scoring array for the current spatial bin */
+    double fluence_score; /* Score for the current spatial bin */
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
     (void) score_len; /* fluence books raw track length; volume division is done in postprocess */
@@ -123,9 +123,9 @@ enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
                                 double score_len) {
     size_t i;
     size_t j;
-    size_t db;
-    size_t db2;
-    size_t score_idx;
+    size_t db;        /* Index into the differential bins for the current spatial bin */
+    size_t db2;       /* Index into the differential bins for the current spatial bin */
+    size_t score_idx; /* Index into the scoring array for the current spatial bin */
     double base_scale;
     double dose_scale;
     double dose_score;
@@ -195,15 +195,15 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
                                 double score_len) {
     size_t i;
     size_t j;
-    double sp_transport;
-    double let_default;
-    double let_step;
-    double mean_energy;
-    double e_per_nuc;
-    double rho_ovr; /* density used for the per-page LET override */
-    double dose_weight;
-    double dlet_numerator;
-    double dlet_denominator;
+    double sp_transport;     /* Stopping power in the transport medium */
+    double let_default;      /* Default LET value */
+    double let_step;         /* LET value for the current step */
+    double mean_energy;      /* Mean energy of the particle */
+    double e_per_nuc;        /* Energy per nucleon */
+    double rho_ovr;          /* density used for the per-page LET override */
+    double dose_weight;      /* Dose weight for the current step */
+    double dlet_numerator;   /* Numerator for the dose-averaged LET */
+    double dlet_denominator; /* Denominator for the dose-averaged LET */
     size_t proj_idx;
     int have_proj;
     struct osh_scoring_page_runtime const *page;
@@ -508,16 +508,15 @@ enum osh_status score_step_tqeff(struct osh_scoring_runtime const *rt,
     size_t i;
     size_t j;
     double mean_energy;
-    double beta;
+    double beta; /* Particle relative speed at the step midpoint.  Needed to compute qeff. */
     double qeff;
-    double track_weight;
-    double tqeff_numerator;
-    double tqeff_denominator;
-    size_t proj_idx;
+    double track_weight;      /* Track-length weight for the current spatial bin */
+    double tqeff_numerator;   /* Scoring numerator for the TQEFF calculation */
+    double tqeff_denominator; /* Scoring denominator for the TQEFF calculation */
+    size_t proj_idx;          /* Column index for given projectile in the stopping-power table */
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
     struct osh_material_runtime const *mat_tables;
-
     mat_tables = rt->mat_tables;
     if (part->z == 0) {
         return OSH_OK;

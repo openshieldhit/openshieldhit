@@ -14,10 +14,10 @@ enum osh_status score_point_energy(struct osh_scoring_runtime const *rt,
                                    struct particle const *part,
                                    struct step const *st) {
     size_t i;
-    size_t db;
-    size_t db2;
-    size_t score_idx;
-    double energy_score;
+    size_t db;           /* Index into the differential bins for the current spatial bin */
+    size_t db2;          /* Index into the differential bins for the current spatial bin */
+    size_t score_idx;    /* Index into the scoring array for the current spatial bin */
+    double energy_score; /* Score for the current spatial bin */
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
 
@@ -83,6 +83,12 @@ enum osh_status score_point_dose(struct osh_scoring_runtime const *rt,
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
+
+        /* The stopping-power ratio is computed once per page, not per bin, because the
+         * page's Settings override (if any) determines the medium for the SP
+         * calculation.  The located bin may be in a different medium than the
+         * transport medium, so the SP ratio is needed to convert dose-to-transport
+         * into dose-to-medium. */
         sp_ratio = osh_scoring_estimator_dose_sp_ratio(&sp, rt, page);
         if (!osh_scoring_estimator_resolve_diff_bins(page, rt, part, st, &db, &db2)) {
             continue;
