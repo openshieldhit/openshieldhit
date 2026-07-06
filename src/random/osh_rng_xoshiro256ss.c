@@ -5,75 +5,24 @@
  * (xoshiro/xoroshiro family by David Blackman and Sebastiano Vigna)
  *
  * Seeding uses splitmix64 to expand (seed, stream) into 256-bit state.
+ * Bodies live in osh_rng_xoshiro256ss_hd.h so device kernels compile the
+ * same lines; this file re-exports them with unchanged public signatures.
  */
 
 #include "random/osh_rng.h"
-
-/* rotate left — named rotl64 (no underscore) to avoid colliding with the
- * MSVC compiler intrinsic _rotl64 (C2169: intrinsic cannot be redefined). */
-static inline uint64_t rotl64(uint64_t x, int k) {
-    return (x << k) | (x >> (64 - k));
-}
-
-/* splitmix64: a 64-bit SplitMix generator, recommended for seeding the larger
- * xoshiro state from a single value.  The increment 0x9e3779b97f4a7c15 is the
- * golden-ratio constant floor(2^64 / phi) (a maximal-period Weyl sequence); the
- * trailing xorshift-multiply-xorshift block is David Stafford's "Mix13"
- * finaliser.  See the constant-by-constant rationale and references in
- * rng_mix_stream() (osh_rng.c), which reuses the same finaliser.
- * Ref: Steele, Lea & Flood, OOPSLA 2014; https://prng.di.unimi.it/splitmix64.c */
-static inline uint64_t _splitmix64_next(uint64_t *x) {
-    uint64_t z;
-
-    *x += 0x9e3779b97f4a7c15ULL;
-    z = *x;
-    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
-    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
-    return z ^ (z >> 31);
-}
+#include "random/osh_rng_xoshiro256ss_hd.h"
 
 /*
  * Initialize xoshiro256** state from (seed, stream).
  * stream selects an independent lane by perturbing the splitmix input.
  */
 void osh_rng_xoshiro256ss_init(struct osh_rng *rng, uint64_t seed, uint64_t stream) {
-    uint64_t x;
-
-    /* Mix seed and stream into the splitmix input.
-     * This is not cryptographic; it is only to separate lanes.
-     */
-    x = seed ^ (stream * 0x9e3779b97f4a7c15ULL);
-
-    rng->u.xoshiro256ss.s[0] = _splitmix64_next(&x);
-    rng->u.xoshiro256ss.s[1] = _splitmix64_next(&x);
-    rng->u.xoshiro256ss.s[2] = _splitmix64_next(&x);
-    rng->u.xoshiro256ss.s[3] = _splitmix64_next(&x);
-
-    /* xoshiro256** requires a non-zero state. splitmix64 virtually guarantees
-     * this, but if you want belt-and-suspenders, you could check all-zero here.
-     */
+    _osh_rng_xoshiro256ss_init_hd(rng, seed, stream);
 }
 
 /*
  * Generate next 64-bit random number (xoshiro256**).
  */
 uint64_t osh_rng_xoshiro256ss_u64(struct osh_rng *rng) {
-    uint64_t *s;
-    uint64_t result;
-    uint64_t t;
-
-    s = rng->u.xoshiro256ss.s;
-
-    result = rotl64(s[1] * 5ULL, 7) * 9ULL;
-    t = s[1] << 17;
-
-    s[2] ^= s[0];
-    s[3] ^= s[1];
-    s[1] ^= s[2];
-    s[0] ^= s[3];
-
-    s[2] ^= t;
-    s[3] = rotl64(s[3], 45);
-
-    return result;
+    return _osh_rng_xoshiro256ss_u64_hd(rng);
 }

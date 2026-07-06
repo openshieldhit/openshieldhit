@@ -3,24 +3,9 @@
 
 #include <math.h>
 
+/* Body lives in osh_rng_hd.h so device kernels compile the same lines. */
 void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, uint64_t stream) {
-    rng->type = type;
-    rng->gauss_has_spare = 0;
-
-    switch (type) {
-    case OSH_RNG_TYPE_PCG32:
-        osh_rng_pcg32_init(rng, seed, stream);
-        break;
-
-    case OSH_RNG_TYPE_XOSHIRO256SS:
-        osh_rng_xoshiro256ss_init(rng, seed, stream);
-        break;
-
-    default:
-        osh_rng_pcg32_init(rng, seed, stream);
-        rng->type = OSH_RNG_TYPE_PCG32;
-        break;
-    }
+    _osh_rng_init_hd(rng, type, seed, stream);
 }
 
 void osh_rng_seed_history(

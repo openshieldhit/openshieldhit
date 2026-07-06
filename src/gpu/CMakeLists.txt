@@ -40,3 +40,10 @@ target_link_libraries(osh_gpu_zone_parity PRIVATE
     osh_gemca2
     osh_common
 )
+
+# RNG device known-answer + throughput; also the compile guard that keeps
+# the RNG _hd headers genuinely device-compilable.
+add_executable(osh_gpu_rng_bench osh_gpu_rng_bench.cu)
+target_include_directories(osh_gpu_rng_bench PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(osh_gpu_rng_bench PRIVATE osh_random)
+set_target_properties(osh_gpu_rng_bench PROPERTIES CUDA_ARCHITECTURES "80")

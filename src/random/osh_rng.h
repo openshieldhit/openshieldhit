@@ -18,6 +18,12 @@
 
 #include <stdint.h>
 
+#include "common/osh_hd.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** Forward declaration for engine API prototypes below. */
 struct osh_rng;
 
@@ -252,7 +258,7 @@ double osh_rng_gauss(struct osh_rng *rng, double mu, double sigma);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_double_vec(struct osh_rng *rng, double *restrict x, int n);
+void osh_rng_double_vec(struct osh_rng *rng, double *OSH_RESTRICT x, int n);
 
 /**
  * @brief Generate an array of floats in the range [0, 1).
@@ -261,7 +267,7 @@ void osh_rng_double_vec(struct osh_rng *rng, double *restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_float_vec(struct osh_rng *rng, float *restrict x, int n);
+void osh_rng_float_vec(struct osh_rng *rng, float *OSH_RESTRICT x, int n);
 
 /**
  * @brief Generate an array of 32-bit unsigned integers.
@@ -270,7 +276,7 @@ void osh_rng_float_vec(struct osh_rng *rng, float *restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_u32_vec(struct osh_rng *rng, uint32_t *restrict x, int n);
+void osh_rng_u32_vec(struct osh_rng *rng, uint32_t *OSH_RESTRICT x, int n);
 
 /**
  * @brief Generate an array of standard normal random variables (N(0,1)).
@@ -279,7 +285,7 @@ void osh_rng_u32_vec(struct osh_rng *rng, uint32_t *restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_gauss01_vec(struct osh_rng *rng, double *restrict x, int n);
+void osh_rng_gauss01_vec(struct osh_rng *rng, double *OSH_RESTRICT x, int n);
 
 /**
  * @brief Generate an array of normal random variables (N(mu, sigma)).
@@ -290,7 +296,7 @@ void osh_rng_gauss01_vec(struct osh_rng *rng, double *restrict x, int n);
  * @param x Pointer to the output array.
  * @param n Number of elements to generate.
  */
-void osh_rng_gauss_vec(struct osh_rng *rng, double mu, double sigma, double *restrict x, int n);
+void osh_rng_gauss_vec(struct osh_rng *rng, double mu, double sigma, double *OSH_RESTRICT x, int n);
 
 /**
  * @brief Sample a Poisson-distributed integer with mean lambda (Knuth algorithm).
@@ -317,5 +323,9 @@ int osh_rng_poisson(struct osh_rng *rng, double lambda);
 static inline double osh_rng(struct osh_rng *rng) {
     return osh_rng_double(rng);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* OSH_RNG_H */

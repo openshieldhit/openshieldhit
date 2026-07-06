@@ -29,4 +29,21 @@
 #define OSH_HD
 #endif
 
+/*
+ * OSH_RESTRICT — `restrict` is a C99 keyword with no C++ equivalent, so any
+ * public header spelling it bare cannot be included from CUDA (or other C++)
+ * translation units.  C compilations keep full restrict semantics; C++ ones
+ * get the compiler-specific spelling (GCC/Clang/NVCC: __restrict__,
+ * MSVC: __restrict).
+ */
+#if defined(__cplusplus)
+#if defined(_MSC_VER)
+#define OSH_RESTRICT __restrict
+#else
+#define OSH_RESTRICT __restrict__
+#endif
+#else
+#define OSH_RESTRICT restrict
+#endif
+
 #endif /* OSH_HD_H */
