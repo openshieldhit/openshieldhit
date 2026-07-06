@@ -16,7 +16,9 @@
 #include <math.h>
 
 #include "common/osh_vect.h"
+#include "common/osh_vect_hd.h"
 #include "random/osh_rng.h"
+#include "random/osh_rng_hd.h"
 
 OSH_HD static inline double _osh_physics_highland_theta0_hd(
     double t_total_mev, double mass_mev, double z_eff, double thickness_gcm2, double path_scale_gcm2, double x0_gcm2) {
@@ -89,10 +91,10 @@ OSH_HD static inline void _osh_physics_highland_scatter_hd(
         return;
     }
 
-    osh_vect_orthogonal_basis_norm(v, u1, u2);
+    _osh_vect_orthogonal_basis_norm_hd(v, u1, u2);
 
-    tx = osh_rng_gauss01(rng) * theta0;
-    ty = osh_rng_gauss01(rng) * theta0;
+    tx = _osh_rng_gauss01_hd(rng) * theta0;
+    ty = _osh_rng_gauss01_hd(rng) * theta0;
 
     w[0] = v[0] + tx * u1[0] + ty * u2[0];
     w[1] = v[1] + tx * u1[1] + ty * u2[1];

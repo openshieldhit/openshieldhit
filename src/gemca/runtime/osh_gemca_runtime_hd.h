@@ -27,6 +27,7 @@
 #include "common/osh_ray.h"
 #include "common/osh_ray_hd.h"
 #include "gemca/osh_gemca2.h"
+#include "gemca/osh_gemca2_defines.h"
 #include "gemca/runtime/osh_gemca_runtime.h"
 
 /*
