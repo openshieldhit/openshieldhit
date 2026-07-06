@@ -9,6 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "apps/osh/osh_app_osh.h"
 #include "common/osh_step.h"
@@ -18,9 +23,10 @@
 #include "particle/osh_particle_pdg.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_point.h"
+#include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 
-#define DETECT_PATH "osh_scoring_point_cyl_detect.tmp"
+#define DETECT_BASENAME "osh_scoring_point_cyl_detect"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -32,6 +38,45 @@
 
 static void assert_close(double a, double b) {
     ASSERT_TRUE(fabs(a - b) < 1.0e-12);
+}
+
+static int test_pid(void) {
+#ifdef _WIN32
+    return _getpid();
+#else
+    return (int) getpid();
+#endif
+}
+
+static void detect_path(char *path, size_t cap) {
+    char const *dir; /* Runtime temp directory selected from the environment. */
+    char sep;        /* Path separator to insert, or NUL when dir already ends with one. */
+    size_t len;      /* Length of dir for trailing-separator detection. */
+    int n;           /* snprintf result used to reject truncation. */
+
+    dir = getenv("TMPDIR");
+    if (!dir || dir[0] == '\0') {
+        dir = getenv("TMP");
+    }
+    if (!dir || dir[0] == '\0') {
+        dir = getenv("TEMP");
+    }
+    if (!dir || dir[0] == '\0') {
+#ifdef _WIN32
+        dir = ".";
+#else
+        dir = "/tmp";
+#endif
+    }
+
+    len = strlen(dir);
+    sep = (len > 0u && (dir[len - 1u] == '/' || dir[len - 1u] == '\\')) ? '\0' : '/';
+    if (sep == '\0') {
+        n = snprintf(path, cap, "%s%s_%d.tmp", dir, DETECT_BASENAME, test_pid());
+    } else {
+        n = snprintf(path, cap, "%s/%s_%d.tmp", dir, DETECT_BASENAME, test_pid());
+    }
+    ASSERT_TRUE(n >= 0 && n < (int) cap);
 }
 
 /*
@@ -58,7 +103,11 @@ static char const *const DETECT_TEXT = "Geometry Cyl\n"
                                        "    Quantity Dose\n";
 
 static void write_detect(void) {
-    FILE *fp = fopen(DETECT_PATH, "w");
+    char path[512]; /* Runtime-only detect.dat path in the temp directory. */
+    FILE *fp;
+
+    detect_path(path, sizeof(path));
+    fp = fopen(path, "w");
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fputs(DETECT_TEXT, fp) >= 0);
     ASSERT_TRUE(fclose(fp) == 0);
@@ -66,11 +115,13 @@ static void write_detect(void) {
 
 static void build(struct osh_scoring_workspace **ws, struct osh_scoring_runtime *rt) {
     enum osh_status rc;
+    char path[512]; /* Same temp detect.dat path written by write_detect(). */
 
     write_detect();
     *ws = NULL;
     memset(rt, 0, sizeof(*rt));
-    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, ws);
+    detect_path(path, sizeof(path));
+    rc = osh_scoring_setup_from_path(path, NULL, ws);
     ASSERT_TRUE(rc == OSH_OK);
     rc = osh_scoring_compile(*ws, NULL, rt);
     ASSERT_TRUE(rc == OSH_OK);
@@ -78,9 +129,12 @@ static void build(struct osh_scoring_workspace **ws, struct osh_scoring_runtime 
 }
 
 static void teardown(struct osh_scoring_workspace *ws, struct osh_scoring_runtime *rt) {
+    char path[512]; /* Temp detect.dat path to remove after the test. */
+
     osh_scoring_runtime_free(rt);
     osh_scoring_workspace_free(ws);
-    remove(DETECT_PATH);
+    detect_path(path, sizeof(path));
+    remove(path);
 }
 
 static void point_step(struct step *st, double x, double y, double z, double de) {
@@ -136,6 +190,10 @@ static void test_cyl_point_locate(void) {
     /* Below the axial stack (z=-0.5): no deposit. */
     point_step(&st, 0.5, 0.0, -0.5, 2.0);
     ASSERT_TRUE(deposit(&rt, &proton, &st) == OSH_OK);
+
+    /* Dose ÷volume happens in postprocess now, so finalise before checking the
+     * radius-dependent ratio (energy is untouched by postprocess). */
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_OK);
 
     /* Energy: exactly de in idx 0 and idx 3, zero elsewhere (no misattribution). */
     assert_close(rt.pages[e_idx].acc.data[0], 2.0);

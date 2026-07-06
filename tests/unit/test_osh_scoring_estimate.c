@@ -38,10 +38,10 @@ static void test_estimate_known_fixture(void) {
     ASSERT_TRUE(strcmp(est.largest_geometry, "G") == 0);
 
     /* A mid-run snapshot copies only the `data` array of pages whose postprocess
-     * writes data.  Dose (MeV/g) is a no-op, so it contributes nothing; DLET's
-     * single data array is 100*8 = 800 (its data2 weight array is aliased, not
-     * copied).  shadow_bytes is therefore strictly less than accum_bytes here. */
-    ASSERT_TRUE(est.shadow_bytes == 800u);
+     * writes data.  Dose now divides by volume in postprocess, so it writes data
+     * too: Dose data = 100*8 = 800, DLET data = 100*8 = 800 (its data2 weight array
+     * is aliased, not copied) -> 1600.  Still less than accum_bytes (DLET's data2). */
+    ASSERT_TRUE(est.shadow_bytes == 1600u);
 
     osh_scoring_workspace_free(ws);
 }
@@ -71,9 +71,9 @@ static void test_estimate_zero_bins(void) {
     ASSERT_TRUE(est.largest_page_bytes == 16u);
     ASSERT_TRUE(strcmp(est.largest_geometry, "G") == 0);
 
-    /* Shadow copies DLET's single data array (rounded to one double); Dose is a
-     * no-op postprocess and contributes nothing. */
-    ASSERT_TRUE(est.shadow_bytes == 8u);
+    /* Shadow copies the data array of both writes-data pages (Dose and DLET),
+     * each rounded to one double: 8 + 8 = 16. */
+    ASSERT_TRUE(est.shadow_bytes == 16u);
 
     osh_scoring_workspace_free(ws);
 }

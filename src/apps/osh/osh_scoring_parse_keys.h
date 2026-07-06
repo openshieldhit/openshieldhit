@@ -30,7 +30,8 @@
 #define OSH_SCORING_KEY_GEO_Z         "z"
 #define OSH_SCORING_KEY_GEO_R         "r"
 #define OSH_SCORING_KEY_GEO_ROT       "rotation"    /* canonical; "rot" is alias */
-#define OSH_SCORING_KEY_GEO_ZONES     "zones"
+#define OSH_SCORING_KEY_GEO_ZONE      "zone"        /* one zone name; repeat per zone bin */
+#define OSH_SCORING_KEY_GEO_VOLUME    "volume"
 #define OSH_SCORING_KEY_GEO_INPUTPATH "inputpath"   /* DicomRTDOSE: path to RTDOSE DICOM file */
 #define OSH_SCORING_KEY_GEO_BODY      "body"        /* future multi-CT: explicit CT body reference */
 

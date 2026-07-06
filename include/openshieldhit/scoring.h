@@ -200,7 +200,7 @@ struct osh_scoring_page_def {
  *
  *   Mesh  - three axes: X, Y, Z.
  *   Cyl   - two axes: R, Z.
- *   Zone  - zero axes; zone range is in @ref zone_start / @ref zone_stop.
+ *   Zone  - zero axes; selected zones are in @ref zone_indices.
  *
  * When @ref has_rotation is set, @ref t maps universe coordinates to the
  * geometry's local frame (same 4×4 row-major layout as the geometry body
@@ -212,8 +212,11 @@ struct osh_scoring_geometry_def {
     struct osh_scoring_axis_def *axes; /* Axis definitions (owned). */
     size_t naxes;                      /* Number of entries in axes[]. */
     double t[16];                      /* Universe→local affine transform (row-major 4×4). */
-    int zone_start;                    /* First zone (Zone geometry only). */
-    int zone_stop;                     /* Last zone  (Zone geometry only). */
+    char **zone_names;                 /* Zone geometry only: user zone names, length nzone_indices (owned). */
+    size_t *zone_indices;              /* Zone geometry only: 0-based transport zone indices resolved from
+                                          zone_names at app level; length nzone_indices (owned). */
+    double *zone_volumes;              /* Zone geometry only: per-zone volume [cm3], 0.0 means unset. */
+    size_t nzone_indices;              /* Number of Zone entries (zone_names / zone_indices / zone_volumes). */
     unsigned char has_rotation;        /* When set, t[] is valid and axes are in local frame. */
     /* ---- Voxel geometry fields (DicomCT / DicomRTDOSE) ------------------- */
     char *vox_rtdose_path; /* DicomRTDOSE only: path to RTDOSE DICOM file; read by app, never library. */
@@ -231,7 +234,7 @@ struct osh_scoring_geometry_def {
  * @details
  * For Mesh geometries three axes (X, Y, Z) are expected.
  * For Cyl geometries two (R, Z).
- * For Zone geometries none (the zone list is in osh_scoring_geometry_def.zones).
+ * For Zone geometries none (the zone list is in osh_scoring_geometry_def.zone_indices).
  *
  * A negative nbins means "inherit from output" (old -1 convention), kept for
  * compatibility; the runtime finalize step resolves this.

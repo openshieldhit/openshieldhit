@@ -44,12 +44,20 @@ static struct osh_scoring_geometry_def make_geo(void) {
 }
 
 static void free_geo(struct osh_scoring_geometry_def *geo) {
+    size_t z; /* Zone selector index for freeing zone_names[]. */
     free(geo->kind);
     free(geo->name);
     free(geo->axes);
+    for (z = 0u; z < geo->nzone_indices; ++z) {
+        free(geo->zone_names[z]);
+    }
+    free((void *) geo->zone_names);
+    free(geo->zone_indices);
+    free(geo->zone_volumes);
     free(geo->vox_rtdose_path);
     free(geo->vox_body_name);
     geo->naxes = 0;
+    geo->nzone_indices = 0u;
 }
 
 static int nearly(double a, double b) {
@@ -158,14 +166,28 @@ static void test_rotation_identity(void) {
 
 static void test_zones(void) {
     struct osh_scoring_geometry_def geo = make_geo();
-    char line[] = "zones 3 7";
+    char line0[] = "zone WaterBox";
+    char line0v[] = "volume 13.37";
+    char line1[] = "zone Target";
     char *words[8];
-    int nw = tokenize(line, words, 8);
+    int nw = tokenize(line0, words, 8);
     int found = 0;
     ASSERT_TRUE(osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, &found) == OSH_OK);
     ASSERT_TRUE(found == 1);
-    ASSERT_TRUE(geo.zone_start == 3);
-    ASSERT_TRUE(geo.zone_stop == 7);
+
+    nw = tokenize(line0v, words, 8);
+    ASSERT_TRUE(osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 2, &found) == OSH_OK);
+
+    nw = tokenize(line1, words, 8);
+    ASSERT_TRUE(osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 3, &found) == OSH_OK);
+
+    /* The parser stores zone selectors by name verbatim; resolution to transport
+     * indices happens later at app level (osh_scoring_resolve_zone_names). */
+    ASSERT_TRUE(geo.nzone_indices == 2u);
+    ASSERT_TRUE(strcmp(geo.zone_names[0], "WaterBox") == 0);
+    ASSERT_TRUE(strcmp(geo.zone_names[1], "Target") == 0);
+    ASSERT_TRUE(nearly(geo.zone_volumes[0], 13.37));
+    ASSERT_TRUE(nearly(geo.zone_volumes[1], 0.0));
     free_geo(&geo);
 }
 
@@ -243,10 +265,10 @@ static void test_error_missing_args(void) {
         ASSERT_TRUE(rc == OSH_EPARSE);
     }
 
-    /* zones with too few arguments */
+    /* zone with no argument */
     memset(&geo, 0, sizeof(geo));
     {
-        char l[] = "zones 3";
+        char l[] = "zone";
         nw = tokenize(l, words, 8);
         rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
         ASSERT_TRUE(rc == OSH_EPARSE);

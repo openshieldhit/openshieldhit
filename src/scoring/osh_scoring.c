@@ -20,6 +20,7 @@ enum osh_status osh_scoring_workspace_create(struct osh_scoring_workspace **ws_o
 enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
     size_t i;
     size_t j;
+    size_t z; /* Zone selector index for freeing zone_names[]. */
 
     if (!ws) {
         return OSH_OK;
@@ -43,6 +44,12 @@ enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
         free(ws->geometries[i].kind);
         free(ws->geometries[i].name);
         free(ws->geometries[i].axes);
+        for (z = 0; z < ws->geometries[i].nzone_indices; ++z) {
+            free(ws->geometries[i].zone_names[z]);
+        }
+        free((void *) ws->geometries[i].zone_names);
+        free(ws->geometries[i].zone_indices);
+        free(ws->geometries[i].zone_volumes);
         free(ws->geometries[i].vox_rtdose_path);
         free(ws->geometries[i].vox_body_name);
     }

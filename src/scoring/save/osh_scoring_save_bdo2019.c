@@ -141,6 +141,26 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
     if (rc == OSH_OK) {
         rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_GEO_N, n, 3u);
     }
+    /* Zone geometry: record which transport zone each output bin corresponds to
+     * (numeric zone index) so a reader can label the bins.  The per-zone volume is
+     * deliberately NOT written: it is consumed by the ÷volume in postprocess, so the
+     * saved dose/fluence is already final.  (Contrast nstat, which the reader still
+     * applies — see the per-page rescale factor.) */
+    if (rc == OSH_OK && geo->geo_kind == OSH_SCORING_GEO_ZONE && geo->nzone_indices > 0u) {
+        int *zone_ids;
+
+        zone_ids = (int *) malloc(geo->nzone_indices * sizeof(*zone_ids));
+        if (!zone_ids) {
+            rc = OSH_ENOMEM;
+        } else {
+            size_t z;
+            for (z = 0u; z < geo->nzone_indices; ++z) {
+                zone_ids[z] = (int) geo->zone_indices[z];
+            }
+            rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_GEO_ZONES, zone_ids, geo->nzone_indices);
+        }
+        free(zone_ids);
+    }
     if (rc == OSH_OK) {
         rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_EST_FILENAME, out->filename);
     }
@@ -342,7 +362,8 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
         return OSH_ESTATE;
     }
     geo = &rt->geometries[out->geometry_idx];
-    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL) {
+    if (geo->geo_kind != OSH_SCORING_GEO_MESH && geo->geo_kind != OSH_SCORING_GEO_CYL
+        && geo->geo_kind != OSH_SCORING_GEO_ZONE) {
         return OSH_ENOTSUP;
     }
     for (ip = 0; ip < out->npages; ++ip) {
@@ -373,6 +394,12 @@ geometry_arrays(struct osh_scoring_geometry_runtime const *geo, double p[3], dou
     p[0] = p[1] = p[2] = 0.0;
     q[0] = q[1] = q[2] = 0.0;
     n[0] = n[1] = n[2] = 1;
+
+    if (geo->geo_kind == OSH_SCORING_GEO_ZONE) {
+        q[0] = (double) geo->nzone_indices;
+        n[0] = (int) geo->nzone_indices;
+        return OSH_OK;
+    }
 
     if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
         if (axis_index(geo, "R", &i0) != OSH_OK || axis_index(geo, "Z", &i2) != OSH_OK) {

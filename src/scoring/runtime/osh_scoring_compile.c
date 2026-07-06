@@ -56,8 +56,8 @@ static size_t geometry_nbins(struct osh_scoring_geometry_def const *geo) {
         return nbins;
     }
 
-    if (geo->zone_stop >= geo->zone_start && geo->zone_start > 0) {
-        return (size_t) (geo->zone_stop - geo->zone_start + 1);
+    if (geo->nzone_indices > 0u) {
+        return geo->nzone_indices;
     }
 
     return 0u;
@@ -317,9 +317,14 @@ static enum osh_scoring_diff_kind diff_kind_from_str(char const *s) {
         return OSH_SCORING_DIFF_EAMU;
     }
     if (strcmp(s, "let") == 0 || strcmp(s, "dedx") == 0) {
+        /* LET/DEDX is a differential-axis value (Diff1Type/Diff2Type), not a
+         * standalone score quantity.  The averaged score quantities are DLET
+         * and TLET. */
         return OSH_SCORING_DIFF_LET;
     }
     if (strcmp(s, "qeff") == 0 || strcmp(s, "zeff2beta2") == 0) {
+        /* Same distinction as LET: QEFF is an axis value; DQEFF/TQEFF are the
+         * averaged scored quantities. */
         return OSH_SCORING_DIFF_QEFF;
     }
     return OSH_SCORING_DIFF_NONE;
@@ -329,7 +334,8 @@ static int runtime_supports_geometry(struct osh_scoring_geometry_runtime const *
     if (!geo) {
         return 0;
     }
-    return geo->geo_kind == OSH_SCORING_GEO_MESH || geo->geo_kind == OSH_SCORING_GEO_CYL;
+    return geo->geo_kind == OSH_SCORING_GEO_MESH || geo->geo_kind == OSH_SCORING_GEO_CYL
+           || geo->geo_kind == OSH_SCORING_GEO_ZONE;
 }
 
 static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
@@ -475,13 +481,44 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
         }
     }
     memcpy(dst->t, src->t, sizeof(dst->t));
-    dst->zone_start = src->zone_start;
-    dst->zone_stop = src->zone_stop;
+    if (src->nzone_indices > 0u) {
+        if (!src->zone_indices) {
+            /* Zone names were parsed but never resolved to transport indices.
+             * osh_scoring_resolve_zone_names() must run (at app level, with the
+             * geometry table) before compile; fail loudly rather than deref NULL. */
+            return OSH_ESTATE;
+        }
+        dst->zone_indices = (size_t *) calloc(src->nzone_indices, sizeof(*dst->zone_indices));
+        if (!dst->zone_indices) {
+            return OSH_ENOMEM;
+        }
+        dst->nzone_indices = src->nzone_indices;
+        for (i = 0; i < src->nzone_indices; ++i) {
+            dst->zone_indices[i] = src->zone_indices[i];
+        }
+    }
     dst->has_rotation = src->has_rotation;
     dst->geo_kind = geometry_kind_to_enum(src->kind);
     dst->nbins = geometry_nbins(src);
     if (dst->nbins == 0u) {
         return OSH_EINVAL;
+    }
+    if (dst->geo_kind == OSH_SCORING_GEO_ZONE) {
+        /* Zone bin volume comes from the user's per-zone Volume, so build the sole
+         * volume source (bin_vol_inv) here where zone_volumes is in scope; Mesh/Cyl
+         * bin_vol_inv is built from axes in osh_scoring_compile.  A missing/zero
+         * Volume defaults to 1.0 cm3 (osh_scoring_resolve_zone_names already warns). */
+        dst->bin_vol_inv = (double *) malloc(dst->nbins * sizeof(*dst->bin_vol_inv));
+        if (!dst->bin_vol_inv) {
+            return OSH_ENOMEM;
+        }
+        for (i = 0; i < dst->nbins; ++i) {
+            if (i < src->nzone_indices && src->zone_volumes && src->zone_volumes[i] > 0.0) {
+                dst->bin_vol_inv[i] = 1.0 / src->zone_volumes[i];
+            } else {
+                dst->bin_vol_inv[i] = 1.0;
+            }
+        }
     }
     if (src->vox_rtdose_path) {
         dst->rtdose_template_path = strdup(src->vox_rtdose_path);
@@ -602,9 +639,10 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
             free(rt->geometries[i].kind);
             free(rt->geometries[i].name);
             free(rt->geometries[i].axes);
+            free(rt->geometries[i].zone_indices);
             free(rt->geometries[i].groups);
             free(rt->geometries[i].rtdose_template_path);
-            free(rt->geometries[i].cyl_vol_inv);
+            free(rt->geometries[i].bin_vol_inv);
         }
     }
     free(rt->geometries);
@@ -825,6 +863,18 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                                 "Scoring output '%s' uses unsupported quantity '%s' for runtime scoring",
                                 ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
                                 ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)");
+                rc = OSH_ENOTSUP;
+                goto fail;
+            }
+            if (rt->geometries[gidx].geo_kind == OSH_SCORING_GEO_ZONE && score_kind != OSH_SCORING_SCORE_ENERGY
+                && score_kind != OSH_SCORING_SCORE_FLUENCE && score_kind != OSH_SCORING_SCORE_DOSE
+                && score_kind != OSH_SCORING_SCORE_DOSEGY) {
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring output '%s' uses quantity '%s' on Zone geometry '%s'; only Energy, Fluence, "
+                                "Dose, and DoseGy are supported for Zone scoring",
+                                ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                                ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)",
+                                ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)");
                 rc = OSH_ENOTSUP;
                 goto fail;
             }
@@ -1172,17 +1222,58 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
     }
 
-    /* Precompute per-R-bin 1/volume LUT for CYL geometries. */
+    /* Precompute the geometry-agnostic per-spatial-bin 1/volume that the
+     * volume-normalised estimators (DOSE, FLUENCE, ...) apply in postprocess: the
+     * scorer deposits the extensive quantity and postprocess divides by volume once
+     * per bin.  bin_vol_inv is the single volume source.  Zone geometries already
+     * built it in copy_geometry_runtime (from the user's per-zone Volume); here we
+     * build Mesh (uniform) and Cyl (per-R shell). */
     for (i = 0; i < rt->ngeometries; ++i) {
         struct osh_scoring_geometry_runtime *g = &rt->geometries[i];
-        if (g->geo_kind == OSH_SCORING_GEO_CYL) {
+        size_t nb = g->nbins;
+        size_t b;
+
+        if (nb == 0u || g->geo_kind == OSH_SCORING_GEO_ZONE) {
+            continue;
+        }
+        g->bin_vol_inv = (double *) malloc(nb * sizeof(*g->bin_vol_inv));
+        if (!g->bin_vol_inv) {
+            osh_scoring_runtime_free(rt);
+            return OSH_ENOMEM;
+        }
+        if (g->geo_kind == OSH_SCORING_GEO_MESH) {
+            /* Uniform voxel volume: V = (product of axis extents) / nbins, so
+             * 1/V = nbins / extent, identical for every bin. */
+            double extent = 1.0;
+            double vinv;
             size_t a;
-            size_t nr = 0, nz_bins = 0;
-            double r_lo = 0.0, r_hi = 0.0, z_lo = 0.0, z_hi = 0.0;
-            size_t ir;
-            double dr, dz;
-            /* Resolve R and Z axes by label — order in detect.dat does not matter. */
-            for (a = 0; a < g->naxes; ++a) {
+            for (a = 0u; a < g->naxes; ++a) {
+                extent *= (g->axes[a].hi - g->axes[a].lo);
+            }
+            if (extent > 0.0) {
+                vinv = (double) nb / extent;
+            } else {
+                vinv = 1.0;
+            }
+            for (b = 0u; b < nb; ++b) {
+                g->bin_vol_inv[b] = vinv;
+            }
+        } else if (g->geo_kind == OSH_SCORING_GEO_CYL) {
+            /* Cylindrical shell volume depends only on r_bin (flat bin =
+             * z_bin*nr + r_bin): V = pi * (r1^2 - r0^2) * dz.  Resolve R/Z by label. */
+            size_t a;
+            size_t nr = 0u;
+            size_t nz_bins = 0u;
+            size_t r_bin;
+            double r_lo = 0.0;
+            double r_hi = 0.0;
+            double z_lo = 0.0;
+            double z_hi = 0.0;
+            double dr;
+            double dz;
+            double r0;
+            double r1;
+            for (a = 0u; a < g->naxes; ++a) {
                 if (strcmp(g->axes[a].label, "R") == 0) {
                     nr = (size_t) g->axes[a].nbins;
                     r_lo = g->axes[a].lo;
@@ -1193,20 +1284,23 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                     z_hi = g->axes[a].hi;
                 }
             }
-            if (nr == 0 || nz_bins == 0)
-                continue; /* malformed; compile already rejected */
-            dr = (r_hi - r_lo) / (double) nr;
-            dz = (z_hi - z_lo) / (double) nz_bins;
-            g->cyl_vol_inv = (double *) malloc(nr * sizeof(double));
-            if (!g->cyl_vol_inv) {
-                osh_scoring_runtime_free(rt);
-                return OSH_ENOMEM;
+            if (nr == 0u || nz_bins == 0u) {
+                for (b = 0u; b < nb; ++b) {
+                    g->bin_vol_inv[b] = 1.0; /* malformed; compile already rejected */
+                }
+            } else {
+                dr = (r_hi - r_lo) / (double) nr;
+                dz = (z_hi - z_lo) / (double) nz_bins;
+                for (b = 0u; b < nb; ++b) {
+                    r_bin = b % nr;
+                    r0 = r_lo + (double) r_bin * dr;
+                    r1 = r0 + dr;
+                    g->bin_vol_inv[b] = 1.0 / (OSH_M_PI * (r1 * r1 - r0 * r0) * dz);
+                }
             }
-            g->cyl_nr = nr;
-            for (ir = 0; ir < nr; ++ir) {
-                double r0 = r_lo + (double) ir * dr;
-                double r1 = r0 + dr;
-                g->cyl_vol_inv[ir] = 1.0 / (OSH_M_PI * (r1 * r1 - r0 * r0) * dz);
+        } else {
+            for (b = 0u; b < nb; ++b) {
+                g->bin_vol_inv[b] = 1.0;
             }
         }
     }

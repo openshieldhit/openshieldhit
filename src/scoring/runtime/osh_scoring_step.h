@@ -16,7 +16,7 @@ extern "C" {
  *
  * @details
  * This is the hot-path entry for step-based scorers.  The current
- * implementation supports Mesh (X,Y,Z) and Cyl (R,Z) geometries and the
+ * implementation supports Mesh (X,Y,Z), Cyl (R,Z), and Zone geometries and the
  * step-based page kinds implemented in osh_scoring_step.c (ENERGY, FLUENCE,
  * DOSE, DOSEGY, DLET, TLET, DQEFF, TQEFF).
  *

@@ -254,20 +254,52 @@ layer), replaces the pixel data with scored values normalised by `nstat` and
 preserved unchanged. Only single-page (single-quantity) outputs are supported;
 multi-page output returns `OSH_ENOTSUP`.
 
-## 6. Unit handling and post-processing
+## 6. Estimators and post-processing
 
-`osh_scoring_postprocess()` applies physics transforms once per bin before
-saving:
+**Geometry and estimator are orthogonal.** The *geometry* decides *which* bins a
+transport step touches — raytraced crossings for Mesh/Cyl, one bin for Zone or a
+point deposit. The *estimator* (the `Quantity` in `detect.dat`) decides *what* to
+book into those bins and *how* to finalise it. So there is one geometry traversal,
+then each score group dispatches to its estimator through a small registry.
 
-- **DOSE**: converts MeV/g → Gy (`× OSH_MEVG2GY`).
-- **DLET, TLET, DQEFF, TQEFF**: finalises the two-pass average as `data / data2`
-  per bin; the `data2` denominator is not written to any output file.
+Each estimator owns a trio of handlers, registered in
+`runtime/osh_scoring_estimator.c` and looked up by `osh_scoring_estimator_for()`:
 
-After post-processing, page buffers are in one of these states:
+- **`score_step_`** — books the raw *extensive* quantity over a step's crossings.
+- **`score_point_`** — the point-deposit counterpart (a single located bin).
+- **`postprocess_`** — turns the accumulator into its *intensive* presentation
+  form once per bin (÷volume, unit conversion, or two-pass ratio).
+
+A `—` below means the handler is `NULL`: the estimator is not scored on that path
+(`score_point_` needs a track length for FLUENCE/LET), or the accumulator is
+already final (`postprocess_` for ENERGY/COUNT). The scorer deposits the extensive
+quantity; the *only* geometry-specific normalisation, ÷volume, lives in
+`postprocess_` (via `geo->bin_vol_inv`) — never at score time and never at save.
+
+| `Quantity` (score kind) | `score_step_` | `score_point_` | `postprocess_` | deposits → finalises |
+|---|---|---|---|---|
+| `ENERGY`  | `score_step_energy`  | `score_point_energy` | — | `de·(path/score_len)` → already final [MeV] |
+| `FLUENCE` | `score_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
+| `DOSE`    | `score_step_dose`    | `score_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
+| `DOSEGY`  | `score_step_dose`    | `score_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
+| `DLET`    | `score_step_dlet`    | — | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `TLET`    | `score_step_tlet`    | — | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `DQEFF`   | `score_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `TQEFF`   | `score_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `NKERMA`  | —                    | — | `postprocess_volume` | (neutron kerma) → ÷volume [MeV/g] |
+
+**Adding a `Quantity`** = write its handler(s), then add one row to the registry
+in `osh_scoring_estimator.c` and one row to this table. `score_point_dose` guards
+neutral particles (they book energy but no local dose); `score_point_energy` books
+the whole point energy deposit (equivalent to a unit-length crossing).
+
+`osh_scoring_postprocess()` runs every page's `postprocess_` handler once, in place,
+between raw accumulation and save. After it, page buffers are in one of these states:
 
 | Kind | State after postprocess | Save-layer normalisation |
 |---|---|---|
-| NORM (DOSE, ENERGY, FLUENCE, …) | raw accumulated sum | divide by `nstat` |
+| NORM (DOSE, FLUENCE, …) | intensive per-primary sum (÷volume applied) | divide by `nstat` |
+| NORM (ENERGY, …) | raw accumulated sum (no transform) | divide by `nstat` |
 | AVER (DLET, TLET, DQEFF, TQEFF) | physical mean (`data ÷ data2` done) | none — written as-is |
 | SUM (COUNT, …) | raw count | none |
 

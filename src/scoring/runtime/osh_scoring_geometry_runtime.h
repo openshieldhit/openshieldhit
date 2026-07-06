@@ -24,9 +24,13 @@ struct osh_scoring_axis_runtime {
  * @brief A contiguous span of pages sharing the same geometry and score kind.
  *
  * @details
- * Pages are laid out so all pages of the same geometry are contiguous.
- * Groups subdivide that span by score kind so the hot path can loop over
- * pages of one kind without branching on kind per step.
+ * A group is not a set of spatial bins or ray crossings.  It is a run of output
+ * pages that all refer to the same geometry and the same score kind, e.g. several
+ * DOSE pages with different filters, Settings overrides, or differential axes.
+ *
+ * Pages are laid out so all pages of the same geometry are contiguous.  Groups
+ * subdivide that span by score kind so the hot path can select the estimator once
+ * and then loop only over compatible pages.
  */
 struct osh_scoring_geometry_score_group {
     size_t first_page;                      /* Index of first page in this group. */
@@ -52,7 +56,7 @@ struct osh_scoring_geometry_score_group {
  * |-----------------------|------------------------|----------------|
  * | OSH_SCORING_GEO_MESH  | 3 (X, Y, Z)            | "X", "Y", "Z" |
  * | OSH_SCORING_GEO_CYL   | 2 (radial + axial)     | "R", "Z"      |
- * | OSH_SCORING_GEO_ZONE  | 0 (zone range instead) | —             |
+ * | OSH_SCORING_GEO_ZONE  | 0 (zone list instead)  | —             |
  *
  * For @c CYL the @c axes array contains exactly one entry labelled @c "R"
  * and one labelled @c "Z"; which comes first depends on the input file.
@@ -70,12 +74,14 @@ struct osh_scoring_geometry_runtime {
     size_t npages;                                   /* Number of pages owned by this geometry. */
     size_t ngroups;                                  /* Number of score-kind groups. */
     enum osh_scoring_geo_kind geo_kind;              /* Resolved geometry kind enum. */
-    int zone_start;                                  /* First zone (Zone geometry only). */
-    int zone_stop;                                   /* Last zone  (Zone geometry only). */
+    size_t *zone_indices;                            /* Internal GEMCA zone indices, one per Zone bin (owned). */
+    size_t nzone_indices;                            /* Number of explicit Zone bins. */
     char has_rotation;                               /* Non-zero when t[] is valid and axes are in local frame. */
     char *rtdose_template_path; /* Non-NULL when FileFormat RTDOSE; owned; path to RTDOSE template. */
-    double *cyl_vol_inv;        /* [cyl_nr] 1/V per R-bin, precomputed at compile; NULL for non-CYL */
-    size_t cyl_nr;              /* R bin count (nr); 0 for non-CYL */
+    double *bin_vol_inv;        /* [nbins] 1/volume per spatial bin, precomputed at compile. The single
+                                   geometry-agnostic volume source for volume-normalised estimators; applied
+                                   in postprocess (not at score time). Uniform for Mesh, per-R for Cyl,
+                                   per-zone for Zone. NULL when the geometry has no meaningful volume. */
 };
 
 #ifdef __cplusplus

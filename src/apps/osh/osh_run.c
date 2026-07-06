@@ -261,6 +261,16 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
         goto cleanup;
     }
 
+    /* Resolve `Geometry Zone` selectors (names) against geo.dat now that both the
+     * geometry and scoring workspaces are loaded, before the library compiles. */
+    rc = osh_scoring_resolve_zone_names(scoring, geom, opt->diag);
+    if (rc != OSH_OK) {
+        if (err) {
+            fprintf(err, "Error: failed to resolve scoring zone names\n");
+        }
+        goto cleanup;
+    }
+
     parse_s = osh_monotonic_seconds() - t_mark;
 
     if (opt->validate_only) {

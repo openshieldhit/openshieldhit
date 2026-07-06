@@ -75,6 +75,35 @@ For `Geometry Cyl`:
 - `BDO2019` stores the geometry as legacy `CYL` metadata with an implicit
   full-azimuth span (`phi = 0..360`, one bin) for compatibility.
 
+### Zone
+
+Score by `geo.dat` zone, selected **by zone name** — one output bin per listed
+zone. Internal numeric zone indices are never used in input files.
+
+```text
+Geometry Zone
+    Name MyZones
+    Zone WaterBox
+    Volume 13.37
+    Zone Target
+    Volume 2.0
+```
+
+Rules and semantics:
+
+- `Zone <name>` selects one zone by its `geo.dat` name; repeat it for each zone to
+  score. Unknown names are a hard error at setup.
+- `Volume <cm3>` optionally follows a `Zone` card and sets the volume for that
+  zone's volume-normalized quantities (`Dose`, `DoseGy`). Zone volumes cannot be
+  computed from overlapping CSG primitives, so they must be given explicitly; a
+  zone with no `Volume` warns and defaults to `1.0 cm3`.
+- The output bin order is exactly the order of the `Zone` lines.
+- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`.
+- `FileFormat BDO` (default) records which transport zone each bin is (`GEO_ZONES`
+  tag) for labelling; `FileFormat TEXT` writes one row per zone with a numeric
+  zone-index column. The per-zone volume is not stored in either — it is consumed by
+  the ÷volume in postprocess, so the saved dose/fluence is already final.
+
 ## Differential scoring
 
 A `Quantity` line can be followed by `Diff1`/`Diff1Type` (and optionally `Diff2`/`Diff2Type`)

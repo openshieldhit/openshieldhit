@@ -164,6 +164,48 @@ static void test_save_cyl_ascii_and_bdo(void) {
     remove(CYL_BDO_PATH);
 }
 
+static void test_save_ascii_rejects_mixed_diff_layout(void) {
+    char const *detect_text = "Geometry Mesh\n"
+                              "    Name G\n"
+                              "    X 0 1 1\n"
+                              "    Y 0 1 1\n"
+                              "    Z 0 1 1\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_bad_ascii.txt\n"
+                              "    FileFormat ASCII\n"
+                              "    Geo G\n"
+                              "    Quantity FLUENCE\n"
+                              "    Diff1 0 10 5\n"
+                              "    Diff1Type LET\n"
+                              "    Quantity FLUENCE\n"
+                              "    Diff1 0 8 4\n"
+                              "    Diff1Type QEFF\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    /* ASCII has one table shape per Output, so it cannot safely combine pages
+     * with different diff axes.  BDO carries page-local axis metadata and remains
+     * the format for heterogeneous differential outputs. */
+    rc = osh_scoring_save(ws, &rt, 1u);
+    ASSERT_TRUE(rc == OSH_ENOTSUP);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_bad_ascii.txt");
+}
+
 int main(void) {
     char const *detect_text = "Geometry Mesh\n"
                               "    Name G\n"
@@ -237,6 +279,9 @@ int main(void) {
 
     test_save_bdo2019_with_dose_and_dlet();
     test_save_cyl_ascii_and_bdo();
+    test_save_ascii_rejects_mixed_diff_layout();
+    /* Zone ASCII/BDO save tests deferred to Stage C: they need app-level zone-name
+     * resolution (a geometry workspace) before compile. */
     return 0;
 }
 

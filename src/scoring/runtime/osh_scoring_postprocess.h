@@ -51,6 +51,21 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
  */
 int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind);
 
+/* Per-estimator postprocess handlers, registered in the estimator table
+ * (osh_scoring_estimator.c).  Each finalises one page's accumulator:
+ *   postprocess_volume — DOSE/FLUENCE/NKERMA: multiply each bin by geo->bin_vol_inv.
+ *   postprocess_dosegy — as volume, then MeV/g -> Gy.
+ *   postprocess_ratio  — DLET/TLET/DQEFF/TQEFF: finalise the data/data2 average. */
+enum osh_status postprocess_volume(struct osh_scoring_page_runtime *dst,
+                                   struct osh_scoring_page_runtime const *src,
+                                   struct osh_scoring_geometry_runtime const *geo);
+enum osh_status postprocess_dosegy(struct osh_scoring_page_runtime *dst,
+                                   struct osh_scoring_page_runtime const *src,
+                                   struct osh_scoring_geometry_runtime const *geo);
+enum osh_status postprocess_ratio(struct osh_scoring_page_runtime *dst,
+                                  struct osh_scoring_page_runtime const *src,
+                                  struct osh_scoring_geometry_runtime const *geo);
+
 #ifdef __cplusplus
 }
 #endif

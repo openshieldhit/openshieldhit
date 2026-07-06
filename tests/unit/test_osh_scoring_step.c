@@ -26,8 +26,20 @@
         }                                                                                                              \
     } while (0)
 
+static int tmp_counter = 0;
+
 static void assert_close(double a, double b) {
     ASSERT_TRUE(fabs(a - b) < 1.0e-12);
+}
+
+static void write_temp_file(char *path, size_t path_cap, char const *content) {
+    FILE *fp;
+
+    snprintf(path, path_cap, "osh_scoring_step_test_%d.tmp", tmp_counter++);
+    fp = fopen(path, "w");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fputs(content, fp) >= 0);
+    ASSERT_TRUE(fclose(fp) == 0);
 }
 
 static void test_score_mesh_energy_and_fluence_with_filters(void) {
@@ -102,13 +114,16 @@ static void test_score_mesh_energy_and_fluence_with_filters(void) {
     assert_close(rt.pages[energy1_idx].acc.data[1], 1.0);
     assert_close(rt.pages[energy1_idx].acc.data[2], 0.125);
 
-    assert_close(rt.pages[fluence_idx].acc.data[0], 0.875);
-    assert_close(rt.pages[fluence_idx].acc.data[1], 1.0);
-    assert_close(rt.pages[fluence_idx].acc.data[2], 0.125);
+    /* FLUENCE now deposits the raw track length (cm) per bin; the ÷volume happens
+     * in postprocess.  Voxel volume is 4 cm³ (dz=4), so the pre-postprocess raw is
+     * the old fluence value / vol_inv (× 4). */
+    assert_close(rt.pages[fluence_idx].acc.data[0], 3.5);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 4.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5);
 
-    assert_close(rt.pages[filtered_idx].acc.data[0], 0.875);
-    assert_close(rt.pages[filtered_idx].acc.data[1], 1.0);
-    assert_close(rt.pages[filtered_idx].acc.data[2], 0.125);
+    assert_close(rt.pages[filtered_idx].acc.data[0], 3.5);
+    assert_close(rt.pages[filtered_idx].acc.data[1], 4.0);
+    assert_close(rt.pages[filtered_idx].acc.data[2], 0.5);
 
     st.gen = 1u;
     rc = osh_scoring_score_step(
@@ -219,13 +234,15 @@ static void test_score_mesh_uses_step_chord_after_bending(void) {
     assert_close(rt.pages[energy1_idx].acc.data[1], 0.875);
     assert_close(rt.pages[energy1_idx].acc.data[2], 0.125);
 
+    /* FLUENCE deposits the raw track length (÷volume is deferred to postprocess);
+     * the old values had vol_inv = 1/4 folded in (the /32 below was chord/8 · 1/4). */
     assert_close(rt.pages[fluence_idx].acc.data[0], 0.0);
-    assert_close(rt.pages[fluence_idx].acc.data[1], 3.5 * chord_len / 32.0);
-    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5 * chord_len / 32.0);
+    assert_close(rt.pages[fluence_idx].acc.data[1], 3.5 * chord_len / 8.0);
+    assert_close(rt.pages[fluence_idx].acc.data[2], 0.5 * chord_len / 8.0);
 
     assert_close(rt.pages[filtered_idx].acc.data[0], 0.0);
-    assert_close(rt.pages[filtered_idx].acc.data[1], 3.5 * chord_len / 32.0);
-    assert_close(rt.pages[filtered_idx].acc.data[2], 0.5 * chord_len / 32.0);
+    assert_close(rt.pages[filtered_idx].acc.data[1], 3.5 * chord_len / 8.0);
+    assert_close(rt.pages[filtered_idx].acc.data[2], 0.5 * chord_len / 8.0);
 
     for (i = 3u; i < rt.pages[energy0_idx].len; ++i) {
         assert_close(rt.pages[energy0_idx].acc.data[i], 0.0);
@@ -523,7 +540,7 @@ static void test_score_mesh_dqeff_tqeff(void) {
     /* Expected qeff = (z_eff/β)² for proton at 150 MeV */
     mean_energy = 150.0;
     gamma_inv = proton_mass_mev / (mean_energy + proton_mass_mev);
-    beta = sqrt(1.0 - gamma_inv * gamma_inv);
+    beta = sqrt(1.0 - (gamma_inv * gamma_inv));
     /* z_eff ≈ 1.0 for proton at β≈0.507 (125·β·1^(-2/3) ≈ 63 → exp term ≈ 0) */
     expected_qeff = 1.0 / (beta * beta);
 
@@ -542,6 +559,236 @@ static void test_score_mesh_dqeff_tqeff(void) {
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
+}
+
+/* LET and QEFF can be differential-axis values for ordinary extensive scores
+ * such as FLUENCE.  They are not the same thing as the averaged quantities DLET,
+ * TLET, DQEFF, and TQEFF.  This test verifies that a FLUENCE page can bin track
+ * length by LET and by QEFF. */
+static void test_score_mesh_fluence_diff_let_qeff(void) {
+    char path[512];
+    char const *detect = "Geometry Mesh\n"
+                         "    Name G\n"
+                         "    X -0.5 0.5 1\n"
+                         "    Y -0.5 0.5 1\n"
+                         "    Z  0.0 2.0 1\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename out.bdo\n"
+                         "    Geo G\n"
+                         "    Quantity Fluence\n"
+                         "    Diff1 0.0 10.0 5\n"
+                         "    Diff1Type LET\n"
+                         "    Quantity Fluence\n"
+                         "    Diff1 0.0 8.0 8\n"
+                         "    Diff1Type QEFF\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *let_page;
+    struct osh_scoring_page_runtime *qeff_page;
+    double proton_mass_mev;
+    unsigned int proj_z[1];
+    unsigned int proj_a[1];
+    double proj_mass[1];
+    float rho_arr[1];
+    float sp_values[2];
+    struct osh_material_runtime mat_rt;
+    double mean_energy;
+    double gamma_inv;
+    double beta;
+    double qeff;
+    size_t qeff_bin;
+    enum osh_status rc;
+    size_t i;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    proton_mass_mev = 938.272046;
+    proj_z[0] = 1u;
+    proj_a[0] = 1u;
+    proj_mass[0] = proton_mass_mev;
+    rho_arr[0] = 1.0f;
+    sp_values[0] = 4.0f;
+    sp_values[1] = 4.0f;
+
+    memset(&mat_rt, 0, sizeof(mat_rt));
+    mat_rt.nprojectiles = 1u;
+    mat_rt.nmaterials = 1u;
+    mat_rt.nenergy = 2u;
+    mat_rt.emin = 1.0;
+    mat_rt.emax = 1000.0;
+    mat_rt.log_emin = log(mat_rt.emin);
+    mat_rt.inv_dlog = 1.0 / (log(mat_rt.emax) - log(mat_rt.emin));
+    mat_rt.projectile_z = proj_z;
+    mat_rt.projectile_a = proj_a;
+    mat_rt.projectile_mass_mev = proj_mass;
+    mat_rt.rho = rho_arr;
+    mat_rt.mass_stopping_power = sp_values;
+    rt.mat_tables = &mat_rt;
+
+    memset(&part, 0, sizeof(part));
+    part.z = 1u;
+    part.a = 1u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[0] = 0.0;
+    st.p[1] = 0.0;
+    st.p[2] = 0.5;
+    st.p[3] = 150.0;
+    st.q[0] = 0.0;
+    st.q[1] = 0.0;
+    st.q[2] = 1.5;
+    st.q[3] = 150.0;
+    st.v[2] = 1.0;
+    st.ds = 1.0;
+    st.de = 1.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    ASSERT_TRUE(rt.noutputs == 1u);
+    ASSERT_TRUE(rt.outputs[0].npages == 2u);
+    let_page = &rt.pages[rt.outputs[0].page_indices[0]];
+    qeff_page = &rt.pages[rt.outputs[0].page_indices[1]];
+
+    /* LET axis: SP is constant 4 MeV*cm2/g and rho is 1 g/cm3, so LET is
+     * 4 MeV/cm.  Diff1 0..10 with 5 bins has width 2, so LET=4 lands in bin 2.
+     * The raw FLUENCE deposit is the crossed track length, here 1 cm. */
+    ASSERT_TRUE(let_page->len == 5u);
+    for (i = 0u; i < let_page->len; ++i) {
+        assert_close(let_page->acc.data[i], (i == 2u) ? 1.0 : 0.0);
+    }
+
+    /* QEFF axis: qeff is computed at the step midpoint and used only as the
+     * differential-axis coordinate.  The scored quantity is still raw FLUENCE,
+     * so the selected spectrum bin receives 1 cm of track length. */
+    mean_energy = 150.0;
+    gamma_inv = proton_mass_mev / (mean_energy + proton_mass_mev);
+    beta = sqrt(1.0 - (gamma_inv * gamma_inv));
+    qeff = 1.0 / (beta * beta);
+    qeff_bin = (size_t) ((qeff - 0.0) / (8.0 - 0.0) * 8.0);
+    ASSERT_TRUE(qeff_bin < qeff_page->len);
+    for (i = 0u; i < qeff_page->len; ++i) {
+        assert_close(qeff_page->acc.data[i], (i == qeff_bin) ? 1.0 : 0.0);
+    }
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+static void test_score_zone_energy_fluence_dose(void) {
+    char path[512];
+    char const *detect = "Geometry Zone\n"
+                         "    Name Z\n"
+                         "    Zone Entrance\n"
+                         "    Volume 2.0\n"
+                         "    Zone Target\n"
+                         "    Volume 4.0\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename zone.bdo\n"
+                         "    Geo Z\n"
+                         "    Quantity Energy\n"
+                         "    Quantity Fluence\n"
+                         "    Quantity Dose\n"
+                         "    Quantity DoseGy\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *energy_page;
+    struct osh_scoring_page_runtime *fluence_page;
+    struct osh_scoring_page_runtime *dose_page;
+    struct osh_scoring_page_runtime *dosegy_page;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+    ASSERT_TRUE(ws->ngeometries == 1u);
+    ASSERT_TRUE(ws->geometries[0].nzone_indices == 2u);
+
+    /* App-level parsing stores Zone selectors by name.  The OSH app resolves
+     * those names against geo.dat before compile; this unit test fills the same
+     * resolved 0-based transport zone ids directly to exercise the library path. */
+    ws->geometries[0].zone_indices = (size_t *) calloc(2u, sizeof(*ws->geometries[0].zone_indices));
+    ASSERT_TRUE(ws->geometries[0].zone_indices != NULL);
+    ws->geometries[0].zone_indices[0] = 3u;
+    ws->geometries[0].zone_indices[1] = 7u;
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&part, 0, sizeof(part));
+    part.charge = 1;
+    part.z = 1u;
+    part.a = 1u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[2] = 0.0;
+    st.q[2] = 2.0;
+    st.v[2] = 1.0;
+    st.ds = 2.0;
+    st.de = 8.0;
+    st.rho = 2.0;
+    st.wt = 1.0;
+    st.medium = 0;
+    st.zone = 7; /* selected Zone entry #2, dense scorer bin 1 */
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    energy_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_ENERGY);
+    fluence_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_FLUENCE);
+    dose_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSE);
+    dosegy_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSEGY);
+    ASSERT_TRUE(energy_page != NULL);
+    ASSERT_TRUE(fluence_page != NULL);
+    ASSERT_TRUE(dose_page != NULL);
+    ASSERT_TRUE(dosegy_page != NULL);
+
+    /* Before postprocess, Zone scoring has deposited into the dense zone bin
+     * selected by st.zone.  The first selected zone is untouched. */
+    assert_close(energy_page->acc.data[0], 0.0);
+    assert_close(energy_page->acc.data[1], 8.0);
+    assert_close(fluence_page->acc.data[0], 0.0);
+    assert_close(fluence_page->acc.data[1], 2.0);
+    assert_close(dose_page->acc.data[0], 0.0);
+    assert_close(dose_page->acc.data[1], 4.0);
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    /* Target has Volume 4 cm3.  FLUENCE becomes track length / volume = 2/4,
+     * and DOSE becomes energy / (rho*volume) = 8/(2*4). */
+    assert_close(energy_page->acc.data[0], 0.0);
+    assert_close(energy_page->acc.data[1], 8.0);
+    assert_close(fluence_page->acc.data[0], 0.0);
+    assert_close(fluence_page->acc.data[1], 0.5);
+    assert_close(dose_page->acc.data[0], 0.0);
+    assert_close(dose_page->acc.data[1], 1.0);
+    assert_close(dosegy_page->acc.data[0], 0.0);
+    assert_close(dosegy_page->acc.data[1], OSH_MEVG2GY);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
 }
 
 /* Allocate a private accumulator set cloning the shape of every page in rt
@@ -659,6 +906,8 @@ int main(void) {
     test_score_mesh_neutron_id_filter();
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
+    test_score_mesh_fluence_diff_let_qeff();
+    test_score_zone_energy_fluence_dose();
     test_score_private_then_merge_equals_direct();
     return 0;
 }
