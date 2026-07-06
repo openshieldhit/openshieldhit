@@ -278,19 +278,19 @@ quantity; the *only* geometry-specific normalisation, ÷volume, lives in
 
 | `Quantity` (score kind) | `score_step_` | `score_point_` | `postprocess_` | deposits → finalises |
 |---|---|---|---|---|
-| `ENERGY`  | `score_step_energy`  | `score_point_energy` | — | `de·(path/score_len)` → already final [MeV] |
-| `FLUENCE` | `score_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
-| `DOSE`    | `score_step_dose`    | `score_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
-| `DOSEGY`  | `score_step_dose`    | `score_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
-| `DLET`    | `score_step_dlet`    | — | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
-| `TLET`    | `score_step_tlet`    | — | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
-| `DQEFF`   | `score_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
-| `TQEFF`   | `score_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `ENERGY`  | `osh_scoring_estimator_step_energy`  | `osh_scoring_estimator_point_energy` | — | `de·(path/score_len)` → already final [MeV] |
+| `FLUENCE` | `osh_scoring_estimator_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
+| `DOSE`    | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
+| `DOSEGY`  | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
+| `DLET`    | `osh_scoring_estimator_step_dlet`    | — | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `TLET`    | `osh_scoring_estimator_step_tlet`    | — | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `DQEFF`   | `osh_scoring_estimator_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `TQEFF`   | `osh_scoring_estimator_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
 | `NKERMA`  | —                    | — | `postprocess_volume` | (neutron kerma) → ÷volume [MeV/g] |
 
 **Adding a `Quantity`** = write its handler(s), then add one row to the registry
-in `osh_scoring_estimator.c` and one row to this table. `score_point_dose` guards
-neutral particles (they book energy but no local dose); `score_point_energy` books
+in `osh_scoring_estimator.c` and one row to this table. `osh_scoring_estimator_point_dose` guards
+neutral particles (they book energy but no local dose); `osh_scoring_estimator_point_energy` books
 the whole point energy deposit (equivalent to a unit-length crossing).
 
 `osh_scoring_postprocess()` runs every page's `postprocess_` handler once, in place,
