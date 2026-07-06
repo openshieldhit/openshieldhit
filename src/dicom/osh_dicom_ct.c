@@ -55,6 +55,22 @@ static void _free_slices(struct _slice *slices, int n) {
     free(slices);
 }
 
+/**
+ * @brief Compute the number of pixels in one CT slice.
+ *
+ * @details
+ * Rows and columns come directly from DICOM unsigned-short tags, but are stored
+ * as signed ints in the temporary slice state so missing or invalid values can
+ * be represented as non-positive.  This helper rejects those values and guards
+ * the rows*cols multiplication before callers use the result for allocation or
+ * copy bounds.
+ *
+ * @param[out] out   Pixel count for one slice on success.
+ * @param[in]  rows  DICOM Rows value.
+ * @param[in]  cols  DICOM Columns value.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for invalid dimensions or overflow.
+ */
 static enum osh_status _slice_pixel_count(size_t *out, int rows, int cols) {
     size_t r;
     size_t c;
@@ -71,6 +87,17 @@ static enum osh_status _slice_pixel_count(size_t *out, int rows, int cols) {
     return OSH_OK;
 }
 
+/**
+ * @brief Collect the CT tags needed from one DICOM file.
+ *
+ * @details
+ * This is an osh_dicom_walk() callback, not a status-returning operation.
+ * Returning 1 asks the walker to continue; returning 0 stops walking the file.
+ * Non-CT files stop immediately after Modality, and CT files stop after Pixel
+ * Data because the reader only needs the flat tags before and including pixels.
+ *
+ * @returns 1 to continue DICOM tag walking, 0 to stop walking this file.
+ */
 static int
 _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const *value, uint32_t length, void *user) {
     struct _collect *c = (struct _collect *) user;
@@ -130,12 +157,23 @@ _tag_cb(uint16_t group, uint16_t element, char const vr[2], unsigned char const 
     return 1;
 }
 
+/**
+ * @brief qsort() comparator for ascending CT slice z position.
+ *
+ * @returns Negative, zero, or positive according to the qsort comparator
+ *          contract.
+ */
 static int _z_cmp(void const *a, void const *b) {
     double za = ((struct _slice const *) a)->z;
     double zb = ((struct _slice const *) b)->z;
     return (za > zb) - (za < zb);
 }
 
+/**
+ * @brief Return whether a path has a .dcm extension.
+ *
+ * @returns 1 for .dcm/.DCM-style names, 0 otherwise.
+ */
 static int _is_dcm(char const *name) {
     size_t n = strlen(name);
     if (n < 4) {
@@ -146,6 +184,17 @@ static int _is_dcm(char const *name) {
             && (ext[3] == 'm' || ext[3] == 'M'));
 }
 
+/**
+ * @brief Read one candidate file and append it if it is a valid CT slice.
+ *
+ * @details
+ * Non-DICOM files, non-CT DICOM files, and CT files lacking usable Rows,
+ * Columns, or Pixel Data are ignored.  Accepted slices transfer ownership of
+ * their pixel buffer into @p slices; ignored slices free any partial pixel
+ * buffer before returning.
+ *
+ * @returns OSH_OK. Allocation failures abort via osh_abort_oomf().
+ */
 static enum osh_status
 _append_ct_slice(struct _slice **slices, int *n, int *cap, char const *path, struct osh_diag_sink const *diag) {
     unsigned char *buf;
@@ -180,6 +229,18 @@ _append_ct_slice(struct _slice **slices, int *n, int *cap, char const *path, str
     return OSH_OK;
 }
 
+/**
+ * @brief Directory-walker callback that scans .dcm files for CT slices.
+ *
+ * @details
+ * This is an osh_dir_foreach_file() callback.  Returning 1 continues directory
+ * iteration; returning 0 stops it.  Operation failures from _append_ct_slice()
+ * are stored in the scan context so osh_dicom_ct_read() can return the status
+ * after osh_dir_foreach_file() unwinds.
+ *
+ * @returns 1 to continue directory iteration, 0 to stop after an operation
+ *          failure.
+ */
 static int _scan_ct_file(char const *path, void *user) {
     struct _scan_ct_dir *scan = (struct _scan_ct_dir *) user;
     enum osh_status rc;
