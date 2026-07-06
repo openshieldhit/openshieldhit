@@ -47,3 +47,8 @@ add_executable(osh_gpu_rng_bench osh_gpu_rng_bench.cu)
 target_include_directories(osh_gpu_rng_bench PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(osh_gpu_rng_bench PRIVATE osh_random)
 set_target_properties(osh_gpu_rng_bench PROPERTIES CUDA_ARCHITECTURES "80")
+
+# FP64 atomicAdd contention on scoring-like bin patterns (issue #231 D4).
+add_executable(osh_gpu_atomics_bench osh_gpu_atomics_bench.cu)
+target_include_directories(osh_gpu_atomics_bench PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(osh_gpu_atomics_bench PROPERTIES CUDA_ARCHITECTURES "80")
