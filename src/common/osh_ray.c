@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "common/osh_const.h"
+#include "common/osh_ray_hd.h"
 
 void osh_ray_move(struct ray *r, double d) {
     int i;
@@ -60,15 +61,7 @@ int osh_ray_v_transform(struct ray_v const *r, struct ray_v *rt, double const t[
 }
 
 /* Temporary — remove once struct ray is retired in favour of struct ray_v. */
+/* Body lives in osh_ray_hd.h so device kernels compile the same lines. */
 int osh_ray_transform(struct ray const *r, struct ray *rt, double const t[16]) {
-    int i;
-    int j;
-
-    for (i = 0; i < 3; i++) {
-        j = i * 4;
-        rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] - t[j + 3];
-        rt->cp[i] = r->cp[0] * t[j] + r->cp[1] * t[j + 1] + r->cp[2] * t[j + 2];
-    }
-    rt->system = r->system; /* caller should update to the target system after the call */
-    return 1;
+    return _osh_ray_transform_hd(r, rt, t);
 }

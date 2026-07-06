@@ -11,6 +11,7 @@
 #include "common/raytrace/osh_raytrace.h"
 #include "gemca/osh_gemca2.h"
 #include "gemca/osh_gemca2_defines.h"
+#include "gemca/runtime/osh_gemca_runtime_hd.h"
 #include "gemca/runtime/osh_gemca_runtime_voxel.h"
 #include "voxel/osh_voxel_hu_lut.h"
 
@@ -1670,75 +1671,10 @@ static int find_body_index(struct osh_gemca_prepared const *wg, struct body cons
  *
  * @returns 1 if the ray is inside the zone, 0 otherwise.
  */
+/* Body lives in osh_gemca_runtime_hd.h so device kernels compile the same lines. */
 static inline int
 eval_membership(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z, struct ray const *r) {
-    int stack[OSH_GEMCA_RT_MAX_STACK];
-    int sp;
-    int i;
-    struct gemca_rt_insn const *insn;
-
-    /*
-     * Fast path: single-instruction zones (one PUSH_BODY after the guard
-     * optimisation removed guards for leaf zones) need no stack machinery.
-     * This is the common case for simple body-per-zone geometry.
-     */
-    if (z->ninsns == 1) {
-        return in_body_rt(rt, z->insns[0].operand, r);
-    }
-
-    sp = 0;
-
-    for (i = 0; i < z->ninsns; i++) {
-        insn = &z->insns[i];
-
-        switch (insn->op) {
-
-        case GEMCA_RT_GUARD_BODY:
-            /* Fast-reject: if outside guard body, skip the entire zone. */
-            if (!in_body_rt(rt, insn->operand, r)) {
-                return 0;
-            }
-            break;
-
-        case GEMCA_RT_PUSH_BODY:
-        case GEMCA_RT_PUSH_VOXEL_BODY:
-            if (sp >= OSH_GEMCA_RT_MAX_STACK) {
-                return 0;
-            }
-            stack[sp++] = in_body_rt(rt, insn->operand, r);
-            break;
-
-        case GEMCA_RT_UNION:
-            if (sp < 2) {
-                return 0;
-            }
-            stack[sp - 2] = stack[sp - 2] || stack[sp - 1];
-            sp--;
-            break;
-
-        case GEMCA_RT_INTERSECT:
-            if (sp < 2) {
-                return 0;
-            }
-            stack[sp - 2] = stack[sp - 2] && stack[sp - 1];
-            sp--;
-            break;
-
-        case GEMCA_RT_DIFF:
-            if (sp < 2) {
-                return 0;
-            }
-            /* left && !right  (left = sp-2, right = sp-1 in RPN order) */
-            stack[sp - 2] = stack[sp - 2] && !stack[sp - 1];
-            sp--;
-            break;
-
-        default:
-            return 0;
-        }
-    }
-
-    return (sp > 0) ? stack[0] : 0;
+    return _osh_gemca_rt_eval_membership_hd(rt->surfaces, rt->bodies, rt->nbodies, z->insns, z->ninsns, r);
 }
 
 static void eval_membership_batch_active(struct osh_gemca_runtime const *rt,
@@ -1993,27 +1929,9 @@ eval_distance(struct osh_gemca_runtime const *rt, struct gemca_rt_zone const *z,
  *
  * @returns 1 if inside all surfaces, 0 otherwise.
  */
+/* Body lives in osh_gemca_runtime_hd.h so device kernels compile the same lines. */
 static inline int in_body_rt(struct osh_gemca_runtime const *rt, int body_idx, struct ray const *r) {
-    struct gemca_rt_body const *b;
-    struct ray tr;
-    int i;
-
-    if (body_idx < 0 || (size_t) body_idx >= rt->nbodies) {
-        return 0;
-    }
-
-    b = &rt->bodies[body_idx];
-
-    if (transform_to_local_rt(b, r, &tr) != OSH_OK) {
-        return 0;
-    }
-
-    for (i = 0; i < b->nsurfs; i++) {
-        if (!_check_surface_rt(&rt->surfaces[b->surf_begin + (size_t) i], &tr)) {
-            return 0;
-        }
-    }
-    return 1;
+    return _osh_gemca_rt_in_body_hd(rt->surfaces, rt->bodies, rt->nbodies, body_idx, r);
 }
 
 /**
@@ -2073,38 +1991,10 @@ static inline double dist_body_rt(struct osh_gemca_runtime const *rt, int body_i
  *
  * @returns OSH_OK on success, OSH_ENOTSUP for an unknown coordinate system.
  */
+/* Body lives in osh_gemca_runtime_hd.h so device kernels compile the same lines. */
 static inline enum osh_status
 transform_to_local_rt(struct gemca_rt_body const *b, struct ray const *r, struct ray *tr) {
-    int i;
-    int j;
-
-    for (i = 0; i < 3; i++) {
-        tr->p[i] = r->p[i];
-        tr->cp[i] = r->cp[i];
-    }
-    tr->system = (int) b->coord;
-
-    switch (b->coord) {
-    case OSH_COORD_UNIVERSE:
-        break;
-
-    case OSH_COORD_BCALIGN:
-        for (i = 0; i < 3; i++) {
-            j = i * 4;
-            tr->p[i] = r->p[i] + b->t[j + 3];
-            tr->cp[i] = r->cp[i];
-        }
-        break;
-
-    case OSH_COORD_BZALIGN:
-        osh_ray_transform(r, tr, b->t);
-        break;
-
-    default:
-        return OSH_ENOTSUP;
-    }
-
-    return OSH_OK;
+    return _osh_gemca_rt_transform_to_local_hd(b, r, tr);
 }
 
 /**
@@ -2181,117 +2071,10 @@ static inline enum osh_status transform_to_local_batch_rt(struct gemca_rt_body c
  * the new SoA batch surface helper.  Inputs are already in body-local
  * coordinates; no transform is applied here.
  */
+/* Body lives in osh_gemca_runtime_hd.h so device kernels compile the same lines. */
 static inline int _check_surface_components_rt(
     struct gemca_rt_surface const *sf, double px, double py, double pz, double ux, double uy, double uz) {
-    double d;
-    double dot;
-    int i;
-    double p[3];
-    double u[3];
-
-    p[0] = px;
-    p[1] = py;
-    p[2] = pz;
-    u[0] = ux;
-    u[1] = uy;
-    u[2] = uz;
-
-    switch (sf->type) {
-
-    case OSH_GEMCA_SURF_SPHERE:
-        d = (px * px) + (py * py) + (pz * pz) - sf->p[0];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return ((px * ux) + (py * uy) + (pz * uz) < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_ELLIPSOID:
-        d = 0.0;
-        for (i = 0; i < 3; i++) {
-            d += (p[i] * p[i]) / sf->p[i];
-        }
-        if (d > 1.0 + OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < 1.0 - OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = 0.0;
-        for (i = 0; i < 3; i++) {
-            dot += (p[i] / sf->p[i]) * u[i];
-        }
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_CYLZ:
-        d = (px * px) + (py * py) - sf->p[0];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = (px * ux) + (py * uy);
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_ELLZ:
-        d = (px * px / sf->p[0]) + (py * py / sf->p[1]) - 1.0;
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = (px / sf->p[0]) * ux + (py / sf->p[1]) * uy;
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_CONE:
-        d = (px * px) + (py * py) - sf->p[1] * (pz * pz);
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        dot = (px * ux) + (py * uy) - (sf->p[1] * pz * uz);
-        return (dot < 0.0) ? 1 : 0;
-
-    case OSH_GEMCA_SURF_PLANEX:
-        d = sf->p[0] * px + sf->p[1];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (sf->p[0] * ux > 0.0) ? 0 : 1;
-
-    case OSH_GEMCA_SURF_PLANEY:
-        d = sf->p[0] * py + sf->p[1];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (sf->p[0] * uy > 0.0) ? 0 : 1;
-
-    case OSH_GEMCA_SURF_PLANEZ:
-        d = sf->p[0] * pz + sf->p[1];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return (sf->p[0] * uz > 0.0) ? 0 : 1;
-
-    case OSH_GEMCA_SURF_PLANE:
-        d = (sf->p[0] * px) + (sf->p[1] * py) + (sf->p[2] * pz) + sf->p[3];
-        if (d > OSH_GEMCA_SMALL) {
-            return 0;
-        } else if (d < -OSH_GEMCA_SMALL) {
-            return 1;
-        }
-        return ((sf->p[0] * ux) + (sf->p[1] * uy) + (sf->p[2] * uz) > 0.0) ? 0 : 1;
-
-    default:
-        return 1;
-    }
+    return _osh_gemca_rt_check_surface_components_hd(sf, px, py, pz, ux, uy, uz);
 }
 
 /**
