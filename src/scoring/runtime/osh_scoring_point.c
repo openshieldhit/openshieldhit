@@ -75,7 +75,7 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
                 /* Cylinder axis is local Z, R the transverse radius.  Uniform dr/dz
                  * bins; flat index z_bin*nr + r_bin matches score_step's layout, and
                  * 1/V is the precomputed per-R-bin value. */
-                r_cyl = sqrt(p_at[0] * p_at[0] + p_at[1] * p_at[1]);
+                r_cyl = sqrt((p_at[0] * p_at[0]) + (p_at[1] * p_at[1]));
                 if (r_cyl < grid.origin[0] || p_at[2] < grid.origin[2]) {
                     continue; /* inside the bore or below the axial stack */
                 }

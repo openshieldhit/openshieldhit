@@ -47,7 +47,7 @@ enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
         for (z = 0; z < ws->geometries[i].nzone_indices; ++z) {
             free(ws->geometries[i].zone_names[z]);
         }
-        free(ws->geometries[i].zone_names);
+        free((void *) ws->geometries[i].zone_names);
         free(ws->geometries[i].zone_indices);
         free(ws->geometries[i].zone_volumes);
         free(ws->geometries[i].vox_rtdose_path);

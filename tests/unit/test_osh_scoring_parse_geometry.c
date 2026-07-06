@@ -51,7 +51,7 @@ static void free_geo(struct osh_scoring_geometry_def *geo) {
     for (z = 0u; z < geo->nzone_indices; ++z) {
         free(geo->zone_names[z]);
     }
-    free(geo->zone_names);
+    free((void *) geo->zone_names);
     free(geo->zone_indices);
     free(geo->zone_volumes);
     free(geo->vox_rtdose_path);

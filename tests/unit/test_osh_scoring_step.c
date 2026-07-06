@@ -527,7 +527,7 @@ static void test_score_mesh_dqeff_tqeff(void) {
     /* Expected qeff = (z_eff/β)² for proton at 150 MeV */
     mean_energy = 150.0;
     gamma_inv = proton_mass_mev / (mean_energy + proton_mass_mev);
-    beta = sqrt(1.0 - gamma_inv * gamma_inv);
+    beta = sqrt(1.0 - (gamma_inv * gamma_inv));
     /* z_eff ≈ 1.0 for proton at β≈0.507 (125·β·1^(-2/3) ≈ 63 → exp term ≈ 0) */
     expected_qeff = 1.0 / (beta * beta);
 
@@ -663,7 +663,7 @@ static void test_score_mesh_fluence_diff_let_qeff(void) {
      * so the selected spectrum bin receives 1 cm of track length. */
     mean_energy = 150.0;
     gamma_inv = proton_mass_mev / (mean_energy + proton_mass_mev);
-    beta = sqrt(1.0 - gamma_inv * gamma_inv);
+    beta = sqrt(1.0 - (gamma_inv * gamma_inv));
     qeff = 1.0 / (beta * beta);
     qeff_bin = (size_t) ((qeff - 0.0) / (8.0 - 0.0) * 8.0);
     ASSERT_TRUE(qeff_bin < qeff_page->len);

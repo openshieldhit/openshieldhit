@@ -157,7 +157,7 @@ static enum osh_status append_zone_name(struct osh_scoring_geometry_def *geo, ch
     if (!dup) {
         return OSH_ENOMEM;
     }
-    name_tmp = (char **) realloc(geo->zone_names, (geo->nzone_indices + 1u) * sizeof(*name_tmp));
+    name_tmp = (char **) realloc((void *) geo->zone_names, (geo->nzone_indices + 1u) * sizeof(*name_tmp));
     if (!name_tmp) {
         free(dup);
         return OSH_ENOMEM;
