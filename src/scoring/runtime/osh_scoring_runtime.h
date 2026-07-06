@@ -113,6 +113,13 @@ struct osh_scoring_runtime {
      * allocation.  NULL when npages == 0.  Owns only the array; the arrays it points
      * into are owned by the pages. */
     struct osh_scoring_accumulator *master_acc;
+    /* Set once by the in-place osh_scoring_postprocess() after it succeeds; guards
+     * against a second destructive in-place call (which would double-divide by
+     * volume / re-ratio data÷data2). Zero after osh_scoring_compile() (which
+     * memsets the runtime). The repeatable, non-destructive primitive for
+     * dump/checkpoint is osh_scoring_postprocess_into() with a distinct dst, which
+     * never touches this flag. See docs/dev/scoring.md §6. */
+    int postprocessed;
 };
 
 /**

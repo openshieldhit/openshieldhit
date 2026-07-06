@@ -18,6 +18,13 @@ extern "C" {
  * data/data2; all other kinds are a no-op.  Implemented as the @p dst == @p src
  * case of @ref osh_scoring_postprocess_into, so its (destructive) behaviour is
  * identical to before.
+ *
+ * @note Single-shot: the transform is destructive and not idempotent, so a
+ * second in-place call would double-divide by volume / re-ratio data÷data2.
+ * The runtime records that it has run and this returns @c OSH_ESTATE on any
+ * further call.  For repeatable (dump / checkpoint / pre-merge) finalisation use
+ * @ref osh_scoring_postprocess_into with a distinct @p dst — it never mutates
+ * @p src and does not trip this guard.
  */
 enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
 
