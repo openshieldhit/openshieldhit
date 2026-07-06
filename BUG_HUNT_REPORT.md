@@ -655,4 +655,91 @@ is right.
 
 ---
 
+## 5. Geometry (GEMCA) & shared numerics
+
+Scope: `src/gemca/` (quadric distances, dispatch), boundary nudge policy,
+`src/common/raytrace/` (scoring DDA), material runtime lookup edge cases.
+
+### G-1 (critical, high) Missing factor 2 in the linear coefficient — ellipsoid, elliptic-cylinder and cone surface distances are mathematically wrong
+
+`_quadratic_solver(a, b, c)` solves `a·t² + b·t + c = 0` with
+`d = b² − 4ac`, roots `(−b ± √d)/(2a)` (`osh_gemca2_dist.c:482-510`), i.e. it
+expects the **full** linear coefficient. The call sites disagree:
+
+| surface | b passed | correct? |
+|---|---|---|
+| `_dist_sphere` (`:353-363`) | `2·(cp·p)` | ✔ |
+| `_dist_cyl` CYLZ (`:380-390`) | `2·(cpx·px + cpy·py)` | ✔ |
+| `_dist_elipcyl` ELLZ (`:406-417`) | `cpx·px/ra² + cpy·py/rb²` | ✗ missing ×2 |
+| `_dist_cone` CONE (`:433-446`) | `cpx·px + cpy·py − t·cpz` | ✗ missing ×2 |
+| `_dist_ellipsoid` ELLIPSOID (`:459-470`) | `Σ cpᵢ·pᵢ/rᵢ²` | ✗ missing ×2 |
+
+Numerical proof by internal inconsistency: a unit circular cylinder queried
+from `p = (0.5, 0, 0)` along `+x` returns **0.5** via `_dist_cyl`
+(b = 1: d = 4, roots −1.5, **0.5**) but **0.6514** via `_dist_elipcyl` with
+`ra² = rb² = 1` (b = 0.5: d = 3.25, roots −1.151, **0.651**) — the same
+surface, 30% apart. Every ray–ELL/ELLZ/CONE intersection with `b ≠ 0` is
+wrong by an error that varies along the ray (only center-through rays are
+correct).
+
+- Impact: any geometry using `ELL`, elliptic cylinders, or truncated cones
+  (`_dist_surface` dispatch, `osh_gemca2_dist.c:158-172`) transports
+  particles across the wrong boundary positions — dose systematically
+  misplaced, zones effectively deformed. **No test or example in the tree
+  references these bodies** (`grep -rl 'ELL|TRC|REC' tests/ examples/` is
+  empty), which is why the suite is green.
+- Additional suspicion on `_dist_cone` (`:443-444`): the quadratic's `a`
+  has `+cpz²/rb²` — a cone's z-term should enter with a **negative** sign
+  (`x² + y² − k²(z−z₀)² = 0`); the parametrization via `t = (pz − ra²)/rb²`
+  is opaque enough that this needs a dedicated unit test rather than reading.
+- Fix direction: pass `2·(…)` at the three sites (or better: make the solver
+  take the half-coefficient `h` and use the numerically stable
+  `q = −(h + sign(h)·√(h²−ac)); t₁ = q/a; t₂ = c/q` form — see G-2); add
+  per-surface distance unit tests (inside/outside/tangent/grazing) for
+  every body type, which would have caught this immediately.
+
+### G-2 (medium, high) Cancellation-prone quadratic root formula near surfaces
+
+Even the correct call sites use `(−b + √d)/(2a)` (`osh_gemca2_dist.c:507-509`).
+When the particle sits just off a surface (`c ≈ 0` — precisely the
+post-nudge state every boundary crossing produces), the small root suffers
+catastrophic cancellation; a garbage small-positive root re-detects the
+surface at distance ~0 and costs an extra nudge/wavefront round (bounded by
+the step budget, but wasteful and noisy near grazing incidence). The stable
+citardauq/sign-split form costs nothing and removes the failure mode.
+
+### G-3 (info, high) Boundary-nudge policy: absolute ε = 1e-8 cm is sound for the stated domain
+
+`OSH_TRANSPORT_BOUNDARY_EPS = 1.0e-8` cm applied along the direction
+(`osh_transport_boundary.h:13-27`). At clinic-scale coordinates (|x| ≤ 10³ cm)
+double roundoff in the distance solvers is ≤ ~1e-11 cm, so the nudge
+dominates it — no stuck-particle hazard from magnitude alone. Two residual
+notes: (a) grazing rays get a *normal* displacement of ε·cosθ → repeated
+re-nudges are possible but each is caught by the `boundary_ds ≤ EPS` guard
+(`osh_transport_ion_step.c:571-578`) and bounded by the step budget; (b) the
+ε path segment per crossing is untracked (≤1e-8 cm per boundary — utterly
+negligible, worth a one-line comment at most).
+
+### G-4 (info, high) Verified-OK: scoring DDA and index plumbing
+
+- The Jacobs alpha-parametric traversal (`osh_raytrace_jacobs_msh.c`) is
+  correct and robust: slab clip, ε-inside entry-voxel probe with index clamp,
+  tie-tolerant multi-axis advance at corners (`same_crossing`, 64·DBL_EPSILON
+  relative), segment count bounded by `Σnᵢ` which matches the caller's
+  scratch-capacity check — no negative-index truncation bug (entry index is
+  clamped after the cast).
+- Zone sentinel constants are consistent (`OSH_ZONE_INDEX_INVALID` ==
+  `OSH_GEMCA_ZONE_INDEX_INVALID` == `(size_t)-1`).
+- CT density lookup clamps HU to [−1000, 1600]
+  (`osh_material_runtime.h:195-204`): correct for the LUT size, but **metal
+  implants (HU 2000–3000+) silently become HU 1600** (~dense bone). Worth a
+  once-per-load warning when the CT contains HU > 1600 (ties into the
+  Schneider LUT domain; clinically relevant for implant patients).
+- `src/gemca/osh_gemca2_dist.c` uses `//` comments and `// TODO vectorize
+  me` markers in production code — violates DEVELOPER.md §4.1 (style; noted
+  because CLAUDE.md calls it a hard rule and clang-tidy evidently does not
+  catch it).
+
+---
+
 *(Sections below are appended as the audit proceeds.)*
