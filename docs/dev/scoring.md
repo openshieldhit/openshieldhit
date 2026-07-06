@@ -290,8 +290,8 @@ quantity; the *only* geometry-specific normalisation, ÷volume, lives in
 
 **Adding a `Quantity`** = write its handler(s), then add one row to the registry
 in `osh_scoring_estimator.c` and one row to this table. `score_point_dose` guards
-neutral particles (they book energy but no local dose); `score_step_energy` doubles
-as energy's point handler because a point deposit is a single unit-length crossing.
+neutral particles (they book energy but no local dose); `score_point_energy` books
+the whole point energy deposit (equivalent to a unit-length crossing).
 
 `osh_scoring_postprocess()` runs every page's `postprocess_` handler once, in place,
 between raw accumulation and save. After it, page buffers are in one of these states:
