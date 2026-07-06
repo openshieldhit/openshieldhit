@@ -44,7 +44,6 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         struct osh_scoring_geometry_runtime const *geo = &rt->geometries[i];
         double p_local[3];
         double const *p_at;
-        double voxel_volume_inv; /* mesh helper output; point scoring normalises volume in postprocess */
         size_t idx;
         double r_cyl;
         size_t r_bin;
@@ -86,7 +85,7 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
                 }
                 idx = z_bin * grid.n[0] + r_bin;
             } else {
-                rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
+                rc = mesh_geometry_to_grid(geo, &grid);
                 if (rc != OSH_OK) {
                     return rc;
                 }

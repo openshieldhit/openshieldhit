@@ -489,20 +489,12 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
             return OSH_ESTATE;
         }
         dst->zone_indices = (size_t *) calloc(src->nzone_indices, sizeof(*dst->zone_indices));
-        dst->zone_vol_inv = (double *) calloc(src->nzone_indices, sizeof(*dst->zone_vol_inv));
-        if (!dst->zone_indices || !dst->zone_vol_inv) {
+        if (!dst->zone_indices) {
             return OSH_ENOMEM;
         }
         dst->nzone_indices = src->nzone_indices;
         for (i = 0; i < src->nzone_indices; ++i) {
             dst->zone_indices[i] = src->zone_indices[i];
-            /* Missing/zero Volume defaults to 1.0 cm3; the app-level resolution
-             * step already warns per zone name (see osh_scoring_resolve_zone_names). */
-            if (src->zone_volumes && src->zone_volumes[i] > 0.0) {
-                dst->zone_vol_inv[i] = 1.0 / src->zone_volumes[i];
-            } else {
-                dst->zone_vol_inv[i] = 1.0;
-            }
         }
     }
     dst->has_rotation = src->has_rotation;
@@ -510,6 +502,23 @@ static enum osh_status copy_geometry_runtime(struct osh_scoring_geometry_runtime
     dst->nbins = geometry_nbins(src);
     if (dst->nbins == 0u) {
         return OSH_EINVAL;
+    }
+    if (dst->geo_kind == OSH_SCORING_GEO_ZONE) {
+        /* Zone bin volume comes from the user's per-zone Volume, so build the sole
+         * volume source (bin_vol_inv) here where zone_volumes is in scope; Mesh/Cyl
+         * bin_vol_inv is built from axes in osh_scoring_compile.  A missing/zero
+         * Volume defaults to 1.0 cm3 (osh_scoring_resolve_zone_names already warns). */
+        dst->bin_vol_inv = (double *) malloc(dst->nbins * sizeof(*dst->bin_vol_inv));
+        if (!dst->bin_vol_inv) {
+            return OSH_ENOMEM;
+        }
+        for (i = 0; i < dst->nbins; ++i) {
+            if (i < src->nzone_indices && src->zone_volumes && src->zone_volumes[i] > 0.0) {
+                dst->bin_vol_inv[i] = 1.0 / src->zone_volumes[i];
+            } else {
+                dst->bin_vol_inv[i] = 1.0;
+            }
+        }
     }
     if (src->vox_rtdose_path) {
         dst->rtdose_template_path = strdup(src->vox_rtdose_path);
@@ -631,10 +640,8 @@ void osh_scoring_runtime_free(struct osh_scoring_runtime *rt) {
             free(rt->geometries[i].name);
             free(rt->geometries[i].axes);
             free(rt->geometries[i].zone_indices);
-            free(rt->geometries[i].zone_vol_inv);
             free(rt->geometries[i].groups);
             free(rt->geometries[i].rtdose_template_path);
-            free(rt->geometries[i].cyl_vol_inv);
             free(rt->geometries[i].bin_vol_inv);
         }
     }
@@ -1144,56 +1151,18 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
     }
 
-    /* Precompute per-R-bin 1/volume LUT for CYL geometries. */
-    for (i = 0; i < rt->ngeometries; ++i) {
-        struct osh_scoring_geometry_runtime *g = &rt->geometries[i];
-        if (g->geo_kind == OSH_SCORING_GEO_CYL) {
-            size_t a;
-            size_t nr = 0, nz_bins = 0;
-            double r_lo = 0.0, r_hi = 0.0, z_lo = 0.0, z_hi = 0.0;
-            size_t ir;
-            double dr, dz;
-            /* Resolve R and Z axes by label — order in detect.dat does not matter. */
-            for (a = 0; a < g->naxes; ++a) {
-                if (strcmp(g->axes[a].label, "R") == 0) {
-                    nr = (size_t) g->axes[a].nbins;
-                    r_lo = g->axes[a].lo;
-                    r_hi = g->axes[a].hi;
-                } else if (strcmp(g->axes[a].label, "Z") == 0) {
-                    nz_bins = (size_t) g->axes[a].nbins;
-                    z_lo = g->axes[a].lo;
-                    z_hi = g->axes[a].hi;
-                }
-            }
-            if (nr == 0 || nz_bins == 0)
-                continue; /* malformed; compile already rejected */
-            dr = (r_hi - r_lo) / (double) nr;
-            dz = (z_hi - z_lo) / (double) nz_bins;
-            g->cyl_vol_inv = (double *) malloc(nr * sizeof(double));
-            if (!g->cyl_vol_inv) {
-                osh_scoring_runtime_free(rt);
-                return OSH_ENOMEM;
-            }
-            g->cyl_nr = nr;
-            for (ir = 0; ir < nr; ++ir) {
-                double r0 = r_lo + (double) ir * dr;
-                double r1 = r0 + dr;
-                g->cyl_vol_inv[ir] = 1.0 / (OSH_M_PI * (r1 * r1 - r0 * r0) * dz);
-            }
-        }
-    }
-
     /* Precompute the geometry-agnostic per-spatial-bin 1/volume that the
-     * volume-normalised estimators (DOSE, FLUENCE, ...) apply in postprocess.
-     * This replaces the per-step vol_inv folded into the accumulator at score
-     * time: the scorer now deposits the extensive quantity and postprocess does
-     * the single division by volume per bin. */
+     * volume-normalised estimators (DOSE, FLUENCE, ...) apply in postprocess: the
+     * scorer deposits the extensive quantity and postprocess divides by volume once
+     * per bin.  bin_vol_inv is the single volume source.  Zone geometries already
+     * built it in copy_geometry_runtime (from the user's per-zone Volume); here we
+     * build Mesh (uniform) and Cyl (per-R shell). */
     for (i = 0; i < rt->ngeometries; ++i) {
         struct osh_scoring_geometry_runtime *g = &rt->geometries[i];
         size_t nb = g->nbins;
         size_t b;
 
-        if (nb == 0u) {
+        if (nb == 0u || g->geo_kind == OSH_SCORING_GEO_ZONE) {
             continue;
         }
         g->bin_vol_inv = (double *) malloc(nb * sizeof(*g->bin_vol_inv));
@@ -1219,21 +1188,43 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 g->bin_vol_inv[b] = vinv;
             }
         } else if (g->geo_kind == OSH_SCORING_GEO_CYL) {
-            /* Flat bin = z_bin*nr + r_bin, so 1/V depends only on r_bin. */
-            for (b = 0u; b < nb; ++b) {
-                if (g->cyl_vol_inv && g->cyl_nr > 0u) {
-                    g->bin_vol_inv[b] = g->cyl_vol_inv[b % g->cyl_nr];
-                } else {
-                    g->bin_vol_inv[b] = 1.0;
+            /* Cylindrical shell volume depends only on r_bin (flat bin =
+             * z_bin*nr + r_bin): V = pi * (r1^2 - r0^2) * dz.  Resolve R/Z by label. */
+            size_t a;
+            size_t nr = 0u;
+            size_t nz_bins = 0u;
+            size_t r_bin;
+            double r_lo = 0.0;
+            double r_hi = 0.0;
+            double z_lo = 0.0;
+            double z_hi = 0.0;
+            double dr;
+            double dz;
+            double r0;
+            double r1;
+            for (a = 0u; a < g->naxes; ++a) {
+                if (strcmp(g->axes[a].label, "R") == 0) {
+                    nr = (size_t) g->axes[a].nbins;
+                    r_lo = g->axes[a].lo;
+                    r_hi = g->axes[a].hi;
+                } else if (strcmp(g->axes[a].label, "Z") == 0) {
+                    nz_bins = (size_t) g->axes[a].nbins;
+                    z_lo = g->axes[a].lo;
+                    z_hi = g->axes[a].hi;
                 }
             }
-        } else if (g->geo_kind == OSH_SCORING_GEO_ZONE) {
-            /* One bin per selected zone; volume is the user-supplied per-zone value. */
-            for (b = 0u; b < nb; ++b) {
-                if (g->zone_vol_inv && b < g->nzone_indices) {
-                    g->bin_vol_inv[b] = g->zone_vol_inv[b];
-                } else {
-                    g->bin_vol_inv[b] = 1.0;
+            if (nr == 0u || nz_bins == 0u) {
+                for (b = 0u; b < nb; ++b) {
+                    g->bin_vol_inv[b] = 1.0; /* malformed; compile already rejected */
+                }
+            } else {
+                dr = (r_hi - r_lo) / (double) nr;
+                dz = (z_hi - z_lo) / (double) nz_bins;
+                for (b = 0u; b < nb; ++b) {
+                    r_bin = b % nr;
+                    r0 = r_lo + (double) r_bin * dr;
+                    r1 = r0 + dr;
+                    g->bin_vol_inv[b] = 1.0 / (OSH_M_PI * (r1 * r1 - r0 * r0) * dz);
                 }
             }
         } else {

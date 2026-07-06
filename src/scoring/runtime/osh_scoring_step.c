@@ -38,7 +38,6 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
                                        struct particle const *part,
                                        struct step const *st) {
     size_t i;
-    size_t j;
     size_t cap;
     size_t ncross;
     double score_dir[3];
@@ -80,10 +79,7 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
         double dir_local[3];
         double const *p_trace;
         double const *dir_trace;
-        double voxel_volume_inv;
-        double const *lut;
         struct osh_voxel_crossing one;
-        size_t nr_cyl;
         size_t g;
 
         if (geo->ngroups == 0u) {
@@ -100,7 +96,7 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
                 continue;
             }
             one.path_len = score_len;
-            one.vol_inv = 1.0; /* volume division moved to estimator postprocess (geo->bin_vol_inv) */
+            one.vol_inv = 1.0; /* unused by estimators; volume is applied in postprocess (geo->bin_vol_inv) */
             for (g = 0; g < geo->ngroups; ++g) {
                 rc = dispatch_step(rt, acc_set, &geo->groups[g], &one, 1u, part, st, score_len);
                 if (rc != OSH_OK) {
@@ -128,9 +124,9 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
         /* ---- Cartesian mesh traversal ----------------------------------- */
 
         if (geo->geo_kind == OSH_SCORING_GEO_MESH) {
-            /* Cartesian mesh: build an X/Y/Z raytrace grid and assign the same
-             * voxel-volume inverse to every crossing. */
-            rc = mesh_geometry_to_grid(geo, &grid, &voxel_volume_inv);
+            /* Cartesian mesh: build an X/Y/Z raytrace grid.  Per-bin volume is
+             * applied later in postprocess (geo->bin_vol_inv), not per crossing. */
+            rc = mesh_geometry_to_grid(geo, &grid);
             if (rc != OSH_OK) {
                 return rc;
             }
@@ -146,14 +142,11 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             if (!hit || ncross == 0u) {
                 continue;
             }
-            for (j = 0; j < ncross; ++j) {
-                crossings[j].vol_inv = voxel_volume_inv;
-            }
         } else if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
             /* ---- Cylindrical mesh traversal ----------------------------- */
 
-            /* Cylindrical mesh: trace in R/Z, then recover the per-R-bin volume
-             * using flat_idx % nr. */
+            /* Cylindrical mesh: trace in R/Z.  Per-R-bin volume is applied later
+             * in postprocess (geo->bin_vol_inv), not per crossing. */
             rc = cyl_geometry_to_grid(geo, &grid);
             if (rc != OSH_OK) {
                 return rc;
@@ -169,11 +162,6 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
             hit = osh_raytrace_cyl_traverse(&grid, p_trace, dir_trace, score_len, crossings, &ncross);
             if (!hit || ncross == 0u) {
                 continue;
-            }
-            lut = geo->cyl_vol_inv;
-            nr_cyl = geo->cyl_nr;
-            for (j = 0; j < ncross; ++j) {
-                crossings[j].vol_inv = lut[crossings[j].idx % nr_cyl];
             }
         } else {
             return OSH_ENOTSUP;
@@ -257,13 +245,13 @@ static int axis_index(struct osh_scoring_geometry_runtime const *geo, char const
 }
 
 /**
- * @brief Fill an osh_raytrace_grid from a mesh scoring geometry and compute 1/voxel_volume.
+ * @brief Fill an osh_raytrace_grid from a mesh scoring geometry.
  *
  * Requires exactly three axes labelled "X", "Y", "Z" with positive bin sizes.
+ * Per-bin volume is not returned here; volume-normalised estimators divide by
+ * geo->bin_vol_inv in postprocess.
  */
-enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
-                                      struct osh_raytrace_grid *grid,
-                                      double *voxel_volume_inv_out) {
+enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo, struct osh_raytrace_grid *grid) {
     int ix;
     int iy;
     int iz;
@@ -271,7 +259,7 @@ enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const 
     double dy;
     double dz;
 
-    if (!geo || !grid || !voxel_volume_inv_out) {
+    if (!geo || !grid) {
         return OSH_EINVAL;
     }
     if (geo->geo_kind != OSH_SCORING_GEO_MESH) {
@@ -308,7 +296,6 @@ enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const 
     grid->n[1] = (size_t) geo->axes[iy].nbins;
     grid->n[2] = (size_t) geo->axes[iz].nbins;
     grid->tile_order = OSH_RAYTRACE_GRID_TILE_ORDER_DEFAULT;
-    *voxel_volume_inv_out = 1.0 / (dx * dy * dz);
     return OSH_OK;
 }
 

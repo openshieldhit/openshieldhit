@@ -127,8 +127,13 @@ static double compute_step_let_with_override(struct osh_scoring_runtime const *r
     }
 
     if (ovr->has_medium && ovr->medium >= 0) {
-        rho = ovr->has_density_g_cm3 ? ovr->density_g_cm3
-                                     : (rt->mat_tables ? rt->mat_tables->rho[(size_t) ovr->medium] : st->rho);
+        if (ovr->has_density_g_cm3) {
+            rho = ovr->density_g_cm3;
+        } else if (rt->mat_tables) {
+            rho = rt->mat_tables->rho[(size_t) ovr->medium];
+        } else {
+            rho = st->rho;
+        }
         return compute_step_let_medium(rt, part, st, (size_t) ovr->medium, rho);
     }
 
@@ -357,4 +362,66 @@ double osh_scoring_estimator_dose_sp_ratio(struct osh_scoring_dose_sp_ctx const 
         return 0.0;
     }
     return 1.0;
+}
+
+/* Gather the transport-medium LET once per step for the two-pass LET scorers.
+ *
+ * The fallback here is de/score_len (the geometric scoring chord), which is the
+ * score-path convention.  The differential-axis LET path (compute_step_let) uses
+ * de/ds instead; the two are kept separate on purpose and only differ for the
+ * no-table case on a bent condensed-history step. */
+struct osh_scoring_step_let_ctx osh_scoring_estimator_step_let_gather(struct osh_scoring_runtime const *rt,
+                                                                      struct particle const *part,
+                                                                      struct step const *st,
+                                                                      double score_len) {
+    struct osh_scoring_step_let_ctx c;
+    struct osh_material_runtime const *mat;
+    double mean_energy;
+
+    mat = rt->mat_tables;
+    c.have_proj = 0;
+    c.proj_idx = 0;
+    c.e_per_nuc = 0.0;
+    c.sp_transport = 0.0;
+    c.let_default = st->de / score_len; /* geometric fallback */
+    if (mat && st->medium >= 0) {
+        mean_energy = 0.5 * (st->p[3] + st->q[3]);
+        c.e_per_nuc = mean_energy / (double) part->a;
+        if (osh_scoring_estimator_find_proj_idx(mat, (unsigned int) part->z, &c.proj_idx)) {
+            c.have_proj = 1;
+            c.sp_transport = osh_material_runtime_sp_lookup(mat, (size_t) st->medium, c.proj_idx, c.e_per_nuc);
+            c.let_default = c.sp_transport * st->rho;
+        }
+    }
+    return c;
+}
+
+/* LET [MeV/cm] a page scores for this step, honouring its Settings override.
+ *
+ * A per-page override changes only the LET value in the DLET/TLET numerator, not
+ * the dose/track weight in the denominator.  Density-only overrides rescale the
+ * transport-medium stopping power (Fano-invariant otherwise). */
+double osh_scoring_estimator_step_let_apply(struct osh_scoring_step_let_ctx const *ctx,
+                                            struct osh_scoring_runtime const *rt,
+                                            struct osh_scoring_page_runtime const *page) {
+    struct osh_scoring_page_override const *sset;
+    double rho_ovr;
+
+    if (!(ctx->have_proj && page->has_sset)) {
+        return ctx->let_default;
+    }
+    sset = &page->sset;
+    if (sset->has_medium && sset->medium >= 0) {
+        if (sset->has_density_g_cm3) {
+            rho_ovr = sset->density_g_cm3;
+        } else {
+            rho_ovr = rt->mat_tables->rho[sset->medium];
+        }
+        return osh_material_runtime_sp_lookup(rt->mat_tables, (size_t) sset->medium, ctx->proj_idx, ctx->e_per_nuc)
+               * rho_ovr;
+    }
+    if (sset->has_density_g_cm3) {
+        return ctx->sp_transport * sset->density_g_cm3;
+    }
+    return ctx->let_default;
 }

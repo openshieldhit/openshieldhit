@@ -15,10 +15,9 @@
 #include "scoring/runtime/osh_scoring_accumulator.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 
-/** Build a raytrace grid + 1/voxel-volume from a Mesh scoring geometry. */
-enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo,
-                                      struct osh_raytrace_grid *grid,
-                                      double *voxel_volume_inv_out);
+/** Build a raytrace grid from a Mesh scoring geometry.  Per-bin volume is applied
+ * separately in postprocess (geo->bin_vol_inv), not returned here. */
+enum osh_status mesh_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo, struct osh_raytrace_grid *grid);
 
 /**
  * Map a transport step's zone id to the dense Zone-scorer bin index.  Linear scan
@@ -30,8 +29,8 @@ int zone_bin_index(struct osh_scoring_geometry_runtime const *geo, int zone, siz
 /**
  * Build a raytrace grid from a Cyl (R,Z) scoring geometry.  Field convention:
  * origin/spacing/n[0] = r_min/dr/nr; origin/spacing/n[2] = z_min/dz/nz; index [1]
- * is unused (n[1] = 1).  Per-voxel 1/V is geo->cyl_vol_inv[r_bin] with
- * r_bin = flat_idx % nr and flat_idx = z_bin * nr + r_bin.
+ * is unused (n[1] = 1).  Flat bin index is z_bin * nr + r_bin; per-bin 1/V is
+ * geo->bin_vol_inv (built at compile), applied in postprocess, not here.
  */
 enum osh_status cyl_geometry_to_grid(struct osh_scoring_geometry_runtime const *geo, struct osh_raytrace_grid *grid);
 

@@ -105,8 +105,8 @@ enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
 /**
  * @brief Accumulate dose [MeV/g] into the DOSE scorer pages.
  *
- * @c vol_inv is read per-crossing from @c crossings[j].vol_inv (pre-filled by
- * the caller: uniform scalar for Mesh; per-R-bin LUT for Cyl).
+ * Deposits the extensive quantity path_len * de/(score_len*rho); the per-bin
+ * volume division is applied once in postprocess (geo->bin_vol_inv), not here.
  *
  * When @c mat_tables is available and a Settings block specifies a medium,
  * applies a stopping-power ratio correction S(ovr,E)/S(tr,E) for
@@ -195,46 +195,20 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
                                 double score_len) {
     size_t i;
     size_t j;
-    double sp_transport;     /* Stopping power in the transport medium */
-    double let_default;      /* Default LET value */
-    double let_step;         /* LET value for the current step */
-    double mean_energy;      /* Mean energy of the particle */
-    double e_per_nuc;        /* Energy per nucleon */
-    double rho_ovr;          /* density used for the per-page LET override */
-    double dose_weight;      /* Dose weight for the current step */
-    double dlet_numerator;   /* Numerator for the dose-averaged LET */
-    double dlet_denominator; /* Denominator for the dose-averaged LET */
-    size_t proj_idx;
-    int have_proj;
+    double let_step;         /* LET this page scores for the step [MeV/cm] */
+    double dose_weight;      /* energy-deposition weight for the crossed bin [MeV] */
+    double dlet_numerator;   /* LET * dose_weight, booked into acc->data */
+    double dlet_denominator; /* dose_weight, booked into acc->data2 */
+    struct osh_scoring_step_let_ctx let_ctx;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
-    struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
-    struct osh_material_runtime const *mat_tables;
-
-    mat_tables = rt->mat_tables;
-    e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table data is available */
 
     if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
         return OSH_OK;
     }
-
-    /* Determine the LET value carried by this transport step.  The default is
-     * table-based LET in the transport medium when tables are available.  If the
-     * transport material data are missing, use de/score_len as a geometric
-     * fallback so old no-table workflows still score a sensible LET. */
-    have_proj = 0;
-    proj_idx = 0;
-    sp_transport = 0.0;
-    let_default = st->de / score_len; /* geometric fallback */
-    if (mat_tables && st->medium >= 0) {
-        mean_energy = 0.5 * (st->p[3] + st->q[3]);
-        e_per_nuc = mean_energy / (double) part->a;
-        if (osh_scoring_estimator_find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx)) {
-            have_proj = 1;
-            sp_transport = osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc);
-            let_default = sp_transport * st->rho;
-        }
-    }
+    /* LET default (transport medium, table-based; de/score_len fallback) is a
+     * per-step quantity; the per-page Settings override is applied inside the loop. */
+    let_ctx = osh_scoring_estimator_step_let_gather(rt, part, st, score_len);
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
@@ -242,33 +216,17 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
-        /* Each page can override the scoring medium or density through Settings.
-         * That changes the LET value in the numerator, but not the dose weight:
-         * DLET is still weighted by where this step deposited energy. */
-        let_step = let_default;
-        if (have_proj && page->has_sset) {
-            sset = &page->sset;
-            if (sset->has_medium && sset->medium >= 0) {
-                rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
-                let_step =
-                    osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
-            } else if (sset->has_density_g_cm3) {
-                let_step = sp_transport * sset->density_g_cm3;
-            }
-        }
+        /* A per-page Settings override changes the LET value in the numerator, not
+         * the dose weight: DLET is still weighted by where energy was deposited. */
+        let_step = osh_scoring_estimator_step_let_apply(&let_ctx, rt, page);
         /* DLET stores a dose-weighted average in two explicit accumulators.
          *
-         * dose_weight is the energy-deposition share assigned to this crossed
-         * spatial bin: st->de * crossing.path_len / score_len [MeV].
-         *
-         * Numerator:
          *   acc->data[crossing.idx]  += LET [MeV/cm] * dose_weight [MeV]
-         *
-         * Denominator:
          *   acc->data2[crossing.idx] += dose_weight [MeV]
          *
-         * Differential axes are not valid for DLET pages, so crossing.idx is the
-         * complete bin index here; no flat diff-bin offset is needed. */
+         * dose_weight is the energy-deposition share assigned to this crossed bin,
+         * st->de * crossing.path_len / score_len.  Differential axes are not valid
+         * for DLET pages, so crossing.idx is the complete bin index. */
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;
@@ -305,45 +263,20 @@ enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
                                 double score_len) {
     size_t i;
     size_t j;
-    double sp_transport;
-    double let_default;
-    double let_step;
-    double mean_energy;
-    double e_per_nuc;
-    double rho_ovr; /* density used for the per-page LET override */
-    double track_weight;
-    double tlet_numerator;
-    double tlet_denominator;
-    size_t proj_idx;
-    int have_proj;
+    double let_step;         /* LET this page scores for the step [MeV/cm] */
+    double track_weight;     /* track-length weight for the crossed bin [cm] */
+    double tlet_numerator;   /* LET * track_weight, booked into acc->data */
+    double tlet_denominator; /* track_weight, booked into acc->data2 */
+    struct osh_scoring_step_let_ctx let_ctx;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
-    struct osh_scoring_page_override const *sset; /* per-page settings override pointer */
-    struct osh_material_runtime const *mat_tables;
-
-    mat_tables = rt->mat_tables;
-    e_per_nuc = 0.0; /* initialized to satisfy MSVC C4701; overwritten when table data is available */
 
     if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
         return OSH_OK;
     }
-
-    /* Determine the LET value carried by this transport step, using the same
-     * transport-medium default as DLET.  TLET differs only in the denominator:
-     * it weights by track length rather than energy deposition. */
-    have_proj = 0;
-    proj_idx = 0;
-    sp_transport = 0.0;
-    let_default = st->de / score_len;
-    if (mat_tables && st->medium >= 0) {
-        mean_energy = 0.5 * (st->p[3] + st->q[3]);
-        e_per_nuc = mean_energy / (double) part->a;
-        if (osh_scoring_estimator_find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx)) {
-            have_proj = 1;
-            sp_transport = osh_material_runtime_sp_lookup(mat_tables, (size_t) st->medium, proj_idx, e_per_nuc);
-            let_default = sp_transport * st->rho;
-        }
-    }
+    /* Same transport-medium LET default as DLET; TLET differs only in weighting by
+     * track length rather than energy deposition. */
+    let_ctx = osh_scoring_estimator_step_let_gather(rt, part, st, score_len);
 
     for (i = 0; i < group->npages; ++i) {
         page = &rt->pages[group->first_page + i];
@@ -351,34 +284,17 @@ enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
         if (!osh_scoring_page_passes_filters(page, part, st)) {
             continue;
         }
-        /* Settings can change which medium/density defines the scored LET.
-         * The track-weight denominator remains geometric and independent of
-         * those material overrides. */
-        let_step = let_default;
-        if (have_proj && page->has_sset) {
-            sset = &page->sset;
-            if (sset->has_medium && sset->medium >= 0) {
-                rho_ovr = sset->has_density_g_cm3 ? sset->density_g_cm3 : mat_tables->rho[sset->medium];
-                let_step =
-                    osh_material_runtime_sp_lookup(mat_tables, (size_t) sset->medium, proj_idx, e_per_nuc) * rho_ovr;
-            } else if (sset->has_density_g_cm3) {
-                let_step = sp_transport * sset->density_g_cm3;
-            }
-        }
-        /* TLET stores a track-length-weighted average in two explicit
-         * accumulators.
+        /* Settings can change which medium/density defines the scored LET; the
+         * track-weight denominator stays geometric and override-independent. */
+        let_step = osh_scoring_estimator_step_let_apply(&let_ctx, rt, page);
+        /* TLET stores a track-length-weighted average in two explicit accumulators.
          *
-         * track_weight is the physical step length assigned to this crossed
-         * spatial bin: st->ds * crossing.path_len / score_len [cm].
-         *
-         * Numerator:
          *   acc->data[crossing.idx]  += LET [MeV/cm] * track_weight [cm]
-         *
-         * Denominator:
          *   acc->data2[crossing.idx] += track_weight [cm]
          *
-         * Differential axes are not valid for TLET pages, so crossing.idx is the
-         * complete bin index here; no flat diff-bin offset is needed. */
+         * track_weight is the physical step length assigned to this crossed bin,
+         * st->ds * crossing.path_len / score_len.  Differential axes are not valid
+         * for TLET pages, so crossing.idx is the complete bin index. */
         for (j = 0; j < ncross; ++j) {
             if (crossings[j].idx >= page->diff_stride) {
                 return OSH_ESTATE;

@@ -75,12 +75,9 @@ struct osh_scoring_geometry_runtime {
     size_t ngroups;                                  /* Number of score-kind groups. */
     enum osh_scoring_geo_kind geo_kind;              /* Resolved geometry kind enum. */
     size_t *zone_indices;                            /* Internal GEMCA zone indices, one per Zone bin (owned). */
-    double *zone_vol_inv;                            /* Zone geometry only: 1/volume [1/cm3], length nzone_indices. */
     size_t nzone_indices;                            /* Number of explicit Zone bins. */
     char has_rotation;                               /* Non-zero when t[] is valid and axes are in local frame. */
     char *rtdose_template_path; /* Non-NULL when FileFormat RTDOSE; owned; path to RTDOSE template. */
-    double *cyl_vol_inv;        /* [cyl_nr] 1/V per R-bin, precomputed at compile; NULL for non-CYL */
-    size_t cyl_nr;              /* R bin count (nr); 0 for non-CYL */
     double *bin_vol_inv;        /* [nbins] 1/volume per spatial bin, precomputed at compile. The single
                                    geometry-agnostic volume source for volume-normalised estimators; applied
                                    in postprocess (not at score time). Uniform for Mesh, per-R for Cyl,
