@@ -232,16 +232,21 @@ enum osh_gemca_zone_batch_dispatch {
  *
  * @note GPU migration: surfaces[], bodies[], and zones[] are plain contiguous
  * buffers suitable for device-memory copies as-is.  The only host-specific
- * field is zones[j].insns (a heap pointer).  See runtime/README.md for the
- * planned `insns_flat` / `insn_begin` addition that closes this gap.
+ * field is zones[j].insns (a heap pointer).  The @ref insns_flat /
+ * @ref insn_begin pair below is the additive fix — populated by setup_zones,
+ * used by the GPU kernel, ignored by the CPU path which keeps dereferencing
+ * zones[j].insns.
  */
 struct osh_gemca_runtime {
     struct osh_gemca_prepared const *workspace; /**< Cold storage reference — not owned. */
     struct gemca_rt_surface *surfaces;          /**< Flat surface array (owned). */
     struct gemca_rt_body *bodies;               /**< Flat body array (owned). */
     struct gemca_rt_zone *zones;                /**< Flat zone array; each zone owns its insns[]. */
+    struct gemca_rt_insn *insns_flat;           /**< GPU-portable flat instruction store: all zones' insns concatenated. Owned. */
+    int *insn_begin;                            /**< Per-zone offset into insns_flat (length nzones+1); insn_begin[nzones] == ninsns_flat. */
     uint8_t *hu_bin_lut;       /**< HU→bin index, 2601 entries indexed by hu+1000; NULL for non-VOX runs; owned. */
     size_t hu_material_offset; /**< Added to hu_bin_lut entries to get actual material runtime index. */
+    size_t ninsns_flat;        /**< Total entries in insns_flat; equals insn_begin[nzones]. */
     size_t nsurfaces;          /**< Number of entries in surfaces[]. */
     size_t nbodies;            /**< Number of entries in bodies[]. */
     size_t nzones;             /**< Number of entries in zones[]. */

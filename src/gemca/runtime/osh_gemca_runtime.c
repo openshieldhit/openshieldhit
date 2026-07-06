@@ -239,6 +239,12 @@ void osh_gemca_runtime_free(struct osh_gemca_runtime *rt) {
         rt->zones = NULL;
     }
 
+    free(rt->insns_flat);
+    rt->insns_flat = NULL;
+
+    free(rt->insn_begin);
+    rt->insn_begin = NULL;
+
     free(rt->bodies);
     rt->bodies = NULL;
 
@@ -248,6 +254,7 @@ void osh_gemca_runtime_free(struct osh_gemca_runtime *rt) {
     free(rt->hu_bin_lut);
     rt->hu_bin_lut = NULL;
 
+    rt->ninsns_flat = 0u;
     rt->nsurfaces = 0;
     rt->nbodies = 0;
     rt->nzones = 0;
@@ -1320,6 +1327,13 @@ static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct 
  * the RPN instruction sequence.  Zone material indices are copied directly from
  * the cold zone struct (they must be resolved before this function is called).
  *
+ * After per-zone compilation, also populates the GPU-portable flat instruction
+ * store (@ref osh_gemca_runtime.insns_flat + @ref osh_gemca_runtime.insn_begin)
+ * by concatenating every zone's compiled insns[] into a single buffer and
+ * recording the start offset of each zone.  The CPU path is unaffected: it
+ * keeps dereferencing zones[j].insns.  This is the only structural change
+ * prescribed by the GPU migration plan in runtime/README.md.
+ *
  * @param[in]  wg  Cold workspace.
  * @param[out] rt  Runtime (rt->surfaces and rt->bodies must be populated).
  *
@@ -1328,6 +1342,8 @@ static enum osh_status setup_bodies(struct osh_gemca_prepared const *wg, struct 
 static enum osh_status
 setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *diag, struct osh_gemca_runtime *rt) {
     size_t iz;
+    int total_insns;
+    int offset;
     enum osh_status rc;
 
     rt->zones = (struct gemca_rt_zone *) calloc(wg->nzones, sizeof(struct gemca_rt_zone));
@@ -1342,6 +1358,41 @@ setup_zones(struct osh_gemca_prepared const *wg, struct osh_diag_sink const *dia
             return rc;
         }
     }
+
+    /* GPU-portable flat instruction store: concatenate every zone's compiled
+     * insns[] into a single buffer so a GPU kernel can stream them with a
+     * single base pointer + per-zone offsets, never chasing a host heap
+     * pointer.  insn_begin has nzones+1 entries; the trailing entry equals
+     * the total instruction count and serves as the exclusive end of the last
+     * zone.  The CPU path ignores these fields and continues to use
+     * zones[j].insns, so its behaviour is byte-identical. */
+    total_insns = 0;
+    for (iz = 0; iz < rt->nzones; iz++) {
+        total_insns += rt->zones[iz].ninsns;
+    }
+
+    rt->insns_flat = (struct gemca_rt_insn *) malloc((size_t) total_insns * sizeof(struct gemca_rt_insn));
+    if (!rt->insns_flat) {
+        return OSH_ENOMEM;
+    }
+
+    rt->insn_begin = (int *) malloc((rt->nzones + 1u) * sizeof(int));
+    if (!rt->insn_begin) {
+        return OSH_ENOMEM;
+    }
+
+    offset = 0;
+    for (iz = 0; iz < rt->nzones; iz++) {
+        rt->insn_begin[iz] = offset;
+        if (rt->zones[iz].ninsns > 0) {
+            memcpy(&rt->insns_flat[offset],
+                   rt->zones[iz].insns,
+                   (size_t) rt->zones[iz].ninsns * sizeof(struct gemca_rt_insn));
+        }
+        offset += rt->zones[iz].ninsns;
+    }
+    rt->insn_begin[rt->nzones] = offset;
+    rt->ninsns_flat = (size_t) total_insns;
 
     return OSH_OK;
 }
