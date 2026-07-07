@@ -13,11 +13,13 @@ extern "C" {
  * @brief Apply postprocessing to accumulated scoring page data, in place.
  *
  * @details
- * A separate cold-path phase between raw accumulation and save.  For DOSEGY it
- * rescales MeV/g -> Gy; for the LET/Qeff two-pass averages it finalises
- * data/data2; all other kinds are a no-op.  Implemented as the @p dst == @p src
- * case of @ref osh_scoring_postprocess_into, so its (destructive) behaviour is
- * identical to before.
+ * A separate cold-path phase between raw accumulation and save.  For DOSE,
+ * FLUENCE, and NKERMA it applies the per-bin volume normalisation; for DOSEGY it
+ * applies the same volume normalisation and then rescales MeV/g -> Gy; for the
+ * LET/Qeff two-pass averages it finalises data/data2.  Score kinds without a
+ * postprocess handler are already in final form.  Implemented as the @p dst ==
+ * @p src case of @ref osh_scoring_postprocess_into, so its (destructive)
+ * behaviour is identical to before.
  *
  * @note Single-shot: the transform is destructive and not idempotent, so a
  * second in-place call would double-divide by volume / re-ratio data÷data2.
@@ -35,12 +37,14 @@ enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
  *
  * @details
  * Computes the presentation form of every page of @p src into the matching page
- * of @p dst, **never mutating @p src**.  Only @c acc.data is ever written (DOSEGY
- * rescale, LET/Qeff average); for the LET/Qeff kinds the @c has_data2 / @c divide
- * flags are cleared on the @p dst page only.  Simple scorers are a no-op: when a
+ * of @p dst, **never mutating @p src**.  Only @c acc.data is ever written
+ * (volume normalisation, DOSEGY rescale, LET/Qeff average); for the LET/Qeff
+ * kinds the @c has_data2 / @c divide flags are cleared on the @p dst page only.
+ * Score kinds without a postprocess handler are mirrored as raw data: when a
  * @p dst page aliases its @p src page's @c data (the shadow's non-transformed
- * pages, or the in-place @p dst == @p src wrapper) nothing is copied; when it owns
- * a distinct buffer the raw values are mirrored so the saved view is complete.
+ * pages, or the in-place @p dst == @p src wrapper) nothing is copied; when it
+ * owns a distinct buffer the raw values are mirrored so the saved view is
+ * complete.
  *
  * @p dst and @p src must have the same @c npages, and matching pages the same
  * @c acc.len.  With a **distinct** @p dst this is the non-destructive primitive a
@@ -59,10 +63,10 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
  * @brief True for score kinds whose postprocess writes @c acc.data.
  *
  * @details
- * DOSEGY (rescale) and the LET/Qeff averages (data/data2) are the only kinds
- * that mutate @c data; every other kind is a no-op.  A non-destructive snapshot
- * therefore needs a private @c data buffer only for these pages — the single
- * source of truth shared by the shadow and the memory estimate.
+ * DOSE, FLUENCE, and NKERMA need volume normalisation; DOSEGY also rescales
+ * MeV/g -> Gy; LET/Qeff averages finalise data/data2.  A non-destructive
+ * snapshot therefore needs a private @c data buffer only for these pages — the
+ * single source of truth shared by the shadow and the memory estimate.
  */
 int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind);
 
