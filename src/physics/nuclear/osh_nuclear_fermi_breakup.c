@@ -191,6 +191,9 @@ static void append_unprocessed_fragment(struct fbu_work_item const *node, struct
     f->p[2] = node->p[2];
     f->z = node->z;
     f->a = node->a;
+    /* Break-up residues are equilibrium products: no exciton configuration. */
+    f->excitons_p = 0u;
+    f->excitons_h = 0u;
     event_out->n_fragments += 1u;
 }
 

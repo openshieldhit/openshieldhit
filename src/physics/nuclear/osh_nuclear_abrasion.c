@@ -1,6 +1,6 @@
 #include "physics/nuclear/osh_nuclear_abrasion.h"
 
-#include <math.h> /* sqrt, exp */
+#include <math.h> /* sqrt, exp, cbrt */
 
 #include "openshieldhit/const.h"
 #include "particle/osh_particle.h"
@@ -13,6 +13,28 @@
 /* Compile-time constants; values match osh_particle_from_pdg for these PDG codes. */
 static struct particle const s_proton = {OSH_PART_MASS_PROTON, OSH_PART_PDG_PROTON, 1, 1u, 1u, 0u};
 static struct particle const s_neutron = {OSH_PART_MASS_NEUTRON, OSH_PART_PDG_NEUTRON, 0, 0u, 1u, 0u};
+
+/**
+ * Retention probability for a knocked-out nucleon of lab kinetic energy
+ * e_mev (issue #263): a smooth Fermi-function turn-on below the threshold —
+ * the lean analog of INCL4.6's "back to spectator" re-absorption.  The
+ * threshold for protons includes a Coulomb-barrier term supplied by the
+ * caller; width 0 degrades gracefully to a hard step.
+ */
+static double retention_probability(double e_mev, double e_thr_mev) {
+    double const w = OSH_ABRASION_RETENTION_WIDTH_MEV;
+
+    if (e_thr_mev <= 0.0) {
+        return 0.0;
+    }
+    if (w <= 0.0) {
+        if (e_mev <= e_thr_mev) {
+            return 1.0;
+        }
+        return 0.0;
+    }
+    return 1.0 / (1.0 + exp((e_mev - e_thr_mev) / w));
+}
 
 /**
  * Zero-truncated Poisson sample (nu >= 1) by CDF inversion.
@@ -65,13 +87,17 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     double cos_sec; /* deflection cos of the knocked-out nucleon */
     double e_sec;   /* lab KE of the knocked-out nucleon [MeV] */
     double sin_sec;
-    double p_in;      /* incident lab momentum magnitude [MeV/c] */
-    double p_sec;     /* emitted nucleon lab momentum magnitude [MeV/c] */
-    double w_curr[3]; /* current cascade-proton direction (composed per collision) */
-    double e_star;    /* prefragment excitation energy accumulated from hole charges [MeV] */
+    double p_in;        /* incident lab momentum magnitude [MeV/c] */
+    double p_sec;       /* emitted nucleon lab momentum magnitude [MeV/c] */
+    double w_curr[3];   /* current cascade-proton direction (composed per collision) */
+    double e_star;      /* prefragment excitation energy: hole charges + retained KE [MeV] */
+    double coulomb_mev; /* ~2/3 of the residue Coulomb barrier, added to the proton retention threshold */
+    double e_thr;       /* retention threshold for the current knockout species [MeV] */
     int is_neutron;
     int n_knockout_p;
     int n_knockout_n;
+    unsigned int n_excitons_p;
+    unsigned int n_excitons_h;
     int nu; /* sampled number of participant nucleons */
     int j;
     size_t s;
@@ -98,6 +124,8 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     event_out->fragments[0].a = (unsigned int) floor(a_eff + 0.5);
     event_out->fragments[0].z = (unsigned int) floor(z_eff + 0.5);
     event_out->fragments[0].excitation_energy = 0.0;
+    event_out->fragments[0].excitons_p = 0u;
+    event_out->fragments[0].excitons_h = 0u;
     p_in = sqrt(T_lab_mev * (T_lab_mev + 2.0 * OSH_PART_MASS_PROTON));
     event_out->fragments[0].p[0] = p_in * incident_dir[0];
     event_out->fragments[0].p[1] = p_in * incident_dir[1];
@@ -136,15 +164,25 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
      * proton (directions composed collision by collision).  Each abraded
      * nucleon leaves a hole; its excitation cost
      * (OSH_ABRASION_EXCITATION_PER_HOLE_MEV) is charged to the cascade proton
-     * and booked as prefragment excitation energy, so the event conserves
-     * kinetic energy exactly:  T_in = sum(KE_knockout) + KE_cascade + E*. */
+     * and booked as prefragment excitation energy.  A knockout near or below
+     * the retention threshold is re-absorbed (issue #263): its kinetic energy
+     * funds E* and it becomes a particle exciton.  The event conserves
+     * kinetic energy exactly:  T_in = sum(KE_escaped) + E*. */
     T_current = T_lab_mev;
     e_star = 0.0;
     n_knockout_p = 0;
     n_knockout_n = 0;
+    n_excitons_p = 0u;
+    n_excitons_h = 0u;
     w_curr[0] = incident_dir[0];
     w_curr[1] = incident_dir[1];
     w_curr[2] = incident_dir[2];
+
+    /* Proton retention threshold includes ~2/3 of the residue Coulomb barrier
+     * (INCL4.6 recipe); V_C = e^2 Z / (r0 A^(1/3)), evaluated once for the
+     * initial target — the per-event change of the residue is beyond this
+     * model's accuracy. */
+    coulomb_mev = (2.0 / 3.0) * OSH_E2_MEV_FM * z_eff / (OSH_ABRASION_COULOMB_R0_FM * cbrt(a_eff));
 
     for (j = 0; j < nu; ++j) {
         /* Stop if the remaining proton energy is too low for meaningful
@@ -156,11 +194,10 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
 
         /* Nucleon type: neutron with prob N/A, proton with prob Z/A. */
         is_neutron = (osh_rng_double(rng) < n_over_a);
-        species = is_neutron ? &s_neutron : &s_proton;
         if (is_neutron) {
-            ++n_knockout_n;
+            species = &s_neutron;
         } else {
-            ++n_knockout_p;
+            species = &s_proton;
         }
 
         /* Isotropic CM scattering — simplest physical model.
@@ -174,21 +211,44 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         osh_kinematics_elastic_equal_mass_lab(
             T_current, OSH_PART_MASS_PROTON, cos_cm, &cos_prim, &e_prim, &cos_sec, &e_sec);
 
-        /* Rotate the knocked-out nucleon from the current cascade direction.
-         * Convention matches pp elastic: the recoil uses the opposite azimuth
-         * (-cos_phi, -sin_phi) so that momentum is conserved transversely. */
-        sin_sec = sqrt(fmax(0.0, 1.0 - (cos_sec * cos_sec)));
-        osh_kinematics_rotate_dir_cos(w_curr, event_out->secondaries[j].dir, cos_sec, sin_sec, -cos_phi, -sin_phi);
+        /* Every collision vacates one orbital: a hole exciton. */
+        ++n_excitons_h;
 
-        event_out->secondaries[j].energy = e_sec;
-        event_out->secondaries[j].species = species;
-        event_out->n_secondaries = (size_t) j + 1u;
+        e_thr = OSH_ABRASION_RETENTION_THRESHOLD_MEV;
+        if (!is_neutron) {
+            e_thr += coulomb_mev;
+        }
+        if (osh_rng_double(rng) < retention_probability(e_sec, e_thr)) {
+            /* Retained: the struck nucleon stays in the residue as a particle
+             * exciton; its kinetic energy funds the excitation.  A/Z and the
+             * fragment momentum are left untouched. */
+            e_star += e_sec;
+            ++n_excitons_p;
+        } else {
+            if (is_neutron) {
+                ++n_knockout_n;
+            } else {
+                ++n_knockout_p;
+            }
 
-        /* Momentum balance: subtract the emitted nucleon from the fragment. */
-        p_sec = sqrt(e_sec * (e_sec + 2.0 * OSH_PART_MASS_PROTON));
-        event_out->fragments[0].p[0] -= p_sec * event_out->secondaries[j].dir[0];
-        event_out->fragments[0].p[1] -= p_sec * event_out->secondaries[j].dir[1];
-        event_out->fragments[0].p[2] -= p_sec * event_out->secondaries[j].dir[2];
+            /* Rotate the knocked-out nucleon from the current cascade
+             * direction.  Convention matches pp elastic: the recoil uses the
+             * opposite azimuth (-cos_phi, -sin_phi) so that momentum is
+             * conserved transversely. */
+            s = event_out->n_secondaries;
+            sin_sec = sqrt(fmax(0.0, 1.0 - (cos_sec * cos_sec)));
+            osh_kinematics_rotate_dir_cos(w_curr, event_out->secondaries[s].dir, cos_sec, sin_sec, -cos_phi, -sin_phi);
+
+            event_out->secondaries[s].energy = e_sec;
+            event_out->secondaries[s].species = species;
+            event_out->n_secondaries = s + 1u;
+
+            /* Momentum balance: subtract the emitted nucleon from the fragment. */
+            p_sec = sqrt(e_sec * (e_sec + 2.0 * OSH_PART_MASS_PROTON));
+            event_out->fragments[0].p[0] -= p_sec * event_out->secondaries[s].dir[0];
+            event_out->fragments[0].p[1] -= p_sec * event_out->secondaries[s].dir[1];
+            event_out->fragments[0].p[2] -= p_sec * event_out->secondaries[s].dir[2];
+        }
 
         /* Deflect the continuing cascade proton. */
         sin_prim = sqrt(fmax(0.0, 1.0 - (cos_prim * cos_prim)));
@@ -223,7 +283,11 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         event_out->fragments[0].p[1] -= p_sec * w_curr[1];
         event_out->fragments[0].p[2] -= p_sec * w_curr[2];
     } else {
+        /* Absorbed cascade proton: its remaining energy funds the excitation
+         * and it joins the residue as a particle exciton (it entered from
+         * outside, so no hole is associated with it). */
         e_star += T_current;
+        ++n_excitons_p;
     }
 
     if (event_out->n_fragments > 0u) {
@@ -241,5 +305,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
 
     if (event_out->n_fragments > 0u) {
         event_out->fragments[0].excitation_energy = e_star;
+        event_out->fragments[0].excitons_p = n_excitons_p;
+        event_out->fragments[0].excitons_h = n_excitons_h;
     }
 }
