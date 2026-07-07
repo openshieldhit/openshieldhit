@@ -344,6 +344,24 @@ is bounded per wall-hour independent of how fast the machine is, whereas a count
 cadence (`NSTAT` step) fires more often the faster the run goes. The
 `--dump-every` command-line flag overrides this card.
 
+### MAXTIME
+
+```
+MAXTIME  <duration>
+```
+
+Run for at most a fixed wall-clock time, then stop cleanly and save the partial
+result. The duration takes an optional unit suffix — `s` (seconds, the default),
+`m` (minutes), or `h` (hours) — e.g. `MAXTIME 30m`. `0` (the default) means
+unlimited.
+
+When a clean stop fires, transport stops *injecting* new primaries but lets
+every in-flight history finish and drains all the secondary families they
+spawned. The saved result is therefore **family-exact** for exactly the
+primaries that completed. See
+[the command-line reference](command-line.md#stopping-a-run-early) for the full
+semantics. The `--max-time` command-line flag overrides this card.
+
 ### RNDSEED
 
 ```
