@@ -14,6 +14,10 @@ _temp*/
 NB*
 *.bdo
 *.log
+
+# Curated CTest reference outputs live under tests/cases/*/expected/ and ARE
+# tracked, even when they share the NB*/*.bdo names of the (ignored) run outputs.
+!tests/cases/*/expected/*
 build-*/
 build_*/
 perf.data*

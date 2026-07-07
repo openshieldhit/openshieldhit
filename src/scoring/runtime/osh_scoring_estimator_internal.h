@@ -16,81 +16,81 @@
 #include "scoring/runtime/osh_scoring_accumulator.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
 
-enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
-                                  struct osh_scoring_accumulator *acc_set,
-                                  struct osh_scoring_geometry_score_group const *group,
-                                  struct osh_voxel_crossing const *crossings,
-                                  size_t ncross,
-                                  struct particle const *part,
-                                  struct step const *st,
-                                  double score_len);
+enum osh_status osh_scoring_estimator_step_energy(struct osh_scoring_runtime const *rt,
+                                                  struct osh_scoring_accumulator *acc_set,
+                                                  struct osh_scoring_geometry_score_group const *group,
+                                                  struct osh_voxel_crossing const *crossings,
+                                                  size_t ncross,
+                                                  struct particle const *part,
+                                                  struct step const *st,
+                                                  double score_len);
 
-enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
-                                   struct osh_scoring_accumulator *acc_set,
-                                   struct osh_scoring_geometry_score_group const *group,
-                                   struct osh_voxel_crossing const *crossings,
-                                   size_t ncross,
-                                   struct particle const *part,
-                                   struct step const *st,
-                                   double score_len);
+enum osh_status osh_scoring_estimator_step_fluence(struct osh_scoring_runtime const *rt,
+                                                   struct osh_scoring_accumulator *acc_set,
+                                                   struct osh_scoring_geometry_score_group const *group,
+                                                   struct osh_voxel_crossing const *crossings,
+                                                   size_t ncross,
+                                                   struct particle const *part,
+                                                   struct step const *st,
+                                                   double score_len);
 
-enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
-                                struct osh_scoring_accumulator *acc_set,
-                                struct osh_scoring_geometry_score_group const *group,
-                                struct osh_voxel_crossing const *crossings,
-                                size_t ncross,
-                                struct particle const *part,
-                                struct step const *st,
-                                double score_len);
+enum osh_status osh_scoring_estimator_step_dose(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len);
 
-enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
-                                struct osh_scoring_accumulator *acc_set,
-                                struct osh_scoring_geometry_score_group const *group,
-                                struct osh_voxel_crossing const *crossings,
-                                size_t ncross,
-                                struct particle const *part,
-                                struct step const *st,
-                                double score_len);
+enum osh_status osh_scoring_estimator_step_dlet(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len);
 
-enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
-                                struct osh_scoring_accumulator *acc_set,
-                                struct osh_scoring_geometry_score_group const *group,
-                                struct osh_voxel_crossing const *crossings,
-                                size_t ncross,
-                                struct particle const *part,
-                                struct step const *st,
-                                double score_len);
+enum osh_status osh_scoring_estimator_step_tlet(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len);
 
-enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
-                                 struct osh_scoring_accumulator *acc_set,
-                                 struct osh_scoring_geometry_score_group const *group,
-                                 struct osh_voxel_crossing const *crossings,
-                                 size_t ncross,
-                                 struct particle const *part,
-                                 struct step const *st,
-                                 double score_len);
+enum osh_status osh_scoring_estimator_step_dqeff(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len);
 
-enum osh_status score_step_tqeff(struct osh_scoring_runtime const *rt,
-                                 struct osh_scoring_accumulator *acc_set,
-                                 struct osh_scoring_geometry_score_group const *group,
-                                 struct osh_voxel_crossing const *crossings,
-                                 size_t ncross,
-                                 struct particle const *part,
-                                 struct step const *st,
-                                 double score_len);
+enum osh_status osh_scoring_estimator_step_tqeff(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len);
 
-enum osh_status score_point_energy(struct osh_scoring_runtime const *rt,
-                                   struct osh_scoring_accumulator *acc_set,
-                                   struct osh_scoring_geometry_score_group const *group,
-                                   size_t spatial_idx,
-                                   struct particle const *part,
-                                   struct step const *st);
+enum osh_status osh_scoring_estimator_point_energy(struct osh_scoring_runtime const *rt,
+                                                   struct osh_scoring_accumulator *acc_set,
+                                                   struct osh_scoring_geometry_score_group const *group,
+                                                   size_t spatial_idx,
+                                                   struct particle const *part,
+                                                   struct step const *st);
 
-enum osh_status score_point_dose(struct osh_scoring_runtime const *rt,
-                                 struct osh_scoring_accumulator *acc_set,
-                                 struct osh_scoring_geometry_score_group const *group,
-                                 size_t spatial_idx,
-                                 struct particle const *part,
-                                 struct step const *st);
+enum osh_status osh_scoring_estimator_point_dose(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 size_t spatial_idx,
+                                                 struct particle const *part,
+                                                 struct step const *st);
 
 #endif /* OSH_SCORING_ESTIMATOR_INTERNAL_H */

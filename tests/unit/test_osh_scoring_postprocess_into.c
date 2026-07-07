@@ -131,6 +131,78 @@ static void test_inplace_simple_noop(void) {
     osh_scoring_accumulator_free(&page.acc);
 }
 
+/* ---- In-place wrapper: single-shot guard --------------------------------- */
+
+static void test_inplace_single_shot_guard(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+    size_t i;
+
+    make_page(&page, OSH_SCORING_SCORE_DOSEGY, 3u, 0);
+    page.acc.data[0] = 1.0;
+    page.acc.data[1] = 2.0;
+    page.acc.data[2] = 3.0;
+    make_runtime(&rt, &page, 1u);
+
+    /* First call finalises in place. */
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_OK);
+    for (i = 0; i < 3u; ++i) {
+        ASSERT_TRUE(page.acc.data[i] == (double) (i + 1) * OSH_MEVG2GY);
+    }
+
+    /* A second in-place call is refused (would double-apply the MeV/g->Gy
+     * rescale); the buffers stay at their once-finalised values. */
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_ESTATE);
+    for (i = 0; i < 3u; ++i) {
+        ASSERT_TRUE(page.acc.data[i] == (double) (i + 1) * OSH_MEVG2GY);
+    }
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
+/* ---- Direct in-place _into(rt, rt): same single-shot guard as the wrapper -- */
+
+static void test_into_inplace_single_shot_guard(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+    size_t i;
+
+    make_page(&page, OSH_SCORING_SCORE_DOSEGY, 3u, 0);
+    page.acc.data[0] = 1.0;
+    page.acc.data[1] = 2.0;
+    page.acc.data[2] = 3.0;
+    make_runtime(&rt, &page, 1u);
+
+    /* Calling the primitive in place (dst == src) must be guarded exactly like the
+     * osh_scoring_postprocess() wrapper: the first call finalises, the second is
+     * refused with OSH_ESTATE rather than double-applying the MeV/g->Gy rescale. */
+    ASSERT_TRUE(osh_scoring_postprocess_into(&rt, &rt) == OSH_OK);
+    for (i = 0; i < 3u; ++i) {
+        ASSERT_TRUE(page.acc.data[i] == (double) (i + 1) * OSH_MEVG2GY);
+    }
+    ASSERT_TRUE(rt.postprocessed == 1);
+
+    ASSERT_TRUE(osh_scoring_postprocess_into(&rt, &rt) == OSH_ESTATE);
+    for (i = 0; i < 3u; ++i) {
+        ASSERT_TRUE(page.acc.data[i] == (double) (i + 1) * OSH_MEVG2GY);
+    }
+
+    /* An out-of-place call after an in-place finalisation is still allowed — the
+     * guard is in-place-only, so the shadow/dump path stays repeatable. */
+    {
+        struct osh_scoring_page_runtime dpage;
+        struct osh_scoring_runtime dst;
+
+        make_page(&dpage, OSH_SCORING_SCORE_DOSEGY, 3u, 0);
+        make_runtime(&dst, &dpage, 1u);
+        ASSERT_TRUE(osh_scoring_postprocess_into(&dst, &rt) == OSH_OK);
+        ASSERT_TRUE(dst.postprocessed == 0); /* out-of-place never sets the flag */
+        osh_scoring_accumulator_free(&dpage.acc);
+    }
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
 /* ---- Out-of-place: dst transformed, src untouched ------------------------- */
 
 static void test_into_out_of_place(void) {
@@ -313,6 +385,8 @@ int main(void) {
     test_inplace_dosegy();
     test_inplace_let();
     test_inplace_simple_noop();
+    test_inplace_single_shot_guard();
+    test_into_inplace_single_shot_guard();
     test_into_out_of_place();
     test_into_let_nondestructive();
     test_into_errors();

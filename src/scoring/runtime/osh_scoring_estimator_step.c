@@ -7,14 +7,14 @@
  *
  * Distributes st->de proportionally to path length in each crossed voxel.
  */
-enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
-                                  struct osh_scoring_accumulator *acc_set,
-                                  struct osh_scoring_geometry_score_group const *group,
-                                  struct osh_voxel_crossing const *crossings,
-                                  size_t ncross,
-                                  struct particle const *part,
-                                  struct step const *st,
-                                  double score_len) {
+enum osh_status osh_scoring_estimator_step_energy(struct osh_scoring_runtime const *rt,
+                                                  struct osh_scoring_accumulator *acc_set,
+                                                  struct osh_scoring_geometry_score_group const *group,
+                                                  struct osh_voxel_crossing const *crossings,
+                                                  size_t ncross,
+                                                  struct particle const *part,
+                                                  struct step const *st,
+                                                  double score_len) {
     size_t i;
     size_t j;
     size_t db;           /* Index into the differential bins for the current spatial bin */
@@ -57,14 +57,14 @@ enum osh_status score_step_energy(struct osh_scoring_runtime const *rt,
  * Deposits the track length per crossing; the estimator postprocess divides by
  * the per-bin volume (geo->bin_vol_inv) once, yielding fluence [1/cm2].
  */
-enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
-                                   struct osh_scoring_accumulator *acc_set,
-                                   struct osh_scoring_geometry_score_group const *group,
-                                   struct osh_voxel_crossing const *crossings,
-                                   size_t ncross,
-                                   struct particle const *part,
-                                   struct step const *st,
-                                   double score_len) {
+enum osh_status osh_scoring_estimator_step_fluence(struct osh_scoring_runtime const *rt,
+                                                   struct osh_scoring_accumulator *acc_set,
+                                                   struct osh_scoring_geometry_score_group const *group,
+                                                   struct osh_voxel_crossing const *crossings,
+                                                   size_t ncross,
+                                                   struct particle const *part,
+                                                   struct step const *st,
+                                                   double score_len) {
     size_t i;
     size_t j;
     size_t db;            /* Index into the differential bins for the current spatial bin */
@@ -113,14 +113,14 @@ enum osh_status score_step_fluence(struct osh_scoring_runtime const *rt,
  * dose-to-medium scoring.  Pure density overrides do not change the dose
  * (Fano theorem).
  */
-enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
-                                struct osh_scoring_accumulator *acc_set,
-                                struct osh_scoring_geometry_score_group const *group,
-                                struct osh_voxel_crossing const *crossings,
-                                size_t ncross,
-                                struct particle const *part,
-                                struct step const *st,
-                                double score_len) {
+enum osh_status osh_scoring_estimator_step_dose(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len) {
     size_t i;
     size_t j;
     size_t db;        /* Index into the differential bins for the current spatial bin */
@@ -185,14 +185,14 @@ enum osh_status score_step_dose(struct osh_scoring_runtime const *rt,
  *
  * postprocess_ratio() later returns acc->data / acc->data2, i.e. LETd.
  */
-enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
-                                struct osh_scoring_accumulator *acc_set,
-                                struct osh_scoring_geometry_score_group const *group,
-                                struct osh_voxel_crossing const *crossings,
-                                size_t ncross,
-                                struct particle const *part,
-                                struct step const *st,
-                                double score_len) {
+enum osh_status osh_scoring_estimator_step_dlet(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len) {
     size_t i;
     size_t j;
     double let_step;         /* LET this page scores for the step [MeV/cm] */
@@ -244,7 +244,7 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
 /**
  * @brief Accumulate track-averaged LET [MeV/cm] via a two-pass accumulator.
  *
- * Same table lookup as score_step_dlet(); uses track-length ds_vox as the weight
+ * Same table lookup as osh_scoring_estimator_step_dlet(); uses track-length ds_vox as the weight
  * rather than dose weight.
  *
  * Raw accumulator meaning before postprocess:
@@ -253,14 +253,14 @@ enum osh_status score_step_dlet(struct osh_scoring_runtime const *rt,
  *
  * postprocess_ratio() later returns acc->data / acc->data2, i.e. LETt.
  */
-enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
-                                struct osh_scoring_accumulator *acc_set,
-                                struct osh_scoring_geometry_score_group const *group,
-                                struct osh_voxel_crossing const *crossings,
-                                size_t ncross,
-                                struct particle const *part,
-                                struct step const *st,
-                                double score_len) {
+enum osh_status osh_scoring_estimator_step_tlet(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len) {
     size_t i;
     size_t j;
     double let_step;         /* LET this page scores for the step [MeV/cm] */
@@ -324,14 +324,14 @@ enum osh_status score_step_tlet(struct osh_scoring_runtime const *rt,
  * @ref Kalholm et al. Medical Physics. 2023 Jan;50(1):651-9.
  *      https://doi.org/10.1002/mp.16029
  */
-enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
-                                 struct osh_scoring_accumulator *acc_set,
-                                 struct osh_scoring_geometry_score_group const *group,
-                                 struct osh_voxel_crossing const *crossings,
-                                 size_t ncross,
-                                 struct particle const *part,
-                                 struct step const *st,
-                                 double score_len) {
+enum osh_status osh_scoring_estimator_step_dqeff(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len) {
     size_t i;
     size_t j;
     double mean_energy;
@@ -402,7 +402,7 @@ enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
 /**
  * @brief Accumulate track-averaged (z_eff/beta)^2 [dimensionless] via a two-pass accumulator.
  *
- * Same as score_step_dqeff() but uses track-length ds_vox as the weight.
+ * Same as osh_scoring_estimator_step_dqeff() but uses track-length ds_vox as the weight.
  *
  * Raw accumulator meaning before postprocess:
  *   acc->data  = sum(qeff * track_weight) per spatial bin
@@ -413,14 +413,14 @@ enum osh_status score_step_dqeff(struct osh_scoring_runtime const *rt,
  * @ref Kalholm et al. Medical Physics. 2023 Jan;50(1):651-9.
  *      https://doi.org/10.1002/mp.16029
  */
-enum osh_status score_step_tqeff(struct osh_scoring_runtime const *rt,
-                                 struct osh_scoring_accumulator *acc_set,
-                                 struct osh_scoring_geometry_score_group const *group,
-                                 struct osh_voxel_crossing const *crossings,
-                                 size_t ncross,
-                                 struct particle const *part,
-                                 struct step const *st,
-                                 double score_len) {
+enum osh_status osh_scoring_estimator_step_tqeff(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len) {
     size_t i;
     size_t j;
     double mean_energy;

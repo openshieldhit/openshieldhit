@@ -2,17 +2,17 @@
 #include "scoring/runtime/osh_scoring_estimator_internal.h"
 
 /**
- * @brief Point-deposit counterpart of score_step_energy.
+ * @brief Point-deposit counterpart of osh_scoring_estimator_step_energy.
  *
  * Books the whole released energy (st->de) at the single located bin.  A point
  * has no track, so there is no path fraction.
  */
-enum osh_status score_point_energy(struct osh_scoring_runtime const *rt,
-                                   struct osh_scoring_accumulator *acc_set,
-                                   struct osh_scoring_geometry_score_group const *group,
-                                   size_t spatial_idx,
-                                   struct particle const *part,
-                                   struct step const *st) {
+enum osh_status osh_scoring_estimator_point_energy(struct osh_scoring_runtime const *rt,
+                                                   struct osh_scoring_accumulator *acc_set,
+                                                   struct osh_scoring_geometry_score_group const *group,
+                                                   size_t spatial_idx,
+                                                   struct particle const *part,
+                                                   struct step const *st) {
     size_t i;
     size_t db;           /* Index into the differential bins for the current spatial bin */
     size_t db2;          /* Index into the differential bins for the current spatial bin */
@@ -43,18 +43,18 @@ enum osh_status score_point_energy(struct osh_scoring_runtime const *rt,
 }
 
 /**
- * @brief Point-deposit counterpart of score_step_dose.
+ * @brief Point-deposit counterpart of osh_scoring_estimator_step_dose.
  *
  * Books de/rho (times a dose-to-medium SP ratio) at the single located bin.
  * Neutral particles release energy here but do not deposit charged-particle dose
  * locally, so they book energy but not dose.
  */
-enum osh_status score_point_dose(struct osh_scoring_runtime const *rt,
-                                 struct osh_scoring_accumulator *acc_set,
-                                 struct osh_scoring_geometry_score_group const *group,
-                                 size_t spatial_idx,
-                                 struct particle const *part,
-                                 struct step const *st) {
+enum osh_status osh_scoring_estimator_point_dose(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 size_t spatial_idx,
+                                                 struct particle const *part,
+                                                 struct step const *st) {
     size_t i;
     size_t db;
     size_t db2;

@@ -206,6 +206,140 @@ static void test_save_ascii_rejects_mixed_diff_layout(void) {
     remove("out_bad_ascii.txt");
 }
 
+/* Zone ASCII + BDO save paths.  Zone geometry needs app-level zone-name
+ * resolution before compile; this test fills the resolved transport zone ids
+ * directly (as the step/point unit tests do) to exercise the library save path
+ * without a geo.dat workspace. */
+static void test_save_zone_ascii_and_bdo(void) {
+    char const *detect_text = "Geometry Zone\n"
+                              "    Name Z\n"
+                              "    Zone Entrance\n"
+                              "    Volume 2.0\n"
+                              "    Zone Target\n"
+                              "    Volume 4.0\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_zone_ascii.txt\n"
+                              "    FileFormat ASCII\n"
+                              "    Geo Z\n"
+                              "    Quantity Energy\n"
+                              "    Quantity Fluence\n"
+                              "    Quantity Dose\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_zone_binary.bdo\n"
+                              "    FileFormat BDO2019\n"
+                              "    Geo Z\n"
+                              "    Quantity Energy\n"
+                              "    Quantity Fluence\n"
+                              "    Quantity Dose\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    unsigned char bdo_head[8];
+    FILE *fp;
+    char line[512];
+    int saw_zone_header;
+    int saw_zone_bin;
+    int saw_col_header;
+    int saw_zone3_row;
+    int saw_zone7_row;
+    size_t i;
+    enum osh_status rc;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+    ASSERT_TRUE(ws->ngeometries == 1u);
+    ASSERT_TRUE(ws->geometries[0].nzone_indices == 2u);
+
+    /* Resolve the two Zone selectors to transport zone ids 3 and 7. */
+    ws->geometries[0].zone_indices = (size_t *) calloc(2u, sizeof(*ws->geometries[0].zone_indices));
+    ASSERT_TRUE(ws->geometries[0].zone_indices != NULL);
+    ws->geometries[0].zone_indices[0] = 3u;
+    ws->geometries[0].zone_indices[1] = 7u;
+
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.noutputs == 2u);
+    ASSERT_TRUE(rt.npages == 6u);
+
+    /* Seed the two zone bins of every page by score kind.  ENERGY is written
+     * raw; FLUENCE/DOSE get ÷volume in postprocess (vol 2 and 4 cm3 -> ×0.5,
+     * ×0.25). */
+    for (i = 0; i < rt.npages; ++i) {
+        switch (rt.pages[i].score_kind) {
+        case OSH_SCORING_SCORE_ENERGY:
+            rt.pages[i].acc.data[0] = 10.0;
+            rt.pages[i].acc.data[1] = 20.0;
+            break;
+        case OSH_SCORING_SCORE_FLUENCE:
+            rt.pages[i].acc.data[0] = 4.0; /* -> 4*0.5 = 2 */
+            rt.pages[i].acc.data[1] = 8.0; /* -> 8*0.25 = 2 */
+            break;
+        case OSH_SCORING_SCORE_DOSE:
+            rt.pages[i].acc.data[0] = 6.0;  /* -> 6*0.5 = 3 */
+            rt.pages[i].acc.data[1] = 12.0; /* -> 12*0.25 = 3 */
+            break;
+        default:
+            break;
+        }
+    }
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    /* nstat = 10: NORM columns divide by nstat at write.  Per zone the rows are
+     * ENERGY (1.0 / 2.0), FLUENCE (0.2 / 0.2), DOSE (0.3 / 0.3). */
+    rc = osh_scoring_save(ws, &rt, 10u);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    fp = fopen("out_zone_ascii.txt", "r");
+    ASSERT_TRUE(fp != NULL);
+    saw_zone_header = 0;
+    saw_zone_bin = 0;
+    saw_col_header = 0;
+    saw_zone3_row = 0;
+    saw_zone7_row = 0;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strstr(line, "# DETECTOR OUTPUT ZONE") != NULL) {
+            saw_zone_header = 1;
+        }
+        if (strstr(line, "# ZONE BIN:") != NULL) {
+            saw_zone_bin = 1;
+        }
+        if (strstr(line, "# ZONE ENERGY FLUENCE DOSE") != NULL) {
+            saw_col_header = 1;
+        }
+        /* First column is the resolved transport zone id, then the three NORM
+         * columns divided by nstat. */
+        if (strstr(line, "3 1.000000000000e+00 2.000000000000e-01 3.000000000000e-01") != NULL) {
+            saw_zone3_row = 1;
+        }
+        if (strstr(line, "7 2.000000000000e+00 2.000000000000e-01 3.000000000000e-01") != NULL) {
+            saw_zone7_row = 1;
+        }
+    }
+    ASSERT_TRUE(saw_zone_header);
+    ASSERT_TRUE(saw_zone_bin);
+    ASSERT_TRUE(saw_col_header);
+    ASSERT_TRUE(saw_zone3_row);
+    ASSERT_TRUE(saw_zone7_row);
+    ASSERT_TRUE(fclose(fp) == 0);
+
+    read_file_bytes("out_zone_binary.bdo", bdo_head, sizeof(bdo_head));
+    ASSERT_TRUE(memcmp(bdo_head, "xSH12A", 6u) == 0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_zone_ascii.txt");
+    remove("out_zone_binary.bdo");
+}
+
 int main(void) {
     char const *detect_text = "Geometry Mesh\n"
                               "    Name G\n"
@@ -280,8 +414,7 @@ int main(void) {
     test_save_bdo2019_with_dose_and_dlet();
     test_save_cyl_ascii_and_bdo();
     test_save_ascii_rejects_mixed_diff_layout();
-    /* Zone ASCII/BDO save tests deferred to Stage C: they need app-level zone-name
-     * resolution (a geometry workspace) before compile. */
+    test_save_zone_ascii_and_bdo();
     return 0;
 }
 

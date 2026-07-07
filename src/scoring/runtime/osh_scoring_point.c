@@ -54,7 +54,7 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         }
 
         if (geo->geo_kind == OSH_SCORING_GEO_ZONE) {
-            if (!zone_bin_index(geo, st->zone, &idx)) {
+            if (!osh_scoring_geometry_zone_bin_index(geo, st->zone, &idx)) {
                 continue;
             }
         } else {
@@ -67,7 +67,7 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
             }
 
             if (geo->geo_kind == OSH_SCORING_GEO_CYL) {
-                rc = cyl_geometry_to_grid(geo, &grid);
+                rc = osh_scoring_geometry_cyl_to_grid(geo, &grid);
                 if (rc != OSH_OK) {
                     return rc;
                 }
@@ -85,7 +85,7 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
                 }
                 idx = z_bin * grid.n[0] + r_bin;
             } else {
-                rc = mesh_geometry_to_grid(geo, &grid);
+                rc = osh_scoring_geometry_mesh_to_grid(geo, &grid);
                 if (rc != OSH_OK) {
                     return rc;
                 }

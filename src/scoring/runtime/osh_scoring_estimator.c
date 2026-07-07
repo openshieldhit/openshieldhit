@@ -11,14 +11,17 @@
  * See docs/dev/scoring.md for the tabulated score_step / score_point / postprocess
  * contract that this table implements.
  */
-static struct osh_scoring_estimator const k_energy = {score_step_energy, score_point_energy, NULL};
-static struct osh_scoring_estimator const k_fluence = {score_step_fluence, NULL, postprocess_volume};
-static struct osh_scoring_estimator const k_dose = {score_step_dose, score_point_dose, postprocess_volume};
-static struct osh_scoring_estimator const k_dosegy = {score_step_dose, score_point_dose, postprocess_dosegy};
-static struct osh_scoring_estimator const k_dlet = {score_step_dlet, NULL, postprocess_ratio};
-static struct osh_scoring_estimator const k_tlet = {score_step_tlet, NULL, postprocess_ratio};
-static struct osh_scoring_estimator const k_dqeff = {score_step_dqeff, NULL, postprocess_ratio};
-static struct osh_scoring_estimator const k_tqeff = {score_step_tqeff, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_energy = {
+    osh_scoring_estimator_step_energy, osh_scoring_estimator_point_energy, NULL};
+static struct osh_scoring_estimator const k_fluence = {osh_scoring_estimator_step_fluence, NULL, postprocess_volume};
+static struct osh_scoring_estimator const k_dose = {
+    osh_scoring_estimator_step_dose, osh_scoring_estimator_point_dose, postprocess_volume};
+static struct osh_scoring_estimator const k_dosegy = {
+    osh_scoring_estimator_step_dose, osh_scoring_estimator_point_dose, postprocess_dosegy};
+static struct osh_scoring_estimator const k_dlet = {osh_scoring_estimator_step_dlet, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_tlet = {osh_scoring_estimator_step_tlet, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_dqeff = {osh_scoring_estimator_step_dqeff, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_tqeff = {osh_scoring_estimator_step_tqeff, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_nkerma = {NULL, NULL, postprocess_volume};
 
 struct osh_scoring_estimator const *osh_scoring_estimator_for(enum osh_scoring_score_kind kind) {

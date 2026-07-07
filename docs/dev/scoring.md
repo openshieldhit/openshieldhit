@@ -201,8 +201,19 @@ so a single batch (`nbatch == 1`, e.g. a plain serial run with no sub-splitting)
 has **zero degrees of freedom and no error estimate** — at least two batches are
 required. This finalisation, and the deposit-side writes into `data_var`, are the
 *variance feature* itself, still unwired; this section and the merge define the
-**contract** the feature will plug into, so wiring it later is a local change, not
-a representation hunt.
+**contract** the feature will plug into.
+
+!!! warning "Variance ↔ postprocess coupling"
+    Wiring the variance path is **no longer purely local** to the deposit and
+    merge. Since #249 the geometry ÷volume lives *inside* the `postprocess_`
+    handlers (§6), so those handlers are on the variance-finalisation critical
+    path once `data_var` (M2) is live: `postprocess_volume` must scale M2 by
+    `vinv²` (the variance of `a·X` is `a²·Var X`), and `postprocess_ratio` must
+    propagate error through the quotient `data/data2` rather than only rewriting
+    `data`. Until then M2 is `NULL` and the handlers touch `data` only, so the
+    current code is correct; the point is that the variance feature (#169) and
+    the code wiring it (#247) must update these handlers too, not just the
+    deposit seam. See the matching note in §6.
 
 > **MPI / GPU note.** The additive fields can ride `MPI_Reduce(MPI_SUM)`, but the
 > `M2` arrays cannot — a rank reduction needs a custom `MPI_Op_create` that
@@ -278,23 +289,42 @@ quantity; the *only* geometry-specific normalisation, ÷volume, lives in
 
 | `Quantity` (score kind) | `score_step_` | `score_point_` | `postprocess_` | deposits → finalises |
 |---|---|---|---|---|
-| `ENERGY`  | `score_step_energy`  | `score_point_energy` | — | `de·(path/score_len)` → already final [MeV] |
-| `FLUENCE` | `score_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
-| `DOSE`    | `score_step_dose`    | `score_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
-| `DOSEGY`  | `score_step_dose`    | `score_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
-| `DLET`    | `score_step_dlet`    | — | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
-| `TLET`    | `score_step_tlet`    | — | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
-| `DQEFF`   | `score_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
-| `TQEFF`   | `score_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `ENERGY`  | `osh_scoring_estimator_step_energy`  | `osh_scoring_estimator_point_energy` | — | `de·(path/score_len)` → already final [MeV] |
+| `FLUENCE` | `osh_scoring_estimator_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
+| `DOSE`    | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
+| `DOSEGY`  | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
+| `DLET`    | `osh_scoring_estimator_step_dlet`    | — | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `TLET`    | `osh_scoring_estimator_step_tlet`    | — | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `DQEFF`   | `osh_scoring_estimator_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `TQEFF`   | `osh_scoring_estimator_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
 | `NKERMA`  | —                    | — | `postprocess_volume` | (neutron kerma) → ÷volume [MeV/g] |
 
 **Adding a `Quantity`** = write its handler(s), then add one row to the registry
-in `osh_scoring_estimator.c` and one row to this table. `score_point_dose` guards
-neutral particles (they book energy but no local dose); `score_point_energy` books
+in `osh_scoring_estimator.c` and one row to this table. `osh_scoring_estimator_point_dose` guards
+neutral particles (they book energy but no local dose); `osh_scoring_estimator_point_energy` books
 the whole point energy deposit (equivalent to a unit-length crossing).
 
+!!! note "NKERMA is a registry placeholder (deposit not yet wired)"
+    The `NKERMA` row is `{NULL, NULL, postprocess_volume}`: it has neither a
+    `score_step_` nor a `score_point_` handler, and — unlike every other kind in
+    the table — **no deposit site anywhere yet** (`OSH_SCORING_SCORE_NKERMA` is
+    written by no code on the transport/physics side). It is a registered kind
+    whose per-bin ÷volume finalisation is *pre-wired* via `postprocess_volume`, so
+    that when neutron-kerma deposition is implemented it can book the extensive
+    kerma from the neutron-interaction path (outside the per-crossing estimator
+    dispatch, since kerma is released at an interaction, not distributed along a
+    step's crossings) and the finalisation is already consistent with
+    DOSE/FLUENCE. Treat the `— / —` handlers as intentional, not an omission.
+
 `osh_scoring_postprocess()` runs every page's `postprocess_` handler once, in place,
-between raw accumulation and save. After it, page buffers are in one of these states:
+between raw accumulation and save. It is **single-shot and destructive** — the
+transform rewrites each page's `data` over itself (÷volume, MeV/g→Gy, `data÷data2`),
+so a second in-place call would double-divide / re-ratio. The runtime records that
+it has run and the function returns `OSH_ESTATE` on any further in-place call. The
+repeatable, non-destructive primitive for dump / checkpoint / pre-merge
+finalisation is `osh_scoring_postprocess_into()` with a **distinct** `dst` (the
+snapshot shadow), which never mutates `src`. After postprocess, page buffers are in
+one of these states:
 
 | Kind | State after postprocess | Save-layer normalisation |
 |---|---|---|
@@ -306,6 +336,17 @@ between raw accumulation and save. After it, page buffers are in one of these st
 **Merging caveat**: AVER pages cannot be naively summed across BDO files
 because `data2` is discarded at post-process; merging requires re-weighting by
 each file's `nstat`.
+
+!!! warning "These handlers are on the variance-finalisation critical path"
+    Because ÷volume moved *into* `postprocess_` (never at score time, never at
+    save), the handlers here own the geometry normalisation — and therefore, once
+    the variance feature (#169) makes `data_var` (M2) live, its finalisation too.
+    `postprocess_volume`/`postprocess_dosegy` scale `data` by `vinv` (×`extra`), so
+    they must scale M2 by `vinv²` (×`extra²`); `postprocess_ratio` forms
+    `data/data2`, so it must propagate error through that quotient. Today M2 is
+    `NULL` and the handlers touch `data` only — correct as-is — but wiring
+    variance (#247) is **not** a deposit-only change: it must extend these
+    handlers. See the coupling note in §4.
 
 ## 7. Lifecycle and module boundaries
 
