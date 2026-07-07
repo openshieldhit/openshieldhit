@@ -26,6 +26,16 @@ SHIELD-HIT12A.
 | [03 Atomic interactions](courses/03-atomic-interactions/index.md) | Stopping power, range, straggling, and multiple scattering |
 | [04 Nuclear interactions](courses/04-nuclear-interactions/index.md) | Nuclear reactions, fragments, neutrons, and model comparison |
 
+## Group projects
+
+Larger problem-based-learning assignments live in
+[projects/](projects/index.md): multi-week group projects that — unlike the
+exercise sets — modify the code itself (new physics channels, new nuclear
+benchmarks, performance and correctness engineering, detector-response
+scorers).  They are written for graduate and post-graduate groups working
+together with LLM coding agents, with scope tiers, validation requirements,
+and stable implementation themes.
+
 ## Slides
 
 Shared slide placeholders live in [slides/](slides/index.md).  Course-specific

@@ -54,6 +54,7 @@ nav:
   - Teaching:
     - Overview: teaching/index.md
     - Shared slides: teaching/slides/index.md
+    - Group projects (PBL): teaching/projects/index.md
     - Courses:
       - Overview: teaching/courses/index.md
       - "00: Getting started":
