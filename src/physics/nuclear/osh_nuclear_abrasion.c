@@ -218,7 +218,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         ++n_excitons_h;
 
         e_thr = OSH_ABRASION_RETENTION_THRESHOLD_MEV;
-        if (!is_neutron) {
+        if (e_thr > 0.0 && !is_neutron) {
             e_thr += coulomb_mev;
         }
         if (osh_rng_double(rng) < retention_probability(e_sec, e_thr)) {
