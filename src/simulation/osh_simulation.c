@@ -654,7 +654,7 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
     }
     sim->transport_ctx.completed_primaries = (size_t) sim->transport_ctx.params.nstat;
 
-    rc = osh_transport_run_minimal(
+    rc = osh_transport_run(
         &sim->transport_ctx, sim->beam_rt, &sim->geom_rt, &sim->transport_tables, &sim->scoring_runtime);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: transport failed");

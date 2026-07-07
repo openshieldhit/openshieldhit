@@ -15,7 +15,7 @@ struct osh_scoring_runtime;
 struct osh_score_target;
 
 /**
- * @brief Minimal fast-neutron transport loop.
+ * @brief Fast-neutron transport loop.
  *
  * @details
  * Drains the neutron pool supplied via transport_ctx->neutron_pool using a

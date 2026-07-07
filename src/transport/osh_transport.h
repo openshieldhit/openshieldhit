@@ -225,43 +225,44 @@ struct osh_transport_context {
 };
 
 /**
- * @brief Run the minimal straight-line CSDA transport loop.
+ * @brief Run the top-level family-scheduled transport driver.
  *
  * @details
- * This is the first end-to-end transport slice for OpenShieldHIT:
- *   - primaries are sampled from beam/
- *   - the top-level driver currently seeds the ion family only
- *   - zones and boundary distances come from gemca/runtime/
- *   - energy loss is computed from material CSDA range tables
- *   - scoring is applied step-by-step through scoring/runtime
+ * The transport driver owns the outer run structure: it partitions the requested
+ * histories into family-complete checkpoint batches, dispatches each enabled
+ * particle family to its kernel, drains all secondaries banked by a batch before
+ * returning to the caller, and optionally routes score-replica ranges through
+ * private accumulators before merging them into the master result.
  *
- * Internally, transport uses a scheduler-owned outer loop with one pool per
- * particle family (ions, neutrons, photons, electrons, ...).  The dispatch
- * seam lives in transport/ rather than inside each family kernel, so that
- * per-family kernels are pure functions of their pool and can be offloaded or
- * parallelised independently in future refactors.
- *
- * Physics included:
- *   - CSDA energy loss (residual-range tables)
- *   - multiple Coulomb scattering (Highland/Molière, random-hinge method)
- *   - Gaussian energy straggling (Bohr variance)
- *   - nuclear interactions (pp elastic, abrasion + Fermi break-up secondaries)
- *
- * Not yet implemented:
- *   - de-excitation of heavy nuclear residues, A > 16 (evaporation/SMM)
+ * Family kernels keep the physics details local to their modules.  The current
+ * ion family includes CSDA energy loss, Highland/Molière multiple Coulomb
+ * scattering, Bohr Gaussian energy straggling, and nuclear interactions
+ * (pp elastic, abrasion + Fermi break-up secondaries).  The neutron family drains
+ * banked fast neutrons through its own pool.  Placeholder families such as photon
+ * and electron report OSH_ENOTSUP until their kernels exist.
  *
  * DELTAE is treated as a maximum fractional energy-loss step criterion in
- * material. Boundary-limited steps are truncated and the exit energy is
+ * material. Boundary-limited ion steps are truncated and the exit energy is
  * recovered from the residual CSDA range.
  *
- * The caller is responsible for calling osh_gemca_compile() before this
- * function and osh_gemca_runtime_free() after it returns.
+ * The caller is responsible for compiling geometry/material/scoring runtimes
+ * before calling this function and freeing those runtimes after it returns.
+ *
+ * @param[in,out] transport_ctx  Per-run transport context, including pools,
+ *                               run controls, diagnostics, and transport params.
+ * @param[in]     beam_rt        Hot beam runtime for primary generation.
+ * @param[in]     geom_rt        Compiled geometry runtime.
+ * @param[in]     material_rt    Hot material runtime tables.
+ * @param[in,out] score_rt       Scoring runtime receiving all deposits.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for invalid run parameters, or an
+ *          OSH_E* propagated from setup, family transport, scoring, or merging.
  */
-enum osh_status osh_transport_run_minimal(struct osh_transport_context *transport_ctx,
-                                          struct osh_beam_runtime *beam_rt,
-                                          struct osh_gemca_runtime const *geom_rt,
-                                          struct osh_material_runtime const *material_rt,
-                                          struct osh_scoring_runtime *score_rt);
+enum osh_status osh_transport_run(struct osh_transport_context *transport_ctx,
+                                  struct osh_beam_runtime *beam_rt,
+                                  struct osh_gemca_runtime const *geom_rt,
+                                  struct osh_material_runtime const *material_rt,
+                                  struct osh_scoring_runtime *score_rt);
 
 #ifdef __cplusplus
 }

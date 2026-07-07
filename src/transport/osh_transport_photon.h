@@ -15,13 +15,26 @@ struct osh_scoring_runtime;
 
 /**
  * @brief Photon transport loop (stub — not yet implemented).
- * @return OSH_ENOTSUP always.
+ *
+ * @details
+ * Placeholder family kernel used by the scheduler so unsupported photon work
+ * reports a normal OSH_ENOTSUP status through the same dispatch path as other
+ * particle families.
+ *
+ * @param[in,out] transport_ctx  Per-run transport context; diagnostics are used
+ *                               for the unsupported-family message.
+ * @param[in]     beam_rt        Unused until photon transport is implemented.
+ * @param[in]     geom_rt        Unused until photon transport is implemented.
+ * @param[in]     material_rt    Unused until photon transport is implemented.
+ * @param[in,out] score_rt       Unused until photon transport is implemented.
+ *
+ * @returns OSH_ENOTSUP always.
  */
-enum osh_status osh_transport_photon_run_minimal(struct osh_transport_context *transport_ctx,
-                                                 struct osh_beam_runtime *beam_rt,
-                                                 struct osh_gemca_runtime const *geom_rt,
-                                                 struct osh_material_runtime const *material_rt,
-                                                 struct osh_scoring_runtime *score_rt);
+enum osh_status osh_transport_photon_run(struct osh_transport_context *transport_ctx,
+                                         struct osh_beam_runtime *beam_rt,
+                                         struct osh_gemca_runtime const *geom_rt,
+                                         struct osh_material_runtime const *material_rt,
+                                         struct osh_scoring_runtime *score_rt);
 
 #ifdef __cplusplus
 }

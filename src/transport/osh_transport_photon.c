@@ -3,11 +3,11 @@
 #include "common/osh_diag.h"
 #include "transport/osh_transport.h"
 
-enum osh_status osh_transport_photon_run_minimal(struct osh_transport_context *transport_ctx,
-                                                 struct osh_beam_runtime *beam_rt,
-                                                 struct osh_gemca_runtime const *geom_rt,
-                                                 struct osh_material_runtime const *material_rt,
-                                                 struct osh_scoring_runtime *score_rt) {
+enum osh_status osh_transport_photon_run(struct osh_transport_context *transport_ctx,
+                                         struct osh_beam_runtime *beam_rt,
+                                         struct osh_gemca_runtime const *geom_rt,
+                                         struct osh_material_runtime const *material_rt,
+                                         struct osh_scoring_runtime *score_rt) {
     (void) beam_rt;
     (void) geom_rt;
     (void) material_rt;
