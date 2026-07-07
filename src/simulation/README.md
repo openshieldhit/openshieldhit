@@ -88,7 +88,7 @@ process-global diagnostics ownership.
 
 ## What `osh_simulation_run` does
 
-1. **Transport** — drives `osh_transport_run_minimal` to completion.
+1. **Transport** — drives `osh_transport_run` to completion.
 2. **Postprocess** — calls `osh_scoring_postprocess` to finalise accumulators.
 
 After a successful run, the simulation records both:

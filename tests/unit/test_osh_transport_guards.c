@@ -11,17 +11,17 @@
  * dereferencing them, so a valid, never-read address is all that is required.
  */
 
-static void test_run_minimal_rejects_bad_args(void) {
+static void test_transport_run_rejects_bad_args(void) {
     struct osh_transport_context ctx;
 
     /* NULL context. */
-    ASSERT_TRUE(osh_transport_run_minimal(NULL, NULL, NULL, NULL, NULL) == OSH_EINVAL);
+    ASSERT_TRUE(osh_transport_run(NULL, NULL, NULL, NULL, NULL) == OSH_EINVAL);
 
     /* nstat == 0 is rejected before any pool is touched, so a zeroed context
      * (NULL pools) is enough to reach and return from that guard. */
     memset(&ctx, 0, sizeof(ctx));
     ctx.params.nstat = 0u;
-    ASSERT_TRUE(osh_transport_run_minimal(&ctx, NULL, NULL, NULL, NULL) == OSH_EINVAL);
+    ASSERT_TRUE(osh_transport_run(&ctx, NULL, NULL, NULL, NULL) == OSH_EINVAL);
 }
 
 static void test_ion_run_range_validates_arguments(void) {
@@ -57,7 +57,7 @@ static void test_ion_run_range_validates_arguments(void) {
 }
 
 int main(void) {
-    test_run_minimal_rejects_bad_args();
+    test_transport_run_rejects_bad_args();
     test_ion_run_range_validates_arguments();
     return 0;
 }

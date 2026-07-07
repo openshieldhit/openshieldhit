@@ -59,9 +59,10 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
                                                  size_t hist_hi,
                                                  size_t *ion_completed_out);
 
-/*
- * Orchestrator for the minimal transport run.
+/**
+ * @brief Orchestrate one complete transport run.
  *
+ * @details
  * After the once-per-run family setup (neutron pool, drop counter), the run takes
  * one of two shapes:
  *   • the DEFAULT path (run_master_batched) — the outer checkpoint batch loop that
@@ -79,18 +80,21 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
  * Both share the INNER family scheduler (run_families_over_range): for one range it
  * drains ions then the neutrons/fragments they banked, so the range is
  * *family-exact* before returning.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for invalid run parameters, or an OSH_E*
+ *          propagated from setup, family transport, scoring, or merging.
  */
-enum osh_status osh_transport_run_minimal(struct osh_transport_context *transport_ctx,
-                                          struct osh_beam_runtime *beam_rt,
-                                          struct osh_gemca_runtime const *geom_rt,
-                                          struct osh_material_runtime const *material_rt,
-                                          struct osh_scoring_runtime *score_rt) {
-    size_t neutron_capacity;
-    size_t nstat;
-    size_t replicas;
-    size_t done;
-    int neutron_enabled; /* cache: neutron pool is present for this run */
-    enum osh_status rc;
+enum osh_status osh_transport_run(struct osh_transport_context *transport_ctx,
+                                  struct osh_beam_runtime *beam_rt,
+                                  struct osh_gemca_runtime const *geom_rt,
+                                  struct osh_material_runtime const *material_rt,
+                                  struct osh_scoring_runtime *score_rt) {
+    size_t neutron_capacity; /* Pool capacity used when the neutron pool must be initialised. */
+    size_t nstat;            /* Requested primary history count for this transport run. */
+    size_t replicas;         /* Score-replica partition count; 0 selects the shared-master path. */
+    size_t done;             /* Primaries fully completed by the chosen run path. */
+    int neutron_enabled;     /* Cached predicate: neutron pool is present for this run. */
+    enum osh_status rc;      /* First failing status from setup or the selected run path. */
 
     if (!transport_ctx) {
         return OSH_EINVAL;
@@ -155,17 +159,26 @@ enum osh_status osh_transport_run_minimal(struct osh_transport_context *transpor
     return OSH_OK;
 }
 
-/*
+/**
+ * @brief Run checkpoint batches into the shared master accumulators.
+ *
+ * @details
  * Default path: the outer checkpoint batch loop over [0, nstat), depositing into
  * the shared master accumulators (target == NULL) and firing the periodic-dump
- * hook at each family-complete boundary.  Factored out of osh_transport_run_minimal
- * so the replica path is a sibling rather than a special case buried in the loop.
+ * hook at each family-complete boundary.  Factored out of osh_transport_run()
+ * so the replica path is a sibling rather than a special case buried in the
+ * loop.
  *
  * The batch size K comes from the checkpoint policy.  FINAL-ONLY (a NULL policy or
  * OSH_PARTIAL_NONE) yields a single batch of K = nstat, so the loop runs exactly
  * once and this is byte-for-byte identical to the un-batched transport.  A LIVE
  * policy yields several family-complete batches at the configured cadence; scored
  * output then matches the final-only result up to floating-point reduction order.
+ *
+ * @param[out] completed_out  Exact number of primary histories completed.
+ * @param[in]  neutron_enabled  Non-zero when the neutron family should be enabled.
+ *
+ * @returns OSH_OK on success, or an OSH_E* from family transport.
  */
 static enum osh_status run_master_batched(struct osh_transport_context *transport_ctx,
                                           struct osh_beam_runtime *beam_rt,
@@ -174,25 +187,25 @@ static enum osh_status run_master_batched(struct osh_transport_context *transpor
                                           struct osh_scoring_runtime *score_rt,
                                           int neutron_enabled,
                                           size_t *completed_out) {
-    struct osh_checkpoint_policy const *policy = transport_ctx->checkpoint_policy;
-    struct osh_run_control *ctl = transport_ctx->run_control; /* clean-stop / dump policy, or NULL */
-    size_t const nstat = transport_ctx->params.nstat;
-    size_t done;          /* primaries whose histories have finished; the true completed count */
-    double measured_rate; /* primaries/s from the last batch; seeds the adaptive time cadence */
-    enum osh_status rc;
+    struct osh_checkpoint_policy const *policy = transport_ctx->checkpoint_policy; /* Borrowed batch cadence. */
+    struct osh_run_control *ctl = transport_ctx->run_control; /* Borrowed clean-stop / dump policy, or NULL. */
+    size_t const nstat = transport_ctx->params.nstat;         /* Requested primary history count. */
+    size_t done;          /* Primaries whose histories have finished; the true completed count. */
+    double measured_rate; /* Primaries/s from the last batch; seeds the adaptive time cadence. */
+    enum osh_status rc;   /* Status from one family-complete batch. */
 
     done = 0u;
     measured_rate = 0.0;
     while (done < nstat) {
-        size_t batch_completed = 0u;
-        size_t const remaining = nstat - done;
+        size_t batch_completed = 0u;           /* Primaries finished by this batch. */
+        size_t const remaining = nstat - done; /* Histories still available to schedule. */
         /* Size the batch from the policy.  The measured rate feeds only the
          * adaptive time cadence; count cadence, explicit batch, and final-only
          * ignore it (final-only returns the whole remainder → one pass, unchanged). */
         size_t const k = osh_checkpoint_next_batch_size(policy, measured_rate, remaining);
-        double t_batch_start = osh_monotonic_seconds();
-        double batch_s;
-        int dump_destination_ready; /* set below: the driver wired a sink + shadow for dumps */
+        double t_batch_start = osh_monotonic_seconds(); /* Batch start time for adaptive cadence. */
+        double batch_s;                                 /* Wall time spent in this family-complete batch. */
+        int dump_destination_ready;                     /* Set below: the driver wired a sink + shadow for dumps. */
 
         /* target == NULL: deposit straight into the shared master views. */
         rc = run_families_over_range(transport_ctx,
@@ -266,7 +279,10 @@ static enum osh_status run_master_batched(struct osh_transport_context *transpor
     return OSH_OK;
 }
 
-/*
+/**
+ * @brief Run score replicas and merge their private accumulators.
+ *
+ * @details
  * Split [0, nstat) into @p nreplicas contiguous integer sub-ranges, transport each
  * one sequentially into its OWN private accumulator set, then merge every set into
  * the shared master before the caller's postprocess + save (issue #230).  This is
@@ -288,6 +304,13 @@ static enum osh_status run_master_batched(struct osh_transport_context *transpor
  * DEVELOPER.md §10: every allocation (private sets + scratch) happens here at setup
  * and every merge at the quiescent boundary after each range fully drains — never on
  * the per-step hot path.
+ *
+ * @param[in]  nreplicas      Number of contiguous history partitions to run.
+ * @param[in]  neutron_enabled  Non-zero when the neutron family should be enabled.
+ * @param[out] completed_out  Exact number of primary histories completed.
+ *
+ * @returns OSH_OK on success, OSH_ENOMEM for allocation/size failures, or an
+ *          OSH_E* from family transport or score merging.
  */
 static enum osh_status run_score_replicas(struct osh_transport_context *transport_ctx,
                                           struct osh_beam_runtime *beam_rt,
@@ -300,16 +323,16 @@ static enum osh_status run_score_replicas(struct osh_transport_context *transpor
     /* Accumulators for all replicas live in one flat block indexed [r*npages + p]:
      * replica r's deposit target is the slice &private_acc[r*npages].  A flat block
      * (vs. an array of per-replica pointers) is one allocation and one free. */
-    struct osh_scoring_accumulator *private_acc;  /* flat nreplicas*npages block, or NULL when npages==0 */
-    struct osh_scoring_scratch *private_scratch;  /* one traversal scratch per replica */
-    struct osh_scoring_accumulator *master;       /* master accumulator view (merge destination) */
-    struct osh_transport_profile *master_profile; /* run master profile, or NULL when profiling off */
-    size_t const nstat = transport_ctx->params.nstat;
-    size_t const npages = score_rt->npages;
-    size_t completed_total;
-    size_t r;
-    size_t p;
-    enum osh_status rc;
+    struct osh_scoring_accumulator *private_acc;      /* flat nreplicas*npages block, or NULL when npages==0 */
+    struct osh_scoring_scratch *private_scratch;      /* one traversal scratch per replica */
+    struct osh_scoring_accumulator *master;           /* master accumulator view (merge destination) */
+    struct osh_transport_profile *master_profile;     /* run master profile, or NULL when profiling off */
+    size_t const nstat = transport_ctx->params.nstat; /* Requested primary history count. */
+    size_t const npages = score_rt->npages;           /* Accumulator pages per replica. */
+    size_t completed_total;                           /* Primaries finished across all launched replicas. */
+    size_t r;                                         /* Replica loop index. */
+    size_t p;                                         /* Scoring page loop index. */
+    enum osh_status rc;                               /* First failing allocation, transport, or merge status. */
 
     *completed_out = 0u;
 
@@ -351,11 +374,11 @@ static enum osh_status run_score_replicas(struct osh_transport_context *transpor
         /* Contiguous integer partition: hi(N-1) == nstat exactly, and consecutive
          * ranges share no history, so the union is [0, nstat) with no gap/overlap
          * for any N <= nstat.  64-bit intermediate avoids nstat*r overflow. */
-        size_t const lo = (size_t) ((unsigned long long) nstat * r / nreplicas);
-        size_t const hi = (size_t) ((unsigned long long) nstat * (r + 1u) / nreplicas);
-        size_t completed = 0u;
-        struct osh_score_target target;
-        struct osh_transport_profile replica_profile;
+        size_t const lo = (size_t) ((unsigned long long) nstat * r / nreplicas);        /* Inclusive history bound. */
+        size_t const hi = (size_t) ((unsigned long long) nstat * (r + 1u) / nreplicas); /* Exclusive history bound. */
+        size_t completed = 0u;                        /* Primaries finished by this replica range. */
+        struct osh_score_target target;               /* Private accumulator/scratch view for this replica. */
+        struct osh_transport_profile replica_profile; /* Temporary profile reduced into the master profile. */
 
         target.acc_set = &private_acc[r * npages];
         target.scratch = &private_scratch[r];
@@ -461,9 +484,9 @@ static enum osh_status run_families_over_range(struct osh_transport_context *tra
                                                size_t hist_hi,
                                                int neutron_enabled,
                                                size_t *batch_completed_out) {
-    struct osh_transport_scheduler scheduler;
-    enum osh_transport_family family;
-    enum osh_status rc;
+    struct osh_transport_scheduler scheduler; /* Per-range queue of enabled families with pending work. */
+    enum osh_transport_family family;         /* Family selected by scheduler_next(). */
+    enum osh_status rc;                       /* Status from scheduler setup or the dispatched family kernel. */
 
     if (batch_completed_out) {
         *batch_completed_out = 0u;
@@ -557,6 +580,8 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
                                                  size_t hist_lo,
                                                  size_t hist_hi,
                                                  size_t *ion_completed_out) {
+    struct osh_diag_sink const *diag; /* Borrowed diagnostics sink; NULL keeps unsupported-family errors silent. */
+
     switch (family) {
     case OSH_TRANSPORT_FAMILY_ION:
         return osh_transport_ion_run_range(
@@ -564,14 +589,13 @@ static enum osh_status dispatch_transport_family(enum osh_transport_family famil
     case OSH_TRANSPORT_FAMILY_NEUTRON:
         return osh_transport_neutron_run(transport_ctx, beam_rt, geom_rt, material_rt, score_rt, target);
     case OSH_TRANSPORT_FAMILY_PHOTON:
-        return osh_transport_photon_run_minimal(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
+        return osh_transport_photon_run(transport_ctx, beam_rt, geom_rt, material_rt, score_rt);
     case OSH_TRANSPORT_FAMILY_ELECTRON:
     case OSH_TRANSPORT_FAMILY_COUNT:
         break;
     }
 
-    OSH_DIAG_ERRORF(transport_ctx ? transport_ctx->diag : NULL,
-                    "transport: %s transport is not implemented",
-                    osh_transport_family_name(family));
+    diag = transport_ctx ? transport_ctx->diag : NULL;
+    OSH_DIAG_ERRORF(diag, "transport: %s transport is not implemented", osh_transport_family_name(family));
     return OSH_ENOTSUP;
 }

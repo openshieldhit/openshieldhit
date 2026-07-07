@@ -28,14 +28,24 @@
 
 static struct particle const k_neutron_species = {OSH_PART_MASS_NEUTRON, OSH_PART_PDG_NEUTRON, 0, 0u, 1u, 0u};
 
-/*
- * Total macroscopic cross section Σ_tot [cm⁻¹] for one material cell.
+/**
+ * @brief Compute the total macroscopic neutron cross section for one material cell.
+ *
+ * @details
  * Σ_tot = Σ_i n_i σ_tot,i,  with n_i [cm⁻³] and σ in cm².
  *
  * Called separately from osh_neutron_reaction_sample() so the free-path
  * length can be sampled before committing to a full reaction.  The two
  * xsec_lookup calls per element are redundant but acceptable for the
- * minimal model; they share the same xsec warning-once state.
+ * current neutron model; they share the same xsec warning-once state.
+ *
+ * @param[in,out] xsec        Cross-section lookup cache and warning state.
+ * @param[in]     handler     Nuclear handler carrying material element lists.
+ * @param[in]     mat_idx     Material index for the current zone/voxel.
+ * @param[in]     rho_g_cm3   Material density [g/cm³].
+ * @param[in]     e_mev       Neutron kinetic energy [MeV].
+ *
+ * @returns Σ_tot [cm⁻¹].
  */
 static double neutron_sigma_tot_cm(struct osh_neutron_xsec *xsec,
                                    struct osh_nuclear_handler const *handler,
