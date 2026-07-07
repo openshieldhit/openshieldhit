@@ -1,0 +1,47 @@
+# Teaching
+
+This area collects student-facing teaching material built around OpenShieldHIT.
+It is separate from the user manual and from runnable examples:
+
+- user documentation explains the input format and command line;
+- examples show complete reusable simulations;
+- teaching material gives exercises, prompts, interpretation tasks, and lecture scaffolding.
+
+The material is intended for graduate-level courses and workshops in Monte Carlo
+transport, particle therapy physics, and related medical-physics topics.  The
+first course is practical and tool-oriented; later courses can stand alone as
+more focused physics or mathematics modules.
+
+OpenShieldHIT is conceptually inspired by the same application domain and input
+style as SHIELD-HIT12A, but it shares no source code with SHIELD-HIT or
+SHIELD-HIT12A.
+
+## Courses
+
+| Course | Focus |
+|---|---|
+| [00 Getting started](courses/00-getting-started/index.md) | First simulations, input files, scoring, and plotting |
+| [01 Basic Monte Carlo transport](courses/01-basic-monte-carlo-transport/index.md) | Histories, random numbers, sampling, estimators, and uncertainty |
+| [02 Beam dynamics](courses/02-beam-dynamics/index.md) | Phase space, beam envelopes, spot lists, and Twiss parameters |
+| [03 Atomic interactions](courses/03-atomic-interactions/index.md) | Stopping power, range, straggling, and multiple scattering |
+| [04 Nuclear interactions](courses/04-nuclear-interactions/index.md) | Nuclear reactions, fragments, neutrons, and model comparison |
+
+## Slides
+
+Shared slide placeholders live in [slides/](slides/index.md).  Course-specific
+slides live below each course directory.
+
+## Exercise style
+
+Exercise sets should be written so a student can work through them without
+editing source code.  Prefer small, reproducible case directories and short
+analysis scripts over manual steps that are hard to check.
+
+Each exercise set should eventually contain:
+
+- learning goals;
+- required background;
+- input files or links to prepared cases;
+- tasks;
+- expected observations;
+- optional extension questions.

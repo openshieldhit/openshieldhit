@@ -51,6 +51,35 @@ nav:
     - Nuclear inelastic reactions: physics/nuclear-inelastic.md
     - Neutron transport: physics/neutron-transport.md
     - Neutron cross sections: physics/neutron-cross-sections.md
+  - Teaching:
+    - Overview: teaching/index.md
+    - Shared slides: teaching/slides/index.md
+    - Courses:
+      - Overview: teaching/courses/index.md
+      - "00: Getting started":
+        - Overview: teaching/courses/00-getting-started/index.md
+        - Slides: teaching/courses/00-getting-started/slides/index.md
+        - Exercises:
+          - Overview: teaching/courses/00-getting-started/exercises/index.md
+          - "Set 01: First simulation": teaching/courses/00-getting-started/exercises/set-01-first-simulation.md
+          - "Set 02: Input files": teaching/courses/00-getting-started/exercises/set-02-input-files.md
+          - "Set 03: Scoring and plots": teaching/courses/00-getting-started/exercises/set-03-scoring-and-plots.md
+      - "01: Basic Monte Carlo transport":
+        - Overview: teaching/courses/01-basic-monte-carlo-transport/index.md
+        - Slides: teaching/courses/01-basic-monte-carlo-transport/slides/index.md
+        - Exercises: teaching/courses/01-basic-monte-carlo-transport/exercises/index.md
+      - "02: Beam dynamics":
+        - Overview: teaching/courses/02-beam-dynamics/index.md
+        - Slides: teaching/courses/02-beam-dynamics/slides/index.md
+        - Exercises: teaching/courses/02-beam-dynamics/exercises/index.md
+      - "03: Atomic interactions":
+        - Overview: teaching/courses/03-atomic-interactions/index.md
+        - Slides: teaching/courses/03-atomic-interactions/slides/index.md
+        - Exercises: teaching/courses/03-atomic-interactions/exercises/index.md
+      - "04: Nuclear interactions":
+        - Overview: teaching/courses/04-nuclear-interactions/index.md
+        - Slides: teaching/courses/04-nuclear-interactions/slides/index.md
+        - Exercises: teaching/courses/04-nuclear-interactions/exercises/index.md
   - Developer Guide:
     - Architecture: dev/architecture.md
     - Build system: dev/build.md
