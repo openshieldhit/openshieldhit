@@ -344,6 +344,23 @@ is bounded per wall-hour independent of how fast the machine is, whereas a count
 cadence (`NSTAT` step) fires more often the faster the run goes. The
 `--dump-every` command-line flag overrides this card.
 
+### MAXTIME
+
+```
+MAXTIME  <duration>
+```
+
+Wall-time budget for the run. The duration takes the same optional unit
+suffix as `DUMPEVERY` — `s` (seconds, the default), `m` (minutes), or `h`
+(hours) — e.g. `MAXTIME 2h`. `0` (the default) means unlimited.
+
+When the budget elapses, the run stops cleanly at the next safe point —
+in-flight histories finish, all secondary families drain, and the partial
+result is saved normalised by the true completed-primary count — rather than
+being killed mid-history. The `--max-time` command-line flag overrides this
+card. See [the command-line reference](command-line.md#periodic-partial-result-dumps)
+for the full clean-stop semantics.
+
 ### RNDSEED
 
 ```
