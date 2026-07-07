@@ -152,6 +152,14 @@ enum osh_status osh_nuclear_handler_compile(struct osh_material_workspace const 
         return rc;
     }
 
+    /* Pre-equilibrium exciton model (issue #225): fast-ejectile emission
+     * between abrasion and the equilibrium break-up. */
+    rc = osh_nuclear_preeq_compile(&out->preeq);
+    if (rc != OSH_OK) {
+        osh_nuclear_handler_free(out);
+        return rc;
+    }
+
     /* Persistent (Z,A) ion species table for recoil / fragment transport and
      * scoring.  Built once here (const during stepping): a heavy recoil or FBU
      * fragment needs a stable species pointer to be injected into the ion pool
@@ -517,13 +525,15 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             return;
         }
 
-        /* Abrasion (fast stage) followed by Fermi break-up de-excitation of
-         * the surviving prefragment (ablation stage).  The break-up consumes
-         * the fragment slot when it fires and appends its products to the
-         * same event; un-broken residues stay for the fragment pool. */
+        /* Abrasion (fast stage), pre-equilibrium exciton emission of fast
+         * ejectiles (issue #225), then Fermi break-up de-excitation of the
+         * thermalized residue (ablation stage).  The break-up consumes the
+         * fragment slot when it fires and appends its products to the same
+         * event; un-broken residues stay for the fragment pool. */
         osh_nuclear_abrasion_step(
             final_energy_mev, incident_dir, selected_a, selected_z, selected_sigma_inel, rng, event_out);
         if (event_out->n_fragments > 0u) {
+            osh_nuclear_preeq_step(&handler->preeq, &event_out->fragments[0], rng, event_out);
             osh_nuclear_fermi_breakup_step(&handler->fbu, &event_out->fragments[0], rng, event_out);
         }
     }

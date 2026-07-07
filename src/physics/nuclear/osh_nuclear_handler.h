@@ -27,6 +27,7 @@
 
 #include "openshieldhit/status.h"
 #include "physics/nuclear/osh_nuclear_fermi_breakup.h"
+#include "physics/nuclear/osh_nuclear_preeq.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -119,6 +120,7 @@ struct osh_nuclear_elem {
  */
 struct osh_nuclear_handler {
     struct osh_nuclear_fermi_breakup fbu; /**< Fermi break-up channel table.            */
+    struct osh_nuclear_preeq preeq;       /**< Pre-equilibrium exciton model (issue #225). */
     struct osh_nuclear_elem *elem_pool;   /**< Flat array: all materials, all elements. */
     size_t *elem_offset;                  /**< elem_offset[i]: start of material i.    */
     size_t *elem_count;                   /**< elem_count[i]:  element count.          */
