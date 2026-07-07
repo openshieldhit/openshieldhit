@@ -7,6 +7,7 @@ add_library(osh_scoring
     runtime/osh_scoring_estimator_point.c
     runtime/osh_scoring_estimator_step.c
     runtime/osh_scoring_filter_runtime.c
+    runtime/osh_scoring_geometry_runtime.c
     runtime/osh_scoring_postprocess.c
     runtime/osh_scoring_shadow.c
     runtime/osh_scoring_snapshot.c
