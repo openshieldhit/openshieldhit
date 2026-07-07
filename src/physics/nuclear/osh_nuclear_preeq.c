@@ -441,7 +441,7 @@ void osh_nuclear_preeq_step(struct osh_nuclear_preeq const *model,
         cum = 0.0;
         for (i = 0; i < nbins - 1; ++i) {
             cum += grid[i];
-            if (u <= cum) {
+            if (u < cum) {
                 break;
             }
         }
