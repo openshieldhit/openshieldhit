@@ -74,16 +74,19 @@ add ⅔ of the Coulomb barrier). Retained kinetic energy funds E\*; the
 retained nucleon becomes a **particle exciton**. Every collision leaves a
 **hole exciton**; the exciton configuration (p, h) is exported in
 `struct osh_nuclear_fragment` as the input of the pre-equilibrium stage.
-The INCL4.6 paper's own ξ = 18 MeV experiment traded nucleon-spectrum
-fidelity for cluster yield — do not raise ξ to chase excitation energy
-(measured in [#260](https://github.com/openshieldhit/openshieldhit/issues/260)
-/ [#263](https://github.com/openshieldhit/openshieldhit/issues/263)).
+The threshold default (ξ = 15 MeV) was calibrated at transport level in the
+[#225](https://github.com/openshieldhit/openshieldhit/issues/225) study:
+retaining the 10–15 MeV knockouts broadens the prefragment E\* tail and
+hardens the break-up alpha sector into its acceptance windows, at a measured
+cost confined to the already-low sub-20 MeV proton bands (the validated
+20–50 MeV band is untouched) — the quantitative form of INCL4.6's caution
+about their earlier ξ = 18 MeV variant.
 
 | knob (compile-time) | default | meaning |
 |---|---|---|
 | `OSH_ABRASION_SIGMA_PN_MB` | 30.0 | p+nucleon σ for ⟨ν⟩ |
 | `OSH_ABRASION_EXCITATION_PER_HOLE_MEV` | 13.3 | hole excitation (do not retune — #260) |
-| `OSH_ABRASION_RETENTION_THRESHOLD_MEV` | 7.0 | back-to-spectator ξ (0 disables) |
+| `OSH_ABRASION_RETENTION_THRESHOLD_MEV` | 15.0 | back-to-spectator ξ (0 disables); calibrated in #225 (ξ ∈ {7,12,15,18} transport scan) |
 | `OSH_ABRASION_RETENTION_WIDTH_MEV` | 2.0 | smooth turn-on width |
 
 ### Pre-equilibrium — single-component exciton model

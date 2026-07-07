@@ -59,20 +59,30 @@
 #define OSH_ABRASION_EXCITATION_PER_HOLE_MEV 13.3
 #endif
 
-/** Knockout-nucleon retention threshold [MeV] (issue #263): a knocked-out
- *  nucleon with lab kinetic energy in the neighbourhood of this value or
- *  below is re-absorbed into the prefragment instead of escaping — the lean
- *  analog of INCL4.6's "back to spectator" recipe (Boudard et al., PRC 87
- *  (2013) 014606, Sec. II D1: neutrons return to spectator status below the
- *  neutron-emission threshold, xi ~= 7 MeV; protons below their emission
- *  threshold plus ~2/3 of the Coulomb barrier).  The same paper's earlier
- *  xi = 18 MeV variant improved low-energy cluster yields but distorted the
- *  nucleon spectra — do not raise this knob to chase E*.  The retained
- *  kinetic energy is booked into E* and the nucleon becomes a particle
- *  exciton, so the event energy balance stays exact.  Override via
- *  -DOSH_ABRASION_RETENTION_THRESHOLD_MEV=<value>; 0 disables retention. */
+/** Knockout-nucleon retention threshold [MeV] (issues #263 / #225): a
+ *  knocked-out nucleon with lab kinetic energy in the neighbourhood of this
+ *  value or below is re-absorbed into the prefragment instead of escaping —
+ *  the lean analog of INCL4.6's "back to spectator" recipe (Boudard et al.,
+ *  PRC 87 (2013) 014606, Sec. II D1; there xi ~= 7 MeV, protons adding ~2/3
+ *  of the Coulomb barrier).  The retained kinetic energy is booked into E*
+ *  and the nucleon becomes a particle exciton, so the event energy balance
+ *  stays exact.
+ *
+ *  The default 15.0 was calibrated in the #225 study (1M-primary nucre1
+ *  transports vs the SH12A 2.5M fixture, xi in {7, 12, 15, 18}): retaining
+ *  the 10-15 MeV knockouts broadens the prefragment E* tail, which hardens
+ *  the break-up alpha sector into its acceptance windows (Phi_alpha 0.77 ->
+ *  0.92, D_alpha 1.02 -> 1.16 of SH12A) and brings t/He-3 fluences near
+ *  unity.  The measured cost — the analog of INCL4.6's caution about their
+ *  earlier xi = 18 MeV variant — is confined to the already-low sub-20 MeV
+ *  proton bands (-12%/-7% at xi = 15; the validated 20-50 MeV band is
+ *  untouched).  The remaining hard-alpha tail is owned by the quasi-free
+ *  knockout stage of #221, not by this knob: xi = 18 buys the tail criterion
+ *  but doubles the soft-band cost and pushes D_alpha to the window edge.
+ *  Override via -DOSH_ABRASION_RETENTION_THRESHOLD_MEV=<value>; 0 disables
+ *  retention. */
 #ifndef OSH_ABRASION_RETENTION_THRESHOLD_MEV
-#define OSH_ABRASION_RETENTION_THRESHOLD_MEV 7.0
+#define OSH_ABRASION_RETENTION_THRESHOLD_MEV 15.0
 #endif
 
 /** Width [MeV] of the smooth (Fermi-function) turn-on of the retention
