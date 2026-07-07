@@ -7,42 +7,43 @@ its physics, its tooling, or its benchmarks. They are sized for graduate or
 post-graduate groups of 2–4, and each lists scope tiers so a group can
 succeed at tier 1 and stretch toward the later tiers.
 
-Every project follows the same working pattern, which mirrors how the code
-itself is developed:
+!!! abstract "Project contract"
+    Every project follows the same working pattern, which mirrors how the code
+    itself is developed:
 
-1. **Proposal** (1 page): the chosen tier, the validation data you will
-   compare against, and the observable that defines success — *before*
-   writing code.
-2. **Benchmark first**: build or adopt the reference comparison early; it is
-   the ground truth for everything that follows.
-3. **Deliverables**: one or more focused pull requests (one logical change
-   each, green CI), a reproducible case directory under `tests/` or
-   `examples/`, and a short report that separates *what was measured* from
-   *what was concluded*.
+    1. **Proposal** (1 page): the chosen tier, the validation data you will
+       compare against, and the observable that defines success — *before*
+       writing code.
+    2. **Benchmark first**: build or adopt the reference comparison early; it is
+       the ground truth for everything that follows.
+    3. **Deliverables**: one or more focused pull requests (one logical change
+       each, green CI), a reproducible case directory under `tests/` or
+       `examples/`, and a short report that separates *what was measured* from
+       *what was concluded*.
 
 ## Working with LLM assistants
 
 These projects are explicitly designed for groups working alongside LLM
 coding agents. The repository is prepared for that: `llms.txt` gives the
 project map, `CLAUDE.md` the agent operating rules, and `DEVELOPER.md` the
-numbered style rules that CI enforces. Ground rules that experience in this
-repository has validated:
+numbered style rules that CI enforces.
 
-- **Benchmarks are the ground truth, not model confidence.** A model will
-  argue eloquently for wrong physics; a committed reference comparison will
-  not. Decide observables before generating code.
-- **Verify every physics formula against the cited primary literature.**
-  Models mis-remember constants and exponents; the repository convention is
-  to implement from published equations and cite the paper, never to copy
-  from other codes (license and provenance both matter — see the note in
-  [the nuclear physics reference](../../physics/nuclear-inelastic.md)).
-- **Keep the loop evidence-driven.** A good physics-development cycle is:
-  measurement stage → model stage → calibration stage, with each decision
-  backed by a numbers table.  This is a better mental model for LLM-assisted
-  physics development than any style guide.
-- **Declare the collaboration.** Reports must state what the LLM produced,
-  what the group verified, and how (academic integrity, and it makes the
-  work reproducible).
+!!! warning "LLM ground rules"
+    - **Benchmarks are the ground truth, not model confidence.** A model will
+      argue eloquently for wrong physics; a committed reference comparison will
+      not. Decide observables before generating code.
+    - **Verify every physics formula against the cited primary literature.**
+      Models mis-remember constants and exponents; the repository convention is
+      to implement from published equations and cite the paper, never to copy
+      from other codes (license and provenance both matter — see the note in
+      [the nuclear physics reference](../../physics/nuclear-inelastic.md)).
+    - **Keep the loop evidence-driven.** A good physics-development cycle is:
+      measurement stage → model stage → calibration stage, with each decision
+      backed by a numbers table.  This is a better mental model for LLM-assisted
+      physics development than any style guide.
+    - **Declare the collaboration.** Reports must state what the LLM produced,
+      what the group verified, and how (academic integrity, and it makes the
+      work reproducible).
 
 ---
 
@@ -67,38 +68,37 @@ it does not have to be complete.
    the photon pool instead of local deposit, and quantify the effect on the
    BNCT benchmark.
 
-**Validation.** Attenuation coefficients vs NIST XCOM per material; depth
-dose of a Co-60 / 6 MV-like spectrum in water vs published data; energy
-conservation per event (the repository's standing invariant — see
-`tests/unit/test_osh_nuclear_*.c` for the pattern).
+!!! note "Validation"
+    Attenuation coefficients vs NIST XCOM per material; depth dose of a Co-60 /
+    6 MV-like spectrum in water vs published data; energy conservation per event
+    (the repository's standing invariant — see `tests/unit/test_osh_nuclear_*.c`
+    for the pattern).
 
 ---
 
-## P2 — Mining EXFOR: new nuclear benchmarks (nuclear data)
+## P2 — Track-structure detector response: quenching scorers
 
-**Background.** The nuclear models are validated against a small set of
-references (`tests/reference/`, SH12A and TOPAS fixtures, and the measured
-data sets listed in the
-[nuclear physics reference](../../physics/nuclear-inelastic.md)). The EXFOR
-library holds far more: light-ion production DDX, neutron production, and
-activation channels for p + C/N/O/Ca at therapy energies.
+**Background.** Real detectors under-respond to high-LET radiation
+(scintillator quenching, alanine, TLD, radiochromic film). OpenShieldHIT
+already scores dose- and track-averaged LET and (z_eff/β)² (the
+`DLET/TLET/DQEFF/TQEFF` estimators in `src/scoring/runtime/`) — the
+infrastructure for **response-weighted dose** scorers is in place.
 
 **Scope tiers.**
 
-1. Retrieve and digitise one measured data set (e.g. Tippawan 96 MeV n+O
-   light-ion DDX, or Bertrand & Peelle proton-induced spectra), build a
-   reference case in the `tests/reference/` layout with a comparison script
-   (follow `tests/reference/README.md` and `tools/plot_nucre.py`).
-2. Add an **activation benchmark**: C-11 / O-15 production along a proton
-   beam in PMMA or water (the PET range-verification observable) — a channel
-   the current chain has never been scored against.
-3. Improvement study: can a calibration knob (`OSH_PREEQ_GAMMA_SCALE_*`,
-   `OSH_ABRASION_SIGMA_PN_MB`, the Tripathi σ_R systematics) be tuned to
-   improve your new benchmark *without regressing the committed ones*?
-   Propose the change with the full before/after table.
+1. Birks-type scorer: D_response = Σ dose_i · η(LET_i) with the Birks kB as
+   the knob; validate against published proton scintillator quenching data.
+2. Amorphous-track (Katz-type) relative-effectiveness tables for alanine or
+   TLD, as pluggable η(z, β) tables — connecting the scorer to the
+   track-structure literature.
+3. Detector-comparison study: predict the response of two detector types in
+   the same field (e.g. plateau vs distal edge of a proton beam) and compare
+   with published measurements; quantify the impact of recoil and fragment LET
+   components that are not yet represented in the scorer.
 
-**Validation.** Your own new reference cases, plus the requirement that all
-existing `reference::` and `cases::` comparisons stay green.
+!!! note "Validation"
+    Published quenching/relative-effectiveness data; internal consistency
+    (η ≡ 1 must reproduce the plain dose scorer exactly).
 
 ---
 
@@ -153,9 +153,10 @@ model-comparison problem. Reference fixtures from TOPAS already exist under
    for the planned CT/voxel revival (`src/gemca/voxel/` is present but
    stale).
 
-**Validation.** Cross-code comparison with quantified statistical and model
-uncertainty; a written judgement of *which* model differences explain the
-observed deviations.
+!!! note "Validation"
+    Cross-code comparison with quantified statistical and model uncertainty; a
+    written judgement of *which* model differences explain the observed
+    deviations.
 
 ---
 
@@ -180,34 +181,39 @@ straggling code (`src/transport/osh_transport_ion_step.c`).
 3. Groundwork electron transport: CSDA-range-based electron stepping for the
    banked deltas (a natural companion to P1's photon pool).
 
-**Validation.** L_Δ vs ICRU 37 / PSTAR restricted stopping powers; total
-energy conservation with the bank included; comparison of the δ-threshold
-sensitivity against microdosimetry literature.
+!!! note "Validation"
+    L_Δ vs ICRU 37 / PSTAR restricted stopping powers; total energy conservation
+    with the bank included; comparison of the δ-threshold sensitivity against
+    microdosimetry literature.
 
 ---
 
-## P6 — Track-structure detector response: quenching scorers
+## P6 — Mining EXFOR: new nuclear benchmarks (nuclear data)
 
-**Background.** Real detectors under-respond to high-LET radiation
-(scintillator quenching, alanine, TLD, radiochromic film). OpenShieldHIT
-already scores dose- and track-averaged LET and (z_eff/β)² (the
-`DLET/TLET/DQEFF/TQEFF` estimators in `src/scoring/runtime/`) — the
-infrastructure for **response-weighted dose** scorers is in place.
+**Background.** The nuclear models are validated against a small set of
+references (`tests/reference/`, SH12A and TOPAS fixtures, and the measured
+data sets listed in the
+[nuclear physics reference](../../physics/nuclear-inelastic.md)). The EXFOR
+library holds far more: light-ion production DDX, neutron production, and
+activation channels for p + C/N/O/Ca at therapy energies.
 
 **Scope tiers.**
 
-1. Birks-type scorer: D_response = Σ dose_i · η(LET_i) with the Birks kB as
-   the knob; validate against published proton scintillator quenching data.
-2. Amorphous-track (Katz-type) relative-effectiveness tables for alanine or
-   TLD, as pluggable η(z, β) tables — connecting the scorer to the
-   track-structure literature.
-3. Detector-comparison study: predict the response of two detector types in
-   the same field (e.g. plateau vs distal edge of a proton beam) and compare
-   with published measurements; quantify the impact of recoil and fragment LET
-   components that are not yet represented in the scorer.
+1. Retrieve and digitise one measured data set (e.g. Tippawan 96 MeV n+O
+   light-ion DDX, or Bertrand & Peelle proton-induced spectra), build a
+   reference case in the `tests/reference/` layout with a comparison script
+   (follow `tests/reference/README.md` and `tools/plot_nucre.py`).
+2. Add an **activation benchmark**: C-11 / O-15 production along a proton
+   beam in PMMA or water (the PET range-verification observable) — a channel
+   the current chain has never been scored against.
+3. Improvement study: can a calibration knob (`OSH_PREEQ_GAMMA_SCALE_*`,
+   `OSH_ABRASION_SIGMA_PN_MB`, the Tripathi σ_R systematics) be tuned to
+   improve your new benchmark *without regressing the committed ones*?
+   Propose the change with the full before/after table.
 
-**Validation.** Published quenching/relative-effectiveness data; internal
-consistency (η ≡ 1 must reproduce the plain dose scorer exactly).
+!!! note "Validation"
+    Your own new reference cases, plus the requirement that all existing
+    `reference::` and `cases::` comparisons stay green.
 
 ---
 

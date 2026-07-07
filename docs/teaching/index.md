@@ -16,6 +16,14 @@ OpenShieldHIT is conceptually inspired by the same application domain and input
 style as SHIELD-HIT12A, but it shares no source code with SHIELD-HIT or
 SHIELD-HIT12A.
 
+!!! note "Teaching-page formatting"
+    Use admonition boxes sparingly and consistently:
+
+    - `note` for assumptions and context;
+    - `tip` for practical workflow hints;
+    - `warning` for current limitations or common mistakes;
+    - `abstract` for deliverables, project contracts, or grading criteria.
+
 ## Courses
 
 | Course | Focus |

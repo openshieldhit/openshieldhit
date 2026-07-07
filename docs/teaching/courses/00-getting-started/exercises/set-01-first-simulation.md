@@ -27,10 +27,11 @@ Use the input-file references when needed:
 
 ## Preparation
 
-These exercises assume that `openshieldhit` is installed on your `PATH`, or that
-you know where the locally built executable is.  The examples below use
-`build/bin/openshieldhit`; replace that path with `openshieldhit` if your
-installation provides the command directly.
+!!! note "Assumption"
+    These exercises assume that `openshieldhit` is installed on your `PATH`, or
+    that you know where the locally built executable is.  The examples below use
+    `build/bin/openshieldhit`; replace that path with `openshieldhit` if your
+    installation provides the command directly.
 
 Start from a copy of the minimal water-tank case:
 
@@ -39,11 +40,12 @@ build/bin/openshieldhit --dry-run tests/cases/00_minimal/
 build/bin/openshieldhit -v -n 5000 tests/cases/00_minimal/
 ```
 
-For exploratory work, write output into a scratch directory:
+!!! tip "Keep the original case clean"
+    For exploratory work, write output into a scratch directory:
 
-```bash
-build/bin/openshieldhit --outdir /tmp/osh-set-01 -n 5000 tests/cases/00_minimal/
-```
+    ```bash
+    build/bin/openshieldhit --outdir /tmp/osh-set-01 -n 5000 tests/cases/00_minimal/
+    ```
 
 The default `tests/cases/00_minimal/` case is already close to the first task:
 protons in water, a simple water geometry, and a 1 mm depth grid.  Increase the
@@ -240,11 +242,10 @@ Tasks:
 3. Repeat for carbon ions and overlay the curves.
 4. Compare the penumbra qualitatively.
 
-Note:
-
-- The original classroom exercise also compared 14 MeV photons.  Treat that as
-  future or external-comparison material until photon transport is part of the
-  supported teaching workflow.
+!!! warning "Photon comparison"
+    The original classroom exercise also compared 14 MeV photons.  Treat that as
+    future or external-comparison material until photon transport is part of the
+    supported teaching workflow.
 
 ## Exercise 7: Particle Energy Spectra
 
@@ -282,14 +283,13 @@ Tasks:
 
 ## Suggested Deliverables
 
-Submit:
-
-- the modified input files;
-- one depth-dose plot;
-- one fluence plot;
-- one 2D dose map;
-- one short explanation of the narrow-scorer Bragg-peak problem;
-- one spectrum plot, if Exercise 7 was completed.
+!!! abstract "Submit"
+    - the modified input files;
+    - one depth-dose plot;
+    - one fluence plot;
+    - one 2D dose map;
+    - one short explanation of the narrow-scorer Bragg-peak problem;
+    - one spectrum plot, if Exercise 7 was completed.
 
 ## Instructor Notes
 
