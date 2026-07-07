@@ -178,11 +178,11 @@ static enum osh_status run_master_batched(struct osh_transport_context *transpor
     struct osh_run_control *ctl = transport_ctx->run_control; /* clean-stop / dump policy, or NULL */
     size_t const nstat = transport_ctx->params.nstat;
     size_t const npages = score_rt->npages;
-    /* Variance (issue #209): when the VARIANCE card allocated per-page M2 arrays,
-     * each checkpoint batch is scored into its own private set and folded into the
-     * master as one batch-means observation, so the master's M2 captures the
-     * between-batch spread.  Off ⇒ the classic cumulative-into-master path,
-     * byte-for-byte unchanged. */
+    /* Variance (issue #209): when any page enabled variance tracking (a "Variance
+     * On" Settings block allocated per-page M2 arrays), each checkpoint batch is
+     * scored into its own private set and folded into the master as one batch-means
+     * observation, so the master's M2 captures the between-batch spread.  Off ⇒ the
+     * classic cumulative-into-master path, byte-for-byte unchanged. */
     int const variance = osh_scoring_runtime_tracks_variance(score_rt);
     struct osh_scoring_accumulator *batch_acc = NULL; /* reusable private set (variance only) */
     struct osh_scoring_scratch batch_scratch;         /* reusable per-batch traversal scratch */

@@ -23,8 +23,9 @@
  *
  * Standard error (issue #209)
  * ---------------------------
- * When the detect.dat VARIANCE card is set, each scored quantity gains a paired
- * standard-error column immediately after its value column (e.g. "DOSE DOSE_ERR").
+ * When a page enables variance tracking (a "Variance On" Settings block on its
+ * Quantity line), each scored quantity gains a paired standard-error column
+ * immediately after its value column (e.g. "DOSE DOSE_ERR").
  * The error is the batch-means standard error of the reported value, in the same
  * units as that value (it already carries the per-primary / physical-mean scaling).
  * A run with fewer than two batches has zero degrees of freedom, so its error

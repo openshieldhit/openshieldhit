@@ -143,13 +143,6 @@ struct osh_scoring_workspace {
     size_t nsettings;
     size_t ngeometries;
     size_t noutputs;
-    /* Monte-Carlo standard-error tracking (issue #209).  Global VARIANCE card:
-     * 0 = off (default; accumulators identical to before); > 0 = on, with the
-     * value being the requested number of batch-means observations (B).  The run
-     * splits [0, nstat) into this many contiguous batches when no other checkpoint
-     * cadence is active, so a single-threaded run yields B >= 2 and a reportable
-     * per-bin standard error.  B = 1 has zero degrees of freedom → no error. */
-    int variance;
 };
 
 /* ---- Output (estimator + pages) ----------------------------------------- */
@@ -268,6 +261,7 @@ struct osh_scoring_settings_def {
     size_t npart;            /* Optional particle-count cap. */
     int medium;              /* Optional medium override (dense material index). */
     int nkmedium;            /* Optional neutron-kerma medium override. */
+    int variance;            /* Monte-Carlo standard-error tracking: 1 = on, 0 = off (issue #209). */
     char has_rescale;
     char has_offset;
     char has_site_diameter_um;
@@ -275,6 +269,7 @@ struct osh_scoring_settings_def {
     char has_npart;
     char has_medium;
     char has_nkmedium;
+    char has_variance; /* Set when a "Variance On|Off" line was present. */
 };
 
 /* ---- Filter -------------------------------------------------------------- */

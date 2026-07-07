@@ -160,8 +160,9 @@ estimates the error. A batch is any of:
 - a parallel worker's history range (threads / MPI ranks — still to come),
 - a periodic partial-dump / checkpoint interval — the batch loop folds one
   observation per checkpoint (see the run-control work, #170),
-- an internal sub-split of a single serial run — a plain `VARIANCE` run derives a
-  count cadence that yields `N` batches out of the box (issue #209),
+- an internal sub-split of a single serial run — a run with any variance-tracking
+  page derives a count cadence that yields the default number of batches out of the
+  box (issue #209),
 - a `--score-replicas N` range, or a separate independent run.
 
 Because every bin is exposed to the **same** set of histories (most depositing
@@ -217,11 +218,13 @@ ignores their strong positive correlation and is therefore deliberately
 **conservative** — an over-estimate, never an under-estimate. A bin with
 `nbatch < 2`, a zero mean, or zero weight finalises to a `0` error.
 
-The feature is off by default and enabled per run by the global `VARIANCE [N]`
-card in `detect.dat` (see [`detect.dat.md`](../user/detect.dat.md)), which
-allocates the companion `M2` (`data_var`) arrays via
-`osh_scoring_accumulator_alloc_variance()`. With it off, the `M2` arrays are never
-allocated and the accumulators and hot path are byte-for-byte unchanged.
+The feature is off by default and enabled **per estimator** by attaching a
+`Settings` block carrying `Variance On` to a `Quantity` line in `detect.dat` (see
+[`detect.dat.md`](../user/detect.dat.md)). `osh_scoring_compile()` resolves that
+per page and allocates the companion `M2` (`data_var`) arrays for the enabled pages
+via `osh_scoring_accumulator_alloc_variance()`. For pages that do not opt in, the
+`M2` arrays are never allocated and their accumulators and hot path are
+byte-for-byte unchanged.
 
 > **MPI / GPU note.** The additive fields can ride `MPI_Reduce(MPI_SUM)`, but the
 > `M2` arrays cannot — a rank reduction needs a custom `MPI_Op_create` that
@@ -243,10 +246,11 @@ particle** (divided by `nstat`) at write time, except averaged quantities
 written as-is. ASCII output is **not** suitable for merging partial results:
 once divided by `nstat`, each run's absolute weight is lost.
 
-When the `VARIANCE` card is active each quantity gains a paired `NAME_ERR` column
-immediately after its value — the batch-means standard error from §4, in the same
-units (the writer emits `|value| · data_var`). BDO 2019 tolerates variance pages
-but writes values only for now; its standard-error field is a planned addition.
+When a page has variance tracking enabled each quantity gains a paired `NAME_ERR`
+column immediately after its value — the batch-means standard error from §4, in the
+same units (the writer emits `|value| · data_var`). BDO 2019 tolerates variance
+pages but writes values only for now; its standard-error field is a planned
+addition.
 
 ### BDO 2019 (`bdo`, `bdo2019`, `binary`, `bin`; default)
 

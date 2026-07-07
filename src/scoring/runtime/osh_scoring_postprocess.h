@@ -65,7 +65,8 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
  * it must run **before** @ref osh_scoring_postprocess rescales @c data or collapses
  * the LET ratio.  @c B < 2 (zero degrees of freedom), a zero mean, or a zero
  * weight yield a 0 error for that bin.  Pages without M2 arrays (variance off, or
- * the dump shadow) are skipped, so this is a no-op unless the VARIANCE card is set.
+ * the dump shadow) are skipped, so this is a no-op unless a page enabled variance
+ * tracking via a "Variance On" Settings block.
  *
  * @param[in,out] rt  Scoring runtime whose variance pages are finalised in place.
  * @returns OSH_OK on success, OSH_EINVAL if @p rt is NULL.

@@ -187,6 +187,26 @@ static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
     }
 }
 
+/* Does any Settings block referenced on this page enable variance tracking?
+ * Mirrors the per-page resolution in osh_scoring_compile() so the memory
+ * estimate cannot drift from the real allocation.  Settings references share the
+ * page's filter_names[] list (they are classified filter-vs-settings at compile). */
+static int page_settings_enable_variance(struct osh_scoring_workspace const *ws,
+                                         struct osh_scoring_page_def const *page) {
+    size_t s;
+    size_t t;
+
+    for (s = 0u; s < page->nfilter_names; ++s) {
+        for (t = 0u; t < ws->nsettings; ++t) {
+            if (ws->settings[t].name && strcmp(ws->settings[t].name, page->filter_names[s]) == 0
+                && ws->settings[t].has_variance && ws->settings[t].variance) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *ws,
                                             struct osh_scoring_mem_estimate *out) {
     size_t i;
@@ -205,9 +225,9 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
     /* Mirror exactly what osh_scoring_compile() allocates: one page per
      * (output, quantity); each page owns `bins` doubles for its primary
      * accumulator, plus a second `bins`-double weight accumulator for the
-     * "average" quantities (LET/Qeff).  A global VARIANCE card (issue #209)
-     * doubles this: each sum array gains a companion Welford M2 array.  bins is
-     * the geometry's bin product, computed by the same geometry_nbins() the
+     * "average" quantities (LET/Qeff).  A per-estimator "Variance On" Settings
+     * (issue #209) doubles this: each sum array gains a companion Welford M2 array.
+     * bins is the geometry's bin product, computed by the same geometry_nbins() the
      * compiler uses, so the estimate cannot drift from the real allocation. */
     for (i = 0u; i < ws->noutputs; ++i) {
         struct osh_scoring_output_def const *output = &ws->outputs[i];
@@ -227,7 +247,7 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
             }
             /* Variance doubles the arrays: data_var mirrors data, data2_var mirrors data2. */
             arrays = sum_arrays;
-            if (ws->variance) {
+            if (page_settings_enable_variance(ws, page)) {
                 arrays = sum_arrays * 2u;
             }
 
@@ -455,6 +475,7 @@ static enum osh_status copy_settings_runtime(struct osh_scoring_settings_runtime
     dst->npart = src->npart;
     dst->medium = src->medium;
     dst->nkmedium = src->nkmedium;
+    dst->variance = src->variance;
     dst->has_rescale = src->has_rescale;
     dst->has_offset = src->has_offset;
     dst->has_site_diameter_um = src->has_site_diameter_um;
@@ -462,6 +483,7 @@ static enum osh_status copy_settings_runtime(struct osh_scoring_settings_runtime
     dst->has_npart = src->has_npart;
     dst->has_medium = src->has_medium;
     dst->has_nkmedium = src->has_nkmedium;
+    dst->has_variance = src->has_variance;
     return OSH_OK;
 }
 
@@ -989,13 +1011,22 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         dst_page->has_data2 = score_kind_uses_data2(dst_page->score_kind);
         dst_page->divide = dst_page->has_data2;
         dst_page->postproc = score_kind_postproc(dst_page->score_kind, dst_page->divide);
-        /* Monte-Carlo standard-error tracking (issue #209): a global detect.dat
-         * VARIANCE card turns it on for every page.  The batch-means M2 arrays are
-         * allocated below; the per-batch fold and finalize happen in transport and
-         * postprocess.  0 keeps the accumulator exactly as before (no var arrays). */
+        /* Monte-Carlo standard-error tracking (issue #209) is enabled per
+         * estimator by attaching a Settings block carrying "Variance On" to the
+         * Quantity line (e.g. "Quantity Dose withErr").  Resolve it here — before
+         * the accumulator is allocated below — because it decides the accumulator's
+         * memory layout (the batch-means M2 companion arrays).  The general Settings
+         * override (medium/density) is applied later in finalize_ssets(), but that
+         * runs after this allocation, so variance is resolved directly against the
+         * page's Settings references now.  0 keeps the accumulator exactly as before
+         * (no var arrays); the per-batch fold and finalize happen in transport and
+         * postprocess. */
         dst_page->variance = 0;
-        if (ws->variance) {
-            dst_page->variance = 1;
+        for (k = 0; k < src_page->nfilter_names; ++k) {
+            sidx = find_settings_index(rt, src_page->filter_names[k]);
+            if (sidx >= 0 && rt->settings[(size_t) sidx].has_variance && rt->settings[(size_t) sidx].variance) {
+                dst_page->variance = 1;
+            }
         }
 
         /* Differential axis — expand data[] to geo_nbins × diff_nbins. */

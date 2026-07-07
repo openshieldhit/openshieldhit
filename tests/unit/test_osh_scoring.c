@@ -282,15 +282,18 @@ static void test_fixture_test01_filter_rules(void) {
     osh_scoring_workspace_free(ws);
 }
 
-/* ---- VARIANCE card (issue #209): global Monte-Carlo standard-error toggle ---- */
+/* ---- Per-estimator Variance Settings key (issue #209) -------------------- */
 
-/* Build a minimal valid deck, splicing @p variance_line (which may be "") in
- * ahead of a one-page Output so the parse otherwise succeeds. */
-static void write_variance_deck(char *path, size_t cap, char const *variance_line) {
+/* Build a minimal valid deck with a "withErr" Settings block whose body is
+ * @p settings_body, referenced by the sole Output page, so the parse succeeds. */
+static void write_variance_deck(char *path, size_t cap, char const *settings_body) {
     char text[512];
     snprintf(text,
              sizeof(text),
+             "Settings\n"
+             "    Name withErr\n"
              "%s"
+             "\n"
              "Geometry Mesh\n"
              "    Name G\n"
              "    Z 0.0 30.0 60\n"
@@ -298,57 +301,62 @@ static void write_variance_deck(char *path, size_t cap, char const *variance_lin
              "Output\n"
              "    Filename out.bdo\n"
              "    Geo G\n"
-             "    Quantity DOSE\n",
-             variance_line);
+             "    Quantity DOSE withErr\n",
+             settings_body);
     write_temp_file(path, cap, text);
 }
 
-/* No card leaves tracking off (0); a bare card selects the documented default
- * batch count; "VARIANCE N" sets it explicitly. */
-static void test_variance_card_default_and_explicit(void) {
+/* No Variance line leaves tracking off and unmarked; "Variance On" turns it on;
+ * "Variance Off" marks it present but off. */
+static void test_variance_settings_on_off(void) {
     char path[512];
     struct osh_scoring_workspace *ws;
+    struct osh_scoring_settings_def const *set;
     enum osh_status rc;
 
-    /* No card → off. */
+    /* No Variance line → off, not marked present. */
     write_variance_deck(path, sizeof(path), "");
     ws = NULL;
     rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK && ws != NULL);
-    ASSERT_TRUE(ws->variance == 0);
+    set = osh_scoring_settings_by_name(ws, "withErr");
+    ASSERT_TRUE(set != NULL);
+    ASSERT_TRUE(!set->has_variance);
+    ASSERT_TRUE(set->variance == 0);
     osh_scoring_workspace_free(ws);
     remove(path);
 
-    /* Bare card → default (OSH_SCORING_VARIANCE_DEFAULT_BATCHES == 10). */
-    write_variance_deck(path, sizeof(path), "VARIANCE\n");
+    /* "Variance On" → on. */
+    write_variance_deck(path, sizeof(path), "    Variance On\n");
     ws = NULL;
     rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK && ws != NULL);
-    ASSERT_TRUE(ws->variance == 10);
+    set = osh_scoring_settings_by_name(ws, "withErr");
+    ASSERT_TRUE(set != NULL);
+    ASSERT_TRUE(set->has_variance);
+    ASSERT_TRUE(set->variance == 1);
     osh_scoring_workspace_free(ws);
     remove(path);
 
-    /* Explicit count. */
-    write_variance_deck(path, sizeof(path), "VARIANCE 20\n");
+    /* "Variance Off" → explicitly off (marked present, value 0). */
+    write_variance_deck(path, sizeof(path), "    Variance Off\n");
     ws = NULL;
     rc = osh_scoring_setup_from_path(path, NULL, &ws);
     ASSERT_TRUE(rc == OSH_OK && ws != NULL);
-    ASSERT_TRUE(ws->variance == 20);
+    set = osh_scoring_settings_by_name(ws, "withErr");
+    ASSERT_TRUE(set != NULL);
+    ASSERT_TRUE(set->has_variance);
+    ASSERT_TRUE(set->variance == 0);
     osh_scoring_workspace_free(ws);
     remove(path);
 }
 
-/* A malformed batch count is rejected rather than silently truncated/wrapped into
- * ws->variance (an int): non-numeric, non-positive, trailing junk, and values that
- * overflow strtol or exceed INT_MAX all fail the parse. */
-static void test_variance_card_rejects_bad_count(void) {
+/* A missing or malformed Variance value is rejected rather than silently ignored. */
+static void test_variance_settings_rejects_bad_value(void) {
     char const *const bad[] = {
-        "VARIANCE abc\n",                  /* not a number */
-        "VARIANCE 0\n",                    /* below the minimum of 1 */
-        "VARIANCE -3\n",                   /* negative */
-        "VARIANCE 12x\n",                  /* trailing junk */
-        "VARIANCE 2147483648\n",           /* INT_MAX + 1: would wrap the int cast */
-        "VARIANCE 99999999999999999999\n", /* out of strtol range (ERANGE) */
+        "    Variance\n",       /* missing argument */
+        "    Variance maybe\n", /* not On/Off */
+        "    Variance 2\n",     /* only 0/1 accepted as numeric aliases */
     };
     size_t i;
 
@@ -372,7 +380,7 @@ int main(void) {
     test_parse_filter_rules();
     test_parse_geometry_axes();
     test_fixture_test01_filter_rules();
-    test_variance_card_default_and_explicit();
-    test_variance_card_rejects_bad_count();
+    test_variance_settings_on_off();
+    test_variance_settings_rejects_bad_value();
     return 0;
 }

@@ -25,6 +25,7 @@ struct osh_scoring_settings_runtime {
     size_t npart;            /* Maximum particle count cap. */
     int medium;              /* Transport medium override index. */
     int nkmedium;            /* Neutron-kerma medium override index. */
+    int variance;            /* Monte-Carlo standard-error tracking: 1 = on, 0 = off. */
     char has_rescale;
     char has_offset;
     char has_site_diameter_um;
@@ -32,6 +33,7 @@ struct osh_scoring_settings_runtime {
     char has_npart;
     char has_medium;
     char has_nkmedium;
+    char has_variance;
 };
 
 #ifdef __cplusplus

@@ -3,20 +3,21 @@
 #
 # Invoked by CMake as:
 #   cmake -DOSH_EXECUTABLE=<path> -DCASE_DIR=<path> -DWORK_DIR=<path>
-#         -DNSTAT=<n> [-DNBATCHES=<n>] [-DREPLICAS=<n>] -P run_variance.cmake
+#         -DNSTAT=<n> [-DREPLICAS=<n>] -P run_variance.cmake
 #
-# It copies the case, enables error tracking by appending a "VARIANCE <N>" card to
-# the copied detect.dat, and runs real transport.  It then asserts:
+# It copies the case, enables error tracking per estimator by injecting a
+# "Settings / Variance On" block into the copied detect.dat and tagging every
+# Quantity line with it, then runs real transport.  It then asserts:
 #
-#   * a plain (no-variance) run and the VARIANCE run agree on every value column
-#     (batching only reorders the FP summation) and the VARIANCE run adds a sane,
+#   * a plain (no-variance) run and the variance run agree on every value column
+#     (batching only reorders the FP summation) and the variance run adds a sane,
 #     non-negative, not-all-zero standard-error column per quantity — checked by
 #     check_variance.py;
-#   * the VARIANCE run is BYTE-IDENTICAL across two invocations — the fixed
+#   * the variance run is BYTE-IDENTICAL across two invocations — the derived
 #     count-cadence partition is deterministic, the reproducibility guard of #168
 #     (and the regression guard against leftover shared-mutable state).
 #
-# When -DREPLICAS=<n> is given it also runs the same VARIANCE case under
+# When -DREPLICAS=<n> is given it also runs the same variance case under
 # --score-replicas <n> and checks its error columns the same way, confirming the
 # replica split doubles as the batch-means source (no dump cadence required).
 
@@ -28,16 +29,12 @@ foreach(required_var OSH_EXECUTABLE CASE_DIR WORK_DIR NSTAT)
     endif()
 endforeach()
 
-if(NOT DEFINED NBATCHES)
-    set(NBATCHES 5)
-endif()
-
 find_program(PYTHON_EXECUTABLE NAMES python3 python)
 if(NOT PYTHON_EXECUTABLE)
     message(FATAL_ERROR "run_variance.cmake: python3 not found — required for .dat comparison")
 endif()
 
-# ---- Case sources: a plain copy, and a copy with the VARIANCE card appended ---
+# ---- Case sources: a plain copy, and a copy with per-estimator variance on ----
 set(PLAIN_SRC "${WORK_DIR}/case_plain")
 set(VAR_SRC "${WORK_DIR}/case_variance")
 file(REMOVE_RECURSE "${PLAIN_SRC}" "${VAR_SRC}")
@@ -46,7 +43,14 @@ file(COPY "${CASE_DIR}/" DESTINATION "${VAR_SRC}")
 if(NOT EXISTS "${VAR_SRC}/detect.dat")
     message(FATAL_ERROR "run_variance.cmake: case '${CASE_DIR}' has no detect.dat")
 endif()
-file(APPEND "${VAR_SRC}/detect.dat" "\nVARIANCE ${NBATCHES}\n")
+
+# Enable variance per estimator: prepend a Settings block carrying "Variance On"
+# and tag every Quantity line with its name ("Quantity <q>" -> "Quantity <q> withErr"),
+# so each scoring page opts in through the same mechanism as "Quantity Dose inWater".
+file(READ "${VAR_SRC}/detect.dat" _deck)
+string(REGEX REPLACE "([Qq]uantity[ \t]+[A-Za-z0-9_]+)" "\\1 withErr" _deck "${_deck}")
+set(_deck "Settings\n    Name withErr\n    Variance On\n\n${_deck}")
+file(WRITE "${VAR_SRC}/detect.dat" "${_deck}")
 
 # ---- Helper: run a case source with extra args into a fresh sub-dir -----------
 function(run_variant src subdir)
@@ -69,8 +73,8 @@ run_variant("${PLAIN_SRC}" "plain")
 run_variant("${VAR_SRC}"   "var_a")
 run_variant("${VAR_SRC}"   "var_b")
 
-# Optional --score-replicas variant: with the VARIANCE card active, the replica
-# split doubles as the batch-means source (issue #209) — no dump cadence needed.
+# Optional --score-replicas variant: with per-estimator variance tracking active,
+# the replica split doubles as the batch-means source (issue #209) — no dump cadence needed.
 # It must produce the same sane error columns as the derived-cadence run.
 if(DEFINED REPLICAS)
     run_variant("${VAR_SRC}" "var_repl" --score-replicas "${REPLICAS}")
@@ -130,4 +134,4 @@ foreach(_ref IN LISTS _var_dats)
     endif()
 endforeach()
 
-message(STATUS "variance error-bar + reproducibility OK for '${CASE_DIR}' (nstat=${NSTAT}, B=${NBATCHES})")
+message(STATUS "variance error-bar + reproducibility OK for '${CASE_DIR}' (nstat=${NSTAT})")

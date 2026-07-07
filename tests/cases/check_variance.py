@@ -5,8 +5,9 @@ Usage:
     python3 check_variance.py <variance.dat> <plain.dat> [--coord-cols INT]
                               [--rtol FLOAT] [--label STR]
 
-Given a scored ASCII file produced with the detect.dat VARIANCE card and the
-matching file from a plain (no-variance) run of the same case, assert that:
+Given a scored ASCII file produced with per-estimator variance tracking (a
+"Variance On" Settings block) and the matching file from a plain (no-variance) run
+of the same case, assert that:
 
   * the variance file has exactly twice as many scored columns as the plain file
     (each value column is followed by its paired standard-error column);

@@ -615,16 +615,16 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
         return OSH_EINVAL;
     }
 
-    /* Variance batching (issue #209): a VARIANCE run needs >= 2 checkpoint batches
-     * to have any degrees of freedom.  If the user set no other cadence and no
-     * score-replica split, derive a count cadence that yields the requested number
-     * of batches (ws->variance), so a plain single-threaded run produces error bars
-     * out of the box.  An explicit dump/checkpoint cadence or --score-replicas
-     * already provides batches, so those are left untouched (the variance fold rides
-     * whatever cadence is active). */
+    /* Variance batching (issue #209): a variance-tracking run needs >= 2 checkpoint
+     * batches to have any degrees of freedom.  If the user set no other cadence and
+     * no score-replica split, derive a count cadence that yields the internal default
+     * number of batches, so a plain single-threaded run produces error bars out of
+     * the box.  An explicit dump/checkpoint cadence or --score-replicas already
+     * provides batches, so those are left untouched (the variance fold rides whatever
+     * cadence is active). */
     if (osh_scoring_runtime_tracks_variance(&sim->scoring_runtime) && sim->transport_ctx.params.score_replicas == 0u
         && sim->checkpoint_policy.mode == OSH_PARTIAL_NONE) {
-        int const nbatches = sim->scoring ? sim->scoring->variance : 0;
+        int const nbatches = OSH_SCORING_VARIANCE_DEFAULT_BATCHES;
         unsigned long long const nstat = (unsigned long long) sim->transport_ctx.params.nstat;
         if (nbatches >= 2 && nstat > 0ull) {
             /* ceil(nstat / nbatches): the count cadence that splits [0, nstat) into
@@ -718,8 +718,8 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
 
     /* Finalise per-bin Monte-Carlo standard error (issue #209) BEFORE postprocess:
      * it reads the raw sums (and, for LET/Qeff, the two-pass weight) that
-     * postprocess is about to rescale/collapse.  A no-op unless the VARIANCE card
-     * allocated the M2 arrays. */
+     * postprocess is about to rescale/collapse.  A no-op unless a page enabled
+     * variance tracking (a "Variance On" Settings block allocated its M2 arrays). */
     rc = osh_scoring_finalize_errors(&sim->scoring_runtime);
     if (rc != OSH_OK) {
         OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: scoring error finalize failed");

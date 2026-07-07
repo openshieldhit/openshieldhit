@@ -153,11 +153,11 @@ QUANTITIES = ("dose", "fluence", "dlet", "tlet")
 def depth_quantities(out_dir: Path, code: str):
     """Return dict {z, dose, fluence, dlet, tlet} for the 1D idd.dat depth file.
 
-    When the OpenShieldHIT run used the detect.dat VARIANCE card each quantity is
-    followed by a paired standard-error column (X Y Z DOSE DOSE_ERR FLUENCE
-    FLUENCE_ERR ...), detected here from the column count; the errors are exposed
-    as "<quantity>_err" so the plots can draw error bands.  A plain run (no
-    VARIANCE) has no error columns and none are added.
+    When the OpenShieldHIT run enabled variance tracking (a "Variance On" Settings
+    block on the Quantity line) each quantity is followed by a paired standard-error
+    column (X Y Z DOSE DOSE_ERR FLUENCE FLUENCE_ERR ...), detected here from the
+    column count; the errors are exposed as "<quantity>_err" so the plots can draw
+    error bands.  A plain run (variance off) has no error columns and none are added.
     """
     d = load_numeric(out_dir / "idd.dat")
     nq = len(QUANTITIES)
