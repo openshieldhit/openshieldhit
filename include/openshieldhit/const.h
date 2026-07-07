@@ -20,9 +20,10 @@
 #define OSH_MB_TO_CM2 1.0e-27               /* 1 millibarn in cm² */
 #define OSH_CM2_TO_MB 1.0e27                /* 1 cm² in millibarns */
 
-#define OSH_HBARC 197.3269804              /* ħ·c [MeV·fm] (c = 1 convention) */
-#define OSH_HBAR 6.582119569e-22           /* reduced Planck constant ħ [MeV·s] */
-#define OSH_ALPHA_FS (1.0 / 137.035999084) /* fine-structure constant α */
+#define OSH_HBARC 197.3269804                    /* ħ·c [MeV·fm] (c = 1 convention) */
+#define OSH_HBAR 6.582119569e-22                 /* reduced Planck constant ħ [MeV·s] */
+#define OSH_ALPHA_FS (1.0 / 137.035999084)       /* fine-structure constant α */
+#define OSH_E2_MEV_FM (OSH_HBARC * OSH_ALPHA_FS) /* Coulomb constant e² = α·ħc [MeV·fm] */
 
 /* Bethe / energy-loss-straggling constants */
 #define OSH_K_BETHE 0.307075                /* 4π N_A r_e² mₑc²  [MeV·cm²/mol] */

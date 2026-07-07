@@ -65,6 +65,10 @@ void osh_nuclear_compound_step(unsigned int z,
         fragment.p[0] = p_lab_mev[0];
         fragment.p[1] = p_lab_mev[1];
         fragment.p[2] = p_lab_mev[2];
+        /* A compound nucleus is thermalized by definition: no exciton
+         * configuration survives for the pre-equilibrium stage. */
+        fragment.excitons_p = 0u;
+        fragment.excitons_h = 0u;
         osh_nuclear_fermi_breakup_step(fbu, &fragment, rng, event_out);
         return;
     }

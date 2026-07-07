@@ -191,6 +191,9 @@ static void append_unprocessed_fragment(struct fbu_work_item const *node, struct
     f->p[2] = node->p[2];
     f->z = node->z;
     f->a = node->a;
+    /* Break-up residues are equilibrium products: no exciton configuration. */
+    f->excitons_p = 0u;
+    f->excitons_h = 0u;
     event_out->n_fragments += 1u;
 }
 
@@ -585,8 +588,14 @@ enum osh_status osh_nuclear_fermi_breakup_compile(struct osh_nuclear_fermi_break
     /* Sizing pass. */
     npart = enumerate_all_partitions(out->mass_mev, alpha, NULL, NULL, NULL, NULL, &nfspecs);
 
-    out->part_pool = calloc(npart > 0u ? npart : 1u, sizeof(*out->part_pool));
-    out->fspec_pool = calloc(nfspecs > 0u ? nfspecs : 1u, sizeof(*out->fspec_pool));
+    if (npart == 0u) {
+        npart = 1u;
+    }
+    if (nfspecs == 0u) {
+        nfspecs = 1u;
+    }
+    out->part_pool = calloc(npart, sizeof(*out->part_pool));
+    out->fspec_pool = calloc(nfspecs, sizeof(*out->fspec_pool));
     if (!out->part_pool || !out->fspec_pool) {
         free(alpha);
         osh_nuclear_fermi_breakup_free(out);

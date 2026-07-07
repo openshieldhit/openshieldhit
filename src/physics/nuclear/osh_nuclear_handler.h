@@ -70,6 +70,14 @@ struct osh_nuclear_fragment {
     double p[3];              /**< Lab momentum vector [MeV/c].            */
     unsigned int z;           /**< Residual atomic number.                 */
     unsigned int a;           /**< Residual mass number.                   */
+    /** Exciton configuration of the residue for the pre-equilibrium stage
+     *  (issue #221): particle excitons are nucleons above the Fermi level
+     *  (retained knockouts, absorbed cascade nucleons); hole excitons are
+     *  the orbitals vacated by cascade collisions.  (0, 0) means the
+     *  fragment is thermalized (no pre-equilibrium emission applies), which
+     *  is the correct state for compound nuclei and break-up residues. */
+    unsigned int excitons_p; /**< Particle excitons.                       */
+    unsigned int excitons_h; /**< Hole excitons.                           */
 };
 
 /**

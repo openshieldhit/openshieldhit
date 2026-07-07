@@ -239,6 +239,93 @@ static void test_fragment_momentum_balance(void) {
     }
 }
 
+static void test_exciton_bookkeeping(void) {
+    /* Exciton export (issue #263).  Per event: every cascade collision
+     * leaves a hole; a retained knock-out is a particle exciton and does NOT
+     * reduce A; an absorbed cascade proton is one more particle exciton.
+     * Externally observable invariants:
+     *   escaped  = A_initial - A_fragment
+     *   retained = excitons_h - escaped            (>= 0)
+     *   excitons_p - retained ∈ {0, 1}             (1 iff cascade absorbed) */
+    struct osh_rng rng;
+    struct osh_nuclear_event ev;
+    double dir[3];
+    double total_p;
+    unsigned int escaped;
+    unsigned int retained;
+    unsigned int slack;
+    int i;
+
+    dir[0] = 0.0;
+    dir[1] = 0.0;
+    dir[2] = 1.0;
+    total_p = 0.0;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 61u, 0u);
+    for (i = 0; i < 20000; ++i) {
+        osh_nuclear_abrasion_step(140.0, dir, O16_A, O16_Z, SIGMA_PA_CM2, &rng, &ev);
+        if (ev.n_fragments == 0u) {
+            continue;
+        }
+        ASSERT_TRUE(ev.fragments[0].a <= (unsigned int) O16_A);
+        escaped = (unsigned int) O16_A - ev.fragments[0].a;
+        ASSERT_TRUE(ev.fragments[0].excitons_h >= escaped);
+        retained = ev.fragments[0].excitons_h - escaped;
+        ASSERT_TRUE(ev.fragments[0].excitons_p >= retained);
+        slack = ev.fragments[0].excitons_p - retained;
+        ASSERT_TRUE(slack == 0u || slack == 1u);
+        total_p += (double) ev.fragments[0].excitons_p;
+    }
+    /* With the default threshold a few % of 140 MeV knock-outs are retained:
+     * the particle-exciton channel must actually fire. */
+    ASSERT_TRUE(total_p > 0.0);
+}
+
+static void test_retention_low_energy(void) {
+    /* At T = 3 MeV a single collision runs; the cascade proton can never pay
+     * the 13.3 MeV hole cost, so it is always absorbed (one particle
+     * exciton), and the knock-out (e_sec <= 3 MeV, well under the threshold)
+     * is retained with high probability.  Retained events keep A/Z intact
+     * and put the entire budget into E*. */
+    struct osh_rng rng;
+    struct osh_nuclear_event ev;
+    double dir[3];
+    double t_in;
+    double mean_p;
+    double total_p;
+    int n_events;
+    int i;
+
+    dir[0] = 0.0;
+    dir[1] = 0.0;
+    dir[2] = 1.0;
+    t_in = 3.0;
+    total_p = 0.0;
+    n_events = 2000;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 71u, 0u);
+    for (i = 0; i < n_events; ++i) {
+        osh_nuclear_abrasion_step(t_in, dir, O16_A, O16_Z, SIGMA_PA_CM2, &rng, &ev);
+        ASSERT_TRUE(ev.n_fragments == 1u);
+        ASSERT_TRUE(ev.fragments[0].excitons_h == 1u);
+        ASSERT_TRUE(ev.fragments[0].excitation_energy <= t_in + 1.0e-9);
+        if (ev.n_secondaries == 0u) {
+            /* Knock-out retained AND cascade proton absorbed: the full
+             * kinetic budget must sit in E* and A/Z must be untouched. */
+            ASSERT_NEAR(ev.fragments[0].excitation_energy, t_in, 1.0e-9);
+            ASSERT_TRUE(ev.fragments[0].a == (unsigned int) O16_A);
+            ASSERT_TRUE(ev.fragments[0].z == (unsigned int) O16_Z);
+            ASSERT_TRUE(ev.fragments[0].excitons_p == 2u);
+        }
+        total_p += (double) ev.fragments[0].excitons_p;
+    }
+    /* Retention probability at ~1.5 MeV is >0.9, so the mean particle count
+     * sits close to 2 (retained knock-out + absorbed cascade proton). */
+    mean_p = total_p / (double) n_events;
+    ASSERT_TRUE(mean_p > 1.7);
+    ASSERT_TRUE(mean_p <= 2.0);
+}
+
 int main(void) {
     test_event_kind();
     test_energy_conservation();
@@ -247,5 +334,7 @@ int main(void) {
     test_mean_nu();
     test_excitation_energy();
     test_fragment_momentum_balance();
+    test_exciton_bookkeeping();
+    test_retention_low_energy();
     return 0;
 }

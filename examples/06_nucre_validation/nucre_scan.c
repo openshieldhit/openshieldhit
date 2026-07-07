@@ -160,6 +160,12 @@ int main(int argc, char **argv) {
     double estar_sum;
     double estar_sq_sum;
     double estar_max;
+    double estar_mean;
+    double estar_std;
+    double excp_sum;
+    double exch_sum;
+    double mean_e;
+    double frac_below;
     double leftover_frag;
     double leftover_estar;
     double edges_ratio;
@@ -222,6 +228,8 @@ int main(int argc, char **argv) {
     estar_sum = 0.0;
     estar_sq_sum = 0.0;
     estar_max = 0.0;
+    excp_sum = 0.0;
+    exch_sum = 0.0;
     leftover_frag = 0.0;
     leftover_estar = 0.0;
     n_with_fragment = 0UL;
@@ -243,6 +251,8 @@ int main(int argc, char **argv) {
             if (bin >= 0) {
                 estar_hist[bin] += 1.0;
             }
+            excp_sum += (double) ev.fragments[0].excitons_p;
+            exch_sum += (double) ev.fragments[0].excitons_h;
             osh_nuclear_fermi_breakup_step(&fbu, &ev.fragments[0], &rng, &ev);
         }
 
@@ -281,21 +291,31 @@ int main(int argc, char **argv) {
            seed);
     printf("# species  yield/event  mean_E_MeV  frac_below_%.3gMeV\n", NUCRE_SCAN_ELO_MEV);
     for (s = 0; s < NUCRE_SCAN_NSPECIES; ++s) {
-        printf("#   %-5s  %10.5f  %10.4f  %10.5f\n",
-               s_species_name[s],
-               yield[s] / (double) nevents,
-               (yield[s] > 0.0) ? esum[s] / yield[s] : 0.0,
-               (yield[s] > 0.0) ? below[s] / yield[s] : 0.0);
+        mean_e = 0.0;
+        frac_below = 0.0;
+        if (yield[s] > 0.0) {
+            mean_e = esum[s] / yield[s];
+            frac_below = below[s] / yield[s];
+        }
+        printf(
+            "#   %-5s  %10.5f  %10.4f  %10.5f\n", s_species_name[s], yield[s] / (double) nevents, mean_e, frac_below);
     }
-    printf("# prefragment: frac_with_fragment=%.5f  Estar_mean=%.4f  Estar_std=%.4f  Estar_max=%.2f MeV\n",
+    estar_mean = 0.0;
+    estar_std = 0.0;
+    if (n_with_fragment > 0UL) {
+        estar_mean = estar_sum / (double) n_with_fragment;
+        estar_std = sqrt(fmax(0.0, estar_sq_sum / (double) n_with_fragment - estar_mean * estar_mean));
+        excp_sum /= (double) n_with_fragment;
+        exch_sum /= (double) n_with_fragment;
+    }
+    printf("# prefragment: frac_with_fragment=%.5f  Estar_mean=%.4f  Estar_std=%.4f  Estar_max=%.2f MeV"
+           "  excitons_p_mean=%.4f  excitons_h_mean=%.4f\n",
            (double) n_with_fragment / (double) nevents,
-           (n_with_fragment > 0UL) ? estar_sum / (double) n_with_fragment : 0.0,
-           (n_with_fragment > 0UL)
-               ? sqrt(fmax(0.0,
-                           estar_sq_sum / (double) n_with_fragment
-                               - (estar_sum / (double) n_with_fragment) * (estar_sum / (double) n_with_fragment)))
-               : 0.0,
-           estar_max);
+           estar_mean,
+           estar_std,
+           estar_max,
+           excp_sum,
+           exch_sum);
     printf("# after break-up: leftover_fragments/event=%.5f  leftover_Estar/event=%.5f MeV (discarded by transport)\n",
            leftover_frag / (double) nevents,
            leftover_estar / (double) nevents);
