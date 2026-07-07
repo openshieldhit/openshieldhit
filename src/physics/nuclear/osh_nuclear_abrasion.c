@@ -64,7 +64,10 @@ static int sample_nu_truncated(struct osh_rng *rng, double lambda) {
         term *= lambda / (double) k;
         cum += term;
     }
-    return (k < 1) ? 1 : k;
+    if (k < 1) {
+        return 1;
+    }
+    return k;
 }
 
 void osh_nuclear_abrasion_step(double T_lab_mev,
@@ -294,8 +297,16 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         unsigned int da = (unsigned int) (n_knockout_p + n_knockout_n);
         unsigned int dz = (unsigned int) n_knockout_p;
 
-        event_out->fragments[0].a = (event_out->fragments[0].a > da) ? event_out->fragments[0].a - da : 0u;
-        event_out->fragments[0].z = (event_out->fragments[0].z > dz) ? event_out->fragments[0].z - dz : 0u;
+        if (event_out->fragments[0].a > da) {
+            event_out->fragments[0].a -= da;
+        } else {
+            event_out->fragments[0].a = 0u;
+        }
+        if (event_out->fragments[0].z > dz) {
+            event_out->fragments[0].z -= dz;
+        } else {
+            event_out->fragments[0].z = 0u;
+        }
         if (event_out->fragments[0].a == 0u || event_out->fragments[0].z == 0u) {
             /* Fully disassembled residual (light targets): any accumulated
              * excitation is dropped with it — rare edge, accepted. */
