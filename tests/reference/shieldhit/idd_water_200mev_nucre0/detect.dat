@@ -17,6 +17,21 @@ Filter
     A = 1
 
 Filter
+    Name Deuterons      # H-2
+    Z = 1
+    A = 2
+
+Filter
+    Name Tritons        # H-3
+    Z = 1
+    A = 3
+
+Filter
+    Name He3
+    Z = 2
+    A = 3
+
+Filter
     Name Alphas         # He-4
     Z = 2
     A = 4
@@ -50,18 +65,24 @@ Output
     Quantity Dose
     Quantity Dose Primary
     Quantity Dose Protons
+    Quantity Dose Deuterons
+    Quantity Dose Tritons
+    Quantity Dose He3
     Quantity Dose Alphas
     Quantity Dose HeavyRec
     Quantity Fluence
     Quantity Fluence Primary
     Quantity Fluence Protons
+    Quantity Fluence Deuterons
+    Quantity Fluence Tritons
+    Quantity Fluence He3
     Quantity Fluence Alphas
     Quantity Fluence HeavyRec
 
 # Differential secondary spectrum in the plateau slab: kinetic energy, 0.1..300
 # MeV, 150 logarithmic bins.  The scorer accumulates Phi(bin); tools/plot_nucre.py
 # divides by the log-bin width to obtain the spectral density dPhi/dEkin.
-# Three pages: all particles, protons, and alphas (order matters for the plotter).
+# Six pages: all particles, p, d, t, He3, and alpha (order matters for the plotter).
 Output
     Filename spectrum.dat
     Fileformat TEXT
@@ -70,6 +91,15 @@ Output
     Diff1     0.1  300.0  150  LOG
     Diff1Type EKIN
     Quantity Fluence Protons
+    Diff1     0.1  300.0  150  LOG
+    Diff1Type EKIN
+    Quantity Fluence Deuterons
+    Diff1     0.1  300.0  150  LOG
+    Diff1Type EKIN
+    Quantity Fluence Tritons
+    Diff1     0.1  300.0  150  LOG
+    Diff1Type EKIN
+    Quantity Fluence He3
     Diff1     0.1  300.0  150  LOG
     Diff1Type EKIN
     Quantity Fluence Alphas
@@ -87,10 +117,16 @@ Output
     Quantity DLET
     Quantity DLET Primary
     Quantity DLET Protons
+    Quantity DLET Deuterons
+    Quantity DLET Tritons
+    Quantity DLET He3
     Quantity DLET Alphas
     Quantity DLET HeavyRec
     Quantity TLET
     Quantity TLET Primary
     Quantity TLET Protons
+    Quantity TLET Deuterons
+    Quantity TLET Tritons
+    Quantity TLET He3
     Quantity TLET Alphas
     Quantity TLET HeavyRec
