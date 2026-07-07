@@ -166,6 +166,7 @@ static enum osh_status page_postprocess_into(struct osh_scoring_page_runtime *ds
 enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, struct osh_scoring_runtime const *src) {
     size_t i;
     enum osh_status rc;
+    int in_place;
 
     if (!dst || !src) {
         return OSH_EINVAL;
@@ -178,6 +179,19 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
      * may legitimately be absent in a hand-built runtime (unit tests). */
     if (src->npages > 0u && (!dst->pages || !src->pages)) {
         return OSH_EINVAL;
+    }
+
+    /* dst == src is the in-place, destructive path: every page's dst.data aliases
+     * src.data, so ÷volume / MeV·g→Gy / data÷data2 rewrite the live arrays and a
+     * second pass would double-apply. The single-shot guard and its flag live here,
+     * not just in the osh_scoring_postprocess() wrapper, so a direct in-place
+     * osh_scoring_postprocess_into(rt, rt) is protected identically — the two
+     * in-place entry points can no longer diverge. An out-of-place call (a distinct
+     * dst shadow) never mutates src and stays repeatable for dump/checkpoint (#170)
+     * and future merge. */
+    in_place = ((void const *) dst == (void const *) src);
+    if (in_place && dst->postprocessed) {
+        return OSH_ESTATE;
     }
 
     for (i = 0; i < src->npages; ++i) {
@@ -193,30 +207,15 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
         }
     }
 
+    if (in_place) {
+        dst->postprocessed = 1;
+    }
     return OSH_OK;
 }
 
 enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt) {
-    enum osh_status rc;
-
-    if (!rt) {
-        return OSH_EINVAL;
-    }
-    /* Single-shot: the in-place transform rewrites each page's data over itself
-     * (÷volume, MeV/g→Gy, data÷data2), so a second call would double-divide /
-     * re-ratio. Refuse it once done rather than silently corrupt the buffers.
-     * This matters as dump/checkpoint (#170) and future merge multiply the call
-     * sites; the repeatable primitive for those is osh_scoring_postprocess_into()
-     * with a distinct dst (the shadow), which never mutates src or sets this flag. */
-    if (rt->postprocessed) {
-        return OSH_ESTATE;
-    }
-    /* In place is the dst == src case: every page's dst.data aliases src.data,
-     * so DOSEGY/LET write back over the live arrays exactly as before, and simple
-     * scorers skip the (self-)copy. */
-    rc = osh_scoring_postprocess_into(rt, rt);
-    if (rc == OSH_OK) {
-        rt->postprocessed = 1;
-    }
-    return rc;
+    /* Thin wrapper over the dst == src case: osh_scoring_postprocess_into() owns
+     * the single-shot guard and the postprocessed flag, so in-place finalisation
+     * behaves identically whether reached through here or called directly. */
+    return osh_scoring_postprocess_into(rt, rt);
 }

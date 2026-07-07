@@ -21,10 +21,12 @@ extern "C" {
  *
  * @note Single-shot: the transform is destructive and not idempotent, so a
  * second in-place call would double-divide by volume / re-ratio data÷data2.
- * The runtime records that it has run and this returns @c OSH_ESTATE on any
- * further call.  For repeatable (dump / checkpoint / pre-merge) finalisation use
- * @ref osh_scoring_postprocess_into with a distinct @p dst — it never mutates
- * @p src and does not trip this guard.
+ * The runtime records that it has run and any further in-place call returns
+ * @c OSH_ESTATE.  The guard lives in @ref osh_scoring_postprocess_into (the
+ * @p dst == @p src case), so calling that directly with @p dst == @p src is
+ * protected identically to this wrapper.  For repeatable (dump / checkpoint /
+ * pre-merge) finalisation use @ref osh_scoring_postprocess_into with a
+ * **distinct** @p dst — it never mutates @p src and does not trip this guard.
  */
 enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
 
@@ -41,9 +43,15 @@ enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
  * a distinct buffer the raw values are mirrored so the saved view is complete.
  *
  * @p dst and @p src must have the same @c npages, and matching pages the same
- * @c acc.len.  This is the non-destructive primitive a mid-run snapshot uses
- * (see @ref osh_scoring_shadow): clone only what postprocess writes, alias the
- * rest, and leave the live accumulators byte-identical.
+ * @c acc.len.  With a **distinct** @p dst this is the non-destructive primitive a
+ * mid-run snapshot uses (see @ref osh_scoring_shadow): clone only what postprocess
+ * writes, alias the rest, and leave the live accumulators byte-identical.
+ *
+ * @note The in-place case (@p dst == @p src) is destructive and single-shot: it
+ * returns @c OSH_ESTATE if the runtime was already postprocessed, and sets that
+ * flag on success.  This is the guard @ref osh_scoring_postprocess relies on, and
+ * it protects a direct in-place call here too.  An out-of-place call never touches
+ * the flag and stays repeatable.
  */
 enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, struct osh_scoring_runtime const *src);
 
