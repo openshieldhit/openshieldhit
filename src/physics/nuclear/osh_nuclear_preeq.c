@@ -357,8 +357,8 @@ void osh_nuclear_preeq_step(struct osh_nuclear_preeq const *model,
     }
 
     for (iter = 0; iter < PREEQ_MAX_ITER; ++iter) {
-        /* Thermalized, empty, or out-of-domain residues are left untouched:
-         * the compound/neutron path and break-up residues carry (0, 0). */
+        /* Residues without particle excitons, without excitation, or out of domain are left untouched.
+         * (p, h) = (0, 0) is the thermalized contract used for compound/neutron paths and break-up residues. */
         if (fragment->excitons_p == 0u || fragment->excitation_energy <= 0.0) {
             return;
         }
