@@ -48,6 +48,7 @@ nav:
     - mat.dat reference: user/mat.dat.md
     - detect.dat reference: user/detect.dat.md
   - Physics Reference:
+    - Nuclear inelastic reactions: physics/nuclear-inelastic.md
     - Neutron transport: physics/neutron-transport.md
     - Neutron cross sections: physics/neutron-cross-sections.md
   - Developer Guide:

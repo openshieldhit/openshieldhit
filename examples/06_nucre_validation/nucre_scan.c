@@ -311,7 +311,7 @@ int main(int argc, char **argv) {
     estar_std = 0.0;
     if (n_with_fragment > 0UL) {
         estar_mean = estar_sum / (double) n_with_fragment;
-        estar_std = sqrt(fmax(0.0, estar_sq_sum / (double) n_with_fragment - estar_mean * estar_mean));
+        estar_std = sqrt(fmax(0.0, (estar_sq_sum / (double) n_with_fragment) - (estar_mean * estar_mean)));
         excp_sum /= (double) n_with_fragment;
         exch_sum /= (double) n_with_fragment;
     }
