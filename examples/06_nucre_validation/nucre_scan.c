@@ -23,6 +23,8 @@
  * Usage:  nucre_scan <Z> <A> <T_MeV> [nevents] [seed]  > out.dat
  */
 
+#include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,6 +53,60 @@ static char const *const s_species_name[NUCRE_SCAN_NSPECIES] = {
     "he3",
     "alpha",
 };
+
+/** @brief Parse a base-10 unsigned integer argument without sign wrapping. */
+static int parse_uint_arg(char const *text, unsigned int *out) {
+    char *end;
+    unsigned long value;
+
+    if (!text || !out || text[0] == '-' || text[0] == '+') {
+        return 0;
+    }
+    errno = 0;
+    end = NULL;
+    value = strtoul(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || value > (unsigned long) UINT_MAX) {
+        return 0;
+    }
+    *out = (unsigned int) value;
+    return 1;
+}
+
+/** @brief Parse a base-10 unsigned long argument without sign wrapping. */
+static int parse_ulong_arg(char const *text, unsigned long *out) {
+    char *end;
+    unsigned long value;
+
+    if (!text || !out || text[0] == '-' || text[0] == '+') {
+        return 0;
+    }
+    errno = 0;
+    end = NULL;
+    value = strtoul(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return 0;
+    }
+    *out = value;
+    return 1;
+}
+
+/** @brief Parse a positive finite floating-point argument. */
+static int parse_positive_double_arg(char const *text, double *out) {
+    char *end;
+    double value;
+
+    if (!text || !out) {
+        return 0;
+    }
+    errno = 0;
+    end = NULL;
+    value = strtod(text, &end);
+    if (errno != 0 || end == text || *end != '\0' || !isfinite(value) || !(value > 0.0)) {
+        return 0;
+    }
+    *out = value;
+    return 1;
+}
 
 /* Map a secondary's species to the fixed tally row; -1 for non-whitelist. */
 static int species_index(struct particle const *sp) {
@@ -122,12 +178,22 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: nucre_scan <Z> <A> <T_MeV> [nevents] [seed]\n");
         return 2;
     }
-    z_tgt = (unsigned int) atoi(argv[1]);
-    a_tgt = (unsigned int) atoi(argv[2]);
-    t_mev = atof(argv[3]);
-    nevents = (argc > 4) ? strtoul(argv[4], NULL, 10) : NUCRE_SCAN_DEFAULT_EVENTS;
-    seed = (argc > 5) ? (unsigned int) strtoul(argv[5], NULL, 10) : NUCRE_SCAN_DEFAULT_SEED;
-    if (z_tgt == 0u || a_tgt < 2u || t_mev <= 0.0 || nevents == 0UL) {
+    if (!parse_uint_arg(argv[1], &z_tgt) || !parse_uint_arg(argv[2], &a_tgt)
+        || !parse_positive_double_arg(argv[3], &t_mev)) {
+        fprintf(stderr, "nucre_scan: invalid target/energy/event count\n");
+        return 2;
+    }
+    nevents = NUCRE_SCAN_DEFAULT_EVENTS;
+    seed = NUCRE_SCAN_DEFAULT_SEED;
+    if (argc > 4 && !parse_ulong_arg(argv[4], &nevents)) {
+        fprintf(stderr, "nucre_scan: invalid target/energy/event count\n");
+        return 2;
+    }
+    if (argc > 5 && !parse_uint_arg(argv[5], &seed)) {
+        fprintf(stderr, "nucre_scan: invalid target/energy/event count\n");
+        return 2;
+    }
+    if (z_tgt == 0u || a_tgt < 2u || nevents == 0UL) {
         fprintf(stderr, "nucre_scan: invalid target/energy/event count\n");
         return 2;
     }
