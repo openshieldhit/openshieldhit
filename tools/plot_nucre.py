@@ -27,13 +27,16 @@ across the four modes.
 
 Column layouts:
   idd.dat quantity order (detect.dat): Dose, Dose Primary, Dose Protons,
-    Dose Alphas, Dose HeavyRec, Fluence, Fluence Primary, Fluence Protons,
-    Fluence Alphas, Fluence HeavyRec
-    OpenShieldHIT mesh : X Y Z <10 quantities>   (Z=col2, quantities col3..12)
-    SHIELD-HIT12A 1D   : Z <10 quantities>        (Z=col0, quantities col1..10)
-  spectrum.dat (Ekin 0.1..300 MeV, 150 log bins, pages: Fluence, Fluence Protons)
-    OpenShieldHIT : X Y Z EKIN Phi_all Phi_prot   -- Phi PER BIN (see issue #215)
-    SHIELD-HIT12A : Page Diff1bin Value           -- Value already /cm^2/MeV
+    Dose Deuterons, Dose Tritons, Dose He3, Dose Alphas, Dose HeavyRec,
+    Fluence, Fluence Primary, Fluence Protons, Fluence Deuterons,
+    Fluence Tritons, Fluence He3, Fluence Alphas, Fluence HeavyRec
+    OpenShieldHIT mesh : X Y Z <16 quantities>   (Z=col2, quantities col3..18)
+    SHIELD-HIT12A 1D   : Z <16 quantities>        (Z=col0, quantities col1..16)
+  spectrum.dat (Ekin 0.1..300 MeV, 150 log bins, pages: Fluence, Fluence Protons,
+    Fluence Deuterons, Fluence Tritons, Fluence He3, Fluence Alphas)
+    OpenShieldHIT : X Y Z EKIN Phi_all Phi_p Phi_d Phi_t Phi_He3 Phi_alpha
+      -- Phi PER BIN (see issue #215)
+    SHIELD-HIT12A : Page Diff1bin Value
   Issue #215: OSH differential output is counts-per-bin, not a density, so this
   tool divides the OSH spectrum by the log-bin width; SH12A is already a density.
 """
@@ -50,6 +53,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/openshieldhit-matplotlib")
 
@@ -69,12 +73,12 @@ REF_LW, OSH_LW = 3.0, 1.3
 REF_LIGHTEN = 0.6  # 0 = original colour, 1 = white
 
 
-def lighten(color, amount=REF_LIGHTEN):
+def lighten(color: Any, amount: float = REF_LIGHTEN) -> tuple[float, float, float]:
     r, g, b = mcolors.to_rgb(color)
     return (r + (1.0 - r) * amount, g + (1.0 - g) * amount, b + (1.0 - b) * amount)
 
 
-def code_style(code, color):
+def code_style(code: str, color: Any) -> dict[str, Any]:
     """Line kwargs for a series: 'sh' = thick lightened underlay, 'osh' = thin saturated overlay."""
     if code == "sh":
         return dict(color=lighten(color), lw=REF_LW, zorder=1, drawstyle="steps-mid")
@@ -92,18 +96,28 @@ SH12A_CASES = {"nucre0", "nucre1"}
 
 # idd.dat quantity order (must match detect.dat).
 QUANTITIES = (
-    "dose", "dose_prim", "dose_prot", "dose_alpha", "dose_heavy",
-    "flu", "flu_prim", "flu_prot", "flu_alpha", "flu_heavy",
+    "dose", "dose_prim", "dose_prot", "dose_deut", "dose_trit", "dose_he3", "dose_alpha", "dose_heavy",
+    "flu", "flu_prim", "flu_prot", "flu_deut", "flu_trit", "flu_he3", "flu_alpha", "flu_heavy",
 )
 
 # let.dat quantity order (must match detect.dat).
 LET_QUANTITIES = (
-    "dlet", "dlet_prim", "dlet_prot", "dlet_alpha", "dlet_heavy",
-    "tlet", "tlet_prim", "tlet_prot", "tlet_alpha", "tlet_heavy",
+    "dlet", "dlet_prim", "dlet_prot", "dlet_deut", "dlet_trit", "dlet_he3", "dlet_alpha", "dlet_heavy",
+    "tlet", "tlet_prim", "tlet_prot", "tlet_deut", "tlet_trit", "tlet_he3", "tlet_alpha", "tlet_heavy",
 )
 
 # Differential spectrum axis (must match the Diff1 line in detect.dat).
 SPEC_LO, SPEC_HI, SPEC_NBINS = 0.1, 300.0, 150
+
+# Differential spectrum page/column order (must match detect.dat).
+SPECTRUM_SPECIES = (
+    ("dphi_all", "all", "C0"),
+    ("dphi_prot", "p", "C2"),
+    ("dphi_deut", "d", "C3"),
+    ("dphi_trit", "t", "C4"),
+    ("dphi_he3", "He3", "C5"),
+    ("dphi_alpha", "alpha", "C6"),
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -167,6 +181,17 @@ def format_elapsed(seconds):
         return f"{seconds:.2f} s"
     minutes, seconds = divmod(seconds, 60.0)
     return f"{int(minutes)}m {seconds:.1f}s"
+
+
+def format_nstat(nstat):
+    """Human-readable primary count label for plot titles."""
+    if nstat is None:
+        return "n/a"
+    if nstat >= 1.0e6:
+        return f"{nstat / 1.0e6:g}M"
+    if nstat >= 1.0e3:
+        return f"{nstat / 1.0e3:g}k"
+    return f"{nstat:g}"
 
 
 def _run(cmd, cwd=None):
@@ -285,10 +310,12 @@ def draw_residual_strip(ax, osh, sh, families, zend, ylim_pct=30.0):
 def osh_spectrum(out_dir: Path):
     """OpenShieldHIT plateau spectrum -> dPhi/dEkin (dividing Phi(bin) by bin width, issue #215).
 
-    Columns are X Y Z EKIN Phi_all Phi_prot [Phi_alpha] (the third fluence page is
-    present once the deck is run with the alpha differential scorer).
+    New decks write columns X Y Z EKIN Phi_all Phi_p Phi_d Phi_t Phi_He3 Phi_alpha.
+    Older three-page outputs (all, p, alpha) are still read correctly while the
+    reference fixtures are being regenerated.
     """
     path = out_dir / "spectrum.dat"
+    keys = ("dphi_all", "dphi_prot", "dphi_deut", "dphi_trit", "dphi_he3", "dphi_alpha")
     if not path.exists():
         return None
     d = load_numeric(path)
@@ -296,13 +323,13 @@ def osh_spectrum(out_dir: Path):
         return None
     _, widths = log_bin_centers_widths(SPEC_LO, SPEC_HI, SPEC_NBINS)
     n = min(d.shape[0], len(widths))
-    out = {
-        "ekin": d[:n, 3],
-        "dphi_all": d[:n, 4] / widths[:n],
-        "dphi_prot": d[:n, 5] / widths[:n],
-    }
-    if d.shape[1] >= 7:
-        out["dphi_alpha"] = d[:n, 6] / widths[:n]
+    out = {"ekin": d[:n, 3]}
+    if d.shape[1] == 7:
+        keys = ("dphi_all", "dphi_prot", "dphi_alpha")
+    for i, key in enumerate(keys):
+        col = 4 + i
+        if col < d.shape[1]:
+            out[key] = d[:n, col] / widths[:n]
     return out
 
 
@@ -326,9 +353,11 @@ def sh12a_spectrum(ref_dir: Path):
         return None
     centers, widths = log_bin_centers_widths(SPEC_LO, SPEC_HI, SPEC_NBINS)
     out = {"ekin": centers}
-    # Pages: 0 all, 1 protons, 2 alphas (page 2 absent in fixtures predating the
-    # alpha differential scorer — skipped gracefully).
-    for page, key in ((0, "dphi_all"), (1, "dphi_prot"), (2, "dphi_alpha")):
+    pages = sorted(set(d[:, 0].astype(int)))
+    keys = ("dphi_all", "dphi_prot", "dphi_deut", "dphi_trit", "dphi_he3", "dphi_alpha")
+    if pages == [0, 1, 2]:
+        keys = ("dphi_all", "dphi_prot", "dphi_alpha")
+    for page, key in enumerate(keys):
         rows = d[d[:, 0].astype(int) == page]
         if rows.size == 0:
             continue
@@ -381,30 +410,36 @@ def main() -> int:
         osh_let = depth_let(osh_out, "osh") if osh_out is not None else None
         osh_spec = osh_spectrum(osh_out) if osh_out is not None else None
         sh = sh_let = sh_spec = None
+        sh_nstat = None
         if case in SH12A_CASES:
             ref = sh12a_ref_dir(args, case)
+            sh_nstat = read_nstat(ref / "beam.dat")
             sh = depth_quantities(ref, "sh12a")
             sh_let = depth_let(ref, "sh12a")
             sh_spec = sh12a_spectrum(ref)
         data[case] = {"osh": osh, "osh_let": osh_let, "osh_err": osh_err, "osh_s": osh_s, "osh_spec": osh_spec,
-                      "sh": sh, "sh_let": sh_let, "sh_spec": sh_spec}
+                      "sh": sh, "sh_let": sh_let, "sh_spec": sh_spec, "sh_nstat": sh_nstat}
 
     DOSE_SPECIES = [
         ("dose", "all", "C0"), ("dose_prim", "primary p", "C1"),
-        ("dose_prot", "all p", "C2"), ("dose_alpha", "alphas", "C3"),
-        ("dose_heavy", "heavy rec (Z>=3)", "C4"),
+        ("dose_prot", "all p", "C2"), ("dose_deut", "d", "C3"),
+        ("dose_trit", "t", "C4"), ("dose_he3", "He3", "C5"),
+        ("dose_alpha", "alphas", "C6"), ("dose_heavy", "heavy rec (Z>=3)", "C7"),
     ]
     FLU_SPECIES = [
         ("flu", "all", "C0"), ("flu_prim", "primary p", "C1"),
-        ("flu_prot", "all p", "C2"), ("flu_alpha", "alphas", "C3"),
-        ("flu_heavy", "heavy rec (Z>=3)", "C4"),
+        ("flu_prot", "all p", "C2"), ("flu_deut", "d", "C3"),
+        ("flu_trit", "t", "C4"), ("flu_he3", "He3", "C5"),
+        ("flu_alpha", "alphas", "C6"), ("flu_heavy", "heavy rec (Z>=3)", "C7"),
     ]
     # Only the track-based species read cleanly; alphas/heavy DLET are dominated
     # by rare high-LET transported recoils in low-statistics bins, and heavy-recoil
     # LET is ~0 until point deposits feed LET (score_point energy/dose only today).
     DLET_SPECIES = [
         ("dlet", "all", "C0"), ("dlet_prim", "primary p", "C1"),
-        ("dlet_prot", "all p", "C2"),
+        ("dlet_prot", "all p", "C2"), ("dlet_deut", "d", "C3"),
+        ("dlet_trit", "t", "C4"), ("dlet_he3", "He3", "C5"),
+        ("dlet_alpha", "alphas", "C6"), ("dlet_heavy", "heavy rec (Z>=3)", "C7"),
     ]
 
     with PdfPages(args.out) as pdf:
@@ -424,6 +459,8 @@ def main() -> int:
                 note = "  [OpenShieldHIT-only NUCRE mode]"
             elif sh is None:
                 note = "  [SHIELD-HIT12A fixture missing]"
+            elif d["sh_nstat"] is not None:
+                note = f"  [SH12A nstat={format_nstat(d['sh_nstat'])}]"
 
             # Each depth quantity is a main panel with a thin (OSH-SH12A)/SH12A
             # residual strip below it (shared x-axis); the spectrum spans the
@@ -492,10 +529,9 @@ def main() -> int:
             for spec, code, tag in ((d["sh_spec"], "sh", "SH12A"), (d["osh_spec"], "osh", "OSH")):
                 if spec is None:
                     continue
-                a.plot(spec["ekin"], spec["dphi_all"], label=f"{tag} all", **code_style(code, "C0"))
-                a.plot(spec["ekin"], spec["dphi_prot"], label=f"{tag} protons", **code_style(code, "C2"))
-                if "dphi_alpha" in spec:
-                    a.plot(spec["ekin"], spec["dphi_alpha"], label=f"{tag} alphas", **code_style(code, "C3"))
+                for key, label, color in SPECTRUM_SPECIES:
+                    if key in spec:
+                        a.plot(spec["ekin"], spec[key], label=f"{tag} {label}", **code_style(code, color))
             a.set(title="Plateau secondary spectrum (z=9.5-10.5 cm)",
                   xlabel="Ekin (MeV)", ylabel="dPhi/dEkin per primary (1/cm^2/MeV)")
             a.set_xscale("log")
@@ -542,7 +578,10 @@ def main() -> int:
     print(f"\nWrote {args.out}")
     print(f"\nOpenShieldHIT wall-clock (nstat={args.nstat}); SHIELD-HIT12A = committed fixture:")
     for case in args.cases:
-        print(f"  {case:<8}{format_elapsed(data[case]['osh_s'])}")
+        sh_label = ""
+        if data[case]["sh_nstat"] is not None:
+            sh_label = f"; SH12A nstat={format_nstat(data[case]['sh_nstat'])}"
+        print(f"  {case:<8}{format_elapsed(data[case]['osh_s'])}{sh_label}")
     return 0
 
 
