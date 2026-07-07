@@ -1,0 +1,13 @@
+# Cylindrical scoring over the REC + TRC target region.
+
+Geometry Cyl
+    Name MyCyl
+    R   0.0    5.0   5     # 5 radial bins, 1 cm each
+    Z   0.0   20.0  200   # 200 depth bins, 1 mm each
+
+Output
+         Filename NB_cyl.dat
+         Fileformat TEXT
+         Geo MyCyl
+         Quantity Energy
+         Quantity Dose

@@ -14,7 +14,7 @@
 | **Commit audited** | [`e3c619a`][e3c619a] on `main` (2026-07-05) |
 | **Source** | [PR #248][#248] |
 | **Scope** | Test infra · transport hot path & EM physics · scoring · nuclear/neutron transport · RNG & parallel readiness · GEMCA geometry · parsers/IO · architecture |
-| **Follow-up** | 11 suggested issues (none filed yet) — see [§8](#sec-8) |
+| **Follow-up** | 11 suggested issues (1 filed — [#255][#255], fixed by [#257][#257]) — see [§8](#sec-8) |
 
 
 Deep audit of `main` (e3c619a) prompted by PR [#239][#239] (sanitizer wiring) and issues
@@ -679,6 +679,8 @@ Scope: `src/gemca/` (quadric distances, dispatch), boundary nudge policy,
 
 ### G-1 (critical, high) Missing factor 2 in the linear coefficient — ellipsoid, elliptic-cylinder and cone surface distances are mathematically wrong {: #g-1 }
 
+**Filed:** [#255][#255] (covers this finding and [G-2](#g-2)) · **Fixed by:** [#257][#257].
+
 `_quadratic_solver(a, b, c)` solves `a·t² + b·t + c = 0` with
 `d = b² − 4ac`, roots `(−b ± √d)/(2a)` (`osh_gemca2_dist.c:482-510`), i.e. it
 expects the **full** linear coefficient. The call sites disagree:
@@ -716,6 +718,8 @@ correct).
   every body type, which would have caught this immediately.
 
 ### G-2 (medium, high) Cancellation-prone quadratic root formula near surfaces {: #g-2 }
+
+**Filed:** [#255][#255] (tracked together with [G-1](#g-1)) · **Fixed by:** [#257][#257].
 
 Even the correct call sites use `(−b + √d)/(2a)` (`osh_gemca2_dist.c:507-509`).
 When the particle sits just off a surface (`c ≈ 0` — precisely the
@@ -888,7 +892,7 @@ case dir which fails at *someone else's* `ctest`).
 
 | # | Finding | Severity | Where |
 |---|---|---|---|
-| [G-1](#g-1) | Ellipsoid/elliptic-cyl/cone distances wrong (missing ×2 on linear coefficient); empirically confirmed 0.651 vs 0.500 | **critical** (for ELL/ELLZ/CONE users) | `osh_gemca2_dist.c:413,443,467` |
+| [G-1](#g-1) | Ellipsoid/elliptic-cyl/cone distances wrong (missing ×2 on linear coefficient); empirically confirmed 0.651 vs 0.500 — filed as [#255][#255], fixed by [#257][#257] | **critical** (for ELL/ELLZ/CONE users) | `osh_gemca2_dist.c:413,443,467` |
 | [N-1](#n-1) | Neutron interactions deposit zero energy; n–p recoil energy vanishes; [TODO.md][todo-md] claims otherwise | **high** | `osh_transport_neutron.c:166-202`, `osh_neutron_reaction.c:91-108` |
 | [N-2](#n-2) | Neutron σ clamped at 20 MeV table edge — fast neutrons ×5–6 over-attenuated | **high** | `osh_neutron_xsec.c:84-87` |
 | [P-2](#p-2) | Isotope conflation: deuteron/triton/³He use wrong range table (×2/×3/×¾) and wrong rest mass | **high** | `osh_transport_ion_step.c:1258`, `osh_material_compile.c:698-716` |
@@ -916,7 +920,7 @@ PR [#239][#239] validated and worth merging as-is ([T-4](#t-4)).
 
 ### Suggested issue slicing (one issue each, in priority order)
 
-1. GEMCA quadric linear-coefficient bug + per-surface distance unit tests ([G-1](#g-1), [G-2](#g-2)).
+1. GEMCA quadric linear-coefficient bug + per-surface distance unit tests ([G-1](#g-1), [G-2](#g-2)) — filed as [#255][#255], fixed by [#257][#257].
 2. Neutron energy deposition: point-deposit `local_deposit_mev` + fix [TODO.md][todo-md] claims ([N-1](#n-1)); follow-up: recoil-proton ion feedback.
 3. Neutron σ above 20 MeV: Tier-2 dispatch above Tier-1 grid ([N-2](#n-2)).
 4. Isotope-aware range/mass in transport (A-rescale within Z column + `part->mass` kinematics + once-per-species warning) ([P-2](#p-2)).
@@ -956,5 +960,7 @@ current usage; "latent" items are correct today but break planned features.
 [#237]: https://github.com/openshieldhit/openshieldhit/issues/237
 [#239]: https://github.com/openshieldhit/openshieldhit/pull/239
 [#248]: https://github.com/openshieldhit/openshieldhit/pull/248
+[#255]: https://github.com/openshieldhit/openshieldhit/issues/255
+[#257]: https://github.com/openshieldhit/openshieldhit/pull/257
 [todo-md]: https://github.com/openshieldhit/openshieldhit/blob/e3c619a1328e9351bcbc1dc599321ac2770ad622/TODO.md
 [e3c619a]: https://github.com/openshieldhit/openshieldhit/commit/e3c619a1328e9351bcbc1dc599321ac2770ad622
