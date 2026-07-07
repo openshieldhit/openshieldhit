@@ -45,6 +45,19 @@ static void make_fragment(
     f->excitons_h = nh;
 }
 
+/* Compare the physically meaningful fragment state field-by-field.
+ * Padding bytes are not stable, so memcmp() is not valid here. */
+static void assert_fragment_equal(struct osh_nuclear_fragment const *lhs, struct osh_nuclear_fragment const *rhs) {
+    ASSERT_NEAR(lhs->excitation_energy, rhs->excitation_energy, 1.0e-12);
+    ASSERT_NEAR(lhs->p[0], rhs->p[0], 1.0e-12);
+    ASSERT_NEAR(lhs->p[1], rhs->p[1], 1.0e-12);
+    ASSERT_NEAR(lhs->p[2], rhs->p[2], 1.0e-12);
+    ASSERT_TRUE(lhs->z == rhs->z);
+    ASSERT_TRUE(lhs->a == rhs->a);
+    ASSERT_TRUE(lhs->excitons_p == rhs->excitons_p);
+    ASSERT_TRUE(lhs->excitons_h == rhs->excitons_h);
+}
+
 static void test_thermalized_noop(void) {
     /* (p, h) = (0, 0) is the thermalized contract: compound nuclei and
      * break-up residues must pass through untouched. */
@@ -63,7 +76,7 @@ static void test_thermalized_noop(void) {
         make_fragment(&f, 8u, 16u, 40.0, 0u, 0u);
         before = f;
         osh_nuclear_preeq_step(&model, &f, &rng, &ev);
-        ASSERT_TRUE(memcmp(&before, &f, sizeof(f)) == 0);
+        assert_fragment_equal(&before, &f);
         ASSERT_TRUE(ev.n_secondaries == 0u);
     }
 }

@@ -211,7 +211,7 @@ static double emission_width(struct osh_nuclear_preeq const *model,
     for (i = 0; i < nbins; ++i) {
         t_mid = ((double) i + 0.5) * dt;
         u_res = t_max - t_mid; /* = E* - B_j - T, residual excitation */
-        ratio = comb * exp((double) n_minus * log(g_level * u_res) - ((double) n_exc - 1.0) * log_ge);
+        ratio = comb * exp(((double) n_minus * log(g_level * u_res)) - (((double) n_exc - 1.0) * log_ge));
         w = prefactor * t_mid * inverse_sigma_fm2(spec, t_mid, (double) a_res, (double) z_res) * gamma_j * r_comp
             * ratio * dt;
         if (w < 0.0) {
@@ -449,7 +449,7 @@ void osh_nuclear_preeq_step(struct osh_nuclear_preeq const *model,
 
         /* Isotropic lab emission (Kalbach systematics: planned refinement). */
         cos_theta = 2.0 * osh_rng_double(rng) - 1.0;
-        sin_theta = sqrt(fmax(0.0, 1.0 - cos_theta * cos_theta));
+        sin_theta = sqrt(fmax(0.0, 1.0 - (cos_theta * cos_theta)));
         osh_kinematics_azimuth(rng, &cos_phi, &sin_phi);
         dir[0] = sin_theta * cos_phi;
         dir[1] = sin_theta * sin_phi;
