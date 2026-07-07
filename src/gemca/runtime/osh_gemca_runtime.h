@@ -408,8 +408,11 @@ void osh_gemca_runtime_check_surface_batch(struct gemca_rt_surface const *sf,
  * @param[in] sf  Flat surface to intersect.
  * @param[in] r   Ray (position and normalised direction) in surface-local coords.
  *
- * @returns Smallest positive distance to the surface, or OSH_GEMCA_INFINITY if
- *          the ray does not cross it.
+ * @returns The surface's ray-distance value, matching the internal distance
+ *          helpers: for the quadric surfaces the smallest positive root (0.0
+ *          when real roots exist but none is positive); for the plane surfaces
+ *          the signed distance along the ray (may be negative); and
+ *          OSH_GEMCA_INFINITY when the ray does not cross the surface.
  */
 double osh_gemca_runtime_surface_distance(struct gemca_rt_surface const *sf, struct ray const *r);
 

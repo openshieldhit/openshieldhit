@@ -163,6 +163,28 @@ static void test_cone_distances(void) {
     ASSERT_TRUE(d <= 0.0 || d >= OSH_GEMCA_INFINITY); /* no finite positive crossing */
 }
 
+/*
+ * Ray parallel to a cone generator: the quadratic coefficient a vanishes, so
+ * the solver takes its degenerate linear branch (a single root). This is the
+ * only quadric surface that can reach that branch with a non-zero linear
+ * coefficient (sphere always has a = 1; for cylinders a = 0 forces h = 0 too).
+ */
+static void test_cone_generator_parallel(void) {
+    struct gemca_rt_surface sf = make_surf(OSH_GEMCA_SURF_CONE, 0.0, 1.0, 0.0);
+    struct ray r;
+    double d;
+
+    /* single forward crossing at distance sqrt(2) */
+    r = make_ray(0.0, 0.0, -2.0, 1.0, 0.0, 1.0);
+    d = surf_dist(&sf, &r);
+    ASSERT_CLOSE(d, sqrt(2.0), 1e-9);
+
+    /* only crossing is behind the origin: no forward hit */
+    r = make_ray(0.0, 0.0, 2.0, 1.0, 0.0, 1.0);
+    d = surf_dist(&sf, &r);
+    ASSERT_TRUE(d <= 0.0 || d >= OSH_GEMCA_INFINITY);
+}
+
 static void test_plane_distances(void) {
     /* PLANEZ: p[0]*z + p[1] = 0 -> plane at z = 2 (p = {1, -2}) */
     struct gemca_rt_surface sf = make_surf(OSH_GEMCA_SURF_PLANEZ, 1.0, -2.0, 0.0);
@@ -323,6 +345,7 @@ int main(void) {
     test_cylz_distances();
     test_ellipsoid_distances();
     test_cone_distances();
+    test_cone_generator_parallel();
     test_plane_distances();
     test_ellz_matches_cylz();
     test_ellipsoid_matches_sphere();

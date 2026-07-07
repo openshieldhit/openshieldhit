@@ -2408,16 +2408,19 @@ static inline double _dist_plane_rt(struct gemca_rt_surface const *sf, struct ra
  * which avoids the cancellation of the naive (-h +/- sqrt)/a form when c is
  * close to 0 -- the post-nudge state every boundary crossing produces (G-2).
  *
- * Returns OSH_GEMCA_INFINITY if there are no real roots or both roots are
- * non-positive.  The tangential case (discriminant == 0) produces a repeated
- * root at -h/a; if that root is positive it is returned as the hit distance
- * (grazing contact counts as a boundary crossing).
+ * Returns the smallest positive root. When real roots exist but none is
+ * positive it returns 0.0 (via _minpos), and it returns OSH_GEMCA_INFINITY when
+ * there are no real roots (or the degenerate linear case has no positive
+ * solution). The tangential case (discriminant == 0) produces a repeated root
+ * at -h/a; if that root is positive it is returned as the hit distance (grazing
+ * contact counts as a boundary crossing).
  *
  * @param[in] a  Quadratic coefficient.
  * @param[in] h  Half of the linear coefficient.
  * @param[in] c  Constant coefficient.
  *
- * @returns Smallest positive root, or OSH_GEMCA_INFINITY.
+ * @returns Smallest positive root; 0.0 if real roots exist but none is
+ *          positive; OSH_GEMCA_INFINITY if there are no real roots.
  */
 static inline double _quad_solver(double a, double h, double c) {
     double disc;

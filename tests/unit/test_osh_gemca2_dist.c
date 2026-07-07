@@ -48,6 +48,8 @@
         }                                                                                                              \
     } while (0)
 
+enum { ZONE_DISTANCE_MAX_PARAMS = 4 }; /* PLANE has the most surface parameters (A,B,C,D) */
+
 /* Build a single-body zone from one surface, in OSH_COORD_UNIVERSE (identity). */
 static double zone_distance(int surf_type, double const *params, int np, struct ray const *r) {
     struct surface sf;
@@ -55,14 +57,21 @@ static double zone_distance(int surf_type, double const *params, int np, struct 
     struct body b;
     struct zone z;
     struct ray rc;
+    double pbuf[ZONE_DISTANCE_MAX_PARAMS]; /* mutable copy so sf.p never aliases const input */
+    int i;
 
     memset(&sf, 0, sizeof(sf));
     memset(&b, 0, sizeof(b));
     memset(&z, 0, sizeof(z));
 
+    ASSERT_TRUE(np >= 0 && np <= ZONE_DISTANCE_MAX_PARAMS);
+    for (i = 0; i < np; ++i) {
+        pbuf[i] = params[i];
+    }
+
     sf.type = surf_type;
     sf.np = np;
-    sf.p = (double *) params;
+    sf.p = pbuf;
 
     surfs[0] = &sf;
     b.surfs = surfs;
@@ -159,10 +168,41 @@ static void test_ast_cone_ray_never_exits(void) {
     ASSERT_TRUE(zone_distance(OSH_GEMCA_SURF_CONE, cone, 2, &r) >= OSH_GEMCA_INFINITY);
 }
 
+/*
+ * Exercise the solver's degenerate (a ~ 0) linear branch and its no-real-roots
+ * branch, which the "generic quadratic" rays above never reach:
+ *   - a purely axial ray in an infinite cylinder gives a = 0 and h = 0;
+ *   - a ray parallel to a cone generator gives a = 0 with h != 0 (one root);
+ *   - a ray that entirely misses the cone gives a real quadratic with no roots.
+ */
+static void test_ast_solver_degenerate_branches(void) {
+    double cyl[1] = {4.0};       /* R = 2 */
+    double cone[2] = {0.0, 1.0}; /* slope^2 = 1 */
+    struct ray r;
+
+    /* axial ray: a = 0 and h = 0 -> never crosses the infinite wall */
+    r = make_ray(0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+    ASSERT_TRUE(zone_distance(OSH_GEMCA_SURF_CYLZ, cyl, 1, &r) >= OSH_GEMCA_INFINITY);
+
+    /* generator-parallel ray with a single forward crossing at distance sqrt(2) */
+    r = make_ray(0.0, 0.0, -2.0, 1.0, 0.0, 1.0);
+    ASSERT_CLOSE(zone_distance(OSH_GEMCA_SURF_CONE, cone, 2, &r), sqrt(2.0), 1e-9);
+
+    /* generator-parallel ray whose only crossing is behind the start: never exits */
+    r = make_ray(0.0, 0.0, 2.0, 1.0, 0.0, 1.0);
+    ASSERT_TRUE(zone_distance(OSH_GEMCA_SURF_CONE, cone, 2, &r) >= OSH_GEMCA_INFINITY);
+
+    /* start outside the cone on a ray that misses it entirely (no real roots);
+       the walk never enters the zone, so the path length is zero */
+    r = make_ray(5.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+    ASSERT_CLOSE(zone_distance(OSH_GEMCA_SURF_CONE, cone, 2, &r), 0.0, 1e-12);
+}
+
 int main(void) {
     test_ast_sphere_exit_distance();
     test_ast_ellz_matches_cylz();
     test_ast_ellipsoid_matches_sphere();
     test_ast_cone_ray_never_exits();
+    test_ast_solver_degenerate_branches();
     return 0;
 }
