@@ -52,6 +52,10 @@ Every simulation case lives in a directory with four plain-text files:
 
 - [`user/command-line.md`](user/command-line.md) — CLI options, `--outdir`, dry-run, and file overrides
 
+## Teaching material
+
+- [`teaching/index.md`](teaching/index.md) — course scaffolding, slides, and exercise sets for student use
+
 ## SH12A compatibility
 
 Conceptually inspired by the same application domain as [SHIELD-HIT12A](https://shieldhit.org) (SH12A) and sharing its input-file format.
