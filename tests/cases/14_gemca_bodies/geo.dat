@@ -1,0 +1,19 @@
+    0    0  150 MeV protons through REC (elliptic cyl) + TRC (truncated cone)
+  REC    1       0.0       0.0       0.0       0.0       0.0      10.0
+                 2.0       0.0       0.0       0.0       3.0       0.0
+  TRC    2       0.0       0.0      10.0       0.0       0.0      10.0
+                 4.0       2.0
+  RCC    3       0.0       0.0     -10.0       0.0       0.0      50.0
+                15.0
+  RCC    4       0.0       0.0     -20.0       0.0       0.0      70.0
+                25.0
+  END
+  001          +1
+  002          +2
+  003          +3     -1     -2
+  004          +4     -3
+  END
+  ASSIGNMAT Water 001
+  ASSIGNMAT Water 002
+  ASSIGNMAT vacuum 003
+  ASSIGNMAT blackhole 004

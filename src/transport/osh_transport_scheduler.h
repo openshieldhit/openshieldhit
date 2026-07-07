@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 /*
- * Internal header: scheduler seam for future multi-pool transport orchestration.
+ * Internal header: scheduler seam for multi-pool transport orchestration.
  * Not part of the public API yet.
  */
 
@@ -21,12 +21,12 @@ enum osh_transport_family {
 };
 
 /*
- * Minimal scheduler state for the future outer transport loop.
+ * Scheduler state for the outer transport loop.
  *
- * The eventual multi-pool driver will own one queue or pool per transport
- * family and update has_work[] as families generate secondaries for each
- * other.  For now this struct only tracks which families are enabled for a
- * run and which of them currently have work pending.
+ * The multi-pool driver owns one queue or pool per transport family and updates
+ * has_work[] as families generate secondaries for each other.  This struct
+ * tracks which families are enabled for a run and which enabled families
+ * currently have work pending.
  */
 struct osh_transport_scheduler {
     char enabled[OSH_TRANSPORT_FAMILY_COUNT];

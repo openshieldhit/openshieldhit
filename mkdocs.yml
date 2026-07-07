@@ -28,6 +28,7 @@ theme:
     - content.code.copy
 
 markdown_extensions:
+  - attr_list
   - admonition
   - pymdownx.details
   - pymdownx.highlight:
@@ -57,4 +58,7 @@ nav:
     - Coordinate systems: dev/coordinates.md
     - Random numbers: dev/random_numbers.md
     - Scoring: dev/scoring.md
+    - Bug hunts:
+      - Overview: dev/bug-hunts/index.md
+      - "2026-07-05: Deep audit": dev/bug-hunts/2026-07-05-deep-audit.md
   - API Reference: api/index.html

@@ -28,8 +28,6 @@ if(NOT GIT_VERSION)
     set(GIT_VERSION "0.0.1-unknown")
 endif()
 
-message(STATUS "OpenShieldHIT version: ${GIT_VERSION}")
-
 # Parse semver components from tag (e.g. v1.2.3 or v1.2.3-5-gabcdef)
 string(REGEX MATCH "([0-9]+)\\.([0-9]+)\\.([0-9]+)" OSH_SEMVER_MATCH "${GIT_VERSION}")
 if(OSH_SEMVER_MATCH)
@@ -37,11 +35,19 @@ if(OSH_SEMVER_MATCH)
     set(OSH_VERSION_MINOR "${CMAKE_MATCH_2}")
     set(OSH_VERSION_PATCH "${CMAKE_MATCH_3}")
 else()
+    # Tagless checkout (shallow clone, fresh fork, CI mirror without tags):
+    # `git describe --always` fell back to a bare commit hash with no X.Y.Z to
+    # parse. Synthesise a semver-shaped default so OSH_VERSION always contains a
+    # major.minor.patch that agrees with the component accessors, keeping the
+    # commit as build metadata for provenance (e.g. "0.0.0+6aae2da").
     set(OSH_VERSION_MAJOR 0)
     set(OSH_VERSION_MINOR 0)
     set(OSH_VERSION_PATCH 0)
+    set(GIT_VERSION "0.0.0+${GIT_VERSION}")
 endif()
 set(OSH_PROJECT_VERSION "${OSH_VERSION_MAJOR}.${OSH_VERSION_MINOR}.${OSH_VERSION_PATCH}")
+
+message(STATUS "OpenShieldHIT version: ${GIT_VERSION}")
 
 configure_file(
     ${PROJECT_SOURCE_DIR}/src/common/osh_version.h.in
