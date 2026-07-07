@@ -326,6 +326,43 @@ static void test_retention_low_energy(void) {
     ASSERT_TRUE(mean_p <= 2.0);
 }
 
+static void test_capture_bookkeeping(void) {
+    /* Issue #265: an absorbed cascade proton adds (Z+1, A+1) to the residue
+     * when the resulting nuclide stays inside the de-excitation domain.  At
+     * T = 3 MeV on C-12 the cascade proton is always absorbed; when the
+     * knock-out is also retained (no secondaries) the residue must be N-13
+     * with the full budget in E*.  On O-16 (max-domain target) the identity
+     * is capped instead — covered by test_retention_low_energy. */
+    struct osh_rng rng;
+    struct osh_nuclear_event ev;
+    double dir[3];
+    double t_in;
+    int n_captured;
+    int i;
+
+    dir[0] = 0.0;
+    dir[1] = 0.0;
+    dir[2] = 1.0;
+    t_in = 3.0;
+    n_captured = 0;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 83u, 0u);
+    for (i = 0; i < 2000; ++i) {
+        osh_nuclear_abrasion_step(t_in, dir, 12.0, 6.0, SIGMA_PA_CM2, &rng, &ev);
+        ASSERT_TRUE(ev.n_fragments == 1u);
+        if (ev.n_secondaries == 0u) {
+            /* Knock-out retained AND cascade proton captured: C-12 + p. */
+            ASSERT_TRUE(ev.fragments[0].a == 13u);
+            ASSERT_TRUE(ev.fragments[0].z == 7u);
+            ASSERT_TRUE(ev.fragments[0].excitons_p == 2u);
+            ASSERT_NEAR(ev.fragments[0].excitation_energy, t_in, 1.0e-9);
+            ++n_captured;
+        }
+    }
+    /* Retention probability at ~1.5 MeV is >0.9: captures must dominate. */
+    ASSERT_TRUE(n_captured > 1500);
+}
+
 int main(void) {
     test_event_kind();
     test_energy_conservation();
@@ -336,5 +373,6 @@ int main(void) {
     test_fragment_momentum_balance();
     test_exciton_bookkeeping();
     test_retention_low_energy();
+    test_capture_bookkeeping();
     return 0;
 }

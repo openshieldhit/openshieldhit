@@ -11,8 +11,11 @@ for p + (Z, A) at a fixed incident energy, with no transport. It tabulates the
 cannot see directly:
 
 - per-species (n, p, d, t, ³He, α) yields per inelastic event, mean energies,
-  and kinetic-energy histograms (150 log bins, 0.1–300 MeV — the same axis as
-  the NUCRE reference-deck plateau spectra);
+  and kinetic-energy histograms (150 log bins, 0.1–300 MeV — the same
+  *binning and axes* as the NUCRE reference-deck plateau spectra, for
+  convenient shape comparison only: production-at-emission and transported
+  plateau fluence are different observables, and the quantitative SH12A
+  comparison is always deck-vs-deck at transport level);
 - the prefragment excitation-energy distribution *before* de-excitation
   (the E\* supply feeding the break-up stage);
 - leftover unprocessed fragments and their residual excitation after break-up.

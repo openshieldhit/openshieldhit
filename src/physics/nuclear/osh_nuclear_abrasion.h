@@ -113,10 +113,12 @@ struct osh_nuclear_event;
  * (the primary slot is terminated; the cascade proton continues as a secondary).
  *
  * The surviving residual is written to event_out->fragments[0] with its mass
- * and atomic number reduced by the escaped knockouts, the accumulated
- * excitation energy E* (hole charges + retained kinetic energy), the exciton
- * configuration (particles, holes), and a lab momentum from the event
- * momentum balance — input for the pre-equilibrium / Fermi break-up
+ * and atomic number reduced by the escaped knockouts — and increased by a
+ * captured cascade proton (issue #265; skipped when the nuclide would leave
+ * the de-excitation table domain, e.g. full capture on O-16) — the
+ * accumulated excitation energy E* (hole charges + retained kinetic energy),
+ * the exciton configuration (particles, holes), and a lab momentum from the
+ * event momentum balance — input for the pre-equilibrium / Fermi break-up
  * de-excitation stages.  Kinetic energy is conserved exactly:
  * T_in = Σ KE_secondaries + E*.
  *

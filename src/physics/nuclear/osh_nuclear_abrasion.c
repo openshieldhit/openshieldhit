@@ -99,6 +99,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     int is_neutron;
     int n_knockout_p;
     int n_knockout_n;
+    int cascade_absorbed;
     unsigned int n_excitons_p;
     unsigned int n_excitons_h;
     int nu; /* sampled number of participant nucleons */
@@ -175,6 +176,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
     e_star = 0.0;
     n_knockout_p = 0;
     n_knockout_n = 0;
+    cascade_absorbed = 0;
     n_excitons_p = 0u;
     n_excitons_h = 0u;
     w_curr[0] = incident_dir[0];
@@ -291,6 +293,7 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
          * outside, so no hole is associated with it). */
         e_star += T_current;
         ++n_excitons_p;
+        cascade_absorbed = 1;
     }
 
     if (event_out->n_fragments > 0u) {
@@ -307,6 +310,21 @@ void osh_nuclear_abrasion_step(double T_lab_mev,
         } else {
             event_out->fragments[0].z = 0u;
         }
+
+        /* Capture bookkeeping (issue #265): an absorbed cascade proton adds
+         * its mass and charge to the residue, mirroring the neutron path's
+         * (Z, A+1) compound convention — but only while the resulting
+         * nuclide stays inside the shared de-excitation table domain.  Full
+         * capture on a max-domain target (O-16 -> F-17) keeps the old
+         * identity: the energy and momentum are still absorbed, and growing
+         * the tables is not worth this rare corner. */
+        if (cascade_absorbed && event_out->fragments[0].a >= 1u && event_out->fragments[0].z >= 1u
+            && event_out->fragments[0].z + 1u <= (unsigned int) OSH_FERMI_BREAKUP_ZMAX
+            && event_out->fragments[0].a + 1u <= (unsigned int) OSH_FERMI_BREAKUP_AMAX) {
+            event_out->fragments[0].a += 1u;
+            event_out->fragments[0].z += 1u;
+        }
+
         if (event_out->fragments[0].a == 0u || event_out->fragments[0].z == 0u) {
             /* Fully disassembled residual (light targets): any accumulated
              * excitation is dropped with it — rare edge, accepted. */
