@@ -237,3 +237,60 @@ Output
 
 `Dose inWater` and `DoseGy inWater` score using the stopping power of water
 regardless of the actual traversed material, equivalent to SH12A dose-to-water.
+
+## Statistical uncertainty (error bars)
+
+Per-bin Monte-Carlo **standard error** is off by default.  Turn it on **per
+estimator** by attaching a `Settings` block that carries `Variance On` to the
+`Quantity` line — the same mechanism as `Quantity Dose inWater`:
+
+```text
+Settings
+    Name withErr
+    Variance On
+
+Output
+    Filename bragg.dat
+    Geo Depth
+    Quantity Dose withErr
+```
+
+Only the pages that reference such a block gain error columns; every other page
+is scored exactly as before.  (There is deliberately no run-wide card or flag for
+this yet — enabling it is a per-page decision.)
+
+**How it works.** The run is split into contiguous, equal blocks of primary
+histories (batches).  Each batch is scored independently and treated as one
+observation of the per-primary mean; the spread *between* batches is the
+uncertainty (the *batch-means* method).  A run therefore needs at least two
+batches to report anything — a run with no batching has zero degrees of freedom
+and its error columns are all zeros.  A plain single-threaded run with at least
+one variance-tracking page is automatically split into a default number of
+batches so it produces error bars out of the box.  Because each history's random
+stream is a pure function of its global index, a fixed batch count is
+bit-reproducible run to run.
+
+**Output.** In `TEXT`/`ASCII` output each quantity gains a paired error column
+immediately after its value column, e.g.
+
+```text
+# X Y Z DOSE DOSE_ERR DLET DLET_ERR
+```
+
+The error is the standard error of that cell's reported value, in the **same
+units** (it already carries the per-primary or physical-mean scaling), so a plot
+can use it directly as a `± ` bar.  For the averaged quantities (`DLET`, `TLET`,
+`DQEFF`, `TQEFF`) the numerator and denominator errors are combined in
+quadrature; ignoring their (strong, positive) correlation makes this a slightly
+**conservative** over-estimate, never an under-estimate.
+
+**Cost & scope.** Enabling `Variance On` roughly doubles the scoring memory of the
+affected pages (a companion sum-of-squares array per accumulator) and adds one
+merge per batch boundary; it does not change the scored values beyond
+floating-point summation order.  It is currently written by the `TEXT`/`ASCII`
+writer only — the `BDO2019` writer still emits the values (its standard-error field
+is a planned addition).
+
+The batch count also comes from any active checkpoint cadence: a run with
+`--dump-every-primaries` / `NSTAT n step` (`nsave`), or the `--score-replicas N`
+diagnostic, uses those batches instead of the internal default.

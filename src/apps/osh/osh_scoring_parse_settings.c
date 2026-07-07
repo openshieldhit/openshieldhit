@@ -16,6 +16,7 @@
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "apps/osh/osh_scoring_parse_keys.h"
 #include "common/osh_diag.h"
+#include "common/osh_readline.h"
 
 typedef enum osh_status (*settings_handler_fn)(
     struct osh_scoring_settings_def *, struct osh_diag_sink const *, char **, int, char const *, unsigned int);
@@ -79,6 +80,12 @@ static enum osh_status settings_maxcount(struct osh_scoring_settings_def *set,
                                          int nwords,
                                          char const *path,
                                          unsigned int lineno);
+static enum osh_status settings_variance(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno);
 
 static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings_name},
                                                  {OSH_SCORING_KEY_RESCALE, settings_rescale},
@@ -92,6 +99,7 @@ static struct settings_entry settings_table[] = {{OSH_SCORING_KEY_NAME, settings
                                                  {OSH_SCORING_KEY_DENSITY, settings_density},
                                                  {OSH_SCORING_KEY_MAXCOUNT, settings_maxcount},
                                                  {"npart", settings_maxcount},
+                                                 {OSH_SCORING_KEY_VARIANCE, settings_variance},
                                                  {NULL, NULL}};
 
 /**
@@ -277,5 +285,38 @@ static enum osh_status settings_maxcount(struct osh_scoring_settings_def *set,
     }
     set->npart = (size_t) strtoull(words[1], NULL, 10);
     set->has_npart = 1u;
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse `Variance On|Off` — per-estimator Monte-Carlo standard-error tracking.
+ *
+ * @details
+ * Attaching a Settings block carrying this key to a `Quantity` line turns on
+ * batch-means variance tracking for that scoring page (issue #209).  Absent, or
+ * `Off`, keeps the accumulator byte-for-byte identical to a plain run.  Accepts
+ * `on`/`1`/`true` and `off`/`0`/`false` (case-insensitive; strcasecmp is banned,
+ * so the value is lower-cased in place first).
+ */
+static enum osh_status settings_variance(struct osh_scoring_settings_def *set,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno) {
+    if (nwords < 2) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Variance requires On or Off", path, lineno);
+        return OSH_EPARSE;
+    }
+    osh_lower_inplace(words[1]);
+    if (strcmp(words[1], "on") == 0 || strcmp(words[1], "1") == 0 || strcmp(words[1], "true") == 0) {
+        set->variance = 1;
+    } else if (strcmp(words[1], "off") == 0 || strcmp(words[1], "0") == 0 || strcmp(words[1], "false") == 0) {
+        set->variance = 0;
+    } else {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Variance value must be On or Off", path, lineno);
+        return OSH_EPARSE;
+    }
+    set->has_variance = 1u;
     return OSH_OK;
 }

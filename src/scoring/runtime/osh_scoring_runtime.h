@@ -176,6 +176,41 @@ static inline struct osh_scoring_scratch *osh_score_target_scratch(struct osh_sc
     return (t && t->scratch) ? t->scratch : osh_scoring_runtime_master_scratch(rt);
 }
 
+/* Batch-means observations used to derive a checkpoint cadence for a plain
+ * single-threaded run when at least one page tracks variance (issue #209).  Enough
+ * degrees of freedom for a stable error estimate without paying many merge
+ * boundaries.  Kept internal: the run-wide batch count is deliberately not exposed
+ * as a card or flag yet (see PR #247 discussion) — an explicit dump cadence or
+ * --score-replicas already provides the batch split when the user needs control. */
+#define OSH_SCORING_VARIANCE_DEFAULT_BATCHES 10
+
+/**
+ * @brief Does this runtime track per-bin Monte-Carlo variance (Welford M2) on any page?
+ *
+ * @details
+ * True when at least one page has a "Variance On" Settings block, so @ref
+ * osh_scoring_compile allocated the M2 arrays for it (issue #209).  Variance is
+ * enabled per estimator, so this scans every page rather than assuming page 0 is
+ * representative.  The transport driver uses this once at setup to decide whether to
+ * score each checkpoint batch into a private set and fold it (with the
+ * Schubert–Gertz cross-term) instead of depositing cumulatively into the master;
+ * the finalize/save layers use it to emit the standard-error columns.  When no page
+ * tracks variance, the accumulators and the hot path are exactly as before.
+ */
+static inline int osh_scoring_runtime_tracks_variance(struct osh_scoring_runtime const *rt) {
+    size_t p;
+
+    if (!rt || rt->npages == 0u || !rt->pages) {
+        return 0;
+    }
+    for (p = 0u; p < rt->npages; ++p) {
+        if (rt->pages[p].acc.data_var != NULL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /**
  * @brief Completeness label to stamp on a saved result — never NULL.
  *

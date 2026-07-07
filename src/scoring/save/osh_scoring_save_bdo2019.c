@@ -368,7 +368,10 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
     }
     for (ip = 0; ip < out->npages; ++ip) {
         struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
-        if (!page->acc.data || page->variance || page->has_data2 || page->divide) {
+        /* page->variance is tolerated but not yet serialised: the BDO value block
+         * is written as usual and the standard-error field is a follow-up (issue
+         * #209).  has_data2 / divide must still be cleared by postprocess. */
+        if (!page->acc.data || page->has_data2 || page->divide) {
             return OSH_ENOTSUP;
         }
         if (legacy_score_kind(page) < 0) {

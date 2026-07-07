@@ -151,13 +151,40 @@ QUANTITIES = ("dose", "fluence", "dlet", "tlet")
 
 
 def depth_quantities(out_dir: Path, code: str):
-    """Return dict {z, dose, fluence, dlet, tlet} for the 1D idd.dat depth file."""
+    """Return dict {z, dose, fluence, dlet, tlet} for the 1D idd.dat depth file.
+
+    When the OpenShieldHIT run enabled variance tracking (a "Variance On" Settings
+    block on the Quantity line) each quantity is followed by a paired standard-error
+    column (X Y Z DOSE DOSE_ERR FLUENCE FLUENCE_ERR ...), detected here from the
+    column count; the errors are exposed as "<quantity>_err" so the plots can draw
+    error bands.  A plain run (variance off) has no error columns and none are added.
+    """
     d = load_numeric(out_dir / "idd.dat")
-    if code == "osh":  # X Y Z DOSE FLUENCE DLET TLET
+    nq = len(QUANTITIES)
+    ncols = d.shape[1]
+    if code == "osh":
         z = d[:, 2]
-        cols = {q: d[:, 3 + i] for i, q in enumerate(QUANTITIES)}
+        base = 3
+        plain_cols = base + nq  # X Y Z DOSE FLUENCE DLET TLET
+        paired_cols = base + 2 * nq  # ... each quantity followed by its _ERR column
+        # Require an exact match for one of the two known layouts and fail fast
+        # otherwise: a loose ">=" would mis-read an unexpected/extra-column idd.dat
+        # as paired and silently index the wrong columns.
+        if ncols == paired_cols:
+            cols = {q: d[:, base + 2 * i] for i, q in enumerate(QUANTITIES)}
+            cols.update({q + "_err": d[:, base + 2 * i + 1] for i, q in enumerate(QUANTITIES)})
+        elif ncols == plain_cols:
+            cols = {q: d[:, base + i] for i, q in enumerate(QUANTITIES)}
+        else:
+            raise ValueError(
+                f"{out_dir / 'idd.dat'}: expected {plain_cols} columns (plain) or {paired_cols} "
+                f"(value/error pairs) for {nq} quantities, got {ncols}")
     else:  # SH12A: Z DOSE FLUENCE DLET TLET
         z = d[:, 0]
+        expect = 1 + nq
+        if ncols != expect:
+            raise ValueError(
+                f"{out_dir / 'idd.dat'}: expected {expect} columns (Z + {nq} quantities), got {ncols}")
         cols = {q: d[:, 1 + i] for i, q in enumerate(QUANTITIES)}
     cols["z"] = z
     return cols
@@ -233,6 +260,13 @@ def main() -> int:
                         continue
                     color = "C0" if name.startswith("Open") else "C1"
                     a.plot(c["z"], c[quantity], style, color=color, label=name, drawstyle="steps-mid")
+                    # Shade the Monte-Carlo standard error when a VARIANCE run
+                    # provided it (idd.dat _ERR columns); absent for a plain run.
+                    err = c.get(quantity + "_err")
+                    if err is not None:
+                        val = c[quantity]
+                        a.fill_between(c["z"], val - err, val + err, step="mid",
+                                       color=color, alpha=0.25, linewidth=0)
 
             a = ax[0, 0]
             overlay(a, "dose")

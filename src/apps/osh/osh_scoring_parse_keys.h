@@ -22,6 +22,7 @@
 #define OSH_SCORING_KEY_SITEDIAM    "sitediameter"  /* canonical; "sitediam" is alias */
 #define OSH_SCORING_KEY_DENSITY     "density"       /* canonical; "rho" is alias */
 #define OSH_SCORING_KEY_MAXCOUNT    "maxcount"      /* canonical; "npart" is alias */
+#define OSH_SCORING_KEY_VARIANCE    "variance"      /* per-estimator error tracking: "Variance On|Off" */
 
 /* ---- Geometry section keys ----------------------------------------------- */
 /* OSH_SCORING_KEY_NAME shared */

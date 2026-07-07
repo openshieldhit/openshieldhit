@@ -187,6 +187,26 @@ static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
     }
 }
 
+/* Does any Settings block referenced on this page enable variance tracking?
+ * Mirrors the per-page resolution in osh_scoring_compile() so the memory
+ * estimate cannot drift from the real allocation.  Settings references share the
+ * page's filter_names[] list (they are classified filter-vs-settings at compile). */
+static int page_settings_enable_variance(struct osh_scoring_workspace const *ws,
+                                         struct osh_scoring_page_def const *page) {
+    size_t s;
+    size_t t;
+
+    for (s = 0u; s < page->nfilter_names; ++s) {
+        for (t = 0u; t < ws->nsettings; ++t) {
+            if (ws->settings[t].name && strcmp(ws->settings[t].name, page->filter_names[s]) == 0
+                && ws->settings[t].has_variance && ws->settings[t].variance) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *ws,
                                             struct osh_scoring_mem_estimate *out) {
     size_t i;
@@ -205,9 +225,10 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
     /* Mirror exactly what osh_scoring_compile() allocates: one page per
      * (output, quantity); each page owns `bins` doubles for its primary
      * accumulator, plus a second `bins`-double weight accumulator for the
-     * "average" quantities (LET/Qeff).  bins is the geometry's bin product,
-     * computed by the same geometry_nbins() the compiler uses, so the estimate
-     * cannot drift from the real allocation. */
+     * "average" quantities (LET/Qeff).  A per-estimator "Variance On" Settings
+     * (issue #209) doubles this: each sum array gains a companion Welford M2 array.
+     * bins is the geometry's bin product, computed by the same geometry_nbins() the
+     * compiler uses, so the estimate cannot drift from the real allocation. */
     for (i = 0u; i < ws->noutputs; ++i) {
         struct osh_scoring_output_def const *output = &ws->outputs[i];
         struct osh_scoring_geometry_def const *geo = osh_scoring_geometry_by_name(ws, output->geometry_name);
@@ -216,9 +237,19 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
         for (j = 0u; j < output->npages; ++j) {
             struct osh_scoring_page_def const *page = &output->pages[j];
             enum osh_scoring_score_kind const kind = quantity_to_score_kind(page->quantity);
-            unsigned const arrays = score_kind_uses_data2(kind) ? 2u : 1u;
+            unsigned sum_arrays = 1u; /* # of sum arrays: data, plus data2 for two-pass averages */
+            unsigned arrays;          /* sum arrays, plus their M2 companions when variance is on */
             uint64_t len = (uint64_t) bins;
             uint64_t page_bytes;
+
+            if (score_kind_uses_data2(kind)) {
+                sum_arrays = 2u;
+            }
+            /* Variance doubles the arrays: data_var mirrors data, data2_var mirrors data2. */
+            arrays = sum_arrays;
+            if (page_settings_enable_variance(ws, page)) {
+                arrays = sum_arrays * 2u;
+            }
 
             if (len > 0u && page->diff_nbins > 0u) {
                 uint64_t const d1 = (uint64_t) page->diff_nbins;
@@ -444,6 +475,7 @@ static enum osh_status copy_settings_runtime(struct osh_scoring_settings_runtime
     dst->npart = src->npart;
     dst->medium = src->medium;
     dst->nkmedium = src->nkmedium;
+    dst->variance = src->variance;
     dst->has_rescale = src->has_rescale;
     dst->has_offset = src->has_offset;
     dst->has_site_diameter_um = src->has_site_diameter_um;
@@ -451,6 +483,7 @@ static enum osh_status copy_settings_runtime(struct osh_scoring_settings_runtime
     dst->has_npart = src->has_npart;
     dst->has_medium = src->has_medium;
     dst->has_nkmedium = src->has_nkmedium;
+    dst->has_variance = src->has_variance;
     return OSH_OK;
 }
 
@@ -696,10 +729,12 @@ enum osh_status osh_scoring_runtime_alloc_accumulator_set(struct osh_scoring_run
         return OSH_EINVAL;
     }
     for (i = 0; i < rt->npages; ++i) {
-        /* Match the master page exactly: same len, same data2 presence.  The
-         * variance arrays track the master too (NULL today), so a later merge
-         * always agrees on optional-array presence. */
-        rc = osh_scoring_accumulator_alloc(&set[i], rt->pages[i].acc.len, rt->pages[i].acc.data2 != NULL);
+        /* Match the master page exactly: same len, same data2 presence, same
+         * variance (Welford M2) presence — so a later merge always agrees on
+         * optional-array presence and the private batch accumulates M2 alongside
+         * the master. */
+        rc = osh_scoring_accumulator_alloc_variance(
+            &set[i], rt->pages[i].acc.len, rt->pages[i].acc.data2 != NULL, rt->pages[i].acc.data_var != NULL);
         if (rc != OSH_OK) {
             osh_scoring_runtime_free_accumulator_set(set, i); /* release the pages built so far */
             return rc;
@@ -976,6 +1011,23 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         dst_page->has_data2 = score_kind_uses_data2(dst_page->score_kind);
         dst_page->divide = dst_page->has_data2;
         dst_page->postproc = score_kind_postproc(dst_page->score_kind, dst_page->divide);
+        /* Monte-Carlo standard-error tracking (issue #209) is enabled per
+         * estimator by attaching a Settings block carrying "Variance On" to the
+         * Quantity line (e.g. "Quantity Dose withErr").  Resolve it here — before
+         * the accumulator is allocated below — because it decides the accumulator's
+         * memory layout (the batch-means M2 companion arrays).  The general Settings
+         * override (medium/density) is applied later in finalize_ssets(), but that
+         * runs after this allocation, so variance is resolved directly against the
+         * page's Settings references now.  0 keeps the accumulator exactly as before
+         * (no var arrays); the per-batch fold and finalize happen in transport and
+         * postprocess. */
+        dst_page->variance = 0;
+        for (k = 0; k < src_page->nfilter_names; ++k) {
+            sidx = find_settings_index(rt, src_page->filter_names[k]);
+            if (sidx >= 0 && rt->settings[(size_t) sidx].has_variance && rt->settings[(size_t) sidx].variance) {
+                dst_page->variance = 1;
+            }
+        }
 
         /* Differential axis — expand data[] to geo_nbins × diff_nbins. */
         dst_page->diff_stride = rt->geometries[dst_page->geometry_idx].nbins;
@@ -1062,7 +1114,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             dst_page->len = dst_page->diff_stride;
         }
 
-        rc = osh_scoring_accumulator_alloc(&dst_page->acc, dst_page->len, dst_page->has_data2);
+        rc = osh_scoring_accumulator_alloc_variance(
+            &dst_page->acc, dst_page->len, dst_page->has_data2, dst_page->variance);
         if (rc != OSH_OK) {
             goto fail;
         }

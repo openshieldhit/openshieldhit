@@ -282,6 +282,97 @@ static void test_fixture_test01_filter_rules(void) {
     osh_scoring_workspace_free(ws);
 }
 
+/* ---- Per-estimator Variance Settings key (issue #209) -------------------- */
+
+/* Build a minimal valid deck with a "withErr" Settings block whose body is
+ * @p settings_body, referenced by the sole Output page, so the parse succeeds. */
+static void write_variance_deck(char *path, size_t cap, char const *settings_body) {
+    char text[512];
+    snprintf(text,
+             sizeof(text),
+             "Settings\n"
+             "    Name withErr\n"
+             "%s"
+             "\n"
+             "Geometry Mesh\n"
+             "    Name G\n"
+             "    Z 0.0 30.0 60\n"
+             "\n"
+             "Output\n"
+             "    Filename out.bdo\n"
+             "    Geo G\n"
+             "    Quantity DOSE withErr\n",
+             settings_body);
+    write_temp_file(path, cap, text);
+}
+
+/* No Variance line leaves tracking off and unmarked; "Variance On" turns it on;
+ * "Variance Off" marks it present but off. */
+static void test_variance_settings_on_off(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_settings_def const *set;
+    enum osh_status rc;
+
+    /* No Variance line → off, not marked present. */
+    write_variance_deck(path, sizeof(path), "");
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK && ws != NULL);
+    set = osh_scoring_settings_by_name(ws, "withErr");
+    ASSERT_TRUE(set != NULL);
+    ASSERT_TRUE(!set->has_variance);
+    ASSERT_TRUE(set->variance == 0);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+
+    /* "Variance On" → on. */
+    write_variance_deck(path, sizeof(path), "    Variance On\n");
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK && ws != NULL);
+    set = osh_scoring_settings_by_name(ws, "withErr");
+    ASSERT_TRUE(set != NULL);
+    ASSERT_TRUE(set->has_variance);
+    ASSERT_TRUE(set->variance == 1);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+
+    /* "Variance Off" → explicitly off (marked present, value 0). */
+    write_variance_deck(path, sizeof(path), "    Variance Off\n");
+    ws = NULL;
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK && ws != NULL);
+    set = osh_scoring_settings_by_name(ws, "withErr");
+    ASSERT_TRUE(set != NULL);
+    ASSERT_TRUE(set->has_variance);
+    ASSERT_TRUE(set->variance == 0);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* A missing or malformed Variance value is rejected rather than silently ignored. */
+static void test_variance_settings_rejects_bad_value(void) {
+    char const *const bad[] = {
+        "    Variance\n",       /* missing argument */
+        "    Variance maybe\n", /* not On/Off */
+        "    Variance 2\n",     /* only 0/1 accepted as numeric aliases */
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        char path[512];
+        struct osh_scoring_workspace *ws = NULL;
+        enum osh_status rc;
+
+        write_variance_deck(path, sizeof(path), bad[i]);
+        rc = osh_scoring_setup_from_path(path, NULL, &ws);
+        ASSERT_TRUE(rc == OSH_EPARSE);
+        ASSERT_TRUE(ws == NULL);
+        remove(path);
+    }
+}
+
 int main(void) {
     test_parse_fixture_test01_detect();
     test_parse_settings_section();
@@ -289,5 +380,7 @@ int main(void) {
     test_parse_filter_rules();
     test_parse_geometry_axes();
     test_fixture_test01_filter_rules();
+    test_variance_settings_on_off();
+    test_variance_settings_rejects_bad_value();
     return 0;
 }

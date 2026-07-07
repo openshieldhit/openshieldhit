@@ -1,5 +1,6 @@
 #include "scoring/runtime/osh_scoring_postprocess.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "openshieldhit/const.h"
@@ -218,4 +219,68 @@ enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt) {
      * the single-shot guard and the postprocessed flag, so in-place finalisation
      * behaves identically whether reached through here or called directly. */
     return osh_scoring_postprocess_into(rt, rt);
+}
+
+/* Relative standard error of one additive estimator from its raw sum and M2.
+ *   sum   = Σ x           (the raw accumulated sum, e.g. acc.data[i])
+ *   m2    = Welford M2 across batches (acc.data_var[i])
+ *   w     = Σ history count over all batches (acc.weight)
+ *   dof   = B - 1 (> 0; the caller guards nbatch >= 2)
+ * SE(mean) = sqrt(m2 / (dof·w)); relative = SE(mean) / |mean| with mean = sum/w,
+ * which simplifies to sqrt(m2·w/dof)/|sum| — invariant under any linear rescale of
+ * the reported value.  A zero sum (empty bin) has no defined relative error → 0. */
+static double rel_error(double sum, double m2, double w, double dof) {
+    double se;
+    if (sum == 0.0 || m2 <= 0.0) {
+        return 0.0;
+    }
+    se = sqrt(m2 * w / dof); /* = |mean| · relative, i.e. the SE of the raw sum */
+    return se / fabs(sum);
+}
+
+enum osh_status osh_scoring_finalize_errors(struct osh_scoring_runtime *rt) {
+    size_t p;
+    size_t i;
+
+    if (!rt) {
+        return OSH_EINVAL;
+    }
+
+    for (p = 0; p < rt->npages; ++p) {
+        struct osh_scoring_accumulator *acc = &rt->pages[p].acc;
+        double dof;
+
+        /* No M2 array ⇒ variance off for this page (or a dump shadow, whose var
+         * arrays are cleared): nothing to finalise. */
+        if (!acc->data_var) {
+            continue;
+        }
+        /* Fewer than two batches is zero degrees of freedom — no error is
+         * defined.  Overwrite the raw M2 with zeros so the writer reports a clean
+         * 0 rather than leaking sum-of-squares into the error column. */
+        if (acc->nbatch < 2u || acc->weight <= 0.0) {
+            memset(acc->data_var, 0, acc->len * sizeof(*acc->data_var));
+            continue;
+        }
+        dof = (double) (acc->nbatch - 1u);
+
+        if (acc->data2 && acc->data2_var) {
+            /* Two-pass AVER quantity (DLET/TLET/Qeff): reported value is the ratio
+             * data/data2.  Combine the numerator and denominator relative errors in
+             * quadrature (covariance ignored ⇒ conservative for correlated num/den). */
+            for (i = 0; i < acc->len; ++i) {
+                double const rel_num = rel_error(acc->data[i], acc->data_var[i], acc->weight, dof);
+                double const rel_den = rel_error(acc->data2[i], acc->data2_var[i], acc->weight, dof);
+                acc->data_var[i] = sqrt(rel_num * rel_num + rel_den * rel_den);
+            }
+        } else {
+            /* Additive quantity (DOSE/FLUENCE/ENERGY/COUNT): relative error of the
+             * single accumulated sum. */
+            for (i = 0; i < acc->len; ++i) {
+                acc->data_var[i] = rel_error(acc->data[i], acc->data_var[i], acc->weight, dof);
+            }
+        }
+    }
+
+    return OSH_OK;
 }
