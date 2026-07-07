@@ -14,7 +14,7 @@
 | **Commit audited** | [`e3c619a`][e3c619a] on `main` (2026-07-05) |
 | **Source** | [PR #248][#248] |
 | **Scope** | Test infra · transport hot path & EM physics · scoring · nuclear/neutron transport · RNG & parallel readiness · GEMCA geometry · parsers/IO · architecture |
-| **Follow-up** | 11 suggested issues (1 filed — [#255][#255], fixed by [#257][#257]) — see [§8](#sec-8) |
+| **Follow-up** | 11 suggested issues (2 filed — [#255][#255], fixed by [#257][#257]; [#267][#267], fixed by [`a0f60a1`][a0f60a1]) — see [§8](#sec-8) |
 
 
 Deep audit of `main` (e3c619a) prompted by PR [#239][#239] (sanitizer wiring) and issues
@@ -160,6 +160,13 @@ cutoff kill is the same physical situation without the deposit.
   with the effective cutoff.
 
 ### P-2 (high, high) Non-default isotopes are transported with the representative isotope's range table and rest mass — deuteron range wrong by ≈2× {: #p-2 }
+
+!!! success "Resolved"
+    Filed as [#267][#267] and fixed by [`a0f60a1`][a0f60a1].  Transport still
+    shares stopping-power columns by `Z`, but CSDA range is now scaled by
+    `A_actual/A_table`, isotope-specific kinematics use `part->mass`, and a
+    regression unit covers non-default H/He isotopes in a non-unit-density
+    material.
 
 Mechanism, three coupled pieces:
 
@@ -895,7 +902,7 @@ case dir which fails at *someone else's* `ctest`).
 | [G-1](#g-1) | Ellipsoid/elliptic-cyl/cone distances wrong (missing ×2 on linear coefficient); empirically confirmed 0.651 vs 0.500 — filed as [#255][#255], fixed by [#257][#257] | **critical** (for ELL/ELLZ/CONE users) | `osh_gemca2_dist.c:413,443,467` |
 | [N-1](#n-1) | Neutron interactions deposit zero energy; n–p recoil energy vanishes; [TODO.md][todo-md] claims otherwise | **high** | `osh_transport_neutron.c:166-202`, `osh_neutron_reaction.c:91-108` |
 | [N-2](#n-2) | Neutron σ clamped at 20 MeV table edge — fast neutrons ×5–6 over-attenuated | **high** | `osh_neutron_xsec.c:84-87` |
-| [P-2](#p-2) | Isotope conflation: deuteron/triton/³He use wrong range table (×2/×3/×¾) and wrong rest mass | **high** | `osh_transport_ion_step.c:1258`, `osh_material_compile.c:698-716` |
+| [P-2](#p-2) | Isotope conflation: deuteron/triton/³He use wrong range table (×2/×3/×¾) and wrong rest mass — filed as [#267][#267], fixed by [`a0f60a1`][a0f60a1] | **high** (resolved) | `osh_transport_ion_step.c:1258`, `osh_material_compile.c:698-716` |
 | [P-1](#p-1) | Residual energy deleted at cutoff kill (scales with TCUT0) | **high** | `osh_transport_ion_step.c:539-543` |
 | [S-1](#s-1) | `st->wt` ignored by every scorer — latent for MCPL ([#41][#41])/VR | **high (latent)** | `src/scoring/runtime/*` |
 | [P-3](#p-3) | Bohr straggling missing relativistic factor; κ-dispatch variance discontinuity | medium | `osh_physics_strag_gauss.c:25-37` |
@@ -923,7 +930,7 @@ PR [#239][#239] validated and worth merging as-is ([T-4](#t-4)).
 1. GEMCA quadric linear-coefficient bug + per-surface distance unit tests ([G-1](#g-1), [G-2](#g-2)) — filed as [#255][#255], fixed by [#257][#257].
 2. Neutron energy deposition: point-deposit `local_deposit_mev` + fix [TODO.md][todo-md] claims ([N-1](#n-1)); follow-up: recoil-proton ion feedback.
 3. Neutron σ above 20 MeV: Tier-2 dispatch above Tier-1 grid ([N-2](#n-2)).
-4. Isotope-aware range/mass in transport (A-rescale within Z column + `part->mass` kinematics + once-per-species warning) ([P-2](#p-2)).
+4. Isotope-aware range/mass in transport (A-rescale within Z column + `part->mass` kinematics) ([P-2](#p-2)) — filed as [#267][#267], fixed by [`a0f60a1`][a0f60a1].
 5. Deposit residual energy at all cutoff/species kills ([P-1](#p-1), and neutron cutoff from [N-1](#n-1)).
 6. Weight-aware scoring + weighted-variance contract ([S-1](#s-1), feeds [#169][#169] and [#41][#41]).
 7. Relativistic Bohr straggling factor ([P-3](#p-3)).
@@ -962,5 +969,7 @@ current usage; "latent" items are correct today but break planned features.
 [#248]: https://github.com/openshieldhit/openshieldhit/pull/248
 [#255]: https://github.com/openshieldhit/openshieldhit/issues/255
 [#257]: https://github.com/openshieldhit/openshieldhit/pull/257
+[#267]: https://github.com/openshieldhit/openshieldhit/issues/267
 [todo-md]: https://github.com/openshieldhit/openshieldhit/blob/e3c619a1328e9351bcbc1dc599321ac2770ad622/TODO.md
 [e3c619a]: https://github.com/openshieldhit/openshieldhit/commit/e3c619a1328e9351bcbc1dc599321ac2770ad622
+[a0f60a1]: https://github.com/openshieldhit/openshieldhit/commit/a0f60a1d201ed147719f26751befbd65488ab536
