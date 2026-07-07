@@ -120,6 +120,17 @@ set(_coord_cols 3)
 if(EXISTS "${CASE_DIR}/expected/coord_cols.txt")
     file(READ "${CASE_DIR}/expected/coord_cols.txt" _raw_cc)
     string(STRIP "${_raw_cc}" _coord_cols)
+    # The value is forwarded verbatim to compare_dat.py as --coord-cols, which
+    # expects an integer.  Validate here so a malformed override (stray text, a
+    # comment, an empty file) fails fast with a clear message rather than surfacing
+    # later as a confusing argparse error misread as an output difference.
+    if(NOT _coord_cols MATCHES "^[0-9]+$")
+        message(FATAL_ERROR
+            "run_case.cmake: expected/coord_cols.txt must contain a single "
+            "non-negative integer, got: '${_coord_cols}'\n"
+            "  file: ${CASE_DIR}/expected/coord_cols.txt"
+        )
+    endif()
 endif()
 file(GLOB _expected_dats "${CASE_DIR}/expected/*.dat")
 foreach(_ref_dat IN LISTS _expected_dats)
