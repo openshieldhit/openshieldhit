@@ -410,7 +410,7 @@ void osh_nuclear_preeq_step(struct osh_nuclear_preeq const *model,
         spec = OSH_PREEQ_NSPECIES - 1;
         for (i = 0; i < OSH_PREEQ_NSPECIES; ++i) {
             cum += width[i];
-            if (u <= cum) {
+            if (u < cum) {
                 spec = i;
                 break;
             }
