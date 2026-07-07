@@ -84,6 +84,7 @@ struct ion_step_ctx {
     char has_voxel;              /* non-zero when voxel_idx is valid     */
     double e0;                   /* entry total kinetic energy [MeV]     */
     double a_proj;               /* mass number (float cast, ≥ 1)        */
+    double range_scale;          /* actual-A / table-A scale for CSDA range */
     double cutoff;               /* energy cutoff for this particle [MeV]*/
     double demin_total;          /* minimum energy loss per step [MeV]   */
     double boundary_ds;          /* distance to zone boundary [cm]       */
@@ -177,6 +178,12 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
 static double cutoff_total_energy(struct osh_transport_params const *params,
                                   struct osh_material_runtime const *material_rt,
                                   struct particle const *part);
+static double isotope_range_scale(struct osh_material_runtime const *material_rt, size_t projectile_idx, double a_proj);
+static double isotope_range_lookup(struct osh_material_runtime const *material_rt,
+                                   size_t material_idx,
+                                   size_t projectile_idx,
+                                   double e_per_nuc,
+                                   double range_scale);
 static double energy_from_residual_range(struct osh_material_runtime const *material_rt,
                                          size_t material_idx,
                                          size_t projectile_idx,
@@ -588,7 +595,11 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     ctx->mat_x0_gcm2 = (double) material_rt->rad_length[zone_ref->material_idx];
     ctx->mat_moliere_chic2 = (double) material_rt->moliere_chic2[zone_ref->material_idx];
     ctx->mat_moliere_screen_z = (double) material_rt->moliere_screen_z[zone_ref->material_idx];
-    ctx->proj_mass_mev = material_rt->projectile_mass_mev[ctx->projectile_idx];
+    ctx->range_scale = isotope_range_scale(material_rt, ctx->projectile_idx, ctx->a_proj);
+    ctx->proj_mass_mev = ctx->part->mass;
+    if (!(ctx->proj_mass_mev > 0.0)) {
+        ctx->proj_mass_mev = material_rt->projectile_mass_mev[ctx->projectile_idx];
+    }
     ctx->enable_mcs = (params && params->mcs_mode != OSH_TRANSPORT_MCS_OFF);
     ctx->mcs_model = params ? (char) params->mcs_mode : (char) OSH_MCS_OFF;
     ctx->enable_straggling = (params && params->straggling_mode != OSH_TRANSPORT_STRAGGLING_OFF);
@@ -680,10 +691,10 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         return;
     }
 
-    ctx->r0 = osh_material_runtime_range_lookup(
-        material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e0 / ctx->a_proj);
-    r1_csda = osh_material_runtime_range_lookup(
-        material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e1_target / ctx->a_proj);
+    ctx->r0 = isotope_range_lookup(
+        material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e0 / ctx->a_proj, ctx->range_scale);
+    r1_csda = isotope_range_lookup(
+        material_rt, ctx->zone_material_idx, ctx->projectile_idx, ctx->e1_target / ctx->a_proj, ctx->range_scale);
 
     ds_csda = (ctx->r0 - r1_csda) / ctx->rho;
     if (ds_csda <= 0.0) {
@@ -785,7 +796,8 @@ static enum osh_status ion_step_hinge_and_scatter(struct ion_step_ctx *ctx,
         proposed_exit_energy = ctx->e1_target;
     } else {
         proposed_exit_energy =
-            energy_from_residual_range(material_rt, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
+            energy_from_residual_range(
+                material_rt, ctx->zone_material_idx, ctx->projectile_idx, residual_range / ctx->range_scale)
             * ctx->a_proj;
         if (proposed_exit_energy > ctx->e0)
             proposed_exit_energy = ctx->e0;
@@ -895,7 +907,8 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
         ctx->exit_energy = ctx->e1_target;
     } else {
         ctx->exit_energy =
-            energy_from_residual_range(material_rt, ctx->zone_material_idx, ctx->projectile_idx, residual_range)
+            energy_from_residual_range(
+                material_rt, ctx->zone_material_idx, ctx->projectile_idx, residual_range / ctx->range_scale)
             * ctx->a_proj;
         if (ctx->exit_energy > ctx->e0)
             ctx->exit_energy = ctx->e0;
@@ -1182,6 +1195,28 @@ static double cutoff_total_energy(struct osh_transport_params const *params,
     return cutoff_total;
 }
 
+static double
+isotope_range_scale(struct osh_material_runtime const *material_rt, size_t projectile_idx, double a_proj) {
+    double table_a; /* representative isotope A used to integrate this Z column */
+
+    table_a = (double) material_rt->projectile_a[projectile_idx];
+    if (!(table_a > 0.0)) {
+        return 1.0;
+    }
+    return a_proj / table_a;
+}
+
+static double isotope_range_lookup(struct osh_material_runtime const *material_rt,
+                                   size_t material_idx,
+                                   size_t projectile_idx,
+                                   double e_per_nuc,
+                                   double range_scale) {
+    double table_range; /* representative-isotope CSDA range [g/cm2] */
+
+    table_range = osh_material_runtime_range_lookup(material_rt, material_idx, projectile_idx, e_per_nuc);
+    return table_range * range_scale;
+}
+
 static double energy_from_residual_range(struct osh_material_runtime const *material_rt,
                                          size_t material_idx,
                                          size_t projectile_idx,
@@ -1262,8 +1297,9 @@ static enum osh_status find_projectile_index(struct osh_material_runtime const *
         return OSH_ESTATE;
     }
     if (a_match != 0u && material_rt->projectile_a[projectile_idx] != a_match) {
-        /* Runtime columns are keyed primarily by Z; differing isotopes share the
-         * representative projectile for that Z for now. */
+        /* Runtime SP columns are keyed by Z.  Later phases rescale the stored
+         * representative-isotope range by A_actual/A_table and use part->mass
+         * for isotope-specific transport kinematics. */
     }
     *projectile_idx_out = projectile_idx;
     return OSH_OK;

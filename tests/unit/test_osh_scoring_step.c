@@ -371,7 +371,8 @@ static void test_score_mesh_dose_and_let_geometric(void) {
     memset(&rt, 0, sizeof(rt));
     rc = osh_scoring_compile(ws, NULL, &rt);
     ASSERT_TRUE(rc == OSH_OK);
-    /* mat_tables stays NULL → geometric LET fallback, DQEFF/TQEFF skipped */
+    /* mat_tables stays NULL -> geometric LET fallback.  part.mass stays unset
+     * here, so DQEFF/TQEFF are skipped because beta cannot be computed. */
 
     memset(&part, 0, sizeof(part));
     part.z = 1u;
@@ -511,6 +512,7 @@ static void test_score_mesh_dqeff_tqeff(void) {
     memset(&part, 0, sizeof(part));
     part.z = 1u;
     part.a = 1u;
+    part.mass = proton_mass_mev;
 
     memset(&st, 0, sizeof(st));
     st.p[0] = 0.0;
@@ -637,6 +639,7 @@ static void test_score_mesh_fluence_diff_let_qeff(void) {
     memset(&part, 0, sizeof(part));
     part.z = 1u;
     part.a = 1u;
+    part.mass = proton_mass_mev;
 
     memset(&st, 0, sizeof(st));
     st.p[0] = 0.0;

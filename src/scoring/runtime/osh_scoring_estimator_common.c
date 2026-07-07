@@ -150,24 +150,21 @@ static double compute_step_let_with_override(struct osh_scoring_runtime const *r
 }
 
 /* Compute (z_eff/beta)^2 at step midpoint.
- * Returns 0 for neutrals or when tables are unavailable. */
+ * Returns 0 for neutrals or species without a valid rest mass. */
 static double
 compute_step_qeff(struct osh_scoring_runtime const *rt, struct particle const *part, struct step const *st) {
     double mean_energy; /* kinetic energy at step midpoint [MeV] */
     double beta;        /* particle velocity / c */
-    size_t proj_idx;    /* projectile row in table (provides rest mass) */
 
+    (void) rt;
     if (part->z == 0) {
         return 0.0;
     }
-    if (!rt->mat_tables) {
-        return 0.0;
-    }
-    if (!osh_scoring_estimator_find_proj_idx(rt->mat_tables, (unsigned int) part->z, &proj_idx)) {
+    if (!(part->mass > 0.0)) {
         return 0.0;
     }
     mean_energy = 0.5 * (st->p[3] + st->q[3]);
-    beta = osh_scoring_estimator_particle_beta(mean_energy, rt->mat_tables->projectile_mass_mev[proj_idx]);
+    beta = osh_scoring_estimator_particle_beta(mean_energy, part->mass);
     if (!(beta > 0.0)) {
         return 0.0;
     }

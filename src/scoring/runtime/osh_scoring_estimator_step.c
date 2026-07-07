@@ -340,26 +340,20 @@ enum osh_status osh_scoring_estimator_step_dqeff(struct osh_scoring_runtime cons
     double dose_weight;
     double dqeff_numerator;
     double dqeff_denominator;
-    size_t proj_idx;
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
-    struct osh_material_runtime const *mat_tables;
 
-    mat_tables = rt->mat_tables;
     if (part->z == 0) {
         return OSH_OK;
     }
-    if (!mat_tables) {
-        return OSH_OK;
-    }
-    if (!osh_scoring_estimator_find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx)) {
+    if (!(part->mass > 0.0)) {
         return OSH_OK;
     }
 
     /* Qeff depends on projectile charge and beta at the step midpoint.  It is a
      * single scalar for this step; only the averaging weight varies per crossing. */
     mean_energy = 0.5 * (st->p[3] + st->q[3]);
-    beta = osh_scoring_estimator_particle_beta(mean_energy, mat_tables->projectile_mass_mev[proj_idx]);
+    beta = osh_scoring_estimator_particle_beta(mean_energy, part->mass);
     if (!(beta > 0.0)) {
         return OSH_OK;
     }
@@ -429,25 +423,20 @@ enum osh_status osh_scoring_estimator_step_tqeff(struct osh_scoring_runtime cons
     double track_weight;      /* Track-length weight for the current spatial bin */
     double tqeff_numerator;   /* Scoring numerator for the TQEFF calculation */
     double tqeff_denominator; /* Scoring denominator for the TQEFF calculation */
-    size_t proj_idx;          /* Column index for given projectile in the stopping-power table */
     struct osh_scoring_page_runtime const *page;
     struct osh_scoring_accumulator *acc;
-    struct osh_material_runtime const *mat_tables;
-    mat_tables = rt->mat_tables;
+
     if (part->z == 0) {
         return OSH_OK;
     }
-    if (!mat_tables) {
-        return OSH_OK;
-    }
-    if (!osh_scoring_estimator_find_proj_idx(mat_tables, (unsigned int) part->z, &proj_idx)) {
+    if (!(part->mass > 0.0)) {
         return OSH_OK;
     }
 
     /* Qeff is computed once for the step midpoint.  TQEFF then averages that
      * value with geometric track-length weights in each crossed bin. */
     mean_energy = 0.5 * (st->p[3] + st->q[3]);
-    beta = osh_scoring_estimator_particle_beta(mean_energy, mat_tables->projectile_mass_mev[proj_idx]);
+    beta = osh_scoring_estimator_particle_beta(mean_energy, part->mass);
     if (!(beta > 0.0)) {
         return OSH_OK;
     }

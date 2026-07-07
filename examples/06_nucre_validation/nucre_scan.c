@@ -35,6 +35,7 @@
 #include "physics/nuclear/osh_nuclear_abrasion.h"
 #include "physics/nuclear/osh_nuclear_fermi_breakup.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
+#include "physics/nuclear/osh_nuclear_preeq.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "random/osh_rng.h"
 
@@ -146,6 +147,7 @@ static int energy_bin(double e_mev) {
 
 int main(int argc, char **argv) {
     struct osh_nuclear_fermi_breakup fbu;
+    struct osh_nuclear_preeq preeq;
     struct osh_rng rng;
     struct osh_nuclear_event ev;
     static double hist[NUCRE_SCAN_NSPECIES][NUCRE_SCAN_NBINS];
@@ -215,6 +217,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "nucre_scan: Fermi break-up compile failed\n");
         return 1;
     }
+    if (osh_nuclear_preeq_compile(&preeq) != OSH_OK) {
+        fprintf(stderr, "nucre_scan: pre-equilibrium compile failed\n");
+        return 1;
+    }
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, seed, 0u);
 
     memset(hist, 0, sizeof(hist));
@@ -253,6 +259,7 @@ int main(int argc, char **argv) {
             }
             excp_sum += (double) ev.fragments[0].excitons_p;
             exch_sum += (double) ev.fragments[0].excitons_h;
+            osh_nuclear_preeq_step(&preeq, &ev.fragments[0], &rng, &ev);
             osh_nuclear_fermi_breakup_step(&fbu, &ev.fragments[0], &rng, &ev);
         }
 
@@ -304,7 +311,7 @@ int main(int argc, char **argv) {
     estar_std = 0.0;
     if (n_with_fragment > 0UL) {
         estar_mean = estar_sum / (double) n_with_fragment;
-        estar_std = sqrt(fmax(0.0, estar_sq_sum / (double) n_with_fragment - estar_mean * estar_mean));
+        estar_std = sqrt(fmax(0.0, (estar_sq_sum / (double) n_with_fragment) - (estar_mean * estar_mean)));
         excp_sum /= (double) n_with_fragment;
         exch_sum /= (double) n_with_fragment;
     }
