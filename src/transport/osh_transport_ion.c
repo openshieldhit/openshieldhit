@@ -44,8 +44,10 @@
 /* ---- Forward declarations ------------------------------------------------ */
 
 static size_t transport_progress_chunk_size(size_t total);
-static void
-report_transport_progress(struct osh_diag_sink const *diag, size_t completed, size_t total, double elapsed_s);
+static size_t next_progress_mark(size_t completed, size_t chunk, size_t total);
+static size_t live_beam_primary_count(struct osh_particle_pool const *pool);
+static void report_transport_progress(
+    struct osh_diag_sink const *diag, size_t completed, size_t total, size_t rate_completed, double elapsed_s);
 static enum osh_status validate_transport_modes(struct osh_transport_context const *transport_ctx);
 
 /* ---- Wavefront loop ------------------------------------------------------ */
@@ -107,6 +109,9 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     size_t steps_taken;
     size_t last_report_completed;
     size_t progress_chunk;
+    size_t progress_base;      /* Global history index at the start of this range. */
+    size_t progress_total;     /* Full run total shown in human-facing progress lines. */
+    size_t progress_completed; /* Global completed histories shown in progress lines. */
     size_t next_report_completed;
     struct osh_step_segment step_seg;
     /* Deposit target for this worker: its private accumulator set + scratch, or
@@ -155,9 +160,14 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
     }
     steps_taken = 0u;
     primaries_done = 0u;
-    last_report_completed = 0u;
-    progress_chunk = transport_progress_chunk_size(nstat);
-    next_report_completed = progress_chunk;
+    progress_base = wctx->hist_lo;
+    progress_total = params->nstat;
+    if (progress_total < wctx->hist_hi) {
+        progress_total = wctx->hist_hi;
+    }
+    last_report_completed = progress_base;
+    progress_chunk = transport_progress_chunk_size(progress_total);
+    next_report_completed = next_progress_mark(progress_base, progress_chunk, progress_total);
     t_start = osh_monotonic_seconds();
     t_last_report = t_start;
     /* Measure the wall budget from the run-level start.  The driver always arms
@@ -167,7 +177,9 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
      * when the run is uncontrolled. */
     ctl_t_start = ctl ? ctl->t_start : t_start;
 
-    report_transport_progress(transport_ctx->diag, 0u, nstat, 0.0);
+    if (progress_base == 0u) {
+        report_transport_progress(transport_ctx->diag, progress_base, progress_total, 0u, 0.0);
+    }
 
     /* Loop until every requested primary has finished OR a clean stop was
      * requested — but in both cases keep going while the pool is non-empty, so
@@ -308,22 +320,23 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
         if (prof) {
             prof->compact_s += osh_monotonic_seconds() - t_phase;
         }
-        primaries_completed = primaries_done - pool->n;
-        if (primaries_completed > last_report_completed) {
+        primaries_completed = primaries_done - live_beam_primary_count(pool);
+        progress_completed = progress_base + primaries_completed;
+        if (progress_completed > progress_total || progress_completed < progress_base) {
+            progress_completed = progress_total;
+        }
+        if (progress_completed > last_report_completed) {
             double const t_now = osh_monotonic_seconds();
-            int const chunk_reached = (primaries_completed >= next_report_completed);
+            int const chunk_reached = (progress_completed >= next_report_completed);
             int const min_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MIN_INTERVAL_S);
             int const max_interval_elapsed = ((t_now - t_last_report) >= OSH_TRANSPORT_PROGRESS_MAX_INTERVAL_S);
-            if (primaries_completed == nstat || (chunk_reached && min_interval_elapsed) || max_interval_elapsed) {
-                report_transport_progress(transport_ctx->diag, primaries_completed, nstat, t_now - t_start);
-                last_report_completed = primaries_completed;
+            if (progress_completed == progress_total || (chunk_reached && min_interval_elapsed)
+                || max_interval_elapsed) {
+                report_transport_progress(
+                    transport_ctx->diag, progress_completed, progress_total, primaries_completed, t_now - t_start);
+                last_report_completed = progress_completed;
                 t_last_report = t_now;
-                while (next_report_completed <= primaries_completed && next_report_completed < nstat) {
-                    next_report_completed += progress_chunk;
-                }
-                if (next_report_completed > nstat) {
-                    next_report_completed = nstat;
-                }
+                next_report_completed = next_progress_mark(progress_completed, progress_chunk, progress_total);
             }
         }
 
@@ -352,6 +365,7 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
         unsigned int const th = (unsigned int) (total_s / 3600.0);
         unsigned int const tm = (unsigned int) ((total_s - th * 3600.0) / 60.0);
         unsigned int const ts = (unsigned int) (total_s - th * 3600.0 - tm * 60.0);
+        char const *complete_label; /* Full-run final path or one checkpoint range. */
 
         if (prof) {
             /* Accumulate, never assign: the outer batch loop (osh_transport.c) calls
@@ -368,9 +382,15 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
             prof->steps += (unsigned long long) steps_taken;
         }
 
-        if (last_report_completed < completed) {
-            report_transport_progress(transport_ctx->diag, completed, nstat, total_s);
+        progress_completed = progress_base + completed;
+        if (progress_completed > progress_total || progress_completed < progress_base) {
+            progress_completed = progress_total;
         }
+        if (last_report_completed < progress_completed) {
+            report_transport_progress(transport_ctx->diag, progress_completed, progress_total, completed, total_s);
+        }
+        complete_label = (progress_base == 0u && progress_completed == progress_total) ? "Transport complete"
+                                                                                       : "Transport batch complete";
 
         /* A clean stop is normal operation, not an error — say so explicitly so
          * the true (partial) primary count is visible in the run log. */
@@ -384,7 +404,8 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
 
         if (th > 0u) {
             OSH_DIAG_INFOF(transport_ctx->diag,
-                           "Transport complete: %zu primaries in %u:%02u:%02u  (avg %.0f primaries/s)",
+                           "%s: %zu primaries in %u:%02u:%02u  (avg %.0f primaries/s)",
+                           complete_label,
                            completed,
                            th,
                            tm,
@@ -392,14 +413,16 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
                            avg_pps);
         } else if (tm > 0u) {
             OSH_DIAG_INFOF(transport_ctx->diag,
-                           "Transport complete: %zu primaries in %02u:%02u  (avg %.0f primaries/s)",
+                           "%s: %zu primaries in %02u:%02u  (avg %.0f primaries/s)",
+                           complete_label,
                            completed,
                            tm,
                            ts,
                            avg_pps);
         } else {
             OSH_DIAG_INFOF(transport_ctx->diag,
-                           "Transport complete: %zu primaries in %u s  (avg %.0f primaries/s)",
+                           "%s: %zu primaries in %u s  (avg %.0f primaries/s)",
+                           complete_label,
                            completed,
                            ts,
                            avg_pps);
@@ -517,6 +540,14 @@ enum osh_status osh_transport_ion_run_range(struct osh_transport_context *transp
 
 /* ---- Progress helpers ---------------------------------------------------- */
 
+/**
+ * @brief Choose the minimum history increment between two progress reports.
+ *
+ * @param[in] total  Full number of histories in the displayed progress range.
+ *
+ * @returns A positive chunk size, never smaller than the configured minimum
+ *          unless the whole run itself is smaller.
+ */
 static size_t transport_progress_chunk_size(size_t total) {
     size_t chunk;
 
@@ -533,8 +564,82 @@ static size_t transport_progress_chunk_size(size_t total) {
     return chunk;
 }
 
-static void
-report_transport_progress(struct osh_diag_sink const *diag, size_t completed, size_t total, double elapsed_s) {
+/**
+ * @brief Return the next global progress boundary after @p completed.
+ *
+ * @details
+ * Progress reporting may start in the middle of the full run when checkpoint
+ * batches call the ion loop over [hist_lo, hist_hi).  This helper snaps the next
+ * report threshold to the run-global chunk grid, so a batch starting at 20000 of
+ * 100000 reports the next 5%/chunk boundary rather than restarting at 1000.
+ *
+ * @param[in] completed  Histories already completed in the displayed full run.
+ * @param[in] chunk      Positive progress-grid spacing.
+ * @param[in] total      Full displayed run total.
+ *
+ * @returns The next progress threshold, capped at @p total.
+ */
+static size_t next_progress_mark(size_t completed, size_t chunk, size_t total) {
+    size_t next;
+    size_t whole_chunks;
+
+    if (completed >= total) {
+        return total;
+    }
+    if (chunk == 0u) {
+        return total;
+    }
+
+    whole_chunks = completed / chunk;
+    if (whole_chunks >= (size_t) -1 / chunk) {
+        return total;
+    }
+    next = (whole_chunks + 1u) * chunk;
+    if (next <= completed || next > total) {
+        return total;
+    }
+    return next;
+}
+
+/**
+ * @brief Count original beam primaries still alive in the ion pool.
+ *
+ * @details
+ * The pool may also contain secondary ions created by nuclear reactions.  Those
+ * particles must not be subtracted from the injected-primary count when estimating
+ * how many requested histories have completed.
+ *
+ * @param[in] pool  Borrowed particle pool; NULL is treated as empty.
+ *
+ * @returns Number of live generation-zero particles.
+ */
+static size_t live_beam_primary_count(struct osh_particle_pool const *pool) {
+    size_t i;
+    size_t nlive;
+
+    nlive = 0u;
+    if (!pool) {
+        return 0u;
+    }
+    for (i = 0u; i < pool->n; ++i) {
+        if (pool->gen[i] == 0u) {
+            ++nlive;
+        }
+    }
+    return nlive;
+}
+
+/**
+ * @brief Emit one transport progress line.
+ *
+ * @param[in] diag            Diagnostic sink; NULL means silent.
+ * @param[in] completed       Displayed histories completed in the full run.
+ * @param[in] total           Displayed full run total.
+ * @param[in] rate_completed  Histories used for the local throughput estimate.
+ * @param[in] elapsed_s       Seconds over which @p rate_completed was measured.
+ */
+static void report_transport_progress(
+    struct osh_diag_sink const *diag, size_t completed, size_t total, size_t rate_completed, double elapsed_s) {
     double primaries_per_second;
     double eta_s;
     size_t remaining;
@@ -544,7 +649,7 @@ report_transport_progress(struct osh_diag_sink const *diag, size_t completed, si
     unsigned int eta_sec;
 
     remaining = (completed < total) ? (total - completed) : 0u;
-    primaries_per_second = (elapsed_s > 0.0) ? ((double) completed / elapsed_s) : 0.0;
+    primaries_per_second = (elapsed_s > 0.0) ? ((double) rate_completed / elapsed_s) : 0.0;
     pct = (total > 0u) ? (int) (completed * 100u / total) : 0;
 
     if (primaries_per_second > 0.0 && remaining > 0u) {
