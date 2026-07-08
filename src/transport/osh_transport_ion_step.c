@@ -297,11 +297,13 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
     /* Phase 1 — identify particle, load material, handle early exits */
     ion_step_setup(&ctx, pool, slot, zone_ref, step_segments, n_step_segments, geom_rt, transport_ctx, material_rt);
     if (ctx.done) {
-        if (ctx.stopped_at_cutoff) {
+        if (ctx.stopped_at_cutoff && ctx.rho > 0.0) {
             /* Deposit the stopping ion's residual kinetic energy at its current
              * position instead of deleting it (issue #279), attributed to the
-             * ion itself (its own generation), matching SH12A/FLUKA cutoff-kill
-             * behaviour.  Zero-length: no track-length contribution. */
+             * ion itself (its own generation).  Zero-density material has no
+             * finite CSDA residual range; a future range-to-rest terminal step
+             * for fluence would use the same positive-density precondition.
+             * Zero-length for now: no track-length contribution. */
             double stop_dir[3];
             stop_dir[0] = pool->ux[slot];
             stop_dir[1] = pool->uy[slot];
