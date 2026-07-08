@@ -17,9 +17,11 @@ extern "C" {
  * FLUENCE, and NKERMA it applies the per-bin volume normalisation; for DOSEGY it
  * applies the same volume normalisation and then rescales MeV/g -> Gy; for the
  * LET/Qeff two-pass averages it finalises data/data2.  Score kinds without a
- * postprocess handler are already in final form.  Implemented as the @p dst ==
- * @p src case of @ref osh_scoring_postprocess_into, so its (destructive)
- * behaviour is identical to before.
+ * postprocess handler are already in final form unless they are differential
+ * pages, where postprocess divides additive bin contents by the differential-axis
+ * bin width(s) to report differential quantities.  Implemented as the
+ * @p dst == @p src case of @ref osh_scoring_postprocess_into, so its
+ * (destructive) behaviour is identical to before.
  *
  * @note Single-shot: the transform is destructive and not idempotent, so a
  * second in-place call would double-divide by volume / re-ratio data÷data2.
@@ -38,13 +40,11 @@ enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
  * @details
  * Computes the presentation form of every page of @p src into the matching page
  * of @p dst, **never mutating @p src**.  Only @c acc.data is ever written
- * (volume normalisation, DOSEGY rescale, LET/Qeff average); for the LET/Qeff
- * kinds the @c has_data2 / @c divide flags are cleared on the @p dst page only.
- * Score kinds without a postprocess handler are mirrored as raw data: when a
- * @p dst page aliases its @p src page's @c data (the shadow's non-transformed
- * pages, or the in-place @p dst == @p src wrapper) nothing is copied; when it
- * owns a distinct buffer the raw values are mirrored so the saved view is
- * complete.
+ * (volume normalisation, DOSEGY rescale, differential bin-width normalisation,
+ * LET/Qeff average); for the LET/Qeff kinds the @c has_data2 / @c divide flags
+ * are cleared on the @p dst page only.  Score kinds without a postprocess handler
+ * are mirrored as raw data, or divided by differential bin width(s) when they are
+ * differential additive pages.
  *
  * @p dst and @p src must have the same @c npages, and matching pages the same
  * @c acc.len.  With a **distinct** @p dst this is the non-destructive primitive a
@@ -102,6 +102,16 @@ enum osh_status osh_scoring_finalize_errors(struct osh_scoring_runtime *rt);
  * single source of truth shared by the shadow and the memory estimate.
  */
 int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind);
+
+/**
+ * @brief True when a specific page writes @c acc.data during postprocess.
+ *
+ * @details
+ * Extends @ref osh_scoring_postprocess_writes_data with page-level differential
+ * metadata, so additive pages such as Energy get scratch in non-destructive
+ * snapshots when they need differential bin-width normalisation.
+ */
+int osh_scoring_postprocess_page_writes_data(struct osh_scoring_page_runtime const *page);
 
 /* Per-estimator postprocess handlers, registered in the estimator table
  * (osh_scoring_estimator.c).  Each finalises one page's accumulator:

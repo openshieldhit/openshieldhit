@@ -74,7 +74,7 @@ enum osh_status osh_scoring_shadow_refresh(struct osh_scoring_shadow *shadow) {
         size_t i;
         for (i = 0; i < shadow->npages; ++i) {
             struct osh_scoring_page_runtime const *lp = &shadow->live->pages[i];
-            if (osh_scoring_postprocess_writes_data(lp->score_kind)) {
+            if (osh_scoring_postprocess_page_writes_data(lp)) {
                 size_t n = lp->acc.len; /* never allocate a zero-length buffer */
                 double *buf;
                 if (n == 0u) {
@@ -115,7 +115,7 @@ uint64_t osh_scoring_shadow_bytes(struct osh_scoring_shadow const *shadow) {
     }
     for (i = 0; i < shadow->npages; ++i) {
         struct osh_scoring_page_runtime const *lp = &shadow->live->pages[i];
-        if (osh_scoring_postprocess_writes_data(lp->score_kind)) {
+        if (osh_scoring_postprocess_page_writes_data(lp)) {
             uint64_t n = (uint64_t) lp->acc.len;
             /* osh_scoring_shadow_refresh() allocates one double even for a len==0
              * page (it never makes a zero-length buffer), so count one here too;

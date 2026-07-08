@@ -17,9 +17,10 @@ extern "C" {
  * @details
  * Holds a @ref osh_scoring_runtime (@c view) whose page array is a struct-copy of
  * the live pages — so every array and scalar is *aliased* — except the
- * @c acc.data of pages whose postprocess writes data (DOSEGY, LET/Qeff), which is
- * redirected to a private scratch buffer.  An out-of-place postprocess then
- * writes only those scratch buffers, leaving the live accumulators byte-identical.
+ * @c acc.data of pages whose postprocess writes data (DOSEGY, LET/Qeff,
+ * differential Energy, ...), which is redirected to a private scratch buffer.
+ * An out-of-place postprocess then writes only those scratch buffers, leaving
+ * the live accumulators byte-identical.
  *
  * Scratch is allocated **once** (lazily, on the first @ref osh_scoring_shadow_refresh)
  * and reused for every subsequent snapshot; it is freed only at

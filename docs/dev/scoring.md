@@ -300,13 +300,15 @@ Each estimator owns a trio of handlers, registered in
 
 A `—` below means the handler is `NULL`: the estimator is not scored on that path
 (`score_point_` needs a track length for FLUENCE/LET), or the accumulator is
-already final (`postprocess_` for ENERGY/COUNT). The scorer deposits the extensive
-quantity; the *only* geometry-specific normalisation, ÷volume, lives in
-`postprocess_` (via `geo->bin_vol_inv`) — never at score time and never at save.
+already final (`postprocess_` for ENERGY/COUNT unless the page is differential).
+The scorer deposits the extensive quantity; geometry-specific normalisation
+(÷volume via `geo->bin_vol_inv`) and differential-axis normalisation (÷bin width,
+or ÷width1÷width2 for double-differential pages) live in `postprocess_` — never
+at score time and never at save.
 
 | `Quantity` (score kind) | `score_step_` | `score_point_` | `postprocess_` | deposits → finalises |
 |---|---|---|---|---|
-| `ENERGY`  | `osh_scoring_estimator_step_energy`  | `osh_scoring_estimator_point_energy` | — | `de·(path/score_len)` → already final [MeV] |
+| `ENERGY`  | `osh_scoring_estimator_step_energy`  | `osh_scoring_estimator_point_energy` | differential pages only | `de·(path/score_len)` → [MeV] or [MeV/axis-unit] |
 | `FLUENCE` | `osh_scoring_estimator_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
 | `DOSE`    | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
 | `DOSEGY`  | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |

@@ -65,6 +65,21 @@ static void test_writes_data_predicate(void) {
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_UNKNOWN) == 0);
 }
 
+static void test_page_writes_data_for_differential_additive_pages(void) {
+    struct osh_scoring_page_runtime page;
+
+    make_page(&page, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_ENERGY) == 0);
+    ASSERT_TRUE(osh_scoring_postprocess_page_writes_data(&page) == 0);
+    page.diff_nbins = 2u;
+    page.diff_stride = 1u;
+    page.diff_lo = 0.0;
+    page.diff_hi = 2.0;
+    ASSERT_TRUE(osh_scoring_postprocess_page_writes_data(&page) == 1);
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
 /* ---- In-place wrapper: DOSEGY rescale ------------------------------------- */
 
 static void test_inplace_dosegy(void) {
@@ -127,6 +142,51 @@ static void test_inplace_simple_noop(void) {
     ASSERT_TRUE(page.acc.data[0] == 11.0);
     ASSERT_TRUE(page.acc.data[1] == 22.0);
     ASSERT_TRUE(page.acc.data[2] == 33.0);
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
+static void test_inplace_diff_linear_normalization(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+
+    make_page(&page, OSH_SCORING_SCORE_FLUENCE, 4u, 0);
+    page.diff_nbins = 4u;
+    page.diff_stride = 1u;
+    page.diff_lo = 0.0;
+    page.diff_hi = 8.0;
+    page.acc.data[0] = 2.0;
+    page.acc.data[1] = 4.0;
+    page.acc.data[2] = 6.0;
+    page.acc.data[3] = 8.0;
+    make_runtime(&rt, &page, 1u);
+
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_OK);
+    ASSERT_TRUE(page.acc.data[0] == 1.0);
+    ASSERT_TRUE(page.acc.data[1] == 2.0);
+    ASSERT_TRUE(page.acc.data[2] == 3.0);
+    ASSERT_TRUE(page.acc.data[3] == 4.0);
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
+static void test_inplace_diff_log_normalization_for_simple_page(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+
+    make_page(&page, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+    page.diff_nbins = 2u;
+    page.diff_stride = 1u;
+    page.diff_lo = 1.0;
+    page.diff_hi = 100.0;
+    page.diff_log = 1;
+    page.acc.data[0] = 9.0;  /* width 1..10 */
+    page.acc.data[1] = 90.0; /* width 10..100 */
+    make_runtime(&rt, &page, 1u);
+
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_OK);
+    ASSERT_TRUE(page.acc.data[0] == 1.0);
+    ASSERT_TRUE(page.acc.data[1] == 1.0);
 
     osh_scoring_accumulator_free(&page.acc);
 }
@@ -382,9 +442,12 @@ static void test_into_unsupported(void) {
 
 int main(void) {
     test_writes_data_predicate();
+    test_page_writes_data_for_differential_additive_pages();
     test_inplace_dosegy();
     test_inplace_let();
     test_inplace_simple_noop();
+    test_inplace_diff_linear_normalization();
+    test_inplace_diff_log_normalization_for_simple_page();
     test_inplace_single_shot_guard();
     test_into_inplace_single_shot_guard();
     test_into_out_of_place();

@@ -427,16 +427,15 @@ exactly at lung/soft-tissue/bone interfaces where dose accuracy is most
 scrutinised. (Also note the step is scored on the chord `p→q` while the
 transport step may have been hinge-bent — documented O(θ₀²·L), fine.)
 
-### S-4 (low, high) Differential-axis edge semantics: both edges exclusive, out-of-range silently dropped, ASCII spectra not divided by bin width {: #s-4 }
+### S-4 (low, high) Differential-axis edge semantics: both edges exclusive, out-of-range silently dropped, ASCII spectra now divided by bin width {: #s-4 }
 
 `diff_axis_bin` (`osh_scoring_step.c:407-421`) treats the axis as the *open*
 interval `(lo, hi)`: a value exactly at `lo` (or `hi`) is discarded via the
 out-of-range sentinel, and there are no under/overflow bins anywhere, so the
-discarded tally is invisible. Combined with the ASCII writer normalising only
-by `1/nstat` (`osh_scoring_save_ascii.c:333-340`) and *not* by bin width, a
-log-binned "spectrum" output is a per-bin count whose shape differs from the
-physical dN/dE — fine as a convention, but it is not documented in the
-writer header, which advertises "immediately human-readable".
+discarded tally is invisible. The original audit also found that differential
+outputs were written as per-bin counts; issue #215 moved bin-width
+normalisation into scoring postprocess, so ASCII and BDO2019 writers now receive
+differential quantities.
 
 ### S-5 (info, high) Verified-OK: the accumulator/merge layer is sound and correctly shaped for #169 {: #s-5 }
 

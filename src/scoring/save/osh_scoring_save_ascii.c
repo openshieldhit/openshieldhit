@@ -117,7 +117,9 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fprintf(fp, "# PRIMARIES: %llu\n", nstat);
             fprintf(fp, "# COMPLETENESS: %s\n", osh_scoring_runtime_completeness_label(rt));
             fprintf(fp, "# Data written in explicit Zone order from detect.dat\n");
-            fprintf(fp, "# Values: NORM/SUM quantities divided by nstat; AVER quantities written as physical mean\n");
+            fprintf(fp,
+                    "# Values: NORM/SUM quantities divided by nstat; differential additive pages are also divided "
+                    "by bin width(s); AVER quantities written as physical mean\n");
             if (diff_nbins > 0u) {
                 fprintf(fp,
                         "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
@@ -233,8 +235,8 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fprintf(fp, "# COMPLETENESS: %s\n", osh_scoring_runtime_completeness_label(rt));
             fprintf(fp, "# Data written in canonical flat cyl order: idx = ir + nr * iz\n");
             fprintf(fp,
-                    "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical "
-                    "mean\n");
+                    "# Values: NORM/SUM quantities divided by nstat; differential additive pages are also divided "
+                    "by bin width(s); AVER quantities (DLET/TLET) written as physical mean\n");
             if (diff_nbins > 0u) {
                 fprintf(fp,
                         "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",
@@ -372,8 +374,8 @@ enum osh_status osh_scoring_save_ascii_output(struct osh_scoring_workspace const
             fprintf(fp, "# COMPLETENESS: %s\n", osh_scoring_runtime_completeness_label(rt));
             fprintf(fp, "# Data written in canonical flat mesh order: idx = ix + nx * (iy + ny * iz)\n");
             fprintf(fp,
-                    "# Values: NORM/SUM quantities divided by nstat; AVER quantities (DLET/TLET) written as physical "
-                    "mean\n");
+                    "# Values: NORM/SUM quantities divided by nstat; differential additive pages are also divided "
+                    "by bin width(s); AVER quantities (DLET/TLET) written as physical mean\n");
             if (diff_nbins > 0u) {
                 fprintf(fp,
                         "# Diff1Type: %s  lo=%g  hi=%g  nbins=%zu%s%s\n",

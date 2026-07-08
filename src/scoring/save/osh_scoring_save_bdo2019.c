@@ -43,6 +43,8 @@ static char const *geometry_type_name(struct osh_scoring_geometry_runtime const 
 static char const *page_data_unit(struct osh_scoring_page_runtime const *page);
 static char const *page_diff_unit(struct osh_scoring_page_runtime const *page);
 static char const *page_diff2_unit(struct osh_scoring_page_runtime const *page);
+static void page_data_unit_with_diff(struct osh_scoring_page_runtime const *page, char *buf, size_t cap);
+static void page_differential_unit_with_diff(struct osh_scoring_page_runtime const *page, char *buf, size_t cap);
 static int legacy_diff2_kind(struct osh_scoring_page_runtime const *page);
 static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
@@ -185,6 +187,7 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         double page_offset;
         double page_diff_start[2];
         double page_diff_stop[2];
+        char data_unit[128];
         char diff_units[64];
         struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
 
@@ -202,11 +205,8 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         page_diff_start[1] = page->diff2_nbins > 0u ? page->diff2_lo : 0.0;
         page_diff_stop[0] = page->diff_hi;
         page_diff_stop[1] = page->diff2_nbins > 0u ? page->diff2_hi : 1.0;
-        if (page->diff2_nbins > 0u) {
-            snprintf(diff_units, sizeof(diff_units), "%s;%s;", page_diff_unit(page), page_diff2_unit(page));
-        } else {
-            snprintf(diff_units, sizeof(diff_units), "%s;", page_diff_unit(page));
-        }
+        page_data_unit_with_diff(page, data_unit, sizeof(data_unit));
+        page_differential_unit_with_diff(page, diff_units, sizeof(diff_units));
 
         rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_TYPE, &page_type, 1u);
         if (rc == OSH_OK) {
@@ -222,7 +222,7 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
             rc = osh_scoring_bdo2019_write_token_double(fp, OSHBDO_PAG_OFFSET, &page_offset, 1u);
         }
         if (rc == OSH_OK) {
-            rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DATA_UNIT, page_data_unit(page));
+            rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DATA_UNIT, data_unit);
         }
         if (rc == OSH_OK && page->diff_nbins > 0u) {
             rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_DIF_SET, &page_diff_flag, 1u);
@@ -321,6 +321,32 @@ static char const *page_diff2_unit(struct osh_scoring_page_runtime const *page) 
         return "dim.less";
     default:
         return "";
+    }
+}
+
+static void page_data_unit_with_diff(struct osh_scoring_page_runtime const *page, char *buf, size_t cap) {
+    if (!buf || cap == 0u) {
+        return;
+    }
+    if (page->diff_nbins > 0u && page->diff2_nbins > 0u) {
+        snprintf(buf, cap, "%s;%s;%s", page_data_unit(page), page_diff_unit(page), page_diff2_unit(page));
+    } else if (page->diff_nbins > 0u) {
+        snprintf(buf, cap, "%s;%s", page_data_unit(page), page_diff_unit(page));
+    } else {
+        snprintf(buf, cap, "%s", page_data_unit(page));
+    }
+}
+
+static void page_differential_unit_with_diff(struct osh_scoring_page_runtime const *page, char *buf, size_t cap) {
+    if (!buf || cap == 0u) {
+        return;
+    }
+    if (page->diff_nbins > 0u && page->diff2_nbins > 0u) {
+        snprintf(buf, cap, "%s/%s/%s", page_data_unit(page), page_diff_unit(page), page_diff2_unit(page));
+    } else if (page->diff_nbins > 0u) {
+        snprintf(buf, cap, "%s/%s", page_data_unit(page), page_diff_unit(page));
+    } else {
+        snprintf(buf, cap, "%s", page_data_unit(page));
     }
 }
 
