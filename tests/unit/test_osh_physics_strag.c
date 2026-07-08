@@ -18,10 +18,18 @@ static int approx(double a, double b, double rtol) {
 
 /* E_max = 2 mₑ β²γ² / (1 + 2γ mₑ/M + (mₑ/M)²); proton 200 MeV → 0.4815 MeV. */
 static void test_emax_proton_200mev(void) {
-    double emax = osh_physics_strag_emax(200.0, 938.272);
+    double beta2;
+    double emax;
+    double gamma;
+
+    gamma = 1.0 + 200.0 / 938.272;
+    beta2 = 1.0 - 1.0 / (gamma * gamma);
+    emax = osh_physics_strag_emax(200.0, 938.272);
     ASSERT_TRUE(approx(emax, 0.4815, 3.0e-3));
+    ASSERT_TRUE(approx(osh_physics_strag_emax_beta2(200.0, 938.272, beta2), emax, 1.0e-12));
     ASSERT_TRUE(osh_physics_strag_emax(-1.0, 938.272) == 0.0);
     ASSERT_TRUE(osh_physics_strag_emax(200.0, 0.0) == 0.0);
+    ASSERT_TRUE(osh_physics_strag_emax_beta2(200.0, 938.272, 0.0) == 0.0);
 }
 
 /* ξ = (K/2)(Z/A)(z²/β²)·d; z=1, Z/A=0.5551, d=0.1 g/cm², β²=0.320525. */
@@ -46,8 +54,10 @@ static void test_kappa(void) {
 static void test_lambda_bar(void) {
     double lb = osh_physics_strag_lambda_bar(0.055225, 0.320525);
     ASSERT_TRUE(approx(lb, 2.1529, 1.0e-3));
+    ASSERT_TRUE(approx(osh_physics_strag_lambda_bar_log(log(0.055225), 0.320525), lb, 1.0e-12));
     /* invalid κ returns NAN (not 0.0, which is a legitimate λ̄). */
     ASSERT_TRUE(isnan(osh_physics_strag_lambda_bar(0.0, 0.32)));
+    ASSERT_TRUE(isnan(osh_physics_strag_lambda_bar_log(-INFINITY, 0.32)));
 }
 
 /* Bohr σ ∝ sqrt(d); guards on non-physical inputs. */

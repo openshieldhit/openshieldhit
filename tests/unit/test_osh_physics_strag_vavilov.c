@@ -81,6 +81,24 @@ static void test_vavilov_monotone_in_u(void) {
     }
 }
 
+static void test_vavilov_log_kappa_matches_kappa(void) {
+    double kappas[] = {0.02, 0.1, 0.5, 2.0, 8.0};
+    double betas[] = {0.1, 0.5, 0.9};
+    size_t ki;
+    size_t bi;
+
+    for (ki = 0; ki < sizeof(kappas) / sizeof(kappas[0]); ++ki) {
+        for (bi = 0; bi < sizeof(betas) / sizeof(betas[0]); ++bi) {
+            double by_kappa;
+            double by_log;
+
+            by_kappa = osh_physics_strag_vavilov_lambda(kappas[ki], betas[bi], 0.42);
+            by_log = osh_physics_strag_vavilov_lambda_log(log(kappas[ki]), betas[bi], 0.42);
+            ASSERT_TRUE(fabs(by_kappa - by_log) < 1.0e-12);
+        }
+    }
+}
+
 static int run_named_test(char const *name) {
     if (strcmp(name, "vavilov_matches_fixture") == 0) {
         test_vavilov_matches_fixture();
@@ -88,6 +106,10 @@ static int run_named_test(char const *name) {
     }
     if (strcmp(name, "vavilov_monotone_in_u") == 0) {
         test_vavilov_monotone_in_u();
+        return 0;
+    }
+    if (strcmp(name, "vavilov_log_kappa_matches_kappa") == 0) {
+        test_vavilov_log_kappa_matches_kappa();
         return 0;
     }
     return 1;
@@ -99,6 +121,7 @@ int main(int argc, char *argv[]) {
     }
     test_vavilov_matches_fixture();
     test_vavilov_monotone_in_u();
+    test_vavilov_log_kappa_matches_kappa();
     printf("All osh_physics_strag_vavilov tests passed.\n");
     return 0;
 }
