@@ -36,7 +36,7 @@
 #include "physics/nuclear/osh_nuclear_fermi_breakup.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "physics/nuclear/osh_nuclear_preeq.h"
-#include "physics/nuclear/osh_nuclear_tripathi.h"
+#include "physics/nuclear/osh_nuclear_sigma_reac.h"
 #include "random/osh_rng.h"
 
 #define NUCRE_SCAN_NBINS 150
@@ -206,9 +206,9 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    sigma_cm2 = osh_nuclear_tripathi_sigma(1u, 1u, (double) z_tgt, (double) a_tgt, t_mev);
+    sigma_cm2 = osh_nuclear_sigma_reac(1u, 1u, (double) z_tgt, (double) a_tgt, t_mev);
     if (sigma_cm2 <= 0.0) {
-        fprintf(stderr, "nucre_scan: Tripathi sigma is zero (below Coulomb threshold?)\n");
+        fprintf(stderr, "nucre_scan: reaction sigma is zero (below threshold?)\n");
         return 1;
     }
 

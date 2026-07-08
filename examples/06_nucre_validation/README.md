@@ -4,6 +4,20 @@ Stage-0 instrument of the fast nuclear reaction stage work
 ([#221](https://github.com/openshieldhit/openshieldhit/issues/221),
 [#260](https://github.com/openshieldhit/openshieldhit/issues/260)).
 
+This directory also holds `sigma_scan`
+([#277](https://github.com/openshieldhit/openshieldhit/issues/277)): a dump of
+the p+A cross sections the transport actually uses — Tripathi σ_R, the
+configured p+A elastic σ_el and its exp(−B|t|) median angle, and the pp
+elastic channel for a hydrogen target (`sigma_scan 1 1`). Its output overlays
+against the committed reference data in `tests/reference/xsec/` via
+`tools/plot_xsec_pa.py`:
+
+```sh
+cmake --build --preset release --parallel --target sigma_scan
+./build/bin/sigma_scan 8 16 > sigma_p_o16.dat     # Z A [Emin Emax steps]
+.venv/bin/python tools/plot_xsec_pa.py --out xsec_report.pdf
+```
+
 `nucre_scan` drives the inelastic branch of the nuclear handler — abrasion
 followed by Fermi break-up, exactly as wired in `osh_nuclear_handler_step()` —
 for p + (Z, A) at a fixed incident energy, with no transport. It tabulates the
