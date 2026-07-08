@@ -35,10 +35,11 @@ Column layouts:
   spectrum.dat (Ekin 0.1..300 MeV, 150 log bins, pages: Fluence, Fluence Protons,
     Fluence Deuterons, Fluence Tritons, Fluence He3, Fluence Alphas)
     OpenShieldHIT : X Y Z EKIN Phi_all Phi_p Phi_d Phi_t Phi_He3 Phi_alpha
-      -- Phi PER BIN (see issue #215)
+      -- Phi is differential in Ekin
     SHIELD-HIT12A : Page Diff1bin Value
-  Issue #215: OSH differential output is counts-per-bin, not a density, so this
-  tool divides the OSH spectrum by the log-bin width; SH12A is already a density.
+  OpenShieldHIT postprocesses differential pages to per-axis quantities;
+  SHIELD-HIT12A fixture values are still normalised here by primary count and
+  bin width.
 """
 
 from __future__ import annotations
@@ -336,7 +337,7 @@ def draw_residual_strip(ax, osh, sh, families, zend, ylim_pct=30.0):
 
 
 def osh_spectrum(out_dir: Path):
-    """OpenShieldHIT plateau spectrum -> dPhi/dEkin (dividing Phi(bin) by bin width, issue #215).
+    """OpenShieldHIT plateau spectrum -> per-primary dPhi/dEkin.
 
     New decks write columns X Y Z EKIN Phi_all Phi_p Phi_d Phi_t Phi_He3 Phi_alpha.
     Older three-page outputs (all, p, alpha) are still read correctly while the
@@ -349,15 +350,14 @@ def osh_spectrum(out_dir: Path):
     d = load_numeric(path)
     if d.shape[1] < 6:
         return None
-    _, widths = log_bin_centers_widths(SPEC_LO, SPEC_HI, SPEC_NBINS)
-    n = min(d.shape[0], len(widths))
+    n = d.shape[0]
     out = {"ekin": d[:n, 3]}
     if d.shape[1] == 7:
         keys = ("dphi_all", "dphi_prot", "dphi_alpha")
     for i, key in enumerate(keys):
         col = 4 + i
         if col < d.shape[1]:
-            out[key] = d[:n, col] / widths[:n]
+            out[key] = d[:n, col]
     return out
 
 
@@ -368,7 +368,7 @@ def sh12a_spectrum(ref_dir: Path):
     fluence summed into each bin over ALL primaries — absolute, not per-primary
     and not per-MeV (verified: sum over bins == NSTAT * per-primary fluence).  So
     normalise by NSTAT (from the fixture's beam.dat) and the log-bin width to get
-    a per-primary spectral density comparable to the OSH curve.
+    a per-primary differential spectrum comparable to the OSH curve.
     """
     path = ref_dir / "spectrum.dat"
     if not path.exists():

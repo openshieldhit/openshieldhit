@@ -26,11 +26,88 @@ int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind) {
     }
 }
 
+static int page_needs_diff_normalization(struct osh_scoring_page_runtime const *page) {
+    if (!page) {
+        return 0;
+    }
+    if (page->diff_nbins == 0u && page->diff2_nbins == 0u) {
+        return 0;
+    }
+    /* AVER pages already report ratios such as LET; APPEND pages are raw payloads.
+     * Dividing either by a differential-axis width would change the physics/API. */
+    return page->postproc != OSH_SCORING_POSTPROC_AVER && page->postproc != OSH_SCORING_POSTPROC_APPEND;
+}
+
+int osh_scoring_postprocess_page_writes_data(struct osh_scoring_page_runtime const *page) {
+    if (!page) {
+        return 0;
+    }
+    return osh_scoring_postprocess_writes_data(page->score_kind) || page_needs_diff_normalization(page);
+}
+
+static double diff_axis_width(double lo, double hi, size_t nbins, int is_log, size_t bin) {
+    double t0;
+    double t1;
+    double ratio;
+
+    if (nbins == 0u || bin >= nbins || !(hi > lo)) {
+        return 0.0;
+    }
+    t0 = (double) bin / (double) nbins;
+    t1 = (double) (bin + 1u) / (double) nbins;
+    if (is_log) {
+        if (!(lo > 0.0)) {
+            return 0.0;
+        }
+        ratio = hi / lo;
+        return lo * (pow(ratio, t1) - pow(ratio, t0));
+    }
+    return (hi - lo) / (double) nbins;
+}
+
+static double page_diff_normalization_factor(struct osh_scoring_page_runtime const *page, size_t data_idx) {
+    double factor;
+
+    if (!page_needs_diff_normalization(page)) {
+        return 1.0;
+    }
+    factor = 1.0;
+    if (page->diff_nbins > 0u) {
+        size_t db;
+        double width;
+        if (page->diff_stride == 0u) {
+            return 0.0;
+        }
+        db = (data_idx / page->diff_stride) % page->diff_nbins;
+        width = diff_axis_width(page->diff_lo, page->diff_hi, page->diff_nbins, page->diff_log, db);
+        if (!(width > 0.0)) {
+            return 0.0;
+        }
+        factor /= width;
+    }
+    if (page->diff2_nbins > 0u) {
+        size_t db;
+        double width;
+        if (page->diff2_stride == 0u) {
+            return 0.0;
+        }
+        db = (data_idx / page->diff2_stride) % page->diff2_nbins;
+        width = diff_axis_width(page->diff2_lo, page->diff2_hi, page->diff2_nbins, page->diff2_log, db);
+        if (!(width > 0.0)) {
+            return 0.0;
+        }
+        factor /= width;
+    }
+    return factor;
+}
+
 /* Volume-normalise an extensive tally in place or out-of-place:
- * dst[i] = src[i] * bin_vol_inv[i % diff_stride] * extra_factor.  The spatial bin
- * of flat index i is i % diff_stride (holds for diff1/diff2 layouts).  Used by the
- * DOSE/FLUENCE/NKERMA/DOSEGY estimators, which deposit the extensive quantity at
- * score time and divide by the bin volume exactly once here. */
+ * dst[i] = src[i] * bin_vol_inv[i % diff_stride] * extra_factor * diff_factor.
+ * The spatial bin of flat index i is i % diff_stride (holds for diff1/diff2
+ * layouts).  Used by the DOSE/FLUENCE/NKERMA/DOSEGY estimators, which deposit
+ * the extensive quantity at score time and divide by the bin volume exactly once
+ * here.  Differential additive pages are additionally divided by differential
+ * bin width(s), turning per-bin totals into differential quantities. */
 static enum osh_status page_scale_by_bin_volume(struct osh_scoring_page_runtime *dst,
                                                 struct osh_scoring_page_runtime const *src,
                                                 struct osh_scoring_geometry_runtime const *geo,
@@ -62,7 +139,22 @@ static enum osh_status page_scale_by_bin_volume(struct osh_scoring_page_runtime 
         } else {
             vinv = 1.0;
         }
-        dst->acc.data[i] = src->acc.data[i] * vinv * extra_factor;
+        dst->acc.data[i] = src->acc.data[i] * vinv * extra_factor * page_diff_normalization_factor(src, i);
+    }
+    return OSH_OK;
+}
+
+static enum osh_status page_copy_with_diff_normalization(struct osh_scoring_page_runtime *dst,
+                                                         struct osh_scoring_page_runtime const *src) {
+    size_t i;
+    size_t len;
+
+    if (!dst->acc.data || !src->acc.data) {
+        return OSH_EINVAL;
+    }
+    len = src->acc.len;
+    for (i = 0u; i < len; ++i) {
+        dst->acc.data[i] = src->acc.data[i] * page_diff_normalization_factor(src, i);
     }
     return OSH_OK;
 }
@@ -154,6 +246,9 @@ static enum osh_status page_postprocess_into(struct osh_scoring_page_runtime *ds
     case OSH_SCORING_POSTPROC_SUM:
     case OSH_SCORING_POSTPROC_NORM:
     case OSH_SCORING_POSTPROC_APPEND:
+        if (page_needs_diff_normalization(src)) {
+            return page_copy_with_diff_normalization(dst, src);
+        }
         if (dst->acc.data != src->acc.data && dst->acc.data && src->acc.data) {
             memcpy(dst->acc.data, src->acc.data, len * sizeof(*dst->acc.data));
         }

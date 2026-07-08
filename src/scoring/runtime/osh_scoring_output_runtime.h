@@ -55,7 +55,14 @@ struct osh_scoring_page_runtime {
     size_t nsettings;                                   /* Number of settings references. */
     size_t len;                                         /* Total number of bins (= product of axis nbins). */
     enum osh_scoring_score_kind score_kind;             /* What physical quantity is accumulated. */
-    enum osh_scoring_postproc postproc;                 /* How to combine across simulation runs. */
+    /* Page finalisation / cross-run combine mode.
+     *
+     * Assigned at compile time from the score kind and LET/Qeff divide flag.  The
+     * in-memory postprocess path uses it to recognise AVER/APPEND cases, and the
+     * BDO writer persists the same value as OSHBDO_PAG_NORMALIZE so merge tools
+     * know whether independent files are summed, nstat-normalised, averaged, or
+     * appended. */
+    enum osh_scoring_postproc postproc;
     struct osh_scoring_page_override sset; /* Hot-path override fields, merged from all settings references. */
     char has_sset;                         /* Non-zero when at least one settings block is referenced. */
     char has_data2;                        /* Non-zero when data2/data2_var are allocated. */

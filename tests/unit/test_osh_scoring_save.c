@@ -8,6 +8,7 @@
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/save/osh_scoring_save.h"
+#include "scoring/save/osh_scoring_save_bdo2019_raw.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -22,8 +23,11 @@
 #define BDO_PATH "out_binary.bdo"
 #define CYL_ASCII_PATH "out_cyl_ascii.txt"
 #define CYL_BDO_PATH "out_cyl_binary.bdo"
+#define BDO_TEST_MAX_PAYLOAD 4096u
 
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes);
+static int file_token_contains_text(char const *path, unsigned long long tag_id, char const *needle);
+static size_t bdo_payload_size(struct osh_scoring_bdo2019_tag const *tag);
 static void write_detect_file(char const *content);
 
 static void test_save_bdo2019_with_dose_and_dlet(void) {
@@ -204,6 +208,97 @@ static void test_save_ascii_rejects_mixed_diff_layout(void) {
     osh_scoring_workspace_free(ws);
     remove(DETECT_PATH);
     remove("out_bad_ascii.txt");
+}
+
+static void test_save_bdo2019_diff_log_units(void) {
+    char const *detect_text = "Geometry Mesh\n"
+                              "    Name G\n"
+                              "    X 0 1 1\n"
+                              "    Y 0 1 1\n"
+                              "    Z 0 1 1\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_diff_log.bdo\n"
+                              "    FileFormat BDO2019\n"
+                              "    Geo G\n"
+                              "    Quantity Fluence\n"
+                              "    Diff1 1 100 2 LOG\n"
+                              "    Diff1Type EKIN\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 1u);
+    ASSERT_TRUE(rt.pages[0].diff_log == 1);
+
+    rt.pages[0].acc.data[0] = 9.0;
+    rt.pages[0].acc.data[1] = 90.0;
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.pages[0].acc.data[0] == 1.0);
+    ASSERT_TRUE(rt.pages[0].acc.data[1] == 1.0);
+
+    rc = osh_scoring_save(ws, &rt, 1u);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(file_token_contains_text("out_diff_log.bdo", OSHBDO_PAG_DATA_UNIT, "/cm^2/MeV"));
+    ASSERT_TRUE(file_token_contains_text("out_diff_log.bdo", OSHBDO_PAG_DIF_UNITS, "/cm^2;MeV"));
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_diff_log.bdo");
+}
+
+static void test_save_bdo2019_diff_slash_unit_parentheses(void) {
+    char const *detect_text = "Geometry Mesh\n"
+                              "    Name G\n"
+                              "    X 0 1 1\n"
+                              "    Y 0 1 1\n"
+                              "    Z 0 1 1\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_diff_let.bdo\n"
+                              "    FileFormat BDO2019\n"
+                              "    Geo G\n"
+                              "    Quantity Fluence\n"
+                              "    Diff1 0 10 2\n"
+                              "    Diff1Type DEDX\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 1u);
+
+    rt.pages[0].acc.data[0] = 5.0;
+    rt.pages[0].acc.data[1] = 10.0;
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_save(ws, &rt, 1u);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(file_token_contains_text("out_diff_let.bdo", OSHBDO_PAG_DATA_UNIT, "/cm^2/(MeV/cm)"));
+    ASSERT_TRUE(file_token_contains_text("out_diff_let.bdo", OSHBDO_PAG_DIF_UNITS, "/cm^2;MeV/cm"));
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_diff_let.bdo");
 }
 
 /* Zone ASCII + BDO save paths.  Zone geometry needs app-level zone-name
@@ -414,6 +509,8 @@ int main(void) {
     test_save_bdo2019_with_dose_and_dlet();
     test_save_cyl_ascii_and_bdo();
     test_save_ascii_rejects_mixed_diff_layout();
+    test_save_bdo2019_diff_log_units();
+    test_save_bdo2019_diff_slash_unit_parentheses();
     test_save_zone_ascii_and_bdo();
     return 0;
 }
@@ -425,6 +522,57 @@ static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes)
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fread(buf, 1u, nbytes, fp) == nbytes);
     ASSERT_TRUE(fclose(fp) == 0);
+}
+
+static int file_token_contains_text(char const *path, unsigned long long tag_id, char const *needle) {
+    FILE *fp;
+    struct osh_scoring_bdo2019_tag tag;
+    size_t payload_size;
+    char payload[BDO_TEST_MAX_PAYLOAD];
+    size_t needle_len;
+    size_t i;
+    int found;
+
+    fp = fopen(path, "rb");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fseek(fp, 24L, SEEK_SET) == 0); /* magic + endian + version field */
+    needle_len = strlen(needle);
+    found = 0;
+    while (fread(&tag, sizeof(tag), 1u, fp) == 1u) {
+        payload_size = bdo_payload_size(&tag);
+        if (payload_size > sizeof(payload)) {
+            break;
+        }
+        if (payload_size > 0u) {
+            ASSERT_TRUE(fread(payload, 1u, payload_size, fp) == payload_size);
+        }
+        if (tag.tag == tag_id && needle_len <= payload_size) {
+            for (i = 0u; i <= payload_size - needle_len; ++i) {
+                if (memcmp(payload + i, needle, needle_len) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+        }
+        if (found) {
+            break;
+        }
+    }
+    ASSERT_TRUE(fclose(fp) == 0);
+    return found;
+}
+
+static size_t bdo_payload_size(struct osh_scoring_bdo2019_tag const *tag) {
+    if (!tag) {
+        return 0u;
+    }
+    if (tag->pltype[0] == 'S') {
+        return (size_t) strtoull(tag->pltype + 1u, NULL, 10) * (size_t) tag->len;
+    }
+    if (strstr(tag->pltype, "f8") || strstr(tag->pltype, "i8") || strstr(tag->pltype, "u8")) {
+        return 8u * (size_t) tag->len;
+    }
+    return 0u;
 }
 
 static void write_detect_file(char const *content) {

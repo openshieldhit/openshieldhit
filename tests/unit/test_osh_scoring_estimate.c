@@ -78,6 +78,30 @@ static void test_estimate_zero_bins(void) {
     osh_scoring_workspace_free(ws);
 }
 
+static void test_estimate_diff_energy_shadow_bytes(void) {
+    char path[1024];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_mem_estimate est;
+
+    (void) snprintf(path, sizeof(path), "%s/scoring_estimate/detect_diff_energy.dat", OSH_TEST_FIXTURES_DIR);
+
+    ASSERT_TRUE(osh_scoring_setup_from_path(path, NULL, &ws) == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+
+    ASSERT_TRUE(osh_scoring_estimate_memory(ws, &est) == OSH_OK);
+
+    /* 2 spatial bins * 4 EKIN bins = 8 data bins.  Differential Energy is an
+     * additive page that needs postprocess bin-width normalisation, so its
+     * snapshot shadow must reserve one private data array. */
+    ASSERT_TRUE(est.npages == 1u);
+    ASSERT_TRUE(est.accum_bytes == 64u);
+    ASSERT_TRUE(est.largest_page_bytes == 64u);
+    ASSERT_TRUE(est.shadow_bytes == 64u);
+    ASSERT_TRUE(strcmp(est.largest_geometry, "G") == 0);
+
+    osh_scoring_workspace_free(ws);
+}
+
 static void test_estimate_null_args(void) {
     struct osh_scoring_mem_estimate est;
     ASSERT_TRUE(osh_scoring_estimate_memory(NULL, &est) == OSH_EINVAL);
@@ -86,6 +110,7 @@ static void test_estimate_null_args(void) {
 int main(void) {
     test_estimate_known_fixture();
     test_estimate_zero_bins();
+    test_estimate_diff_energy_shadow_bytes();
     test_estimate_null_args();
     return 0;
 }

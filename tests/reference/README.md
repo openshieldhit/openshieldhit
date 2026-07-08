@@ -74,10 +74,10 @@ python3 tools/plot_nucre.py            # writes a multi-page nucre_report.pdf
 ```
 
 The SH12A `idd.dat`/`spectrum.dat` fixtures are committed under
-`shieldhit/idd_water_200mev_nucre{0,1}/` and are not re-run.  Note: OSH's
-differential output is currently counts-per-bin, not a density, so the plot tool
-divides by the log-bin width (SH12A already reports a density) — tracked as
-issue #215.
+`shieldhit/idd_water_200mev_nucre{0,1}/` and are not re-run.  OSH differential
+outputs are postprocessed to per-axis differential quantities; the plot tool
+only applies the fixture-specific SH12A normalisation by primary count and
+log-bin width.
 
 ### Workflow
 

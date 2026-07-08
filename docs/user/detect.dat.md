@@ -143,6 +143,13 @@ Supported axis type keywords (same for Diff1Type and Diff2Type):
 
 Differential scoring is supported for `Fluence`, `Dose`, `DoseGy`, and `Energy`.
 Averaged quantities (`DLET`, `TLET`, `DQEFF`, `TQEFF`) cannot carry a differential axis.
+Additive differential pages are reported as differential quantities: after
+spatial postprocessing, each bin is divided by the width of its `Diff1` bin, and
+by the product of `Diff1` and `Diff2` widths for double-differential pages.  For
+example, `Quantity Fluence` with `Diff1Type EKIN` is reported per MeV
+(`/cm²/MeV`, equivalent to `1/cm²/MeV`), not as fluence accumulated per energy
+bin.  `LOG` binning uses the actual logarithmic bin widths for this
+normalisation.
 
 ### Axis stopping-power override
 

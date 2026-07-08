@@ -26,6 +26,16 @@
  *
  * DOSE is stored in Gy (osh_scoring_postprocess() has already applied the
  * MeV/g → Gy conversion); DLET and TLET are stored in MeV/cm.
+ *
+ * BDO unit-token contract
+ * -----------------------
+ * PAG_DATA_UNIT describes exactly the values stored in PAG_DATA.  For
+ * differential pages this is the final differential unit expression, e.g.
+ * "/cm^2/MeV" or "/cm^2/(MeV/cm)".
+ *
+ * PAG_DIF_UNITS is the semicolon-separated list of component units:
+ * requested scored quantity, Diff1, optional Diff2.  For fluence differential
+ * in LET, that list is "/cm^2;MeV/cm".
  */
 
 #include "scoring/save/osh_scoring_save_bdo2019.h"
@@ -43,6 +53,11 @@ static char const *geometry_type_name(struct osh_scoring_geometry_runtime const 
 static char const *page_data_unit(struct osh_scoring_page_runtime const *page);
 static char const *page_diff_unit(struct osh_scoring_page_runtime const *page);
 static char const *page_diff2_unit(struct osh_scoring_page_runtime const *page);
+static void page_bdo_pag_data_unit(struct osh_scoring_page_runtime const *page, char *buf, size_t cap);
+static void page_bdo_pag_dif_units(struct osh_scoring_page_runtime const *page, char *buf, size_t cap);
+static void page_bdo_unit_string(struct osh_scoring_page_runtime const *page, char const *sep, char *buf, size_t cap);
+static void page_bdo_append_denominator_unit(char *buf, size_t cap, char const *unit);
+static int bdo_unit_needs_denominator_parens(char const *unit);
 static int legacy_diff2_kind(struct osh_scoring_page_runtime const *page);
 static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
@@ -185,7 +200,8 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         double page_offset;
         double page_diff_start[2];
         double page_diff_stop[2];
-        char diff_units[64];
+        char pag_data_unit[128];
+        char pag_dif_units[64];
         struct osh_scoring_page_runtime const *page = &rt->pages[out->page_indices[ip]];
 
         page_type = legacy_score_kind(page);
@@ -202,11 +218,12 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
         page_diff_start[1] = page->diff2_nbins > 0u ? page->diff2_lo : 0.0;
         page_diff_stop[0] = page->diff_hi;
         page_diff_stop[1] = page->diff2_nbins > 0u ? page->diff2_hi : 1.0;
-        if (page->diff2_nbins > 0u) {
-            snprintf(diff_units, sizeof(diff_units), "%s;%s;", page_diff_unit(page), page_diff2_unit(page));
-        } else {
-            snprintf(diff_units, sizeof(diff_units), "%s;", page_diff_unit(page));
-        }
+
+        /* Intended BDO token assignment:
+         *   PAG_DATA_UNIT = final value unit, e.g. "/cm^2/MeV"
+         *   PAG_DIF_UNITS = component unit list, e.g. "/cm^2;MeV" */
+        page_bdo_pag_data_unit(page, pag_data_unit, sizeof(pag_data_unit));
+        page_bdo_pag_dif_units(page, pag_dif_units, sizeof(pag_dif_units));
 
         rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_TYPE, &page_type, 1u);
         if (rc == OSH_OK) {
@@ -222,7 +239,9 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
             rc = osh_scoring_bdo2019_write_token_double(fp, OSHBDO_PAG_OFFSET, &page_offset, 1u);
         }
         if (rc == OSH_OK) {
-            rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DATA_UNIT, page_data_unit(page));
+            /* Unit of the stored PAG_DATA values.  For a fluence-vs-energy page
+             * this is "/cm^2/MeV". */
+            rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DATA_UNIT, pag_data_unit);
         }
         if (rc == OSH_OK && page->diff_nbins > 0u) {
             rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_DIF_SET, &page_diff_flag, 1u);
@@ -240,7 +259,9 @@ enum osh_status osh_scoring_save_bdo2019_output(struct osh_scoring_workspace con
             rc = osh_scoring_bdo2019_write_token_int(fp, OSHBDO_PAG_DIF_SIZE, page_diff_size, 2u);
         }
         if (rc == OSH_OK && page->diff_nbins > 0u) {
-            rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DIF_UNITS, diff_units);
+            /* Semicolon-separated component units for the value and axes.  For a
+             * fluence-vs-energy page this is "/cm^2;MeV". */
+            rc = osh_scoring_bdo2019_write_token_str(fp, OSHBDO_PAG_DIF_UNITS, pag_dif_units);
         }
         if (rc == OSH_OK) {
             /* TODO: current runtime does not yet carry full normalization
@@ -276,7 +297,8 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
     case OSH_SCORING_SCORE_ENERGY:
         return "MeV";
     case OSH_SCORING_SCORE_FLUENCE:
-        return "1/cm^2";
+        /* SH12A spells reciprocal area units with a leading slash, not "1/". */
+        return "/cm^2";
     case OSH_SCORING_SCORE_DOSE:
         return "MeV/g";
     case OSH_SCORING_SCORE_DOSEGY:
@@ -322,6 +344,79 @@ static char const *page_diff2_unit(struct osh_scoring_page_runtime const *page) 
     default:
         return "";
     }
+}
+
+/* Build OSHBDO_PAG_DATA_UNIT.
+ *
+ * This is the unit of the postprocessed page values after differential-axis
+ * bin-width normalisation:
+ *   no diff:      "/cm^2"
+ *   one diff:     "/cm^2/MeV"
+ *   slash diff:   "/cm^2/(MeV/cm)"
+ *   two diffs:    "/cm^2/MeV/sr"
+ */
+static void page_bdo_pag_data_unit(struct osh_scoring_page_runtime const *page, char *buf, size_t cap) {
+    if (!buf || cap == 0u) {
+        return;
+    }
+    snprintf(buf, cap, "%s", page_data_unit(page));
+    if (page->diff_nbins > 0u) {
+        page_bdo_append_denominator_unit(buf, cap, page_diff_unit(page));
+    }
+    if (page->diff2_nbins > 0u) {
+        page_bdo_append_denominator_unit(buf, cap, page_diff2_unit(page));
+    }
+}
+
+/* Build OSHBDO_PAG_DIF_UNITS.
+ *
+ * This is not the mathematical final differential unit.  It is a semicolon
+ * separated list of the page value unit followed by the units of Diff1 and
+ * optional Diff2:
+ *   no diff:      "/cm^2"
+ *   one diff:     "/cm^2;MeV"
+ *   slash diff:   "/cm^2;MeV/cm"
+ *   two diffs:    "/cm^2;MeV;sr"
+ */
+static void page_bdo_pag_dif_units(struct osh_scoring_page_runtime const *page, char *buf, size_t cap) {
+    page_bdo_unit_string(page, ";", buf, cap);
+}
+
+static void page_bdo_unit_string(struct osh_scoring_page_runtime const *page, char const *sep, char *buf, size_t cap) {
+    if (!buf || cap == 0u) {
+        return;
+    }
+    if (page->diff_nbins > 0u && page->diff2_nbins > 0u) {
+        /* Value unit + Diff1 unit + Diff2 unit. */
+        snprintf(buf, cap, "%s%s%s%s%s", page_data_unit(page), sep, page_diff_unit(page), sep, page_diff2_unit(page));
+    } else if (page->diff_nbins > 0u) {
+        /* Value unit + Diff1 unit. */
+        snprintf(buf, cap, "%s%s%s", page_data_unit(page), sep, page_diff_unit(page));
+    } else {
+        /* Plain page: only the requested quantity's unit. */
+        snprintf(buf, cap, "%s", page_data_unit(page));
+    }
+}
+
+static void page_bdo_append_denominator_unit(char *buf, size_t cap, char const *unit) {
+    size_t used;
+
+    if (!buf || !unit || cap == 0u || unit[0] == '\0') {
+        return;
+    }
+    used = strlen(buf);
+    if (used >= cap) {
+        return;
+    }
+    if (bdo_unit_needs_denominator_parens(unit)) {
+        snprintf(buf + used, cap - used, "/(%s)", unit);
+    } else {
+        snprintf(buf + used, cap - used, "/%s", unit);
+    }
+}
+
+static int bdo_unit_needs_denominator_parens(char const *unit) {
+    return unit && strchr(unit, '/') != NULL;
 }
 
 static int legacy_diff2_kind(struct osh_scoring_page_runtime const *page) {

@@ -24,6 +24,8 @@
 #include "scoring/runtime/osh_scoring_runtime.h"
 #include "test_assert.h"
 
+static void assert_bytes_equal(unsigned char const *expected, unsigned char const *actual, size_t nbytes);
+
 /* Build a single page descriptor with an allocated accumulator. */
 static void
 make_page(struct osh_scoring_page_runtime *p, enum osh_scoring_score_kind kind, size_t len, int want_data2) {
@@ -63,6 +65,21 @@ static void test_writes_data_predicate(void) {
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_ENERGY) == 0);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_COUNT) == 0);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_UNKNOWN) == 0);
+}
+
+static void test_page_writes_data_for_differential_additive_pages(void) {
+    struct osh_scoring_page_runtime page;
+
+    make_page(&page, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_ENERGY) == 0);
+    ASSERT_TRUE(osh_scoring_postprocess_page_writes_data(&page) == 0);
+    page.diff_nbins = 2u;
+    page.diff_stride = 1u;
+    page.diff_lo = 0.0;
+    page.diff_hi = 2.0;
+    ASSERT_TRUE(osh_scoring_postprocess_page_writes_data(&page) == 1);
+
+    osh_scoring_accumulator_free(&page.acc);
 }
 
 /* ---- In-place wrapper: DOSEGY rescale ------------------------------------- */
@@ -127,6 +144,51 @@ static void test_inplace_simple_noop(void) {
     ASSERT_TRUE(page.acc.data[0] == 11.0);
     ASSERT_TRUE(page.acc.data[1] == 22.0);
     ASSERT_TRUE(page.acc.data[2] == 33.0);
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
+static void test_inplace_diff_linear_normalization(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+
+    make_page(&page, OSH_SCORING_SCORE_FLUENCE, 4u, 0);
+    page.diff_nbins = 4u;
+    page.diff_stride = 1u;
+    page.diff_lo = 0.0;
+    page.diff_hi = 8.0;
+    page.acc.data[0] = 2.0;
+    page.acc.data[1] = 4.0;
+    page.acc.data[2] = 6.0;
+    page.acc.data[3] = 8.0;
+    make_runtime(&rt, &page, 1u);
+
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_OK);
+    ASSERT_TRUE(page.acc.data[0] == 1.0);
+    ASSERT_TRUE(page.acc.data[1] == 2.0);
+    ASSERT_TRUE(page.acc.data[2] == 3.0);
+    ASSERT_TRUE(page.acc.data[3] == 4.0);
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
+static void test_inplace_diff_log_normalization_for_simple_page(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+
+    make_page(&page, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+    page.diff_nbins = 2u;
+    page.diff_stride = 1u;
+    page.diff_lo = 1.0;
+    page.diff_hi = 100.0;
+    page.diff_log = 1;
+    page.acc.data[0] = 9.0;  /* width 1..10 */
+    page.acc.data[1] = 90.0; /* width 10..100 */
+    make_runtime(&rt, &page, 1u);
+
+    ASSERT_TRUE(osh_scoring_postprocess(&rt) == OSH_OK);
+    ASSERT_TRUE(page.acc.data[0] == 1.0);
+    ASSERT_TRUE(page.acc.data[1] == 1.0);
 
     osh_scoring_accumulator_free(&page.acc);
 }
@@ -268,6 +330,59 @@ static void test_into_let_nondestructive(void) {
     osh_scoring_accumulator_free(&dpage.acc);
 }
 
+static void test_into_diff_energy_snapshot_nondestructive(void) {
+    struct osh_scoring_page_runtime spage;
+    struct osh_scoring_page_runtime dpage1;
+    struct osh_scoring_page_runtime dpage2;
+    struct osh_scoring_runtime src;
+    struct osh_scoring_runtime dst1;
+    struct osh_scoring_runtime dst2;
+    unsigned char before[2u * sizeof(double)];
+
+    make_page(&spage, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+    make_page(&dpage1, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+    make_page(&dpage2, OSH_SCORING_SCORE_ENERGY, 2u, 0);
+
+    spage.diff_nbins = 2u;
+    spage.diff_stride = 1u;
+    spage.diff_lo = 1.0;
+    spage.diff_hi = 100.0;
+    spage.diff_log = 1;
+    dpage1.diff_nbins = spage.diff_nbins;
+    dpage1.diff_stride = spage.diff_stride;
+    dpage1.diff_lo = spage.diff_lo;
+    dpage1.diff_hi = spage.diff_hi;
+    dpage1.diff_log = spage.diff_log;
+    dpage2.diff_nbins = spage.diff_nbins;
+    dpage2.diff_stride = spage.diff_stride;
+    dpage2.diff_lo = spage.diff_lo;
+    dpage2.diff_hi = spage.diff_hi;
+    dpage2.diff_log = spage.diff_log;
+
+    spage.acc.data[0] = 9.0;
+    spage.acc.data[1] = 90.0;
+    memcpy(before, spage.acc.data, sizeof(before));
+
+    make_runtime(&src, &spage, 1u);
+    make_runtime(&dst1, &dpage1, 1u);
+    make_runtime(&dst2, &dpage2, 1u);
+
+    ASSERT_TRUE(osh_scoring_postprocess_into(&dst1, &src) == OSH_OK);
+    ASSERT_TRUE(dpage1.acc.data[0] == 1.0);
+    ASSERT_TRUE(dpage1.acc.data[1] == 1.0);
+    assert_bytes_equal(before, (unsigned char const *) spage.acc.data, sizeof(before));
+    ASSERT_TRUE(src.postprocessed == 0);
+
+    ASSERT_TRUE(osh_scoring_postprocess_into(&dst2, &src) == OSH_OK);
+    ASSERT_TRUE(dpage2.acc.data[0] == 1.0);
+    ASSERT_TRUE(dpage2.acc.data[1] == 1.0);
+    assert_bytes_equal(before, (unsigned char const *) spage.acc.data, sizeof(before));
+
+    osh_scoring_accumulator_free(&spage.acc);
+    osh_scoring_accumulator_free(&dpage1.acc);
+    osh_scoring_accumulator_free(&dpage2.acc);
+}
+
 /* ---- Error paths ---------------------------------------------------------- */
 
 static void test_into_errors(void) {
@@ -382,17 +497,31 @@ static void test_into_unsupported(void) {
 
 int main(void) {
     test_writes_data_predicate();
+    test_page_writes_data_for_differential_additive_pages();
     test_inplace_dosegy();
     test_inplace_let();
     test_inplace_simple_noop();
+    test_inplace_diff_linear_normalization();
+    test_inplace_diff_log_normalization_for_simple_page();
     test_inplace_single_shot_guard();
     test_into_inplace_single_shot_guard();
     test_into_out_of_place();
     test_into_let_nondestructive();
+    test_into_diff_energy_snapshot_nondestructive();
     test_into_errors();
     test_into_kind_mismatch();
     test_into_missing_arrays();
     test_into_unsupported();
     printf("All osh_scoring_postprocess_into tests passed.\n");
     return 0;
+}
+
+static void assert_bytes_equal(unsigned char const *expected, unsigned char const *actual, size_t nbytes) {
+    size_t i;
+
+    ASSERT_TRUE(expected != NULL);
+    ASSERT_TRUE(actual != NULL);
+    for (i = 0u; i < nbytes; ++i) {
+        ASSERT_TRUE(expected[i] == actual[i]);
+    }
 }
