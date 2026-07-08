@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "common/osh_generation.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
 
@@ -86,7 +87,8 @@ struct osh_particle_pool {
     /* ---- Per-history metadata (SoA) ---- */
     double *wt;         /* statistical weight; 1.0 = unweighted          — capacity doubles   */
     uint64_t *prim_idx; /* 0-based index of beam-primary ancestor        — capacity uint64_t  */
-    uint8_t *gen;       /* generation: 0 = beam primary, 1 = secondary … — capacity uint8_t   */
+    uint8_t *gen;       /* generation: 0 = beam primary, 1 = secondary …; saturates at
+                         * OSH_GENERATION_MAX instead of wrapping — capacity uint8_t */
 
     /* ---- Per-slot RNG state (SoA) ---- */
     /* One independent physics stream per live history, carried with the slot
@@ -102,12 +104,14 @@ struct osh_particle_pool {
     struct particle const **species; /* one pointer per entry into the particle registry */
 
     /* ---- Bookkeeping ---- */
-    size_t n;         /* number of live entries in [0, n)   */
-    size_t capacity;  /* total allocated slots               */
-    size_t n_dropped; /* secondaries lost to overflow (diag); mirrors the
-                       * neutron pool's n_dropped.  Never reset by compaction,
-                       * so it accumulates across wavefront passes and
-                       * checkpoint batches for the run-level diagnostic. */
+    size_t n;                 /* number of live entries in [0, n)   */
+    size_t capacity;          /* total allocated slots               */
+    size_t n_dropped;         /* secondaries lost to overflow (diag); mirrors the
+                               * neutron pool's n_dropped.  Never reset by compaction,
+                               * so it accumulates across wavefront passes and
+                               * checkpoint batches for the run-level diagnostic. */
+    size_t n_unknown_dropped; /* ions killed because no stopping/range table exists
+                               * for their species; their kinetic energy is lost. */
 };
 
 /* ---- Lifecycle ----------------------------------------------------------- */

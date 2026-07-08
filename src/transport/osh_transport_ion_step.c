@@ -392,7 +392,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                     np->e[k] = ev->secondaries[si].energy;
                     np->wt[k] = pool->wt[slot];
                     np->prim_idx[k] = pool->prim_idx[slot];
-                    np->gen[k] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+                    np->gen[k] = osh_generation_child(pool->gen[slot]);
                     osh_rng_split(&np->rng[k], rng, (uint64_t) si); /* lineage+ordinal-keyed child stream */
                 } else {
                     np->n_dropped++;
@@ -414,7 +414,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             pool->e[s] = ev->secondaries[si].energy;
             pool->wt[s] = pool->wt[slot];
             pool->prim_idx[s] = pool->prim_idx[slot];
-            pool->gen[s] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+            pool->gen[s] = osh_generation_child(pool->gen[slot]);
             pool->species[s] = ev->secondaries[si].species;
             /* Give the secondary its own stream, keyed by the parent's lineage
              * and this secondary's ordinal `si`.  Splitting reads but does not
@@ -488,7 +488,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             if (!(ke > 0.0)) {
                 continue;
             }
-            child_gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+            child_gen = osh_generation_child(pool->gen[slot]);
 
             if (ke / (double) frag->a < OSH_TRANSPORT_ION_EMIN_MEV_PER_U) {
                 /* Sub-threshold: no transportable range — point deposit here. */
@@ -568,7 +568,8 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
 
     rc = find_projectile_index(material_rt, ctx->part, &ctx->projectile_idx);
     if (rc != OSH_OK) {
-        pool->e[slot] = 0.0; /* unknown species — kill silently */
+        pool->n_unknown_dropped++;
+        pool->e[slot] = 0.0; /* unknown species: no transport table, energy lost */
         ctx->done = 1;
         return;
     }

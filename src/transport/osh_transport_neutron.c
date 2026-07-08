@@ -157,7 +157,7 @@ static void push_neutron_secondary(struct osh_neutron_pool *pool,
     pool->e[slot] = sec->energy;
     pool->wt[slot] = pool->wt[k];
     pool->prim_idx[slot] = pool->prim_idx[k];
-    pool->gen[slot] = (pool->gen[k] < 255u) ? (uint8_t) (pool->gen[k] + 1u) : 255u;
+    pool->gen[slot] = osh_generation_child(pool->gen[k]);
     osh_rng_split(&pool->rng[slot], &pool->rng[k], (uint64_t) ordinal);
 }
 

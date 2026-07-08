@@ -604,6 +604,7 @@ enum osh_status osh_simulation_get_profile(struct osh_simulation const *sim, str
     out->neutrons_banked = (unsigned long long) sim->neutron_pool.n_created;
     out->fragments_banked = (unsigned long long) sim->fragment_pool.n_created;
     out->ion_secondaries_dropped = (unsigned long long) sim->ion_pool.n_dropped;
+    out->unknown_particles_dropped = (unsigned long long) sim->ion_pool.n_unknown_dropped;
     return OSH_OK;
 }
 
@@ -701,6 +702,12 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
                        "simulation: %zu ion secondary/secondaries dropped (pool overflow); "
                        "raise the pool capacity to avoid losing their deposited energy",
                        sim->ion_pool.n_dropped);
+    }
+    if (sim->ion_pool.n_unknown_dropped > 0u) {
+        OSH_DIAG_WARNF(sim->diag,
+                       "simulation: %zu unknown particle(s) dropped because no ion transport table exists; "
+                       "their kinetic energy was not scored",
+                       sim->ion_pool.n_unknown_dropped);
     }
     if (sim->fragment_pool.n_sent_breakup > 0u) {
         OSH_DIAG_INFOF(sim->diag,

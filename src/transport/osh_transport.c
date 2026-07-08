@@ -132,13 +132,14 @@ enum osh_status osh_transport_run(struct osh_transport_context *transport_ctx,
         }
     }
 
-    /* Reset the ion-secondary drop counter for this run (mirrors the neutron
+    /* Reset the ion drop counters for this run (mirrors the neutron
      * pool reset above), so a re-run reports drops for the current run only.
      * It then accumulates across all ranges, since the per-range
      * osh_transport_ion_run_range resets only the pool's live count, never
-     * n_dropped. */
+     * these diagnostic counters. */
     if (transport_ctx->ion_pool != NULL) {
         transport_ctx->ion_pool->n_dropped = 0u;
+        transport_ctx->ion_pool->n_unknown_dropped = 0u;
     }
 
     done = 0u;
