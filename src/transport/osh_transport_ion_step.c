@@ -209,6 +209,13 @@ static inline int _nuclear_event_kills_primary(enum osh_nuclear_event_kind kind)
            || kind == OSH_NUCLEAR_EVENT_FRAGMENTATION;
 }
 
+/** 1 if the nuclear event kind deflects the surviving primary (elastic channels).
+ * Every consumer of the event's primary_dir/primary_energy must use this predicate
+ * so the scored step and the pool write-back can never disagree (issue #275). */
+static inline int _nuclear_event_elastic_scatters_primary(enum osh_nuclear_event_kind kind) {
+    return kind == OSH_NUCLEAR_EVENT_ELASTIC_PP || kind == OSH_NUCLEAR_EVENT_ELASTIC_PA;
+}
+
 /* Deposit @p energy [MeV] at the slot's current position as a zero-length point
  * (issue #179), attributed to @p species and to a first-generation secondary of
  * the slot's history.  Used for the sub-threshold recoil deposit.  @p target is
@@ -1015,8 +1022,7 @@ static void ion_step_nuclear(struct ion_step_ctx *ctx,
                                  &ctx->nuclear_event);
 
         /* Elastic overrides MCS: straight-line endpoint. */
-        if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP
-            || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PA) {
+        if (_nuclear_event_elastic_scatters_primary(ctx->nuclear_event.kind)) {
             ctx->w_scat[0] = ctx->incident_dir[0];
             ctx->w_scat[1] = ctx->incident_dir[1];
             ctx->w_scat[2] = ctx->incident_dir[2];
@@ -1109,8 +1115,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
          * holds the ionisation energy deposited — do not modify it.
          * st.q[3] = 0 signals that the primary exits dead. */
         st.q[3] = 0.0;
-    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP
-               || ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PA) {
+    } else if (_nuclear_event_elastic_scatters_primary(ctx->nuclear_event.kind)) {
         /* Primary survives with a new direction and energy from elastic scatter. */
         st.q[3] = ctx->nuclear_event.primary_energy;
         st.w[0] = ctx->nuclear_event.primary_dir[0];
@@ -1147,7 +1152,7 @@ static enum osh_status ion_step_commit(struct ion_step_ctx const *ctx,
         pool->ux[slot] = ctx->w_scat[0];
         pool->uy[slot] = ctx->w_scat[1];
         pool->uz[slot] = ctx->w_scat[2];
-    } else if (ctx->nuclear_event.kind == OSH_NUCLEAR_EVENT_ELASTIC_PP) {
+    } else if (_nuclear_event_elastic_scatters_primary(ctx->nuclear_event.kind)) {
         pool->e[slot] = ctx->nuclear_event.primary_energy;
         pool->ux[slot] = ctx->nuclear_event.primary_dir[0];
         pool->uy[slot] = ctx->nuclear_event.primary_dir[1];

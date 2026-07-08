@@ -8,8 +8,8 @@ secondary spectrum directly expose the nuclear contribution to dose and fluence.
 
 The four NUCRE modes:
   * nucre0  NUCRE 0 - nuclear off (baseline, no secondaries)
-  * nucre1  NUCRE 1 - inelastic (Tripathi) + pp-elastic (the physical "on" case)
-  * nucre2  NUCRE 2 - elastic only            (OSH-only; SH12A has no such mode)
+  * nucre1  NUCRE 1 - inelastic (Tripathi) + nuclear elastic (pp and p+A) (the physical "on" case)
+  * nucre2  NUCRE 2 - elastic only (pp + p+A) (OSH-only; SH12A has no such mode)
   * nucre3  NUCRE 3 - inelastic only          (OSH-only)
 Modes 2 and 3 decompose mode 1.
 
@@ -84,11 +84,12 @@ def code_style(code: str, color: Any) -> dict[str, Any]:
         return dict(color=lighten(color), lw=REF_LW, zorder=1, drawstyle="steps-mid")
     return dict(color=color, lw=OSH_LW, zorder=3, drawstyle="steps-mid")
 
+
 CASES = ["nucre0", "nucre1", "nucre2", "nucre3"]
 MODEL = {
     "nucre0": "NUCRE 0 (off)",
-    "nucre1": "NUCRE 1 (inel + pp-el)",
-    "nucre2": "NUCRE 2 (elastic only)",
+    "nucre1": "NUCRE 1 (inel + pp/pA-el)",
+    "nucre2": "NUCRE 2 (pp/pA elastic only)",
     "nucre3": "NUCRE 3 (inelastic only)",
 }
 # SHIELD-HIT12A only implements NUCRE 0/1; modes 2/3 are OpenShieldHIT-only.
@@ -96,14 +97,42 @@ SH12A_CASES = {"nucre0", "nucre1"}
 
 # idd.dat quantity order (must match detect.dat).
 QUANTITIES = (
-    "dose", "dose_prim", "dose_prot", "dose_deut", "dose_trit", "dose_he3", "dose_alpha", "dose_heavy",
-    "flu", "flu_prim", "flu_prot", "flu_deut", "flu_trit", "flu_he3", "flu_alpha", "flu_heavy",
+    "dose",
+    "dose_prim",
+    "dose_prot",
+    "dose_deut",
+    "dose_trit",
+    "dose_he3",
+    "dose_alpha",
+    "dose_heavy",
+    "flu",
+    "flu_prim",
+    "flu_prot",
+    "flu_deut",
+    "flu_trit",
+    "flu_he3",
+    "flu_alpha",
+    "flu_heavy",
 )
 
 # let.dat quantity order (must match detect.dat).
 LET_QUANTITIES = (
-    "dlet", "dlet_prim", "dlet_prot", "dlet_deut", "dlet_trit", "dlet_he3", "dlet_alpha", "dlet_heavy",
-    "tlet", "tlet_prim", "tlet_prot", "tlet_deut", "tlet_trit", "tlet_he3", "tlet_alpha", "tlet_heavy",
+    "dlet",
+    "dlet_prim",
+    "dlet_prot",
+    "dlet_deut",
+    "dlet_trit",
+    "dlet_he3",
+    "dlet_alpha",
+    "dlet_heavy",
+    "tlet",
+    "tlet_prim",
+    "tlet_prot",
+    "tlet_deut",
+    "tlet_trit",
+    "tlet_he3",
+    "tlet_alpha",
+    "tlet_heavy",
 )
 
 # Differential spectrum axis (must match the Diff1 line in detect.dat).
@@ -299,8 +328,7 @@ def draw_residual_strip(ax, osh, sh, families, zend, ylim_pct=30.0):
         ax.axhline(0.0, color="k", lw=0.5)
         ax.set_ylim(-ylim_pct, ylim_pct)
     else:
-        ax.text(0.5, 0.5, "no SH12A reference", ha="center", va="center",
-                transform=ax.transAxes, fontsize=6, color="gray")
+        ax.text(0.5, 0.5, "no SH12A reference", ha="center", va="center", transform=ax.transAxes, fontsize=6, color="gray")
     ax.set_xlim(0.0, zend)
     ax.set_ylabel("(O-S)/S [%]", fontsize=6)
     ax.tick_params(labelsize=6)
@@ -377,9 +405,13 @@ def main() -> int:
         args.out = args.workdir / "nucre_report.pdf"
 
     try:
-        version = subprocess.check_output(
-            ["git", "-C", str(args.repo_root), "describe", "--tags", "--dirty", "--always"],
-            stderr=subprocess.DEVNULL).decode().strip()
+        version = (
+            subprocess.check_output(
+                ["git", "-C", str(args.repo_root), "describe", "--tags", "--dirty", "--always"], stderr=subprocess.DEVNULL
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         version = "unknown"
 
@@ -417,29 +449,50 @@ def main() -> int:
             sh = depth_quantities(ref, "sh12a")
             sh_let = depth_let(ref, "sh12a")
             sh_spec = sh12a_spectrum(ref)
-        data[case] = {"osh": osh, "osh_let": osh_let, "osh_err": osh_err, "osh_s": osh_s, "osh_spec": osh_spec,
-                      "sh": sh, "sh_let": sh_let, "sh_spec": sh_spec, "sh_nstat": sh_nstat}
+        data[case] = {
+            "osh": osh,
+            "osh_let": osh_let,
+            "osh_err": osh_err,
+            "osh_s": osh_s,
+            "osh_spec": osh_spec,
+            "sh": sh,
+            "sh_let": sh_let,
+            "sh_spec": sh_spec,
+            "sh_nstat": sh_nstat,
+        }
 
     DOSE_SPECIES = [
-        ("dose", "all", "C0"), ("dose_prim", "primary p", "C1"),
-        ("dose_prot", "all p", "C2"), ("dose_deut", "d", "C3"),
-        ("dose_trit", "t", "C4"), ("dose_he3", "He3", "C5"),
-        ("dose_alpha", "alphas", "C6"), ("dose_heavy", "heavy rec (Z>=3)", "C7"),
+        ("dose", "all", "C0"),
+        ("dose_prim", "primary p", "C1"),
+        ("dose_prot", "all p", "C2"),
+        ("dose_deut", "d", "C3"),
+        ("dose_trit", "t", "C4"),
+        ("dose_he3", "He3", "C5"),
+        ("dose_alpha", "alphas", "C6"),
+        ("dose_heavy", "heavy rec (Z>=3)", "C7"),
     ]
     FLU_SPECIES = [
-        ("flu", "all", "C0"), ("flu_prim", "primary p", "C1"),
-        ("flu_prot", "all p", "C2"), ("flu_deut", "d", "C3"),
-        ("flu_trit", "t", "C4"), ("flu_he3", "He3", "C5"),
-        ("flu_alpha", "alphas", "C6"), ("flu_heavy", "heavy rec (Z>=3)", "C7"),
+        ("flu", "all", "C0"),
+        ("flu_prim", "primary p", "C1"),
+        ("flu_prot", "all p", "C2"),
+        ("flu_deut", "d", "C3"),
+        ("flu_trit", "t", "C4"),
+        ("flu_he3", "He3", "C5"),
+        ("flu_alpha", "alphas", "C6"),
+        ("flu_heavy", "heavy rec (Z>=3)", "C7"),
     ]
     # Only the track-based species read cleanly; alphas/heavy DLET are dominated
     # by rare high-LET transported recoils in low-statistics bins, and heavy-recoil
     # LET is ~0 until point deposits feed LET (score_point energy/dose only today).
     DLET_SPECIES = [
-        ("dlet", "all", "C0"), ("dlet_prim", "primary p", "C1"),
-        ("dlet_prot", "all p", "C2"), ("dlet_deut", "d", "C3"),
-        ("dlet_trit", "t", "C4"), ("dlet_he3", "He3", "C5"),
-        ("dlet_alpha", "alphas", "C6"), ("dlet_heavy", "heavy rec (Z>=3)", "C7"),
+        ("dlet", "all", "C0"),
+        ("dlet_prim", "primary p", "C1"),
+        ("dlet_prot", "all p", "C2"),
+        ("dlet_deut", "d", "C3"),
+        ("dlet_trit", "t", "C4"),
+        ("dlet_he3", "He3", "C5"),
+        ("dlet_alpha", "alphas", "C6"),
+        ("dlet_heavy", "heavy rec (Z>=3)", "C7"),
     ]
 
     with PdfPages(args.out) as pdf:
@@ -467,9 +520,12 @@ def main() -> int:
             # lower-right.  SH12A underneath (thick, light); OSH on top (thin).
             fig = plt.figure(figsize=(12, 10), constrained_layout=True)
             gs = fig.add_gridspec(4, 2, height_ratios=[3, 1, 3, 1])
-            fig.suptitle(f"200 MeV p -> water, {MODEL[case]}   (MSCAT off, STRAGG off; OSH nstat={args.nstat})\n"
-                         f"OpenShieldHIT {version} (thin, saturated) vs SHIELD-HIT12A committed fixture "
-                         f"(thick, light){note}", fontsize=11)
+            fig.suptitle(
+                f"200 MeV p -> water, {MODEL[case]}   (MSCAT off, STRAGG off; OSH nstat={args.nstat})\n"
+                f"OpenShieldHIT {version} (thin, saturated) vs SHIELD-HIT12A committed fixture "
+                f"(thick, light){note}",
+                fontsize=11,
+            )
 
             def overlay(a, sh_src, osh_src, families):
                 for c, code, tag in ((sh_src, "sh", "SH12A"), (osh_src, "osh", "OSH")):
@@ -516,8 +572,16 @@ def main() -> int:
             if osh_let is not None:
                 a.legend(fontsize=6, ncol=2)
             else:
-                a.text(0.5, 0.5, "no let.dat (run the case with the updated detect.dat)",
-                       ha="center", va="center", transform=a.transAxes, fontsize=8, color="gray")
+                a.text(
+                    0.5,
+                    0.5,
+                    "no let.dat (run the case with the updated detect.dat)",
+                    ha="center",
+                    va="center",
+                    transform=a.transAxes,
+                    fontsize=8,
+                    color="gray",
+                )
             a.tick_params(labelbottom=False)
             # DLET-all omitted from the residual: OSH's heavy-recoil LET is not yet
             # scored (point deposits feed dose, not LET), so DLET-all is not
@@ -532,8 +596,11 @@ def main() -> int:
                 for key, label, color in SPECTRUM_SPECIES:
                     if key in spec:
                         a.plot(spec["ekin"], spec[key], label=f"{tag} {label}", **code_style(code, color))
-            a.set(title="Plateau secondary spectrum (z=9.5-10.5 cm)",
-                  xlabel="Ekin (MeV)", ylabel="dPhi/dEkin per primary (1/cm^2/MeV)")
+            a.set(
+                title="Plateau secondary spectrum (z=9.5-10.5 cm)",
+                xlabel="Ekin (MeV)",
+                ylabel="dPhi/dEkin per primary (1/cm^2/MeV)",
+            )
             a.set_xscale("log")
             a.set_yscale("log")
             a.grid(True, which="both", alpha=0.3)
@@ -560,8 +627,9 @@ def main() -> int:
         ax[0].set_yscale("log")
         ax[0].set_ylim(1.0, None)
         ax[0].grid(True, which="both", alpha=0.3)
-        ax[1].set(title="Plateau proton spectrum vs NUCRE mode", xlabel="Ekin (MeV)",
-                  ylabel="dPhi/dEkin per primary (1/cm^2/MeV)")
+        ax[1].set(
+            title="Plateau proton spectrum vs NUCRE mode", xlabel="Ekin (MeV)", ylabel="dPhi/dEkin per primary (1/cm^2/MeV)"
+        )
         ax[1].set_xscale("log")
         ax[1].set_yscale("log")
         ax[1].grid(True, which="both", alpha=0.3)
@@ -569,8 +637,9 @@ def main() -> int:
             handles, _ = a.get_legend_handles_labels()
             if handles:
                 a.legend(fontsize=8)
-        fig.suptitle(f"OpenShieldHIT {version} (thin, saturated) vs "
-                     f"SHIELD-HIT12A committed fixtures (thick, light)", fontsize=11)
+        fig.suptitle(
+            f"OpenShieldHIT {version} (thin, saturated) vs SHIELD-HIT12A committed fixtures (thick, light)", fontsize=11
+        )
         fig.tight_layout(rect=(0, 0, 1, 0.95))
         pdf.savefig(fig)
         plt.close(fig)
