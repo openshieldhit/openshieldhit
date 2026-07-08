@@ -39,7 +39,8 @@ static double _sigma_reac_lookup_cm2(struct osh_nuclear_sigma_reac_table const *
     } else {
         idx = (unsigned int) x;
         frac = x - (double) idx;
-        sigma_mb = (double) table->sigma_mb[idx] + (frac * ((double) table->sigma_mb[idx + 1u] - (double) table->sigma_mb[idx]));
+        sigma_mb = (double) table->sigma_mb[idx]
+                   + (frac * ((double) table->sigma_mb[idx + 1u] - (double) table->sigma_mb[idx]));
     }
     return sigma_mb * OSH_SIGMA_REAC_MB_TO_CM2;
 }
