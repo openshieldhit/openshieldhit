@@ -287,8 +287,11 @@ NEUTRLCUT  <e>   [MeV]
 ```
 
 Lower energy cutoff for neutron transport [MeV].  Neutrons at or below this
-threshold are killed; local energy deposits from cutoff kills are not yet
-scored.  `0.0` keeps the transport default, currently `1e-3 MeV` (`1 keV`).
+threshold are killed.  If the kill occurs inside positive-density material, the
+neutron's remaining kinetic energy is scored as a local point deposit, so it
+contributes to `Energy`, `Dose`, and `DoseGy` pages.  `0.0` keeps the transport
+default, currently `1e-9 MeV` (`1 meV`), below the thermal clamp at
+`2.53e-8 MeV` (`25.3 meV`).
 
 ### DELTAE
 
