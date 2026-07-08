@@ -24,6 +24,8 @@
 #include "scoring/runtime/osh_scoring_runtime.h"
 #include "test_assert.h"
 
+static void assert_bytes_equal(unsigned char const *expected, unsigned char const *actual, size_t nbytes);
+
 /* Build a single page descriptor with an allocated accumulator. */
 static void
 make_page(struct osh_scoring_page_runtime *p, enum osh_scoring_score_kind kind, size_t len, int want_data2) {
@@ -368,13 +370,13 @@ static void test_into_diff_energy_snapshot_nondestructive(void) {
     ASSERT_TRUE(osh_scoring_postprocess_into(&dst1, &src) == OSH_OK);
     ASSERT_TRUE(dpage1.acc.data[0] == 1.0);
     ASSERT_TRUE(dpage1.acc.data[1] == 1.0);
-    ASSERT_TRUE(memcmp(before, spage.acc.data, sizeof(before)) == 0);
+    assert_bytes_equal(before, (unsigned char const *) spage.acc.data, sizeof(before));
     ASSERT_TRUE(src.postprocessed == 0);
 
     ASSERT_TRUE(osh_scoring_postprocess_into(&dst2, &src) == OSH_OK);
     ASSERT_TRUE(dpage2.acc.data[0] == 1.0);
     ASSERT_TRUE(dpage2.acc.data[1] == 1.0);
-    ASSERT_TRUE(memcmp(before, spage.acc.data, sizeof(before)) == 0);
+    assert_bytes_equal(before, (unsigned char const *) spage.acc.data, sizeof(before));
 
     osh_scoring_accumulator_free(&spage.acc);
     osh_scoring_accumulator_free(&dpage1.acc);
@@ -512,4 +514,14 @@ int main(void) {
     test_into_unsupported();
     printf("All osh_scoring_postprocess_into tests passed.\n");
     return 0;
+}
+
+static void assert_bytes_equal(unsigned char const *expected, unsigned char const *actual, size_t nbytes) {
+    size_t i;
+
+    ASSERT_TRUE(expected != NULL);
+    ASSERT_TRUE(actual != NULL);
+    for (i = 0u; i < nbytes; ++i) {
+        ASSERT_TRUE(expected[i] == actual[i]);
+    }
 }

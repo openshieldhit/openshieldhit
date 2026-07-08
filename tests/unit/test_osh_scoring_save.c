@@ -23,6 +23,7 @@
 #define BDO_PATH "out_binary.bdo"
 #define CYL_ASCII_PATH "out_cyl_ascii.txt"
 #define CYL_BDO_PATH "out_cyl_binary.bdo"
+#define BDO_TEST_MAX_PAYLOAD 4096u
 
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes);
 static int file_token_contains_text(char const *path, unsigned long long tag_id, char const *needle);
@@ -527,7 +528,7 @@ static int file_token_contains_text(char const *path, unsigned long long tag_id,
     FILE *fp;
     struct osh_scoring_bdo2019_tag tag;
     size_t payload_size;
-    char *payload;
+    char payload[BDO_TEST_MAX_PAYLOAD];
     size_t needle_len;
     size_t i;
     int found;
@@ -539,10 +540,10 @@ static int file_token_contains_text(char const *path, unsigned long long tag_id,
     found = 0;
     while (fread(&tag, sizeof(tag), 1u, fp) == 1u) {
         payload_size = bdo_payload_size(&tag);
-        payload = NULL;
+        if (payload_size > sizeof(payload)) {
+            break;
+        }
         if (payload_size > 0u) {
-            payload = (char *) malloc(payload_size);
-            ASSERT_TRUE(payload != NULL);
             ASSERT_TRUE(fread(payload, 1u, payload_size, fp) == payload_size);
         }
         if (tag.tag == tag_id && needle_len <= payload_size) {
@@ -553,7 +554,6 @@ static int file_token_contains_text(char const *path, unsigned long long tag_id,
                 }
             }
         }
-        free(payload);
         if (found) {
             break;
         }
