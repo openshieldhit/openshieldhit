@@ -6,11 +6,12 @@
  * Prints, for p + (Z, A) over an incident-energy grid, exactly the quantities
  * the nuclear handler feeds into the removal rate:
  *
- *   - sigma_R    : Tripathi reaction cross section [mb]
- *                  (osh_nuclear_tripathi_sigma());
+ *   - sigma_R    : reaction cross section [mb] — evaluated-table lookup for
+ *                  tabulated targets, Tripathi fallback
+ *                  (osh_nuclear_sigma_reac());
  *   - sigma_el   : p+A nuclear elastic cross section [mb] as configured
- *                  (osh_nuclear_elastic_sigma(), currently
- *                  OSH_NUCLEAR_ELASTIC_SIGMA_FACTOR * sigma_R);
+ *                  (osh_nuclear_elastic_sigma(): energy-dependent
+ *                  sigma_el/sigma_R ratio times sigma_R);
  *   - B          : diffraction slope of the exp(-B|t|) angular model
  *                  [(GeV/c)^-2] (osh_nuclear_elastic_slope());
  *   - theta_med  : median CM scattering angle of that model [deg], from
@@ -30,7 +31,7 @@
 #include "particle/osh_particle_const.h"
 #include "physics/nuclear/osh_nuclear_elastic.h"
 #include "physics/nuclear/osh_nuclear_pp.h"
-#include "physics/nuclear/osh_nuclear_tripathi.h"
+#include "physics/nuclear/osh_nuclear_sigma_reac.h"
 
 #define SIGMA_SCAN_E_MIN_MEV 5.0
 #define SIGMA_SCAN_E_MAX_MEV 250.0
@@ -99,7 +100,7 @@ int main(int argc, char **argv) {
             sigma_r_cm2 = 0.0;
             sigma_el_cm2 = osh_nuclear_pp_sigma_el(e);
         } else {
-            sigma_r_cm2 = osh_nuclear_tripathi_sigma(1u, 1u, (double) zt, (double) at, e);
+            sigma_r_cm2 = osh_nuclear_sigma_reac(1u, 1u, (double) zt, (double) at, e);
             sigma_el_cm2 = osh_nuclear_elastic_sigma(1u, 1u, (double) zt, (double) at, e);
         }
 

@@ -15,9 +15,12 @@ struct osh_rng;
  * @details
  * Approximate model for issue #212 (projectile-agnostic API so nucleus-nucleus
  * elastic can reuse it later):
- *   - sigma_el = sigma_tot - sigma_reac, with sigma_tot from a black-disk optical
- *     limit (sigma_tot = 2*sigma_reac), so sigma_el ~= sigma_reac (Tripathi).
- *     A single tunable prefactor scales it.
+ *   - sigma_el = ratio(E) * sigma_reac, with an energy-dependent ratio
+ *     calibrated against the measured integrated nuclear elastic scale
+ *     (Garron 1962, p+C-12 at 155 MeV) and the SH12A-implied removal rate
+ *     (issue #277): black-disk scale (~1) at and below ~30 MeV, falling to
+ *     ~0.32 above ~180 MeV, log-E interpolated between.  A tunable overall
+ *     prefactor scales it.
  *   - the angular distribution is nuclear diffraction, dsigma/dt ~ exp(B(A)*t),
  *     forward-peaked with slope B(A) set by the nuclear radius R = r0*A^(1/3);
  *     the recoil nucleus therefore carries a small (sub-MeV) kinetic energy.
@@ -31,15 +34,15 @@ double osh_nuclear_elastic_sigma(unsigned int zp, unsigned int ap, double zt, do
 
 /**
  * @brief Elastic cross section [cm^2] from an already-evaluated reaction cross
- *        section @p sigma_reac_cm2 (Tripathi σ_R), applying only the sigma_el /
- *        sigma_reac prefactor.
+ *        section @p sigma_reac_cm2, applying the energy-dependent sigma_el /
+ *        sigma_reac ratio at @p e_lab_per_nucleon [MeV/u].
  *
  * Lets a caller that already holds σ_R (e.g. the shared rate loop that feeds both
  * the inelastic and the p+A-elastic hazard) obtain σ_el without re-evaluating the
- * parametric Tripathi formula. `osh_nuclear_elastic_sigma()` is exactly this
- * applied to a fresh Tripathi call.
+ * reaction cross section. `osh_nuclear_elastic_sigma()` is exactly this applied
+ * to a fresh osh_nuclear_sigma_reac() call.
  */
-double osh_nuclear_elastic_sigma_from_reac(double sigma_reac_cm2);
+double osh_nuclear_elastic_sigma_from_reac(double sigma_reac_cm2, double e_lab_per_nucleon);
 
 /** Mean free path [g/cm^2] from target molar mass [g/mol] and sigma [cm^2]. */
 double osh_nuclear_elastic_lambda_gcm2(double at_g_per_mol, double sigma_cm2);

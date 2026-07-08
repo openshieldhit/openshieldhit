@@ -9,9 +9,12 @@
  * angle at these energies), the column fluence drops well below that.
  *
  * The bounds are statistical, not bitwise (RNG-stream shifts must not break
- * this test): with 2000 primaries the binomial sigma is ~0.008, so the
- * asserted window is separated from both the buggy (~0.98) and the expected
- * fixed (~0.85-0.92) value by several sigma.
+ * this test): with 5000 primaries the binomial sigma is ~0.003.  Landmarks
+ * for phi_depth (the z = 10..11 cm primary column fluence): ~0.985 with the
+ * transport bug (pp-only removal), ~0.96 with the calibrated #277 cross
+ * sections (LA150 sigma_R + energy-dependent sigma_el/sigma_R ratio), and
+ * ~0.87 with the pre-#277 black-disk sigma_el = sigma_R.  The asserted
+ * window (0.90, 0.972) is >4 sigma from both failure modes.
  */
 #include <math.h>
 #include <stdio.h>
@@ -102,7 +105,7 @@ static void test_pa_elastic_depletes_narrow_column(void) {
                     "TMAX0       150.0 0.0          # 150 MeV, range ~15.8 cm in water\n"
                     "BEAMSIGMA   0.0   0.0          # pencil beam\n"
                     "BEAMPOS     0.0   0.0  -5.0\n"
-                    "NSTAT       2000  -1\n"
+                    "NSTAT       5000  -1\n"
                     "DELTAE      0.005\n"
                     "DEMIN       0.025\n"
                     "STRAGG      0                  # no straggling\n"
@@ -140,16 +143,17 @@ static void test_pa_elastic_depletes_narrow_column(void) {
 
     /* Entrance bin (z = 0..1 cm): essentially the full beam. */
     phi_entrance = read_bin_value(out_path, 0.5);
+    printf("pa_elastic: phi_entrance=%.4f phi_depth=%.4f\n", phi_entrance, read_bin_value(out_path, 10.5));
     ASSERT_TRUE(phi_entrance > 0.97);
     ASSERT_TRUE(phi_entrance < 1.03);
 
-    /* Two-thirds range (z = 10..11 cm): pp elastic alone leaves ~0.98 of the
-     * beam in the column (the buggy value); working p+A elastic scatters
-     * primaries out and lands well below.  The floor guards against the
-     * opposite failure mode (elastic wrongly absorbing the beam). */
+    /* Two-thirds range (z = 10..11 cm): pp elastic alone leaves ~0.985 of the
+     * beam in the column (the #275 bug); working p+A elastic with the
+     * calibrated ratio lands near 0.96.  The floor also trips if the elastic
+     * magnitude regresses to the black-disk scale (~0.87) or beyond. */
     phi_depth = read_bin_value(out_path, 10.5);
-    ASSERT_TRUE(phi_depth < 0.95);
-    ASSERT_TRUE(phi_depth > 0.70);
+    ASSERT_TRUE(phi_depth < 0.972);
+    ASSERT_TRUE(phi_depth > 0.90);
 
     ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
     osh_geometry_workspace_free(geo);

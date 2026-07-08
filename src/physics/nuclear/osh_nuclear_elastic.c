@@ -2,14 +2,44 @@
 
 #include <math.h>
 
-#include "physics/nuclear/osh_nuclear_tripathi.h"
+#include "physics/nuclear/osh_nuclear_sigma_reac.h"
+#include "physics/nuclear/osh_nuclear_tripathi.h" /* osh_nuclear_lambda_gcm2 */
 #include "random/osh_rng.h"
 
-/* sigma_el / sigma_reac prefactor.  Black-disk optical limit: sigma_tot =
- * 2*sigma_reac, so sigma_el = sigma_tot - sigma_reac = sigma_reac (factor 1).
+/* Overall sigma_el scale on top of the energy-dependent ratio below.
  * Tunable at compile time for closer agreement with data/SH12A. */
 #ifndef OSH_NUCLEAR_ELASTIC_SIGMA_FACTOR
 #define OSH_NUCLEAR_ELASTIC_SIGMA_FACTOR 1.0
+#endif
+
+/*
+ * Energy-dependent sigma_el / sigma_reac ratio (issue #277).
+ *
+ * The former constant black-disk factor (sigma_el = sigma_reac) overpredicts
+ * the integrated nuclear elastic cross section by a factor 2-3 above
+ * ~100 MeV: the only integrated (P,EL) measurement on a therapy target,
+ * Garron 1962 (p+C-12 at 155 MeV, 75 +- 7 mb, EXFOR O0360005), gives
+ * sigma_el / sigma_reac = 0.34 against the LA150 sigma_reac of 222 mb.
+ * Toward low energies optical-model systematics bring the ratio up to the
+ * black-disk scale (~1 at and below ~30 MeV).
+ *
+ * Model: ratio = RATIO_LOW for E <= E_LOW, RATIO_HIGH for E >= E_HIGH, and
+ * log-E linear interpolation in between.  With the defaults the Garron point
+ * evaluates to 0.38 * 222 mb = 84 mb — within 1.3 sigma of the measurement.
+ * The transport-level acceptance (primary depth fluence vs SH12A, issue
+ * #277) is the final calibration of these anchors.
+ */
+#ifndef OSH_NUCLEAR_ELASTIC_RATIO_LOW
+#define OSH_NUCLEAR_ELASTIC_RATIO_LOW 1.0
+#endif
+#ifndef OSH_NUCLEAR_ELASTIC_RATIO_HIGH
+#define OSH_NUCLEAR_ELASTIC_RATIO_HIGH 0.32
+#endif
+#ifndef OSH_NUCLEAR_ELASTIC_RATIO_E_LOW_MEV
+#define OSH_NUCLEAR_ELASTIC_RATIO_E_LOW_MEV 30.0
+#endif
+#ifndef OSH_NUCLEAR_ELASTIC_RATIO_E_HIGH_MEV
+#define OSH_NUCLEAR_ELASTIC_RATIO_E_HIGH_MEV 180.0
 #endif
 
 /* Nuclear radius parameter [fm]: R = r0 * A^(1/3), used for the diffraction slope. */
@@ -20,15 +50,32 @@
 /* hbar*c [MeV fm] — converts the slope from fm^2 to (MeV/c)^-2. */
 #define OSH_HBARC_MEV_FM 197.327
 
-double osh_nuclear_elastic_sigma_from_reac(double sigma_reac_cm2) {
+/** sigma_el / sigma_reac ratio at lab energy @p e_mev (log-E interpolation
+ * between the low- and high-energy anchors). */
+static inline double _elastic_ratio(double e_mev) {
+    double frac;
+
+    if (e_mev <= OSH_NUCLEAR_ELASTIC_RATIO_E_LOW_MEV) {
+        return OSH_NUCLEAR_ELASTIC_RATIO_LOW;
+    }
+    if (e_mev >= OSH_NUCLEAR_ELASTIC_RATIO_E_HIGH_MEV) {
+        return OSH_NUCLEAR_ELASTIC_RATIO_HIGH;
+    }
+    frac = log(e_mev / OSH_NUCLEAR_ELASTIC_RATIO_E_LOW_MEV)
+           / log(OSH_NUCLEAR_ELASTIC_RATIO_E_HIGH_MEV / OSH_NUCLEAR_ELASTIC_RATIO_E_LOW_MEV);
+    return OSH_NUCLEAR_ELASTIC_RATIO_LOW + (frac * (OSH_NUCLEAR_ELASTIC_RATIO_HIGH - OSH_NUCLEAR_ELASTIC_RATIO_LOW));
+}
+
+double osh_nuclear_elastic_sigma_from_reac(double sigma_reac_cm2, double e_lab_per_nucleon) {
     if (!(sigma_reac_cm2 > 0.0)) {
         return 0.0;
     }
-    return OSH_NUCLEAR_ELASTIC_SIGMA_FACTOR * sigma_reac_cm2;
+    return OSH_NUCLEAR_ELASTIC_SIGMA_FACTOR * _elastic_ratio(e_lab_per_nucleon) * sigma_reac_cm2;
 }
 
 double osh_nuclear_elastic_sigma(unsigned int zp, unsigned int ap, double zt, double at, double e_lab_per_nucleon) {
-    return osh_nuclear_elastic_sigma_from_reac(osh_nuclear_tripathi_sigma(zp, ap, zt, at, e_lab_per_nucleon));
+    return osh_nuclear_elastic_sigma_from_reac(osh_nuclear_sigma_reac(zp, ap, zt, at, e_lab_per_nucleon),
+                                               e_lab_per_nucleon);
 }
 
 double osh_nuclear_elastic_lambda_gcm2(double at_g_per_mol, double sigma_cm2) {

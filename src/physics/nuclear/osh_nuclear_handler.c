@@ -13,6 +13,7 @@
 #include "physics/nuclear/osh_nuclear_elastic.h"
 #include "physics/nuclear/osh_nuclear_fermi_breakup.h"
 #include "physics/nuclear/osh_nuclear_pp.h"
+#include "physics/nuclear/osh_nuclear_sigma_reac.h"
 #include "physics/nuclear/osh_nuclear_tripathi.h"
 #include "physics/osh_kinematics.h"
 #include "random/osh_rng.h"
@@ -307,10 +308,11 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
 
     /*
      * Inelastic + p+A-elastic rate: one pass over the material elements, feeding
-     * both hazards from a single Tripathi σ_R per (element, E) — the p+A-elastic
-     * hazard scales σ_R by the σ_el/σ_R prefactor instead of re-running the
-     * parametric formula. The struck element is re-sampled proportional to its
-     * hazard when a channel wins (selection loops below).
+     * both hazards from a single σ_R per (element, E) — evaluated-table lookup
+     * for tabulated targets, Tripathi otherwise (osh_nuclear_sigma_reac) — with
+     * the p+A-elastic hazard scaling σ_R by the energy-dependent σ_el/σ_R ratio
+     * instead of re-running the evaluation. The struck element is re-sampled
+     * proportional to its hazard when a channel wins (selection loops below).
      * This keeps compound materials physically meaningful for fragmentation: water
      * is struck on oxygen (abrasion + break-up), while hydrogen is excluded from the
      * inelastic channel below the pion-production threshold (no p+p inelastic there;
@@ -335,7 +337,7 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
                 continue;
             }
 
-            sigma_reac = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
+            sigma_reac = osh_nuclear_sigma_reac(projectile->z, projectile->a, zi, ai, e_per_nucleon);
             if (!(sigma_reac > 0.0)) {
                 continue;
             }
@@ -345,7 +347,7 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
                 rate_inel += (double) elems[i].mass_fraction / lambda_inel;
             }
             if (pa_i) {
-                sigma_pa_i = osh_nuclear_elastic_sigma_from_reac(sigma_reac);
+                sigma_pa_i = osh_nuclear_elastic_sigma_from_reac(sigma_reac, e_per_nucleon);
                 if (sigma_pa_i > 0.0) {
                     rate_pa += (double) elems[i].mass_fraction / osh_nuclear_elastic_lambda_gcm2(ai, sigma_pa_i);
                 }
@@ -504,7 +506,7 @@ void osh_nuclear_handler_step(struct osh_nuclear_handler const *handler,
             if (_skip_hydrogen_inelastic(projectile, elems[i].z, rate_energy_mev)) {
                 continue;
             }
-            sigma_i = osh_nuclear_tripathi_sigma(projectile->z, projectile->a, zi, ai, e_per_nucleon);
+            sigma_i = osh_nuclear_sigma_reac(projectile->z, projectile->a, zi, ai, e_per_nucleon);
             if (sigma_i > 0.0) {
                 double elem_rate = (double) elems[i].mass_fraction / osh_nuclear_lambda_gcm2(ai, sigma_i);
                 selected_a = ai;
