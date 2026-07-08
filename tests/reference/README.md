@@ -115,3 +115,12 @@ pin against regressions.
 SH12A gold-standard result fixtures for manual comparison. `topas/` currently
 holds mirrored input decks only. Neither subtree is registered as a CTest
 suite directly.
+
+## `xsec/` — p+A cross-section reference data (issue #277)
+
+Provenance-headed tables of measured and evaluated proton-nucleus cross
+sections (EXFOR `(P,NON)`/`(P,EL)` points; ENDF/B-VIII.0 and TENDL-2023
+proton-sublibrary nonelastic curves — the LA150 lineage behind the ICRU 63
+tables). Regenerable with `tools/fetch_pa_xsec.py`; compared against the
+transport's own cross sections (`sigma_scan` in `examples/06_nucre_validation`)
+by `tools/plot_xsec_pa.py`. Not registered as a CTest suite.

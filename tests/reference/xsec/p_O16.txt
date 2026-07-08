@@ -1,0 +1,184 @@
+# p+O16 cross-section reference data (issue #277)
+# Retrieved 2026-07-08 by tools/fetch_pa_xsec.py from IAEA NDS.
+#
+# Evaluated curves (MF3/MT5, all nonelastic lumped):
+#   endfb8-nonel  : ENDF/B-VIII.0 proton sublibrary (LA150h lineage; the
+#                   evaluation behind the ICRU 63 nonelastic tables)
+#   tendl23-nonel : TENDL-2023 proton sublibrary (adopts LA150 for C-12/O-16)
+#   No evaluated elastic: MF3/MT2 of charged-particle files is a Coulomb-
+#   interference bookkeeping convention (LA150 carries the identical curve
+#   for C-12 and O-16), not a transport-usable nuclear elastic sigma.
+#
+# EXFOR datasets: exfor:<ID> = (P,NON),SIG;  exfor-el:<ID> = (P,EL),SIG
+#   (integrated nuclear elastic as published, >= 20 MeV only):
+#   O0579004   O-16  1999  A.Ingemarsson+         Jour: Nuclear Physics, Section A, Vol.653, p.341 (1999)  (1 pts as published)
+#   C1862004   O-16  1975  I.Slaus+               Jour: Physical Review, Part C, Nuclear Physics, Vol.12, p.1093 (1975)  (27 pts as published)
+#   O0330002   O-16  1975  R.F.Carlson+           Jour: Physical Review, Part C, Nuclear Physics, Vol.12, p.1167 (1975)  (74 pts as published)
+#   O0247010   O-16  1961  A.E.Taylor+            Jour: Nuclear Physics, Vol.25, p.642 (1961)  (1 pts as published)
+#   O0213013O  O-0   1972  P.U.Renberg+           Jour: Nuclear Physics, Section A, Vol.183, p.81 (1972)  (4 pts as published)
+#
+# columns: source  E_MeV  sigma_mb  err_mb   (err 0.0 = not given)
+exfor:O0579004      65.5000    365.000   15.000
+exfor:C1862004      20.9000    524.600   13.000
+exfor:C1862004      22.0000    535.800   12.300
+exfor:C1862004      22.8000    536.900   12.300
+exfor:C1862004      24.0000    542.600   12.500
+exfor:C1862004      24.7000    550.500    8.200
+exfor:C1862004      24.8000    545.400   11.000
+exfor:C1862004      26.1000    520.800   13.800
+exfor:C1862004      27.5000    521.700    7.800
+exfor:C1862004      27.6000    504.500   12.500
+exfor:C1862004      28.6000    504.500    7.500
+exfor:C1862004      29.8000    505.800    8.400
+exfor:C1862004      30.7000    489.700    9.900
+exfor:C1862004      31.0000    494.200    8.400
+exfor:C1862004      32.2000    489.700    7.800
+exfor:C1862004      33.6000    482.900    7.600
+exfor:C1862004      33.7000    469.700   10.600
+exfor:C1862004      34.8000    477.800    7.500
+exfor:C1862004      34.9000    474.700   10.400
+exfor:C1862004      36.2000    464.900    7.300
+exfor:C1862004      36.4000    455.800    9.900
+exfor:C1862004      37.2000    456.700    7.100
+exfor:C1862004      37.8000    453.700   10.300
+exfor:C1862004      38.4000    447.500    7.600
+exfor:C1862004      39.6000    457.800    8.600
+exfor:C1862004      39.7000    448.600    6.700
+exfor:C1862004      43.1000    435.700    7.300
+exfor:C1862004      43.2000    432.700    8.600
+exfor:O0330002      18.8000    531.000   18.000
+exfor:O0330002      19.9000    529.000   17.000
+exfor:O0330002      20.9000    524.000   16.000
+exfor:O0330002      22.0000    535.000   15.000
+exfor:O0330002      22.8000    524.000   15.000
+exfor:O0330002      22.8000    547.000   15.000
+exfor:O0330002      23.9000    530.000   15.000
+exfor:O0330002      24.1000    553.000   14.000
+exfor:O0330002      24.7000    548.000   17.000
+exfor:O0330002      24.7000    550.000   21.000
+exfor:O0330002      24.8000    536.000   15.000
+exfor:O0330002      24.8000    552.000   15.000
+exfor:O0330002      25.6000    524.000   18.000
+exfor:O0330002      26.6000    517.000   14.000
+exfor:O0330002      27.5000    521.000   21.000
+exfor:O0330002      27.6000    503.000   14.000
+exfor:O0330002      27.6000    505.000   18.000
+exfor:O0330002      28.2000    506.000   21.000
+exfor:O0330002      28.6000    508.000   21.000
+exfor:O0330002      29.0000    499.000   20.000
+exfor:O0330002      29.5000    507.000   20.000
+exfor:O0330002      29.7000    503.000   19.000
+exfor:O0330002      29.7000    509.000   19.000
+exfor:O0330002      29.8000    507.000   20.000
+exfor:O0330002      30.2000    499.000   20.000
+exfor:O0330002      30.4000    492.000   12.000
+exfor:O0330002      30.6000    487.000   14.000
+exfor:O0330002      30.6000    498.000   19.000
+exfor:O0330002      31.0000    490.000   19.000
+exfor:O0330002      31.1000    490.000   13.000
+exfor:O0330002      31.4000    491.000   19.000
+exfor:O0330002      31.8000    490.000   18.000
+exfor:O0330002      32.2000    490.000   18.000
+exfor:O0330002      32.6000    487.000   18.000
+exfor:O0330002      32.9000    483.000   13.000
+exfor:O0330002      33.0000    480.000   18.000
+exfor:O0330002      33.4000    486.000   18.000
+exfor:O0330002      33.8000    479.000   17.000
+exfor:O0330002      34.0000    461.000   12.000
+exfor:O0330002      34.2000    462.000   12.000
+exfor:O0330002      34.2000    475.000   17.000
+exfor:O0330002      34.2000    481.000   16.000
+exfor:O0330002      34.6000    494.000   17.000
+exfor:O0330002      34.8000    481.000   13.000
+exfor:O0330002      34.9000    468.000   12.000
+exfor:O0330002      35.0000    477.000   17.000
+exfor:O0330002      35.4000    464.000   17.000
+exfor:O0330002      35.8000    462.000   17.000
+exfor:O0330002      35.9000    466.000   12.000
+exfor:O0330002      36.2000    471.000   17.000
+exfor:O0330002      36.6000    459.000   17.000
+exfor:O0330002      36.8000    445.000   12.000
+exfor:O0330002      36.9000    452.000   13.000
+exfor:O0330002      37.0000    451.000   15.000
+exfor:O0330002      37.4000    461.000   15.000
+exfor:O0330002      37.8000    451.000   15.000
+exfor:O0330002      37.8000    461.000   11.000
+exfor:O0330002      38.2000    445.000   14.000
+exfor:O0330002      38.6000    453.000   15.000
+exfor:O0330002      38.7000    446.000   11.000
+exfor:O0330002      39.0000    441.000   15.000
+exfor:O0330002      39.4000    443.000   15.000
+exfor:O0330002      39.4000    450.000   14.000
+exfor:O0330002      39.6000    464.000   11.000
+exfor:O0330002      39.8000    446.000   15.000
+exfor:O0330002      39.8000    451.000   12.000
+exfor:O0330002      40.2000    453.000   15.000
+exfor:O0330002      43.1000    426.000   13.000
+exfor:O0330002      43.1000    444.000   13.000
+exfor:O0330002      43.2000    432.000   12.000
+exfor:O0330002      46.1000    418.000   12.000
+exfor:O0330002      46.1000    432.000   12.000
+exfor:O0330002      46.3000    418.000   13.000
+exfor:O0330002      47.7000    418.000   12.000
+exfor:O0247010     138.0000    493.000   10.000
+exfor:O0213013O    231.0000    295.000   12.000
+endfb8-nonel         7.0000    208.286    0.000
+endfb8-nonel         8.0000    307.457    0.000
+endfb8-nonel         9.0000    380.584    0.000
+endfb8-nonel        10.0000    424.839    0.000
+endfb8-nonel        11.0000    451.768    0.000
+endfb8-nonel        12.0000    478.571    0.000
+endfb8-nonel        13.0000    497.977    0.000
+endfb8-nonel        14.0000    510.464    0.000
+endfb8-nonel        15.0000    518.168    0.000
+endfb8-nonel        16.0000    524.115    0.000
+endfb8-nonel        17.0000    528.446    0.000
+endfb8-nonel        18.0000    531.110    0.000
+endfb8-nonel        19.0000    533.013    0.000
+endfb8-nonel        20.0000    534.610    0.000
+endfb8-nonel        23.0000    537.000    0.000
+endfb8-nonel        27.0000    522.680    0.000
+endfb8-nonel        30.0000    500.610    0.000
+endfb8-nonel        35.0000    470.560    0.000
+endfb8-nonel        40.0000    449.000    0.000
+endfb8-nonel        50.0000    401.000    0.000
+endfb8-nonel        60.0000    362.000    0.000
+endfb8-nonel        70.0000    333.000    0.000
+endfb8-nonel        80.0000    313.000    0.000
+endfb8-nonel        90.0000    302.070    0.000
+endfb8-nonel       100.0000    297.000    0.000
+endfb8-nonel       110.0000    295.620    0.000
+endfb8-nonel       120.0000    295.000    0.000
+endfb8-nonel       130.0000    295.000    0.000
+endfb8-nonel       140.0000    295.000    0.000
+endfb8-nonel       150.0000    295.000    0.000
+tendl23-nonel        7.0000    208.286    0.000
+tendl23-nonel        8.0000    307.457    0.000
+tendl23-nonel        9.0000    380.584    0.000
+tendl23-nonel       10.0000    424.839    0.000
+tendl23-nonel       11.0000    451.768    0.000
+tendl23-nonel       12.0000    478.571    0.000
+tendl23-nonel       13.0000    497.977    0.000
+tendl23-nonel       14.0000    510.464    0.000
+tendl23-nonel       15.0000    518.168    0.000
+tendl23-nonel       16.0000    524.115    0.000
+tendl23-nonel       17.0000    528.446    0.000
+tendl23-nonel       18.0000    531.110    0.000
+tendl23-nonel       19.0000    533.013    0.000
+tendl23-nonel       20.0000    534.610    0.000
+tendl23-nonel       23.0000    537.000    0.000
+tendl23-nonel       27.0000    522.680    0.000
+tendl23-nonel       30.0000    500.610    0.000
+tendl23-nonel       35.0000    470.560    0.000
+tendl23-nonel       40.0000    449.000    0.000
+tendl23-nonel       50.0000    401.000    0.000
+tendl23-nonel       60.0000    362.000    0.000
+tendl23-nonel       70.0000    333.000    0.000
+tendl23-nonel       80.0000    313.000    0.000
+tendl23-nonel       90.0000    302.070    0.000
+tendl23-nonel      100.0000    297.000    0.000
+tendl23-nonel      110.0000    295.620    0.000
+tendl23-nonel      120.0000    295.000    0.000
+tendl23-nonel      130.0000    295.000    0.000
+tendl23-nonel      140.0000    295.000    0.000
+tendl23-nonel      150.0000    295.000    0.000
