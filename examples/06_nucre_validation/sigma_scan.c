@@ -28,11 +28,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "common/osh_const.h"
 #include "particle/osh_particle_const.h"
 #include "physics/nuclear/osh_nuclear_elastic.h"
 #include "physics/nuclear/osh_nuclear_pp.h"
 #include "physics/nuclear/osh_nuclear_sigma_reac.h"
-
 #define SIGMA_SCAN_E_MIN_MEV 5.0
 #define SIGMA_SCAN_E_MAX_MEV 250.0
 #define SIGMA_SCAN_N_STEPS 246
