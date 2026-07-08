@@ -25,6 +25,13 @@ static double _vav_xform(double u, int kind) {
 }
 
 double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
+    if (kappa <= 0.0) {
+        return osh_physics_strag_vavilov_lambda_log(-INFINITY, beta2, u);
+    }
+    return osh_physics_strag_vavilov_lambda_log(log(kappa), beta2, u);
+}
+
+double osh_physics_strag_vavilov_lambda_log(double log_kappa, double beta2, double u) {
     int b;                  /* selected κ-band index (0..NKB-1)                    */
     int ub;                 /* selected u-band index (0..NUB-1)                    */
     int k;                  /* polynomial power in the Horner loop                 */
@@ -50,17 +57,17 @@ double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u) {
 
     /* κ-band dispatch (last band catches all remaining κ). */
     for (b = 0; b < OSH_VAV_NKB - 1; ++b) {
-        if (kappa < osh_vav_kdisp_hi[b]) {
+        if (log_kappa < osh_vav_khlog[b]) {
             break;
         }
     }
     /* Normalised ln-kappa within the band.  ln(klo), ln(khi) and 1/(ln-span) are
-     * precomputed constants in the header, so this costs a single log per call
-     * (logf: single precision suffices — see _vav_xform) instead of three. */
-    kn = (2.0 * logf((float) kappa) - osh_vav_klog[b] - osh_vav_khlog[b]) * osh_vav_kspan_inv[b];
+     * precomputed constants in the header, so callers that also need λ̄ can share
+     * the single ln κ value instead of paying for a second log. */
+    kn = (2.0 * log_kappa - osh_vav_klog[b] - osh_vav_khlog[b]) * osh_vav_kspan_inv[b];
     /* Fold a non-positive κ to the LOW fitted edge (κ→0 is the Landau limit):
-     * logf(κ<0) is NaN, and the fmin/fmax clamp below would otherwise drop the
-     * NaN and land on the high edge (logf(0)=-inf already clamps low correctly,
+     * ln(κ<0) is NaN, and the fmin/fmax clamp below would otherwise drop the
+     * NaN and land on the high edge (ln 0 = -inf already clamps low correctly,
      * but κ<0 must be handled explicitly). */
     if (isnan(kn)) {
         kn = -1.0;

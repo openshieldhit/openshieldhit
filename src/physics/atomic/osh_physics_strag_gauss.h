@@ -38,17 +38,19 @@ extern "C" {
  * @brief Compute the Gaussian (Bohr) standard deviation of energy loss.
  *
  * @details
- * Returns σ = sqrt(C_bohr × z_eff² × z_over_a × thickness_gcm2) [MeV].  The
- * caller draws ΔE_strag ~ N(0, σ) and adds it to the CSDA mean energy loss for
- * the step, then clamps the exit energy to [E_cutoff, E_entry].
+ * Returns σ = sqrt(C_bohr × z_eff² × z_over_a × thickness_gcm2) · γ ·
+ * sqrt(1 − β²/2) [MeV].  The caller draws ΔE_strag ~ N(0, σ) and adds it to the
+ * CSDA mean energy loss for the step, then clamps the exit energy to
+ * [E_cutoff, E_entry].
  *
  * @param[in] z_eff           Effective projectile charge (dimensionless).
  * @param[in] z_over_a        Effective Z/A of the target [mol/g].
  * @param[in] thickness_gcm2  Areal density of the step ρ·ds [g/cm²].
+ * @param[in] beta2           Projectile β² (v²/c²), in (0, 1).
  *
  * @returns σ [MeV], always ≥ 0.
  */
-double osh_physics_strag_sigma(double z_eff, double z_over_a, double thickness_gcm2);
+double osh_physics_strag_sigma(double z_eff, double z_over_a, double thickness_gcm2, double beta2);
 
 #ifdef __cplusplus
 }

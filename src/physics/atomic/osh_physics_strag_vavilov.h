@@ -43,6 +43,19 @@ extern "C" {
  */
 double osh_physics_strag_vavilov_lambda(double kappa, double beta2, double u);
 
+/**
+ * @brief Reduced Vavilov variable λ(u; ln κ, β²).
+ *
+ * @details Equivalent to @ref osh_physics_strag_vavilov_lambda, but accepts
+ * precomputed ln κ so callers can share it with λ̄.
+ *
+ * @param[in] log_kappa  Natural logarithm of κ.
+ * @param[in] beta2      Projectile β², fitted over [OSH_VAV_BLO, OSH_VAV_BHI].
+ * @param[in] u          Uniform deviate in (0, 1); clamped to the fitted range.
+ * @returns λ (dimensionless).
+ */
+double osh_physics_strag_vavilov_lambda_log(double log_kappa, double beta2, double u);
+
 #ifdef __cplusplus
 }
 #endif

@@ -18,10 +18,18 @@ static int approx(double a, double b, double rtol) {
 
 /* E_max = 2 mₑ β²γ² / (1 + 2γ mₑ/M + (mₑ/M)²); proton 200 MeV → 0.4815 MeV. */
 static void test_emax_proton_200mev(void) {
-    double emax = osh_physics_strag_emax(200.0, 938.272);
+    double beta2;
+    double emax;
+    double gamma;
+
+    gamma = 1.0 + 200.0 / 938.272;
+    beta2 = 1.0 - 1.0 / (gamma * gamma);
+    emax = osh_physics_strag_emax(200.0, 938.272);
     ASSERT_TRUE(approx(emax, 0.4815, 3.0e-3));
+    ASSERT_TRUE(approx(osh_physics_strag_emax_beta2(200.0, 938.272, beta2), emax, 1.0e-12));
     ASSERT_TRUE(osh_physics_strag_emax(-1.0, 938.272) == 0.0);
     ASSERT_TRUE(osh_physics_strag_emax(200.0, 0.0) == 0.0);
+    ASSERT_TRUE(osh_physics_strag_emax_beta2(200.0, 938.272, 0.0) == 0.0);
 }
 
 /* ξ = (K/2)(Z/A)(z²/β²)·d; z=1, Z/A=0.5551, d=0.1 g/cm², β²=0.320525. */
@@ -46,18 +54,41 @@ static void test_kappa(void) {
 static void test_lambda_bar(void) {
     double lb = osh_physics_strag_lambda_bar(0.055225, 0.320525);
     ASSERT_TRUE(approx(lb, 2.1529, 1.0e-3));
+    ASSERT_TRUE(approx(osh_physics_strag_lambda_bar_log(log(0.055225), 0.320525), lb, 1.0e-12));
     /* invalid κ returns NAN (not 0.0, which is a legitimate λ̄). */
     ASSERT_TRUE(isnan(osh_physics_strag_lambda_bar(0.0, 0.32)));
+    ASSERT_TRUE(isnan(osh_physics_strag_lambda_bar_log(-INFINITY, 0.32)));
 }
 
 /* Bohr σ ∝ sqrt(d); guards on non-physical inputs. */
 static void test_sigma_guards_and_scaling(void) {
-    double s1 = osh_physics_strag_sigma(1.0, 0.5551, 0.1);
-    double s4 = osh_physics_strag_sigma(1.0, 0.5551, 0.4);
+    double s1;
+    double s4;
+
+    s1 = osh_physics_strag_sigma(1.0, 0.5551, 0.1, 0.320525);
+    s4 = osh_physics_strag_sigma(1.0, 0.5551, 0.4, 0.320525);
     ASSERT_TRUE(s1 > 0.0);
     ASSERT_TRUE(approx(s4, 2.0 * s1, 1.0e-9));
-    ASSERT_TRUE(osh_physics_strag_sigma(0.0, 0.5551, 0.1) == 0.0);
-    ASSERT_TRUE(osh_physics_strag_sigma(1.0, 0.5551, 0.0) == 0.0);
+    ASSERT_TRUE(osh_physics_strag_sigma(0.0, 0.5551, 0.1, 0.320525) == 0.0);
+    ASSERT_TRUE(osh_physics_strag_sigma(1.0, 0.5551, 0.0, 0.320525) == 0.0);
+    ASSERT_TRUE(osh_physics_strag_sigma(1.0, 0.5551, 0.1, 0.0) == 0.0);
+}
+
+/* The relativistic factor applies to variance: σ²/σ²_classical = γ²(1 − β²/2). */
+static void test_sigma_relativistic_factor(void) {
+    double beta2;
+    double classical;
+    double expected;
+    double sigma;
+    double variance_ratio;
+
+    beta2 = 0.320525;
+    sigma = osh_physics_strag_sigma(1.0, 0.5551, 0.1, beta2);
+    classical = 0.396128 * sqrt(0.5551 * 0.1);
+    variance_ratio = (sigma * sigma) / (classical * classical);
+    expected = (1.0 - 0.5 * beta2) / (1.0 - beta2);
+    ASSERT_TRUE(approx(sigma, 0.1037, 3.0e-3));
+    ASSERT_TRUE(approx(variance_ratio, expected, 1.0e-12));
 }
 
 static int run_named_test(char const *name) {
@@ -81,6 +112,10 @@ static int run_named_test(char const *name) {
         test_sigma_guards_and_scaling();
         return 0;
     }
+    if (strcmp(name, "sigma_relativistic_factor") == 0) {
+        test_sigma_relativistic_factor();
+        return 0;
+    }
     return 1;
 }
 
@@ -93,6 +128,7 @@ int main(int argc, char *argv[]) {
     test_kappa();
     test_lambda_bar();
     test_sigma_guards_and_scaling();
+    test_sigma_relativistic_factor();
     printf("All osh_physics_strag tests passed.\n");
     return 0;
 }

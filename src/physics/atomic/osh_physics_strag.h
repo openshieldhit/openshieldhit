@@ -74,6 +74,19 @@ double osh_physics_strag_xi(double z_eff, double z_over_a, double thickness_gcm2
 double osh_physics_strag_emax(double t_kin_mev, double mass_mev);
 
 /**
+ * @brief Maximum energy transfer when projectile β² is already known.
+ *
+ * @details Same formula and units as @ref osh_physics_strag_emax, but avoids
+ * recomputing β² in callers that already need it for ξ and the samplers.
+ *
+ * @param[in] t_kin_mev  Projectile kinetic energy T [MeV].
+ * @param[in] mass_mev   Projectile rest mass M [MeV/c²].
+ * @param[in] beta2      Projectile β² (v²/c²), in (0, 1).
+ * @returns E_max [MeV], or 0 for non-physical inputs.
+ */
+double osh_physics_strag_emax_beta2(double t_kin_mev, double mass_mev, double beta2);
+
+/**
  * @brief Vavilov straggling parameter κ = ξ / E_max.
  *
  * @param[in] xi     Width parameter ξ [MeV].
@@ -93,6 +106,18 @@ double osh_physics_strag_kappa(double xi, double e_max);
  * @returns λ̄ (dimensionless).
  */
 double osh_physics_strag_lambda_bar(double kappa, double beta2);
+
+/**
+ * @brief Reduced-mean λ̄ when ln κ is already known.
+ *
+ * @details Same formula as @ref osh_physics_strag_lambda_bar, but lets hot-path
+ * callers share ln κ with the Vavilov sampler.
+ *
+ * @param[in] log_kappa  Natural logarithm of κ.
+ * @param[in] beta2      Projectile β².
+ * @returns λ̄ (dimensionless), or NAN for a non-finite @p log_kappa.
+ */
+double osh_physics_strag_lambda_bar_log(double log_kappa, double beta2);
 
 #ifdef __cplusplus
 }
