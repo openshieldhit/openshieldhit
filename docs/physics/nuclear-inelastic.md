@@ -58,6 +58,25 @@ the MF3/MT2 "elastic" entry of charged-particle evaluations is a
 Coulomb-interference bookkeeping convention, not a usable integrated nuclear
 elastic cross section.
 
+The transport σ_R (black) sits on the evaluated LA150 curve by construction,
+and the σ_el curve passes through the Garron point:
+
+![p+O-16 reaction and elastic cross sections](img/xsec_p_O16.png){ width=680 }
+
+![p+C-12 reaction and elastic cross sections](img/xsec_p_C12.png){ width=680 }
+
+At transport level, the resulting primary-removal rate in a 1 cm² water column
+now overlays the rate implied by the SHIELD-HIT12A reference fixture (the
+model curve lies slightly above both because it assumes full column escape,
+whereas the *implied* curves are the actual column observable — a scattered
+primary keeps being scored until it drifts out):
+
+![primary removal rate in water vs SH12A-implied](img/xsec_removal_water.png){ width=620 }
+
+These figures are regenerated (deterministically, no Monte Carlo) with
+`python tools/plot_xsec_pa.py --png-dir docs/physics/img` after the `sigma_scan`
+instrument or the reference tables change.
+
 ## The inelastic chain
 
 An inelastic event runs a staged pipeline (the architecture of issue

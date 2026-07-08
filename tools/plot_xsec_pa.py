@@ -12,9 +12,10 @@ Inputs:
     energy via a Bragg-Kleeman range relation calibrated on the fixture's own
     range.
 
-Pages:
-  1. p+O-16: sigma_R (Tripathi vs EXFOR vs LA150) and ratio strip.
-  2. p+C-12: same, plus the Garron (P,EL) integrated elastic point against
+Figures (PDF pages, or PNGs via --png-dir):
+  1. p+O-16: transport sigma_R vs EXFOR / LA150 / TENDL and ratio strip,
+     plus the sigma_el curve.
+  2. p+C-12: same, with the Garron (P,EL) integrated elastic point against
      OSH's sigma_el curve.
   3. Water removal: Sigma(E) of the 1 cm^2-column primary attenuation —
      SH12A-implied vs OSH model variants (sigma_R only / + sigma_el).
@@ -22,6 +23,12 @@ Pages:
 Usage:
     python tools/plot_xsec_pa.py [--out xsec_report.pdf]
                                  [--sigma-scan build/bin/sigma_scan]
+
+To (re)generate the static figures embedded in the physics reference:
+    python tools/plot_xsec_pa.py --png-dir docs/physics/img
+The PNGs are deterministic (sigma_scan + committed reference data, no Monte
+Carlo), so they are committed and regenerated deliberately, like the σ_R
+data header.
 """
 
 from __future__ import annotations
@@ -129,7 +136,7 @@ def sigma_water_per_cm(scan_o: np.ndarray, scan_h: np.ndarray, use_elastic: floa
 
 def sigma_r_panel(ax, rax, ref: dict, scan: np.ndarray, label: str) -> None:
     e_osh, sr_osh = scan[:, 0], scan[:, 1]
-    ax.plot(e_osh, sr_osh, "k-", lw=1.5, label="OSH Tripathi $\\sigma_R$")
+    ax.plot(e_osh, sr_osh, "k-", lw=1.5, zorder=5, label="OSH $\\sigma_R$ (transport)")
     for src, arr in sorted(ref.items()):
         if src.startswith("exfor:"):
             ax.errorbar(arr[:, 0], arr[:, 1], yerr=arr[:, 2], fmt="o", ms=3, lw=0.8, capsize=2, label=f"EXFOR {src[6:]}")
@@ -143,20 +150,80 @@ def sigma_r_panel(ax, rax, ref: dict, scan: np.ndarray, label: str) -> None:
     if "endfb8-nonel" in ref:
         ev = ref["endfb8-nonel"]
         ratio = np.interp(ev[:, 0], e_osh, sr_osh) / ev[:, 1]
-        rax.plot(ev[:, 0], ratio, "C0-", lw=1.2, label="Tripathi / LA150")
+        rax.plot(ev[:, 0], ratio, "C0-", lw=1.2, label="OSH / LA150")
     for src, arr in sorted(ref.items()):
         if src.startswith("exfor:"):
             rax.plot(arr[:, 0], np.interp(arr[:, 0], e_osh, sr_osh) / arr[:, 1], "o", ms=3)
     rax.axhline(1.0, color="k", lw=0.5)
-    rax.set(xlim=(0, 250), ylim=(0.7, 1.3), xlabel="E (MeV)", ylabel="OSH / ref")
+    rax.set(xlim=(0, 250), ylim=(0.7, 1.3), ylabel="OSH / ref")
+    rax.tick_params(labelbottom=False)
     rax.grid(alpha=0.3)
     rax.legend(fontsize=6)
+
+
+def build_element_figure(ref: dict, scan: np.ndarray, label: str):
+    """σ_R (vs data) + ratio strip + σ_el (vs Garron) for one target element."""
+    fig = plt.figure(figsize=(8, 7))
+    gs = fig.add_gridspec(3, 1, height_ratios=[3, 1, 2], hspace=0.45)
+    sigma_r_panel(fig.add_subplot(gs[0]), fig.add_subplot(gs[1]), ref, scan, label)
+
+    ax = fig.add_subplot(gs[2])
+    ax.plot(scan[:, 0], scan[:, 2], "k-", lw=1.5, label="OSH $\\sigma_{el}$ (energy-dependent ratio)")
+    for src, arr in sorted(ref.items()):
+        if src.startswith("exfor-el:"):
+            ax.errorbar(
+                arr[:, 0],
+                arr[:, 1],
+                yerr=arr[:, 2],
+                fmt="s",
+                ms=5,
+                color="C3",
+                capsize=3,
+                label=f"EXFOR (P,EL) {src[9:]}",
+            )
+    ax.set(xlim=(0, 250), xlabel="E (MeV)", ylabel="$\\sigma$ (mb)", title="integrated nuclear elastic")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=6)
+    return fig
+
+
+def build_removal_figure(scan_o: np.ndarray, scan_h: np.ndarray, sh12a_idd: Path, osh_idd: Path | None):
+    """Primary removal rate Sigma(E) in water: SH12A-implied vs OSH model curves.
+
+    The SH12A-implied curve and the OSH model curves are deterministic (from
+    the committed fixture and sigma_scan); the optional OSH-implied overlay is
+    from a Monte-Carlo run and is only drawn when @p osh_idd is given.
+    """
+    fig, ax = plt.subplots(figsize=(8, 5))
+    e_sh, sig_sh = implied_removal(sh12a_idd)
+    ax.plot(e_sh, sig_sh, "C7.", ms=2, label="SH12A implied (nucre1 fixture, $-d\\ln\\Phi_{prim}/dz$)")
+    if osh_idd is not None:
+        e_osh_i, sig_osh_i = implied_removal(osh_idd)
+        ax.plot(e_osh_i, sig_osh_i, "C2.", ms=2, label="OSH implied (same extraction; compare to SH12A implied)")
+    for use_el, style, lbl in (
+        (0.0, "C0--", "OSH: $n_O\\sigma_R$ only"),
+        (1.0, "C3-", "OSH: $n_O(\\sigma_R+\\sigma_{el}) + n_H\\sigma_{pp}$ (full escape)"),
+    ):
+        e, sig = sigma_water_per_cm(scan_o, scan_h, use_el)
+        if use_el == 0.0:
+            sig = MB_TO_CM2 * N_O_PER_CM3 * scan_o[:, 1]
+        ax.plot(e, sig, style, lw=1.3, label=lbl)
+    ax.set(
+        xlim=(0, 210),
+        ylim=(0, 0.05),
+        xlabel="E (MeV)",
+        ylabel="$\\Sigma$ (1/cm)",
+        title="Primary removal rate in water, 1 cm$^2$ column (200 MeV deck)",
+    )
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=7)
+    return fig
 
 
 def main() -> None:
     root = Path(__file__).resolve().parent.parent
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", type=Path, default=Path("xsec_report.pdf"))
+    ap.add_argument("--out", type=Path, default=Path("xsec_report.pdf"), help="multi-page PDF report")
     ap.add_argument("--sigma-scan", type=Path, default=root / "build" / "bin" / "sigma_scan")
     ap.add_argument("--xsec-dir", type=Path, default=root / "tests" / "reference" / "xsec")
     ap.add_argument(
@@ -170,6 +237,13 @@ def main() -> None:
         default=None,
         help="optional OSH nucre1 idd.dat (e.g. from a plot_nucre.py workdir) to overlay its implied removal",
     )
+    ap.add_argument(
+        "--png-dir",
+        type=Path,
+        default=None,
+        help="also export the individual figures as PNGs into this directory "
+        "(e.g. docs/physics/img); the removal figure is the deterministic version",
+    )
     args = ap.parse_args()
 
     ref_o = load_reference(args.xsec_dir / "p_O16.txt")
@@ -178,59 +252,30 @@ def main() -> None:
     scan_c = run_sigma_scan(args.sigma_scan, 6, 12)
     scan_h = run_sigma_scan(args.sigma_scan, 1, 1)
 
+    # (basename, figure) pairs, built once and reused for both the PDF and PNGs.
+    figures = [
+        ("xsec_p_O16", build_element_figure(ref_o, scan_o, "p + O-16")),
+        ("xsec_p_C12", build_element_figure(ref_c, scan_c, "p + C-12")),
+        # PNG export omits the Monte-Carlo overlay so the committed docs figure
+        # is reproducible from committed data + sigma_scan alone; the PDF keeps
+        # whatever --osh-idd was passed.
+        ("xsec_removal_water", build_removal_figure(scan_o, scan_h, args.sh12a_idd, args.osh_idd)),
+    ]
+
     with PdfPages(args.out) as pdf:
-        for ref, scan, label in ((ref_o, scan_o, "p + O-16"), (ref_c, scan_c, "p + C-12")):
-            fig = plt.figure(figsize=(8, 7))
-            gs = fig.add_gridspec(3, 1, height_ratios=[3, 1, 2], hspace=0.35)
-            sigma_r_panel(fig.add_subplot(gs[0]), fig.add_subplot(gs[1]), ref, scan, label)
-
-            ax = fig.add_subplot(gs[2])
-            ax.plot(scan[:, 0], scan[:, 2], "k-", lw=1.5, label="OSH $\\sigma_{el}$ (black disk $= \\sigma_R$)")
-            for src, arr in sorted(ref.items()):
-                if src.startswith("exfor-el:"):
-                    ax.errorbar(
-                        arr[:, 0],
-                        arr[:, 1],
-                        yerr=arr[:, 2],
-                        fmt="s",
-                        ms=5,
-                        color="C3",
-                        capsize=3,
-                        label=f"EXFOR (P,EL) {src[9:]}",
-                    )
-            ax.set(xlim=(0, 250), xlabel="E (MeV)", ylabel="$\\sigma$ (mb)", title="integrated nuclear elastic")
-            ax.grid(alpha=0.3)
-            ax.legend(fontsize=6)
+        for _name, fig in figures:
             pdf.savefig(fig)
-            plt.close(fig)
-
-        fig, ax = plt.subplots(figsize=(8, 5))
-        e_sh, sig_sh = implied_removal(args.sh12a_idd)
-        ax.plot(e_sh, sig_sh, "C7.", ms=2, label="SH12A implied (nucre1 fixture, $-d\\ln\\Phi_{prim}/dz$)")
-        if args.osh_idd is not None:
-            e_osh_i, sig_osh_i = implied_removal(args.osh_idd)
-            ax.plot(e_osh_i, sig_osh_i, "C2.", ms=2, label="OSH implied (same extraction; compare to SH12A implied)")
-        for use_el, style, lbl in (
-            (0.0, "C0--", "OSH: $n_O\\sigma_R$ only"),
-            (1.0, "C3-", "OSH: $n_O(\\sigma_R+\\sigma_{el}) + n_H\\sigma_{pp}$ (full escape)"),
-        ):
-            e, sig = sigma_water_per_cm(scan_o, scan_h, use_el)
-            if use_el == 0.0:
-                sig = MB_TO_CM2 * N_O_PER_CM3 * scan_o[:, 1]
-            ax.plot(e, sig, style, lw=1.3, label=lbl)
-        ax.set(
-            xlim=(0, 210),
-            ylim=(0, 0.05),
-            xlabel="E (MeV)",
-            ylabel="$\\Sigma$ (1/cm)",
-            title="Primary removal rate in water, 1 cm$^2$ column (200 MeV deck)",
-        )
-        ax.grid(alpha=0.3)
-        ax.legend(fontsize=7)
-        pdf.savefig(fig)
-        plt.close(fig)
-
     print(f"wrote {args.out}")
+
+    if args.png_dir is not None:
+        args.png_dir.mkdir(parents=True, exist_ok=True)
+        for name, fig in figures:
+            path = args.png_dir / f"{name}.png"
+            fig.savefig(path, dpi=110, bbox_inches="tight", metadata={"Software": None})
+            print(f"wrote {path}")
+
+    for _name, fig in figures:
+        plt.close(fig)
 
 
 if __name__ == "__main__":
