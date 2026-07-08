@@ -966,15 +966,15 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
     if (ctx->enable_straggling) {
         e_mid = 0.5 * (ctx->e0 + ctx->exit_energy);
         z_eff = osh_physics_bethe_z_eff(e_mid / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
+        gamma = 1.0 + e_mid / ctx->proj_mass_mev;
+        beta2 = 1.0 - 1.0 / (gamma * gamma);
 
         if (ctx->straggling_mode == OSH_TRANSPORT_STRAGGLING_VAVILOV) {
-            gamma = 1.0 + e_mid / ctx->proj_mass_mev;
-            beta2 = 1.0 - 1.0 / (gamma * gamma);
             xi = osh_physics_strag_xi(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2, beta2);
             e_max = osh_physics_strag_emax(e_mid, ctx->proj_mass_mev);
             kappa = osh_physics_strag_kappa(xi, e_max);
             if (kappa >= OSH_STRAG_KAPPA_GAUSS || kappa <= 0.0) {
-                sigma_strag = osh_physics_strag_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2);
+                sigma_strag = osh_physics_strag_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2, beta2);
                 delta = (sigma_strag > 0.0) ? osh_rng_gauss(rng, 0.0, sigma_strag) : 0.0;
             } else {
                 u = osh_rng_double(rng);
@@ -984,7 +984,7 @@ static void ion_step_energy_and_straggling(struct ion_step_ctx *ctx,
                 delta = -xi * (lam - osh_physics_strag_lambda_bar(kappa, beta2));
             }
         } else {
-            sigma_strag = osh_physics_strag_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2);
+            sigma_strag = osh_physics_strag_sigma(z_eff, ctx->mat_z_over_a, ctx->ds_gcm2, beta2);
             delta = (sigma_strag > 0.0) ? osh_rng_gauss(rng, 0.0, sigma_strag) : 0.0;
         }
 
