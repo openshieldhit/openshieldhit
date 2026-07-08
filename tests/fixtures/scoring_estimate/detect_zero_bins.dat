@@ -7,7 +7,7 @@
 #   Dose  -> 1 accumulator  => max(0,1) * 8 * 1 =  8 bytes
 #   DLET  -> 2 accumulators => max(0,1) * 8 * 2 = 16 bytes
 # Expected: accum_bytes = 24, npages = 2, largest_page_bytes = 16, geometry "G",
-#           shadow_bytes = 8 (DLET's single data array; Dose is a no-op).
+#           shadow_bytes = 16 (Dose and DLET each copy one data array).
 
 Geometry Mesh
     Name G

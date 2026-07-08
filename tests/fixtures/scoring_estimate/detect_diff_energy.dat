@@ -1,0 +1,23 @@
+# Fixture for differential additive-page shadow memory.
+#
+# Geometry "G" is a 1 x 1 x 2 mesh => 2 spatial bins.
+# Quantity Energy has one differential EKIN axis with 4 bins, so the page has
+# 2 * 4 = 8 flat bins.  Energy normally has no kind-level postprocess scratch,
+# but differential additive pages are divided by differential bin width in
+# postprocess, so the snapshot shadow must allocate one data array:
+#   Energy(EKIN) -> 8 * 8 * 1 = 64 accumulator bytes
+# Expected: accum_bytes = 64, shadow_bytes = 64, npages = 1.
+
+Geometry Mesh
+    Name G
+    X -1.0   1.0     1
+    Y -1.0   1.0     1
+    Z  0.0  10.0     2
+
+Output
+    Filename est_diff_energy.dat
+    Fileformat TEXT
+    Geo G
+    Quantity Energy
+    Diff1 0 100 4
+    Diff1Type EKIN

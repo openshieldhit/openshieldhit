@@ -207,6 +207,23 @@ static int page_settings_enable_variance(struct osh_scoring_workspace const *ws,
     return 0;
 }
 
+/* divide=1 means postproc divides data by data2 (LET average) -> AVER mode.
+ * All other scorers default to NORM (÷nstat) except raw-count kinds. */
+static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind score_kind, char divide) {
+    if (divide) {
+        return OSH_SCORING_POSTPROC_AVER;
+    }
+
+    switch (score_kind) {
+    case OSH_SCORING_SCORE_COUNT:
+        return OSH_SCORING_POSTPROC_SUM;
+    case OSH_SCORING_SCORE_MCPL:
+        return OSH_SCORING_POSTPROC_APPEND;
+    default:
+        return OSH_SCORING_POSTPROC_NORM;
+    }
+}
+
 enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *ws,
                                             struct osh_scoring_mem_estimate *out) {
     size_t i;
@@ -237,12 +254,14 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
         for (j = 0u; j < output->npages; ++j) {
             struct osh_scoring_page_def const *page = &output->pages[j];
             enum osh_scoring_score_kind const kind = quantity_to_score_kind(page->quantity);
+            char const has_data2 = (char) score_kind_uses_data2(kind);
+            struct osh_scoring_page_runtime page_rt;
             unsigned sum_arrays = 1u; /* # of sum arrays: data, plus data2 for two-pass averages */
             unsigned arrays;          /* sum arrays, plus their M2 companions when variance is on */
             uint64_t len = (uint64_t) bins;
             uint64_t page_bytes;
 
-            if (score_kind_uses_data2(kind)) {
+            if (has_data2) {
                 sum_arrays = 2u;
             }
             /* Variance doubles the arrays: data_var mirrors data, data2_var mirrors data2. */
@@ -281,9 +300,15 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
             out->npages += 1u;
 
             /* A mid-run snapshot copies only the `data` array (one, never data2)
-             * of pages whose postprocess writes data — DOSEGY and the LET/Qeff
-             * averages — at the same per-page bin count used above. */
-            if (osh_scoring_postprocess_writes_data(kind)) {
+             * of pages whose postprocess writes data — including page-level
+             * differential additive pages such as Energy vs Ekin — at the same
+             * per-page bin count used above. */
+            memset(&page_rt, 0, sizeof(page_rt));
+            page_rt.score_kind = kind;
+            page_rt.postproc = score_kind_postproc(kind, has_data2);
+            page_rt.diff_nbins = page->diff_nbins;
+            page_rt.diff2_nbins = page->diff2_nbins;
+            if (osh_scoring_postprocess_page_writes_data(&page_rt)) {
                 uint64_t shadow_n = len;
                 uint64_t shadow_page;
                 /* osh_scoring_shadow_refresh() grabs one double even for a len==0
@@ -318,23 +343,6 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
     }
 
     return OSH_OK;
-}
-
-/* divide=1 means postproc divides data by data2 (LET average) → AVER mode.
- * All other scorers default to NORM (÷nstat) except raw-count kinds. */
-static enum osh_scoring_postproc score_kind_postproc(enum osh_scoring_score_kind score_kind, char divide) {
-    if (divide) {
-        return OSH_SCORING_POSTPROC_AVER;
-    }
-
-    switch (score_kind) {
-    case OSH_SCORING_SCORE_COUNT:
-        return OSH_SCORING_POSTPROC_SUM;
-    case OSH_SCORING_SCORE_MCPL:
-        return OSH_SCORING_POSTPROC_APPEND;
-    default:
-        return OSH_SCORING_POSTPROC_NORM;
-    }
 }
 
 static enum osh_scoring_diff_kind diff_kind_from_str(char const *s) {
