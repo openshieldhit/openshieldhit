@@ -14,7 +14,7 @@
 | **Commit audited** | [`e3c619a`][e3c619a] on `main` (2026-07-05) |
 | **Source** | [PR #248][#248] |
 | **Scope** | Test infra · transport hot path & EM physics · scoring · nuclear/neutron transport · RNG & parallel readiness · GEMCA geometry · parsers/IO · architecture |
-| **Follow-up** | 11 suggested issues (2 filed — [#255][#255], fixed by [#257][#257]; [#267][#267], fixed by [`a0f60a1`][a0f60a1]) — see [§8](#sec-8) |
+| **Follow-up** | 11 suggested issues (3 filed — [#255][#255], fixed by [#257][#257]; [#267][#267], fixed by [`a0f60a1`][a0f60a1]; [#279][#279], fixed by [#285][#285]) — see [§8](#sec-8) |
 
 
 Deep audit of `main` (e3c619a) prompted by PR [#239][#239] (sanitizer wiring) and issues
@@ -124,6 +124,19 @@ Scope: `src/transport/osh_transport_ion_step.c`, `osh_transport_ion.c`,
 (the samplers the hot path consumes).
 
 ### P-1 (high, high) Residual kinetic energy is silently deleted when a particle is killed at the energy cutoff {: #p-1 }
+
+!!! success "Resolved"
+    Filed as [#279][#279] and fixed by [#285][#285].  An ion or neutron killed
+    at the transport energy cutoff (default or a raised `TCUT0`/`NEUTRLCUT`)
+    now point-deposits its residual kinetic energy at the kill site instead of
+    discarding it, gated on positive-density material and attributed to the
+    particle's own generation, with an energy-conservation regression test
+    (`tests/unit/test_osh_cutoff_deposit.c`) for the ion side and a companion
+    test for the neutron side.  The related unknown-species kill noted below
+    is also fixed: it now increments a dedicated `n_unknown_dropped` counter
+    and WARNs once per run instead of failing silently.  The `residual_range
+    <= 0` kills and the EMIN/effective-cutoff fragment-injection mismatch
+    (both noted below) are untouched by #285 and remain open.
 
 Every ion ends its life at `ion_step_setup()`:
 
@@ -483,7 +496,11 @@ then `apply_event`'s ELASTIC branch ignores `ev->secondaries` entirely
   scorers work); every energy/dose scorer sees zero from the neutron family.
 - The neutron **cutoff kill** (`osh_transport_neutron.c:287-291`, default
   `ncut = 1 keV`, `osh_transport.h:48`) also discards the remaining energy —
-  same class as [P-1](#p-1).
+  same class as [P-1](#p-1). **Resolved by [#285][#285]** (tracked under
+  [P-1](#p-1)/[#279][#279]): the cutoff kill now point-deposits the residual
+  in positive-density material. The interaction/reaction deposits below
+  (capture, (n,p)/(n,α), compound-residual, n-p elastic recoil) are a
+  separate mechanism and remain open.
 - **[TODO.md][todo-md] misdescribes this**: the "What is implemented" list says "elastic
   (isotropic CM; n-p recoil proton returned)" and "(currently deposited
   locally)" for charged secondaries. Neither is true in code — only the
@@ -903,7 +920,7 @@ case dir which fails at *someone else's* `ctest`).
 | [N-1](#n-1) | Neutron interactions deposit zero energy; n–p recoil energy vanishes; [TODO.md][todo-md] claims otherwise | **high** | `osh_transport_neutron.c:166-202`, `osh_neutron_reaction.c:91-108` |
 | [N-2](#n-2) | Neutron σ clamped at 20 MeV table edge — fast neutrons ×5–6 over-attenuated | **high** | `osh_neutron_xsec.c:84-87` |
 | [P-2](#p-2) | Isotope conflation: deuteron/triton/³He use wrong range table (×2/×3/×¾) and wrong rest mass — filed as [#267][#267], fixed by [`a0f60a1`][a0f60a1] | **high** (resolved) | `osh_transport_ion_step.c:1258`, `osh_material_compile.c:698-716` |
-| [P-1](#p-1) | Residual energy deleted at cutoff kill (scales with TCUT0) | **high** | `osh_transport_ion_step.c:539-543` |
+| [P-1](#p-1) | Residual energy deleted at cutoff kill (scales with TCUT0) — filed as [#279][#279], fixed by [#285][#285] | **high** (resolved) | `osh_transport_ion_step.c:539-543` |
 | [S-1](#s-1) | `st->wt` ignored by every scorer — latent for MCPL ([#41][#41])/VR | **high (latent)** | `src/scoring/runtime/*` |
 | [P-3](#p-3) | Bohr straggling missing relativistic factor; κ-dispatch variance discontinuity | medium | `osh_physics_strag_gauss.c:25-37` |
 | [P-4](#p-4) | Nuclear vertex at step endpoint (even past boundary nudge) | medium | `osh_transport_ion_step.c:307-484` |
@@ -931,7 +948,7 @@ PR [#239][#239] validated and worth merging as-is ([T-4](#t-4)).
 2. Neutron energy deposition: point-deposit `local_deposit_mev` + fix [TODO.md][todo-md] claims ([N-1](#n-1)); follow-up: recoil-proton ion feedback.
 3. Neutron σ above 20 MeV: Tier-2 dispatch above Tier-1 grid ([N-2](#n-2)).
 4. Isotope-aware range/mass in transport (A-rescale within Z column + `part->mass` kinematics) ([P-2](#p-2)) — filed as [#267][#267], fixed by [`a0f60a1`][a0f60a1].
-5. Deposit residual energy at all cutoff/species kills ([P-1](#p-1), and neutron cutoff from [N-1](#n-1)).
+5. Deposit residual energy at all cutoff/species kills ([P-1](#p-1), and neutron cutoff from [N-1](#n-1)) — filed as [#279][#279], fixed by [#285][#285]. Broader neutron reaction-deposit scoring in [N-1](#n-1) (capture, (n,p)/(n,α), n-p elastic recoil) remains open.
 6. Weight-aware scoring + weighted-variance contract ([S-1](#s-1), feeds [#169][#169] and [#41][#41]).
 7. Relativistic Bohr straggling factor ([P-3](#p-3)).
 8. Nuclear vertex sampling within the step ([P-4](#p-4)) + step-midpoint energy for scoring on kill steps ([S-2](#s-2)).
@@ -970,6 +987,8 @@ current usage; "latent" items are correct today but break planned features.
 [#255]: https://github.com/openshieldhit/openshieldhit/issues/255
 [#257]: https://github.com/openshieldhit/openshieldhit/pull/257
 [#267]: https://github.com/openshieldhit/openshieldhit/issues/267
+[#279]: https://github.com/openshieldhit/openshieldhit/issues/279
+[#285]: https://github.com/openshieldhit/openshieldhit/pull/285
 [todo-md]: https://github.com/openshieldhit/openshieldhit/blob/e3c619a1328e9351bcbc1dc599321ac2770ad622/TODO.md
 [e3c619a]: https://github.com/openshieldhit/openshieldhit/commit/e3c619a1328e9351bcbc1dc599321ac2770ad622
 [a0f60a1]: https://github.com/openshieldhit/openshieldhit/commit/a0f60a1d201ed147719f26751befbd65488ab536
