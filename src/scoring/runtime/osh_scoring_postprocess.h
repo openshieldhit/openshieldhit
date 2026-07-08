@@ -32,9 +32,12 @@ extern "C" {
  * pre-merge) finalisation use @ref osh_scoring_postprocess_into with a
  * **distinct** @p dst — it never mutates @p src and does not trip this guard.
  *
- * @note BDO merge tools must treat postprocessed differential pages like other
- * reported per-primary quantities: combine independent files by each file's
- * @c nstat, never by summing already-differential values directly.
+ * @note BDO merge tools must follow the per-page @c OSHBDO_PAG_NORMALIZE tag
+ * written from @c page->postproc (assigned at scoring compile time).  That tag,
+ * not the unit string, tells the merge whether independent files are summed,
+ * nstat-normalised, nstat-weighted averages, or appended.  Differential NORM
+ * pages are already bin-width-normalised here, so they still merge by nstat
+ * weighting, never by summing reported differential values directly.
  */
 enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
 
