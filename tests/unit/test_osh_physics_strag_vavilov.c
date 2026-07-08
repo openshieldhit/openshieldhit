@@ -86,12 +86,11 @@ static void test_vavilov_log_kappa_matches_kappa(void) {
     double betas[] = {0.1, 0.5, 0.9};
     size_t ki;
     size_t bi;
+    double by_kappa;
+    double by_log;
 
     for (ki = 0; ki < sizeof(kappas) / sizeof(kappas[0]); ++ki) {
         for (bi = 0; bi < sizeof(betas) / sizeof(betas[0]); ++bi) {
-            double by_kappa;
-            double by_log;
-
             by_kappa = osh_physics_strag_vavilov_lambda(kappas[ki], betas[bi], 0.42);
             by_log = osh_physics_strag_vavilov_lambda_log(log(kappas[ki]), betas[bi], 0.42);
             ASSERT_TRUE(fabs(by_kappa - by_log) < 1.0e-12);
