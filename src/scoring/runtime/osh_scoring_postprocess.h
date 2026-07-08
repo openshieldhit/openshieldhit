@@ -31,6 +31,10 @@ extern "C" {
  * protected identically to this wrapper.  For repeatable (dump / checkpoint /
  * pre-merge) finalisation use @ref osh_scoring_postprocess_into with a
  * **distinct** @p dst — it never mutates @p src and does not trip this guard.
+ *
+ * @note BDO merge tools must treat postprocessed differential pages like other
+ * reported per-primary quantities: combine independent files by each file's
+ * @c nstat, never by summing already-differential values directly.
  */
 enum osh_status osh_scoring_postprocess(struct osh_scoring_runtime *rt);
 

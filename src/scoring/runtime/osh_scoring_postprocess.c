@@ -33,6 +33,8 @@ static int page_needs_diff_normalization(struct osh_scoring_page_runtime const *
     if (page->diff_nbins == 0u && page->diff2_nbins == 0u) {
         return 0;
     }
+    /* AVER pages already report ratios such as LET; APPEND pages are raw payloads.
+     * Dividing either by a differential-axis width would change the physics/API. */
     return page->postproc != OSH_SCORING_POSTPROC_AVER && page->postproc != OSH_SCORING_POSTPROC_APPEND;
 }
 
