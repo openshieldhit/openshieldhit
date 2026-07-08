@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/openshieldhit/openshieldhit/discussions
+    about: Ask a question or start a discussion about OpenShieldHIT

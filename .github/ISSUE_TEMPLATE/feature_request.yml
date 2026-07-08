@@ -1,0 +1,78 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement to OpenShieldHIT.
+        The more context you can provide, the easier it is to evaluate and implement the request.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: >
+        What problem are you trying to solve, or what capability is missing?
+        Explain the use case that prompted this request.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >
+        Describe what you would like to see added or changed.
+        If you have a specific design in mind (new keyword in `beam.dat`,
+        new scoring quantity, new API function, …) describe it here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >
+        Have you considered any alternative approaches or workarounds?
+        Why are they insufficient?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the codebase does this affect?
+      multiple: true
+      options:
+        - Transport / physics
+        - Geometry (GEMCA / voxel)
+        - Scoring
+        - Input parsing (beam.dat / geo.dat / mat.dat / detect.dat)
+        - Output formats (BDO / text / DICOM)
+        - Build / CMake
+        - Public C API
+        - Documentation
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: >
+        Links to relevant papers, specifications, or other projects
+        that describe the desired behaviour (e.g. a SHIELD-HIT12A keyword
+        reference, a physics paper, or an upstream issue).
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help understand or prioritise this request.
+    validations:
+      required: false
