@@ -195,8 +195,8 @@ def write_table(out_path: Path, label: str, meta: list[dict], blocks: dict) -> N
         )
     lines.append("#")
     lines.append("# columns: source  E_MeV  sigma_mb  err_mb   (err 0.0 = not given)")
-    for source in sorted(blocks):
-        for e, s, err in blocks[source]:
+    for source, points in blocks.items():
+        for e, s, err in points:
             lines.append(f"{source:<16} {e:10.4f} {s:10.3f} {err:8.3f}")
     out_path.write_text("\n".join(lines) + "\n")
     print(f"wrote {out_path}  ({sum(len(p) for p in blocks.values())} rows)")
