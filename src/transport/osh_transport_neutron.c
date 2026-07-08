@@ -83,6 +83,30 @@ static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k, double 
         &pool->x[k], &pool->y[k], &pool->z[k], pool->ux[k], pool->uy[k], pool->uz[k], dist);
 }
 
+/*
+ * Fill the medium/zone/voxel_idx/has_voxel fields of @p st from @p zone_ref,
+ * with the fallback (-1 medium/zone, 0 voxel_idx/has_voxel) used whenever
+ * zone_ref is NULL or carries no voxel.  Shared by score_neutron_step() and
+ * score_neutron_point_deposit() so the two step builders cannot drift apart.
+ */
+static void step_set_zone_fields(struct step *st, struct osh_zone_ref const *zone_ref) {
+    if (zone_ref) {
+        st->medium = (int) zone_ref->material_idx;
+        st->zone = (int) zone_ref->zone_idx;
+    } else {
+        st->medium = -1;
+        st->zone = -1;
+    }
+
+    if (zone_ref && zone_ref->has_hu) {
+        st->voxel_idx = zone_ref->voxel_idx;
+        st->has_voxel = 1u;
+    } else {
+        st->voxel_idx = 0u;
+        st->has_voxel = 0u;
+    }
+}
+
 static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
                                           struct osh_score_target const *target,
                                           struct osh_neutron_pool const *pool,
@@ -114,13 +138,10 @@ static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
     st.de = 0.0;
     st.rho = rho;
     st.wt = pool->wt[k];
-    st.voxel_idx = (zone_ref && zone_ref->has_hu) ? zone_ref->voxel_idx : 0u;
-    st.medium = zone_ref ? (int) zone_ref->material_idx : -1;
-    st.zone = zone_ref ? (int) zone_ref->zone_idx : -1;
+    step_set_zone_fields(&st, zone_ref);
     st.system = OSH_COORD_UNIVERSE;
     st.prim_idx = pool->prim_idx[k];
     st.gen = pool->gen[k];
-    st.has_voxel = (zone_ref && zone_ref->has_hu) ? 1u : 0u;
 
     return osh_scoring_score_step(score_rt,
                                   osh_score_target_accumulators(target, score_rt),
@@ -160,13 +181,10 @@ static enum osh_status score_neutron_point_deposit(struct osh_scoring_runtime *s
     st.de = energy;
     st.rho = rho;
     st.wt = pool->wt[k];
-    st.voxel_idx = (zone_ref && zone_ref->has_hu) ? zone_ref->voxel_idx : 0u;
-    st.medium = zone_ref ? (int) zone_ref->material_idx : -1;
-    st.zone = zone_ref ? (int) zone_ref->zone_idx : -1;
+    step_set_zone_fields(&st, zone_ref);
     st.system = OSH_COORD_UNIVERSE;
     st.prim_idx = pool->prim_idx[k];
     st.gen = pool->gen[k];
-    st.has_voxel = (zone_ref && zone_ref->has_hu) ? 1u : 0u;
 
     return osh_scoring_score_point(score_rt,
                                    osh_score_target_accumulators(target, score_rt),
