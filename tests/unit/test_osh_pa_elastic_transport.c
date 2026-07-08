@@ -141,17 +141,20 @@ static void test_pa_elastic_depletes_narrow_column(void) {
     ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
     ASSERT_TRUE(osh_simulation_save(sim) == OSH_OK);
 
-    /* Entrance bin (z = 0..1 cm): essentially the full beam. */
+    /* Entrance bin (z = 0..1 cm): essentially the full beam.  Two-thirds range
+     * (z = 10..11 cm): pp elastic alone leaves ~0.985 of the beam in the column
+     * (the #275 bug); working p+A elastic with the calibrated ratio lands near
+     * 0.96.  Parse each bin once and print both so a statistical failure shows
+     * the measured values. */
     phi_entrance = read_bin_value(out_path, 0.5);
-    printf("pa_elastic: phi_entrance=%.4f phi_depth=%.4f\n", phi_entrance, read_bin_value(out_path, 10.5));
+    phi_depth = read_bin_value(out_path, 10.5);
+    printf("pa_elastic: phi_entrance=%.4f phi_depth=%.4f\n", phi_entrance, phi_depth);
+
     ASSERT_TRUE(phi_entrance > 0.97);
     ASSERT_TRUE(phi_entrance < 1.03);
 
-    /* Two-thirds range (z = 10..11 cm): pp elastic alone leaves ~0.985 of the
-     * beam in the column (the #275 bug); working p+A elastic with the
-     * calibrated ratio lands near 0.96.  The floor also trips if the elastic
-     * magnitude regresses to the black-disk scale (~0.87) or beyond. */
-    phi_depth = read_bin_value(out_path, 10.5);
+    /* The floor also trips if the elastic magnitude regresses to the black-disk
+     * scale (~0.87) or beyond. */
     ASSERT_TRUE(phi_depth < 0.972);
     ASSERT_TRUE(phi_depth > 0.90);
 
