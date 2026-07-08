@@ -16,6 +16,7 @@
  */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "apps/osh/osh_app_osh.h"

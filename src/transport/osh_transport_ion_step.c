@@ -220,10 +220,10 @@ static inline int _nuclear_event_elastic_scatters_primary(enum osh_nuclear_event
 /* Deposit @p energy [MeV] at the slot's current position as a zero-length point
  * (issue #179), attributed to @p species at generation @p gen.  Callers pass
  * gen = pool->gen[slot] for the slot particle's own residual (e.g. the
- * cutoff-stop deposit, #279) or gen[slot]+1 for a newly-created secondary
- * (e.g. a sub-threshold recoil fragment).  @p target is the worker-supplied
- * deposit target; NULL (or NULL fields) fall back to the shared master views
- * (issue #230). */
+ * cutoff-stop deposit, #279) or osh_generation_child(pool->gen[slot]) for a
+ * newly-created secondary (e.g. a sub-threshold recoil fragment).  @p target is
+ * the worker-supplied deposit target; NULL (or NULL fields) fall back to the
+ * shared master views (issue #230). */
 static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
                               struct osh_score_target const *target,
                               struct osh_particle_pool const *pool,
