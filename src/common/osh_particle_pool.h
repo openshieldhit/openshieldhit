@@ -163,6 +163,20 @@ void osh_particle_pool_free(struct osh_particle_pool *pool);
 /* ---- Operations ---------------------------------------------------------- */
 
 /**
+ * @brief Remove dead entries and count surviving generation-zero particles.
+ *
+ * @details
+ * Same compaction semantics as @ref osh_particle_pool_compact.  The return value
+ * is the number of live entries with gen == 0 after compaction, computed during
+ * the compaction scan so callers do not need a second pool pass.
+ *
+ * @param[in,out] pool  Pool to compact.
+ *
+ * @returns Number of surviving generation-zero entries, or 0 for NULL/empty.
+ */
+size_t osh_particle_pool_compact_count_gen0(struct osh_particle_pool *pool);
+
+/**
  * @brief Remove dead entries from the pool, compacting live entries to [0, n).
  *
  * @details

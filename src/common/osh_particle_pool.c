@@ -149,18 +149,23 @@ void osh_particle_pool_free(struct osh_particle_pool *pool) {
     memset(pool, 0, sizeof(*pool));
 }
 
-void osh_particle_pool_compact(struct osh_particle_pool *pool) {
+size_t osh_particle_pool_compact_count_gen0(struct osh_particle_pool *pool) {
     size_t dst;
+    size_t gen0_live;
     size_t src;
 
     if (!pool || pool->n == 0u) {
-        return;
+        return 0u;
     }
 
     dst = 0u;
+    gen0_live = 0u;
     for (src = 0u; src < pool->n; ++src) {
         if (pool->e[src] <= 0.0) {
             continue; /* dead — skip */
+        }
+        if (pool->gen[src] == 0u) {
+            ++gen0_live;
         }
         if (dst != src) {
             pool->x[dst] = pool->x[src];
@@ -179,4 +184,9 @@ void osh_particle_pool_compact(struct osh_particle_pool *pool) {
         ++dst;
     }
     pool->n = dst;
+    return gen0_live;
+}
+
+void osh_particle_pool_compact(struct osh_particle_pool *pool) {
+    (void) osh_particle_pool_compact_count_gen0(pool);
 }
