@@ -49,7 +49,48 @@ static void test_unknown_particle_drop_is_counted(void) {
     osh_particle_pool_free(&pool);
 }
 
+static void test_projectile_table_error_is_propagated(void) {
+    struct osh_particle_pool pool;
+    struct osh_transport_context transport_ctx;
+    struct osh_material_runtime material_rt;
+    struct osh_step_segment segment;
+    struct particle proton;
+    unsigned int projectile_z[1];
+    enum osh_status rc;
+
+    memset(&transport_ctx, 0, sizeof(transport_ctx));
+    memset(&material_rt, 0, sizeof(material_rt));
+    memset(&segment, 0, sizeof(segment));
+    memset(&proton, 0, sizeof(proton));
+
+    projectile_z[0] = 2u; /* inconsistent table: column 0 should be Z=1 */
+    material_rt.projectile_z = projectile_z;
+    material_rt.nprojectiles = 1u;
+
+    proton.mass = 938.272;
+    proton.pdg = 2212;
+    proton.charge = 1;
+    proton.z = 1u;
+    proton.a = 1u;
+
+    ASSERT_TRUE(osh_particle_pool_init(&pool, 1u) == OSH_OK);
+    pool.n = 1u;
+    pool.e[0] = 10.0;
+    pool.ux[0] = 1.0;
+    pool.species[0] = &proton;
+
+    rc = osh_transport_ion_step(
+        &pool, 0u, NULL, &segment, 1u, NULL, &transport_ctx, NULL, &material_rt, NULL, NULL, NULL);
+
+    ASSERT_TRUE(rc == OSH_ESTATE);
+    ASSERT_TRUE(pool.e[0] == 0.0);
+    ASSERT_TRUE(pool.n_unknown_dropped == 0u);
+
+    osh_particle_pool_free(&pool);
+}
+
 int main(void) {
     test_unknown_particle_drop_is_counted();
+    test_projectile_table_error_is_propagated();
     return 0;
 }

@@ -493,13 +493,14 @@ static double sum_last_column(char const *path) {
  * cylinders spanning z ∈ [0, 20], so the same single-quantity Energy mesh reads
  * back the deposited energy for each.
  */
-static void run_checkpoint_case(char const *case_name,
-                                unsigned long long nstat,
-                                unsigned long long every_primaries,
-                                unsigned long long pool_capacity,
-                                unsigned long long *completed_out,
-                                double *energy_sum_out,
-                                struct osh_simulation_profile *profile_out) {
+static void run_checkpoint_case_with_ncut(char const *case_name,
+                                          unsigned long long nstat,
+                                          unsigned long long every_primaries,
+                                          unsigned long long pool_capacity,
+                                          double ncut_override,
+                                          unsigned long long *completed_out,
+                                          double *energy_sum_out,
+                                          struct osh_simulation_profile *profile_out) {
     char geo_path[512];
     char beam_path[512];
     char mat_path[512];
@@ -541,6 +542,9 @@ static void run_checkpoint_case(char const *case_name,
     ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
 
     beam->nstat = (size_t) nstat; /* set before create so pools size to it */
+    if (ncut_override >= 0.0) {
+        beam->ncut = (float) ncut_override;
+    }
 
     ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
     ASSERT_TRUE(osh_simulation_set_checkpoint_policy(sim, every_primaries) == OSH_OK);
@@ -569,6 +573,17 @@ static void run_checkpoint_case(char const *case_name,
     osh_scoring_workspace_free(scoring);
     remove(out_path);
     remove(scoring_path);
+}
+
+static void run_checkpoint_case(char const *case_name,
+                                unsigned long long nstat,
+                                unsigned long long every_primaries,
+                                unsigned long long pool_capacity,
+                                unsigned long long *completed_out,
+                                double *energy_sum_out,
+                                struct osh_simulation_profile *profile_out) {
+    run_checkpoint_case_with_ncut(
+        case_name, nstat, every_primaries, pool_capacity, -1.0, completed_out, energy_sum_out, profile_out);
 }
 
 /*
@@ -856,6 +871,46 @@ static void test_checkpoint_live_batches_drain_families_with_nuclear(void) {
 }
 
 /*
+ * Neutron cutoff residual accounting (issue #279 sibling): raising NEUTRLCUT
+ * above all produced neutron energies kills banked neutrons immediately.  Their
+ * remaining kinetic energy must be point-deposited into Energy/Dose rather than
+ * disappearing.  The default-cutoff run with the same seed proves the fixture
+ * produces neutrons; the raised-cutoff run should score strictly more Energy
+ * because those neutron kinetic energies are deposited at birth sites.
+ */
+static void test_neutron_cutoff_residual_is_deposited(void) {
+    unsigned long long completed_default = 0ull;
+    unsigned long long completed_cutoff = 0ull;
+    double energy_default = 0.0;
+    double energy_cutoff = 0.0;
+    struct osh_simulation_profile prof_default;
+    struct osh_simulation_profile prof_cutoff;
+
+    run_checkpoint_case_with_ncut("../reference/idd_water_200mev_nucre1",
+                                  200ull,
+                                  0ull,
+                                  0ull,
+                                  -1.0,
+                                  &completed_default,
+                                  &energy_default,
+                                  &prof_default);
+    run_checkpoint_case_with_ncut("../reference/idd_water_200mev_nucre1",
+                                  200ull,
+                                  0ull,
+                                  0ull,
+                                  1000.0,
+                                  &completed_cutoff,
+                                  &energy_cutoff,
+                                  &prof_cutoff);
+
+    ASSERT_TRUE(completed_default == 200ull);
+    ASSERT_TRUE(completed_cutoff == 200ull);
+    ASSERT_TRUE(prof_default.neutrons_banked > 0ull);
+    ASSERT_TRUE(prof_cutoff.neutrons_banked > 0ull);
+    ASSERT_TRUE(energy_cutoff > energy_default);
+}
+
+/*
  * Capacity/batch invariance with nuclear reactions ON (issue #213 regression
  * lock).  Scored energy for a fixed (seed, rndoffset) must not depend on:
  *   - the checkpoint batch size K (full / 64 / 1), nor
@@ -1038,6 +1093,7 @@ int main(void) {
     test_checkpoint_final_only_default_completes();
     test_checkpoint_live_batches_match_final_only();
     test_checkpoint_live_batches_drain_families_with_nuclear();
+    test_neutron_cutoff_residual_is_deposited();
     test_checkpoint_nuclear_invariant_across_batches_and_capacity();
     test_checkpoint_nuclear_overflow_is_counted_not_silent();
     test_checkpoint_profiling_accumulates_across_batches();

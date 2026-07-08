@@ -570,8 +570,12 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
 
     rc = find_projectile_index(material_rt, ctx->part, &ctx->projectile_idx);
     if (rc != OSH_OK) {
-        pool->n_unknown_dropped++;
-        pool->e[slot] = 0.0; /* unknown species: no transport table, energy lost */
+        pool->e[slot] = 0.0;
+        if (rc == OSH_ENOTSUP) {
+            pool->n_unknown_dropped++; /* unknown species: no transport table, energy lost */
+        } else {
+            ctx->done_rc = rc;
+        }
         ctx->done = 1;
         return;
     }
