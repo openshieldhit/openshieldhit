@@ -233,6 +233,9 @@ energy (above the cutoff) until it is **captured or escapes** the geometry,
 instead of being killed at an arbitrary low-energy floor.  A thermal neutron
 always makes spatial progress each step, so in any bounded geometry it terminates
 on capture or escape (no explicit step cap needed).
+If a user raises `NEUTRLCUT` above the default, a neutron killed by that cutoff
+inside positive-density material point-deposits its remaining kinetic energy,
+so the cutoff residual contributes to `Energy`, `Dose`, and `DoseGy`.
 
 Caveats of this first cut: the free-gas 0 K cross sections are used unchanged (no
 S(α,β) molecular binding below ~1 eV — the freeze avoids the worst artifact,

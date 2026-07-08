@@ -17,10 +17,9 @@ to `20 MeV`.
 
 The lower edge, `1e-9 MeV`, is `1 meV`.  This preserves the low-energy `1/v`
 behavior of important absorber channels such as `B-10(n,alpha)` and
-`Li-6(n,alpha)`.  The current neutron transport loop uses `1e-3 MeV`
-(`1 keV`) as the default cutoff when `NEUTRLCUT <= 0`, so the sub-keV table
-entries are present for future thermal-neutron transport work and for runs that
-lower the cutoff explicitly.
+`Li-6(n,alpha)`.  The current neutron transport loop uses this table floor as
+the default cutoff when `NEUTRLCUT <= 0`; neutrons that thermalise are clamped to
+`2.53e-8 MeV` (`25.3 meV`) and therefore remain above the default cutoff.
 
 The upper edge, `20 MeV`, follows the JEFF-4.0 evaluation range used here.  For
 nuclides outside the table, `osh_neutron_xsec_lookup()` falls back to the

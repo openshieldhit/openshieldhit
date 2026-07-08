@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "common/osh_generation.h"
 #include "openshieldhit/status.h"
 
 #ifdef __cplusplus
@@ -42,7 +43,7 @@ struct osh_neutron_pool {
 
     /* Per-history metadata */
     uint64_t *prim_idx;  /**< beam-primary ancestor index              */
-    uint8_t *gen;        /**< generation; saturates at 255             */
+    uint8_t *gen;        /**< generation; saturates at OSH_GENERATION_MAX */
     struct osh_rng *rng; /**< per-slot RNG state (one stream/neutron)  */
 
     /* Bookkeeping */

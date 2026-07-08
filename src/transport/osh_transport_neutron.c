@@ -17,6 +17,7 @@
 #include "physics/neutron/osh_neutron_xsec.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "random/osh_rng.h"
+#include "scoring/runtime/osh_scoring_point.h"
 #include "scoring/runtime/osh_scoring_step.h"
 #include "transport/osh_neutron_pool.h"
 #include "transport/osh_transport.h"
@@ -82,6 +83,30 @@ static void advance_to_boundary(struct osh_neutron_pool *pool, size_t k, double 
         &pool->x[k], &pool->y[k], &pool->z[k], pool->ux[k], pool->uy[k], pool->uz[k], dist);
 }
 
+/*
+ * Fill the medium/zone/voxel_idx/has_voxel fields of @p st from @p zone_ref,
+ * with the fallback (-1 medium/zone, 0 voxel_idx/has_voxel) used whenever
+ * zone_ref is NULL or carries no voxel.  Shared by score_neutron_step() and
+ * score_neutron_point_deposit() so the two step builders cannot drift apart.
+ */
+static void step_set_zone_fields(struct step *st, struct osh_zone_ref const *zone_ref) {
+    if (zone_ref) {
+        st->medium = (int) zone_ref->material_idx;
+        st->zone = (int) zone_ref->zone_idx;
+    } else {
+        st->medium = -1;
+        st->zone = -1;
+    }
+
+    if (zone_ref && zone_ref->has_hu) {
+        st->voxel_idx = zone_ref->voxel_idx;
+        st->has_voxel = 1u;
+    } else {
+        st->voxel_idx = 0u;
+        st->has_voxel = 0u;
+    }
+}
+
 static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
                                           struct osh_score_target const *target,
                                           struct osh_neutron_pool const *pool,
@@ -113,19 +138,59 @@ static enum osh_status score_neutron_step(struct osh_scoring_runtime *score_rt,
     st.de = 0.0;
     st.rho = rho;
     st.wt = pool->wt[k];
-    st.voxel_idx = (zone_ref && zone_ref->has_hu) ? zone_ref->voxel_idx : 0u;
-    st.medium = zone_ref ? (int) zone_ref->material_idx : -1;
-    st.zone = zone_ref ? (int) zone_ref->zone_idx : -1;
+    step_set_zone_fields(&st, zone_ref);
     st.system = OSH_COORD_UNIVERSE;
     st.prim_idx = pool->prim_idx[k];
     st.gen = pool->gen[k];
-    st.has_voxel = (zone_ref && zone_ref->has_hu) ? 1u : 0u;
 
     return osh_scoring_score_step(score_rt,
                                   osh_score_target_accumulators(target, score_rt),
                                   osh_score_target_scratch(target, score_rt),
                                   &k_neutron_species,
                                   &st);
+}
+
+static enum osh_status score_neutron_point_deposit(struct osh_scoring_runtime *score_rt,
+                                                   struct osh_score_target const *target,
+                                                   struct osh_neutron_pool const *pool,
+                                                   size_t k,
+                                                   struct osh_zone_ref const *zone_ref,
+                                                   double rho,
+                                                   double energy) {
+    struct step st;
+
+    if (!score_rt || !(energy > 0.0)) {
+        return OSH_OK;
+    }
+
+    st.p[0] = pool->x[k];
+    st.p[1] = pool->y[k];
+    st.p[2] = pool->z[k];
+    st.p[3] = energy;
+    st.q[0] = pool->x[k];
+    st.q[1] = pool->y[k];
+    st.q[2] = pool->z[k];
+    st.q[3] = energy;
+    st.v[0] = pool->ux[k];
+    st.v[1] = pool->uy[k];
+    st.v[2] = pool->uz[k];
+    st.w[0] = pool->ux[k];
+    st.w[1] = pool->uy[k];
+    st.w[2] = pool->uz[k];
+    st.ds = 0.0;
+    st.de = energy;
+    st.rho = rho;
+    st.wt = pool->wt[k];
+    step_set_zone_fields(&st, zone_ref);
+    st.system = OSH_COORD_UNIVERSE;
+    st.prim_idx = pool->prim_idx[k];
+    st.gen = pool->gen[k];
+
+    return osh_scoring_score_point(score_rt,
+                                   osh_score_target_accumulators(target, score_rt),
+                                   osh_score_target_scratch(target, score_rt),
+                                   &k_neutron_species,
+                                   &st);
 }
 
 /*
@@ -157,7 +222,7 @@ static void push_neutron_secondary(struct osh_neutron_pool *pool,
     pool->e[slot] = sec->energy;
     pool->wt[slot] = pool->wt[k];
     pool->prim_idx[slot] = pool->prim_idx[k];
-    pool->gen[slot] = (pool->gen[k] < 255u) ? (uint8_t) (pool->gen[k] + 1u) : 255u;
+    pool->gen[slot] = osh_generation_child(pool->gen[k]);
     osh_rng_split(&pool->rng[slot], &pool->rng[k], (uint64_t) ordinal);
 }
 
@@ -299,13 +364,6 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
             geom_rt, pool->x, pool->y, pool->z, pool->ux, pool->uy, pool->uz, zone_refs, n_wavefront, dist_batch);
 
         for (k = 0u; k < n_wavefront; ++k) {
-            /* -- energy cutoff --------------------------------------------- */
-            if (pool->e[k] <= e_cutoff_mev) {
-                pool->e[k] = 0.0;
-                n_cutoff++;
-                continue;
-            }
-
             /* -- escaped geometry ------------------------------------------ */
             if (zone_refs[k].zone_idx == OSH_ZONE_INDEX_INVALID) {
                 pool->e[k] = 0.0;
@@ -323,6 +381,20 @@ enum osh_status osh_transport_neutron_run(struct osh_transport_context *transpor
             }
 
             rho = (double) material_rt->rho[mat_idx];
+
+            /* -- energy cutoff --------------------------------------------- */
+            if (pool->e[k] <= e_cutoff_mev) {
+                if (rho > 0.0) {
+                    rc = score_neutron_point_deposit(score_rt, target, pool, k, &zone_refs[k], rho, pool->e[k]);
+                    if (rc != OSH_OK) {
+                        osh_neutron_xsec_free(&xsec);
+                        return rc;
+                    }
+                }
+                pool->e[k] = 0.0;
+                n_cutoff++;
+                continue;
+            }
 
             /* -- vacuum or zero-density material --------------------------- */
             if (rho <= 0.0) {

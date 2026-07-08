@@ -861,8 +861,9 @@ static int _parse_neutrfast(PARSE_HANDLER_ARGS) {
  * @details
  * Syntax: NEUTRLCUT \<e\>  [MeV]
  *
- * Neutrons at or below this threshold are killed; local energy deposits from
- * cutoff kills are not yet scored.  0.0 keeps the transport default.
+ * Neutrons at or below this threshold are killed; in positive-density material
+ * their remaining kinetic energy is point-deposited.  0.0 keeps the transport
+ * default.
  *
  * @param[in,out] beam  Writes beam->ncut.
  * @param[in]     oshf  Used for error diagnostics.

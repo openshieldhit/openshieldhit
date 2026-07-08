@@ -12,11 +12,11 @@ interactions in ion transport.  Those neutrons are banked in `struct
 osh_neutron_pool` and later drained by `osh_transport_neutron_run()`.
 
 The model currently transports neutrons down to the configured `NEUTRLCUT`
-cutoff, using `1e-3 MeV` (`1 keV`) when the input leaves `NEUTRLCUT` at `0.0`.
-The embedded cross-section tables already extend below that to `1e-9 MeV`
-(`1 meV`) for future thermal-neutron transport, but
-thermal-neutron physics is not modeled as a separate regime yet.
-Cross-section lookup uses the available neutron tables at the requested energy.
+cutoff, using the cross-section table floor `1e-9 MeV` (`1 meV`) when the input
+leaves `NEUTRLCUT` at `0.0`.  Elastic collisions that would down-scatter below
+room-temperature thermal energy are clamped to `2.53e-8 MeV` (`25.3 meV`), so
+default runs keep thermal neutrons alive until capture or escape.  Cross-section
+lookup uses the available neutron tables at the requested energy.
 
 ## Data Flow
 
@@ -62,17 +62,20 @@ and survives to the next wavefront pass.  Otherwise it is advanced to the
 interaction point and handed to the neutron reaction layer.
 
 Finite neutron transport steps are passed to the existing step-scoring path with
-zero local energy deposition, enabling neutron fluence maps.  Point-like local
-deposits from reactions remain separate from this and require point-deposit
-scoring.
+zero continuous energy deposition, enabling neutron fluence maps.  A neutron
+that is killed by the configured energy cutoff inside positive-density material
+point-deposits its remaining kinetic energy locally, so the cutoff residual is
+booked as `Energy` / `Dose` / `DoseGy`.  Other point-like local deposits from
+neutron reactions remain separate from this and require additional wiring.
 
 ## Boundary And Material Cases
 
 Per neutron slot, the current loop handles:
 
-- energy at or below the effective neutron cutoff: kill the neutron
 - outside geometry: kill the neutron
 - blackhole material: kill the neutron
+- energy at or below the effective neutron cutoff in positive-density material:
+  point-deposit the remaining kinetic energy, then kill the neutron
 - vacuum or zero-density material: advance to the next boundary
 - zero macroscopic cross section: advance to the next boundary
 - finite macroscopic cross section: sample a free path and possibly interact
@@ -99,7 +102,7 @@ are pushed back into the neutron pool and processed in a later wavefront pass.
 
 These are intentional boundaries of the current implementation:
 
-- local neutron energy deposits are marked but not yet scored
+- local neutron-reaction energy deposits are marked but not yet scored
 - charged secondaries from neutron reactions ((n,p), (n,α)) are not yet fed
   back into the ion transport family; their energy is deposited locally instead
 - thermal-neutron models are not implemented separately (separate issue #178)
@@ -110,8 +113,8 @@ These are intentional boundaries of the current implementation:
 The Tier-1 neutron cross sections are condensed from JEFF-4.0 PENDF0K at 0 K.
 They use a 31-point irregular energy grid, giving 30 interpolation intervals,
 from `1e-9 MeV` (`1 meV`) to `20 MeV`.  The lower part of the grid keeps
-thermal and epithermal absorber behavior available even though the current
-transport loop cuts off at `1 keV`.
+thermal and epithermal absorber behavior available to the current default
+transport loop.
 
 See [Neutron cross-section tables](neutron-cross-sections.md) for the stored
 channels, the full nuclide list, and the Tier-2 fallback rule.

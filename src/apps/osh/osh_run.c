@@ -1202,7 +1202,7 @@ static enum osh_status run_write_profile_json(char const *path,
             "\"counters\":{\"steps\":%llu,\"steps_per_primary\":%.9g,"
             "\"iterations\":%llu,\"nuclear_events\":%llu,\"secondaries\":%llu,"
             "\"neutrons_banked\":%llu,\"fragments_banked\":%llu,"
-            "\"ion_secondaries_dropped\":%llu}}\n",
+            "\"ion_secondaries_dropped\":%llu,\"unknown_particles_dropped\":%llu}}\n",
             osh_version_string(),
             run_compiler_string(),
             nstat,
@@ -1227,7 +1227,8 @@ static enum osh_status run_write_profile_json(char const *path,
             prof->secondaries,
             prof->neutrons_banked,
             prof->fragments_banked,
-            prof->ion_secondaries_dropped);
+            prof->ion_secondaries_dropped,
+            prof->unknown_particles_dropped);
 
     if (fclose(fp) != 0) {
         OSH_DIAG_ERRORF(diag, "profile: failed to finalize '%s'", path);
