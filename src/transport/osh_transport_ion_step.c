@@ -101,6 +101,7 @@ struct ion_step_ctx {
     char straggling_mode;    /* enum osh_transport_straggling_mode selected for this run */
     char is_vacuum;          /* 1 if vacuum zone or ρ ≤ 0            */
     char done;               /* 1 if step already handled (kill/nudge/error) */
+    char stopped_at_cutoff;  /* 1 if killed at the energy cutoff (deposit e0 locally, #279) */
     enum osh_status done_rc; /* return value when done == 1           */
 
     /* --- Set by ion_step_length() ---------------------------------------- */
@@ -217,10 +218,12 @@ static inline int _nuclear_event_elastic_scatters_primary(enum osh_nuclear_event
 }
 
 /* Deposit @p energy [MeV] at the slot's current position as a zero-length point
- * (issue #179), attributed to @p species and to a first-generation secondary of
- * the slot's history.  Used for the sub-threshold recoil deposit.  @p target is
- * the worker-supplied deposit target; NULL (or NULL fields) fall back to the
- * shared master views (issue #230). */
+ * (issue #179), attributed to @p species at generation @p gen.  Callers pass
+ * gen = pool->gen[slot] for the slot particle's own residual (e.g. the
+ * cutoff-stop deposit, #279) or gen[slot]+1 for a newly-created secondary
+ * (e.g. a sub-threshold recoil fragment).  @p target is the worker-supplied
+ * deposit target; NULL (or NULL fields) fall back to the shared master views
+ * (issue #230). */
 static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
                               struct osh_score_target const *target,
                               struct osh_particle_pool const *pool,
@@ -228,6 +231,7 @@ static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
                               struct ion_step_ctx const *ctx,
                               struct particle const *species,
                               double energy,
+                              uint8_t gen,
                               double const dir[3]) {
     struct step pt;
 
@@ -258,7 +262,7 @@ static void ion_point_deposit(struct osh_scoring_runtime *score_rt,
     pt.zone = (int) ctx->zone_idx;
     pt.system = OSH_COORD_UNIVERSE;
     pt.prim_idx = pool->prim_idx[slot];
-    pt.gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+    pt.gen = gen;
     pt.has_voxel = ctx->has_voxel;
     osh_scoring_score_point(score_rt,
                             osh_score_target_accumulators(target, score_rt),
@@ -292,8 +296,20 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
 
     /* Phase 1 — identify particle, load material, handle early exits */
     ion_step_setup(&ctx, pool, slot, zone_ref, step_segments, n_step_segments, geom_rt, transport_ctx, material_rt);
-    if (ctx.done)
+    if (ctx.done) {
+        if (ctx.stopped_at_cutoff) {
+            /* Deposit the stopping ion's residual kinetic energy at its current
+             * position instead of deleting it (issue #279), attributed to the
+             * ion itself (its own generation), matching SH12A/FLUKA cutoff-kill
+             * behaviour.  Zero-length: no track-length contribution. */
+            double stop_dir[3];
+            stop_dir[0] = pool->ux[slot];
+            stop_dir[1] = pool->uy[slot];
+            stop_dir[2] = pool->uz[slot];
+            ion_point_deposit(score_rt, target, pool, slot, &ctx, ctx.part, ctx.e0, pool->gen[slot], stop_dir);
+        }
         return ctx.done_rc;
+    }
 
     if (ctx.is_vacuum) {
         /* Phase 2a — vacuum: straight shot, no energy loss or scatter */
@@ -443,6 +459,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             double pmag;
             double ke;
             double dir[3];
+            uint8_t child_gen; /* fragment is a new secondary: parent gen + 1, clamped */
 
             psq = (frag->p[0] * frag->p[0]) + (frag->p[1] * frag->p[1]) + (frag->p[2] * frag->p[2]);
             pmag = sqrt(psq);
@@ -471,10 +488,11 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
             if (!(ke > 0.0)) {
                 continue;
             }
+            child_gen = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
 
             if (ke / (double) frag->a < OSH_TRANSPORT_ION_EMIN_MEV_PER_U) {
                 /* Sub-threshold: no transportable range — point deposit here. */
-                ion_point_deposit(score_rt, target, pool, slot, &ctx, species, ke, dir);
+                ion_point_deposit(score_rt, target, pool, slot, &ctx, species, ke, child_gen, dir);
             } else {
                 /* Above threshold: inject as an ion for transport next pass. */
                 size_t s;
@@ -492,7 +510,7 @@ enum osh_status osh_transport_ion_step(struct osh_particle_pool *pool,
                 pool->e[s] = ke;
                 pool->wt[s] = pool->wt[slot];
                 pool->prim_idx[s] = pool->prim_idx[slot];
-                pool->gen[s] = (pool->gen[slot] < 255u) ? (uint8_t) (pool->gen[slot] + 1u) : 255u;
+                pool->gen[s] = child_gen;
                 pool->species[s] = species;
                 /* Distinct child stream from the secondaries (which used ordinals
                  * [0, n_secondaries)); offset the fragment ordinals past them. */
@@ -531,6 +549,7 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     params = transport_ctx ? &transport_ctx->params : NULL;
     ctx->done = 0;
     ctx->done_rc = OSH_OK;
+    ctx->stopped_at_cutoff = 0;
     ctx->nuclear_event.kind = OSH_NUCLEAR_EVENT_NONE;
     ctx->nuclear_event.n_secondaries = 0u;
     ctx->nuclear_event.n_fragments = 0u;
@@ -555,11 +574,6 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     }
 
     ctx->cutoff = cutoff_total_energy(params, material_rt, ctx->part);
-    if (ctx->e0 <= ctx->cutoff) {
-        pool->e[slot] = 0.0;
-        ctx->done = 1;
-        return;
-    }
 
     if (!zone_ref || zone_ref->zone_idx == OSH_GEMCA_ZONE_INDEX_INVALID) {
         pool->e[slot] = 0.0; /* escaped geometry */
@@ -579,6 +593,20 @@ static void ion_step_setup(struct ion_step_ctx *ctx,
     if (zone_ref->material_idx >= material_rt->nmaterials) {
         ctx->done = 1;
         ctx->done_rc = OSH_ESTATE;
+        return;
+    }
+
+    /* Ion at or below the transport cutoff stops here.  Flag its residual
+     * kinetic energy (ctx->e0) for a local point deposit by the caller
+     * (issue #279) instead of deleting it.  Ordered after the escaped-geometry
+     * and blackhole kills so a particle stopping in the void or a graveyard
+     * zone stays un-scored, and after the material-index validity check so the
+     * deposit always targets a real material (ion_point_deposit reads
+     * ctx->zone_material_idx and ctx->rho, both set just above). */
+    if (ctx->e0 <= ctx->cutoff) {
+        pool->e[slot] = 0.0;
+        ctx->stopped_at_cutoff = 1;
+        ctx->done = 1;
         return;
     }
 
