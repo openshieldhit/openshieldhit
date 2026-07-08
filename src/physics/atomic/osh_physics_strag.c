@@ -4,6 +4,14 @@
 
 #include "openshieldhit/const.h"
 
+static double emax_from_gamma_beta2(double gamma, double mass_mev, double beta2) {
+    double ratio; /* electron-to-projectile mass ratio mₑ/M       */
+
+    ratio = OSH_ELECTRON_MASS_MEV / mass_mev;
+    /* E_max = 2·mₑc²·β²γ² / (1 + 2γ·mₑ/M + (mₑ/M)²) */
+    return 2.0 * OSH_ELECTRON_MASS_MEV * beta2 * gamma * gamma / (1.0 + 2.0 * gamma * ratio + ratio * ratio);
+}
+
 double osh_physics_strag_xi(double z_eff, double z_over_a, double thickness_gcm2, double beta2) {
     if (z_eff <= 0.0 || z_over_a <= 0.0 || thickness_gcm2 <= 0.0 || beta2 <= 0.0) {
         return 0.0;
@@ -21,20 +29,17 @@ double osh_physics_strag_emax(double t_kin_mev, double mass_mev) {
     }
     gamma = 1.0 + t_kin_mev / mass_mev;
     beta2 = 1.0 - 1.0 / (gamma * gamma);
-    return osh_physics_strag_emax_beta2(t_kin_mev, mass_mev, beta2);
+    return emax_from_gamma_beta2(gamma, mass_mev, beta2);
 }
 
 double osh_physics_strag_emax_beta2(double t_kin_mev, double mass_mev, double beta2) {
     double gamma; /* Lorentz factor γ = 1 + T/M                    */
-    double ratio; /* electron-to-projectile mass ratio mₑ/M       */
 
     if (t_kin_mev <= 0.0 || mass_mev <= 0.0 || beta2 <= 0.0 || beta2 >= 1.0) {
         return 0.0;
     }
     gamma = 1.0 + t_kin_mev / mass_mev;
-    ratio = OSH_ELECTRON_MASS_MEV / mass_mev;
-    /* E_max = 2·mₑc²·β²γ² / (1 + 2γ·mₑ/M + (mₑ/M)²) */
-    return 2.0 * OSH_ELECTRON_MASS_MEV * beta2 * gamma * gamma / (1.0 + 2.0 * gamma * ratio + ratio * ratio);
+    return emax_from_gamma_beta2(gamma, mass_mev, beta2);
 }
 
 double osh_physics_strag_kappa(double xi, double e_max) {
