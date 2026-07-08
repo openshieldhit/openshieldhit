@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
             if (cos_med < -1.0) {
                 cos_med = -1.0;
             }
-            theta_med = acos(cos_med) * 180.0 / M_PI;
+            theta_med = acos(cos_med) / OSH_M_PI_180;
         }
 
         printf("%10.4f %12.4f %12.4f %10.4f\n",
