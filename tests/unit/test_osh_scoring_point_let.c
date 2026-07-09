@@ -22,6 +22,8 @@
 #include "particle/osh_particle_const.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_defs.h"
+#include "scoring/runtime/osh_scoring_estimator_internal.h"
+#include "scoring/runtime/osh_scoring_geometry_runtime.h"
 #include "scoring/runtime/osh_scoring_point.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_runtime.h"
@@ -79,6 +81,26 @@ static char const *const DETECT_TEXT = "Geometry Mesh\n"
                                        "    Quantity DLET\n"
                                        "    Quantity TLET\n";
 
+/* Same geometry, but the DLET/TLET pages carry a Protons (Z=1, A=1) filter, so a
+ * heavier recoil is rejected inside the handler's page loop before it books a
+ * LET sample. */
+static char const *const DETECT_FILTERED = "Geometry Mesh\n"
+                                           "    Name G\n"
+                                           "    X -0.5 0.5 1\n"
+                                           "    Y -0.5 0.5 1\n"
+                                           "    Z  0.0 3.0 3\n"
+                                           "\n"
+                                           "Filter\n"
+                                           "    Name Protons\n"
+                                           "    Z = 1\n"
+                                           "    A = 1\n"
+                                           "\n"
+                                           "Output\n"
+                                           "    Filename out.bdo\n"
+                                           "    Geo G\n"
+                                           "    Quantity DLET Protons\n"
+                                           "    Quantity TLET Protons\n";
+
 /* Build a flat SP table: two projectiles (Z=2 alpha, Z=6 carbon), one material,
  * two energy grid points holding the same mass stopping power per projectile so the
  * midpoint lookup returns it exactly regardless of the birth energy.  rho is 1
@@ -120,7 +142,8 @@ static void init_two_proj_tables(struct osh_material_runtime *mat_rt,
     mat_rt->mass_stopping_power = sp_values;
 }
 
-/* Fill a point-deposit step at Z-bin 1 (Z in [1,2)) for species with mass number a. */
+/* Fill a point deposit at Z-bin 1 (Z in [1,2)): birth energy `energy` [MeV] and the
+ * whole energy released locally `de` [MeV], with zero track length. */
 static void point_step(struct step *st, double energy, double de) {
     memset(st, 0, sizeof(*st));
     st->p[2] = 1.5;
@@ -353,10 +376,221 @@ static void test_point_species_not_in_table(void) {
     remove(path);
 }
 
+/* A neutral point deposit (a de-excitation gamma) reaches the DLET/TLET point path
+ * but the z == 0 guard rejects it: LET has no meaning for an uncharged deposit. */
+static void test_point_let_neutral_skipped(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle gamma;
+    struct step st;
+    struct osh_scoring_page_runtime *dlet_page;
+    struct osh_scoring_page_runtime *tlet_page;
+    unsigned int proj_z[2];
+    unsigned int proj_a[2];
+    double proj_mass[2];
+    float rho_arr[1];
+    float sp_values[4];
+    struct osh_material_runtime mat_rt;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), DETECT_TEXT);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    init_two_proj_tables(&mat_rt, proj_z, proj_a, proj_mass, rho_arr, sp_values, 50.0f, 400.0f);
+    rt.mat_tables = &mat_rt;
+
+    memset(&gamma, 0, sizeof(gamma));
+    gamma.charge = 0;
+    gamma.z = 0u;
+    gamma.a = 0u;
+
+    point_step(&st, 40.0, 4.0);
+    rc = osh_scoring_score_point(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &gamma, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    dlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DLET);
+    tlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TLET);
+    ASSERT_TRUE(dlet_page != NULL && tlet_page != NULL);
+    assert_near(dlet_page->acc.data2[1], 0.0);
+    assert_near(tlet_page->acc.data2[1], 0.0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* A recoil rejected by a page's particle filter books no LET sample even though it
+ * has a valid SP-table column: the skip happens inside the handler page loop. */
+static void test_point_let_filtered_out(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle alpha;
+    struct step st;
+    struct osh_scoring_page_runtime *dlet_page;
+    struct osh_scoring_page_runtime *tlet_page;
+    unsigned int proj_z[2];
+    unsigned int proj_a[2];
+    double proj_mass[2];
+    float rho_arr[1];
+    float sp_values[4];
+    struct osh_material_runtime mat_rt;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), DETECT_FILTERED);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    init_two_proj_tables(&mat_rt, proj_z, proj_a, proj_mass, rho_arr, sp_values, 50.0f, 400.0f);
+    rt.mat_tables = &mat_rt;
+
+    /* An alpha (Z=2) is in the SP table but fails the Protons (Z=1) filter. */
+    memset(&alpha, 0, sizeof(alpha));
+    alpha.charge = 2;
+    alpha.z = 2u;
+    alpha.a = 4u;
+    alpha.mass = proj_mass[0];
+
+    point_step(&st, 40.0, 4.0);
+    rc = osh_scoring_score_point(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &alpha, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    dlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DLET);
+    tlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TLET);
+    ASSERT_TRUE(dlet_page != NULL && tlet_page != NULL);
+    assert_near(dlet_page->acc.data2[1], 0.0);
+    assert_near(tlet_page->acc.data2[1], 0.0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* A recoil present in the SP table but with zero stopping power there has no
+ * representable LET (let_point == 0), so it is skipped — the TLET path in
+ * particular never reaches the de/LET divide. */
+static void test_point_let_zero_sp_skipped(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle alpha;
+    struct step st;
+    struct osh_scoring_page_runtime *dlet_page;
+    struct osh_scoring_page_runtime *tlet_page;
+    unsigned int proj_z[2];
+    unsigned int proj_a[2];
+    double proj_mass[2];
+    float rho_arr[1];
+    float sp_values[4];
+    struct osh_material_runtime mat_rt;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), DETECT_TEXT);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    /* Alpha column present (have_proj true) but its stopping power is zero. */
+    init_two_proj_tables(&mat_rt, proj_z, proj_a, proj_mass, rho_arr, sp_values, 0.0f, 400.0f);
+    rt.mat_tables = &mat_rt;
+
+    memset(&alpha, 0, sizeof(alpha));
+    alpha.charge = 2;
+    alpha.z = 2u;
+    alpha.a = 4u;
+    alpha.mass = proj_mass[0];
+
+    point_step(&st, 40.0, 4.0);
+    rc = osh_scoring_score_point(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &alpha, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    dlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DLET);
+    tlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TLET);
+    ASSERT_TRUE(dlet_page != NULL && tlet_page != NULL);
+    assert_near(dlet_page->acc.data2[1], 0.0);
+    assert_near(tlet_page->acc.data2[1], 0.0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* An out-of-range spatial bin trips the defensive bound check.  The public locator
+ * in osh_scoring_score_point() never produces such an index, so the handlers are
+ * called directly with spatial_idx == diff_stride (one past the last bin). */
+static void test_point_let_out_of_range_bin(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle alpha;
+    struct step st;
+    struct osh_scoring_page_runtime *dlet_page;
+    struct osh_scoring_page_runtime *tlet_page;
+    struct osh_scoring_geometry_score_group gd;
+    struct osh_scoring_geometry_score_group gt;
+    struct osh_scoring_accumulator *acc;
+    unsigned int proj_z[2];
+    unsigned int proj_a[2];
+    double proj_mass[2];
+    float rho_arr[1];
+    float sp_values[4];
+    struct osh_material_runtime mat_rt;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), DETECT_TEXT);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    init_two_proj_tables(&mat_rt, proj_z, proj_a, proj_mass, rho_arr, sp_values, 50.0f, 400.0f);
+    rt.mat_tables = &mat_rt;
+
+    memset(&alpha, 0, sizeof(alpha));
+    alpha.charge = 2;
+    alpha.z = 2u;
+    alpha.a = 4u;
+    alpha.mass = proj_mass[0];
+    point_step(&st, 40.0, 4.0);
+
+    dlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DLET);
+    tlet_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TLET);
+    ASSERT_TRUE(dlet_page != NULL && tlet_page != NULL);
+
+    acc = osh_scoring_runtime_master_accumulators(&rt);
+    gd.first_page = (size_t) (dlet_page - rt.pages);
+    gd.npages = 1u;
+    gd.score_kind = OSH_SCORING_SCORE_DLET;
+    gt.first_page = (size_t) (tlet_page - rt.pages);
+    gt.npages = 1u;
+    gt.score_kind = OSH_SCORING_SCORE_TLET;
+
+    ASSERT_TRUE(osh_scoring_estimator_point_dlet(&rt, acc, &gd, dlet_page->diff_stride, &alpha, &st) == OSH_ESTATE);
+    ASSERT_TRUE(osh_scoring_estimator_point_tlet(&rt, acc, &gt, tlet_page->diff_stride, &alpha, &st) == OSH_ESTATE);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 int main(void) {
     test_point_single_recoil_let();
     test_point_mixed_recoils_dlet_vs_tlet();
     test_point_species_not_in_table();
+    test_point_let_neutral_skipped();
+    test_point_let_filtered_out();
+    test_point_let_zero_sp_skipped();
+    test_point_let_out_of_range_bin();
     printf("All osh_scoring_point_let tests passed.\n");
     return 0;
 }
