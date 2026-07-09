@@ -381,13 +381,15 @@ enum osh_status osh_path_ensure_dir(char const *path) {
 }
 
 /**
- * @brief Remove @p path and the non-directory entries directly inside it.
+ * @brief Remove @p path and the regular files directly inside it.
  *
  * @details
  * Counterpart to osh_path_ensure_dir(): walks the directory once via
- * osh_dir_foreach_file(), removing each file, then removes the now-empty
- * directory itself. A missing @p path is treated as success so callers can
- * use it unconditionally in test teardown.
+ * osh_dir_foreach_file() (which only visits regular files, not
+ * subdirectories), removing each one, then removes the now-empty directory
+ * itself. A missing @p path is treated as success so callers can use it
+ * unconditionally in test teardown; any other stat() failure (e.g. a
+ * permission error) is reported as OSH_EIO rather than silently ignored.
  *
  * @param[in] path  Directory to remove.
  *
@@ -402,7 +404,7 @@ enum osh_status osh_path_remove_dir(char const *path) {
     }
 
     if (stat(path, &st) != 0) {
-        return OSH_OK; /* already gone */
+        return (errno == ENOENT) ? OSH_OK : OSH_EIO;
     }
     if (!_mode_is_dir(st.st_mode)) {
         return OSH_EIO;
