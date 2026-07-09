@@ -14,7 +14,7 @@
 | **Commit audited** | [`e3c619a`][e3c619a] on `main` (2026-07-05) |
 | **Source** | [PR #248][#248] |
 | **Scope** | Test infra · transport hot path & EM physics · scoring · nuclear/neutron transport · RNG & parallel readiness · GEMCA geometry · parsers/IO · architecture |
-| **Follow-up** | 11 suggested issues (4 filed — [#255][#255], fixed by [#257][#257]; [#267][#267], fixed by [`a0f60a1`][a0f60a1]; [#279][#279], fixed by [#285][#285]; [#299][#299], fixed by [#301]) — see [§8](#sec-8) |
+| **Follow-up** | 11 suggested issues (5 filed — [#255][#255], fixed by [#257][#257]; [#267][#267], fixed by [`a0f60a1`][a0f60a1]; [#279][#279], fixed by [#285][#285]; [#280][#280], fixed by [#287][#287]; [#299][#299], fixed by [#301]) — see [§8](#sec-8) |
 
 
 Deep audit of `main` (e3c619a) prompted by PR [#239][#239] (sanitizer wiring) and issues
@@ -220,6 +220,13 @@ is not: `R ∝ A/z²`):
   `osh_transport_ion_step.c:1258` is taken.
 
 ### P-3 (medium, high) Bohr Gaussian straggling omits the relativistic variance factor — σ ~11% low at 200 MeV; discontinuity at the STRAGG 2 κ=10 dispatch {: #p-3 }
+
+!!! success "Resolved"
+    Filed as [#280][#280] and fixed by [#287][#287].  `osh_physics_strag_sigma()`
+    now takes `beta2` and applies the `γ²(1−β²/2)` relativistic correction to
+    the Bohr variance, and both call sites in `osh_transport_ion_step.c`
+    (STRAGG 1 and the STRAGG 2 Gaussian branch) pass `beta2` through, so the
+    κ=10 dispatch no longer has a variance discontinuity.
 
 `osh_physics_strag_sigma()` (`osh_physics_strag_gauss.c:25-37`) implements the
 **classical** Bohr variance `σ² = 0.1569·z_eff²·(Z/A)·d`, with no β
@@ -937,7 +944,7 @@ case dir which fails at *someone else's* `ctest`).
 | [P-2](#p-2) | Isotope conflation: deuteron/triton/³He use wrong range table (×2/×3/×¾) and wrong rest mass — filed as [#267][#267], fixed by [`a0f60a1`][a0f60a1] | **high** (resolved) | `osh_transport_ion_step.c:1258`, `osh_material_compile.c:698-716` |
 | [P-1](#p-1) | Residual energy deleted at cutoff kill (scales with TCUT0) — filed as [#279][#279], fixed by [#285][#285] | **high** (resolved) | `osh_transport_ion_step.c:539-543` |
 | [S-1](#s-1) | `st->wt` ignored by every scorer — latent for MCPL ([#41][#41])/VR | **high (latent)** | `src/scoring/runtime/*` |
-| [P-3](#p-3) | Bohr straggling missing relativistic factor; κ-dispatch variance discontinuity | medium | `osh_physics_strag_gauss.c:25-37` |
+| [P-3](#p-3) | Bohr straggling missing relativistic factor; κ-dispatch variance discontinuity — filed as [#280][#280], fixed by [#287][#287] | medium (resolved) | `osh_physics_strag_gauss.c:25-37` |
 | [P-4](#p-4) | Nuclear vertex at step endpoint (even past boundary nudge) | medium | `osh_transport_ion_step.c:307-484` |
 | [S-2](#s-2) | LET/spectra midpoint energy uses `q[3]=0` on nuclear-kill steps | medium | `osh_scoring_step.c:441` vs `osh_transport_ion_step.c:1092` |
 | [S-3](#s-3) | CT dose uses step-start density for all crossings (known TODO, confirmed) | medium | `osh_scoring_step.c:838-841` |
@@ -965,7 +972,7 @@ PR [#239][#239] validated and worth merging as-is ([T-4](#t-4)).
 4. Isotope-aware range/mass in transport (A-rescale within Z column + `part->mass` kinematics) ([P-2](#p-2)) — filed as [#267][#267], fixed by [`a0f60a1`][a0f60a1].
 5. Deposit residual energy at all cutoff/species kills ([P-1](#p-1), and neutron cutoff from [N-1](#n-1)) — filed as [#279][#279], fixed by [#285][#285]. Broader neutron reaction-deposit scoring in [N-1](#n-1) (capture, (n,p)/(n,α), n-p elastic recoil) remains open.
 6. Weight-aware scoring + weighted-variance contract ([S-1](#s-1), feeds [#169][#169] and [#41][#41]).
-7. Relativistic Bohr straggling factor ([P-3](#p-3)).
+7. Relativistic Bohr straggling factor ([P-3](#p-3)) — filed as [#280][#280], fixed by [#287][#287].
 8. Nuclear vertex sampling within the step ([P-4](#p-4)) + step-midpoint energy for scoring on kill steps ([S-2](#s-2)).
 9. Reference-test data: commit IDD curves, wire `ctest -L reference` into CI ([T-2](#t-2)); case-dir input validation ([T-1](#t-1)); test tmpdir hygiene ([T-3](#t-3)).
 10. Parallel-driver fixes on `feat/parallel-threads` before merge ([R-4](#r-4) + [R-3](#r-3) statics).
@@ -1003,7 +1010,9 @@ current usage; "latent" items are correct today but break planned features.
 [#257]: https://github.com/openshieldhit/openshieldhit/pull/257
 [#267]: https://github.com/openshieldhit/openshieldhit/issues/267
 [#279]: https://github.com/openshieldhit/openshieldhit/issues/279
+[#280]: https://github.com/openshieldhit/openshieldhit/issues/280
 [#285]: https://github.com/openshieldhit/openshieldhit/pull/285
+[#287]: https://github.com/openshieldhit/openshieldhit/pull/287
 [#299]: https://github.com/openshieldhit/openshieldhit/issues/299
 [#301]: https://github.com/openshieldhit/openshieldhit/pull/301
 [todo-md]: https://github.com/openshieldhit/openshieldhit/blob/e3c619a1328e9351bcbc1dc599321ac2770ad622/TODO.md
