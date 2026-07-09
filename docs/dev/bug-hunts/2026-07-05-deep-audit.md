@@ -14,7 +14,7 @@
 | **Commit audited** | [`e3c619a`][e3c619a] on `main` (2026-07-05) |
 | **Source** | [PR #248][#248] |
 | **Scope** | Test infra · transport hot path & EM physics · scoring · nuclear/neutron transport · RNG & parallel readiness · GEMCA geometry · parsers/IO · architecture |
-| **Follow-up** | 11 suggested issues (4 filed — [#255][#255], fixed by [#257][#257]; [#267][#267], fixed by [`a0f60a1`][a0f60a1]; [#279][#279], fixed by [#285][#285]; [#299][#299], fixed by [#PLACEHOLDER_PR]) — see [§8](#sec-8) |
+| **Follow-up** | 11 suggested issues (4 filed — [#255][#255], fixed by [#257][#257]; [#267][#267], fixed by [`a0f60a1`][a0f60a1]; [#279][#279], fixed by [#285][#285]; [#299][#299], fixed by [#301]) — see [§8](#sec-8) |
 
 
 Deep audit of `main` (e3c619a) prompted by PR [#239][#239] (sanitizer wiring) and issues
@@ -302,7 +302,7 @@ acts in the opposite direction for rare events.
 ### P-6 (low, medium) RNG child streams are seeded with the parent's *future* draws {: #p-6 }
 
 !!! success "Resolved"
-    Filed as [#299][#299] and fixed by [#PLACEHOLDER_PR].  `osh_rng_split()`
+    Filed as [#299][#299] and fixed by [#301].  `osh_rng_split()`
     now derives the child's `(seed, stream)` by hashing the parent's *internal
     state* words — which the engine's output function permutes before ever
     emitting — keyed by the ordinal, through the existing `rng_mix_stream`
@@ -627,7 +627,7 @@ because it is the concrete next step of [#161][#161]).
 ### R-2 (low, medium) `osh_rng_split` seeds children from the parent's *future* output window {: #r-2 }
 
 !!! success "Resolved"
-    Same fix as [P-6](#p-6) — filed as [#299][#299], fixed by [#PLACEHOLDER_PR].
+    Same fix as [P-6](#p-6) — filed as [#299][#299], fixed by [#301].
 
 Detailed as [P-6](#p-6) in §1: child ordinal k consumes the parent-copy's draws
 [2k, 2k+1] as (seed, stream) — the same u64s the parent itself will consume
@@ -1005,6 +1005,7 @@ current usage; "latent" items are correct today but break planned features.
 [#279]: https://github.com/openshieldhit/openshieldhit/issues/279
 [#285]: https://github.com/openshieldhit/openshieldhit/pull/285
 [#299]: https://github.com/openshieldhit/openshieldhit/issues/299
+[#301]: https://github.com/openshieldhit/openshieldhit/pull/301
 [todo-md]: https://github.com/openshieldhit/openshieldhit/blob/e3c619a1328e9351bcbc1dc599321ac2770ad622/TODO.md
 [e3c619a]: https://github.com/openshieldhit/openshieldhit/commit/e3c619a1328e9351bcbc1dc599321ac2770ad622
 [a0f60a1]: https://github.com/openshieldhit/openshieldhit/commit/a0f60a1d201ed147719f26751befbd65488ab536
