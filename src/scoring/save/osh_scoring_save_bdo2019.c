@@ -610,13 +610,18 @@ static int legacy_score_kind(struct osh_scoring_page_runtime const *page) {
         return 13;
     case OSH_SCORING_SCORE_MCPL:
         return 63;
-    case OSH_SCORING_SCORE_DAVGE:
-        return 64;
+    /* Track-averaged kinetic energy and beta reuse the existing SH12A
+     * detector-type IDs (SH_SDET_AVGENERGY = 8, SH_SDET_AVGBETA = 9); both are
+     * track-averaged in SH12A.  SH12A has no dose-averaged counterparts, so
+     * DAVGE/DBETA take the next free IDs (66, 67).  64/65 are reserved for
+     * DIRTYDOSE/DIRTYDOSEGY and must not be reused here. */
     case OSH_SCORING_SCORE_TAVGE:
-        return 65;
-    case OSH_SCORING_SCORE_DBETA:
-        return 66;
+        return 8;
     case OSH_SCORING_SCORE_TBETA:
+        return 9;
+    case OSH_SCORING_SCORE_DAVGE:
+        return 66;
+    case OSH_SCORING_SCORE_DBETA:
         return 67;
     default:
         return -1;
