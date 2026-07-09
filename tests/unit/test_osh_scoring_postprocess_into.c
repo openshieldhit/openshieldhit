@@ -35,10 +35,12 @@ make_page(struct osh_scoring_page_runtime *p, enum osh_scoring_score_kind kind, 
     p->score_kind = kind;
     p->has_data2 = (char) (want_data2 ? 1 : 0);
     p->divide = 0;
-    p->postproc = (kind == OSH_SCORING_SCORE_DLET || kind == OSH_SCORING_SCORE_TLET || kind == OSH_SCORING_SCORE_DQEFF
-                   || kind == OSH_SCORING_SCORE_TQEFF)
-                      ? OSH_SCORING_POSTPROC_AVER
-                      : OSH_SCORING_POSTPROC_NONE;
+    p->postproc =
+        (kind == OSH_SCORING_SCORE_DLET || kind == OSH_SCORING_SCORE_TLET || kind == OSH_SCORING_SCORE_DQEFF
+         || kind == OSH_SCORING_SCORE_TQEFF || kind == OSH_SCORING_SCORE_DAVGE || kind == OSH_SCORING_SCORE_TAVGE
+         || kind == OSH_SCORING_SCORE_DBETA || kind == OSH_SCORING_SCORE_TBETA)
+            ? OSH_SCORING_POSTPROC_AVER
+            : OSH_SCORING_POSTPROC_NONE;
 }
 
 static void make_runtime(struct osh_scoring_runtime *rt, struct osh_scoring_page_runtime *pages, size_t npages) {
@@ -55,6 +57,10 @@ static void test_writes_data_predicate(void) {
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TLET) == 1);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DQEFF) == 1);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TQEFF) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DAVGE) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TAVGE) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DBETA) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TBETA) == 1);
 
     /* DOSE/FLUENCE (and NKERMA) now transform in postprocess too — they divide by
      * the per-bin volume, so they write data out-of-place like DOSEGY/LET. */

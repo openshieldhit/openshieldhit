@@ -310,7 +310,12 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
         return "MeV/cm";
     case OSH_SCORING_SCORE_DQEFF:
     case OSH_SCORING_SCORE_TQEFF:
+    case OSH_SCORING_SCORE_DBETA:
+    case OSH_SCORING_SCORE_TBETA:
         return "dim.less";
+    case OSH_SCORING_SCORE_DAVGE:
+    case OSH_SCORING_SCORE_TAVGE:
+        return "MeV";
     default:
         return "arb";
     }
@@ -605,6 +610,14 @@ static int legacy_score_kind(struct osh_scoring_page_runtime const *page) {
         return 13;
     case OSH_SCORING_SCORE_MCPL:
         return 63;
+    case OSH_SCORING_SCORE_DAVGE:
+        return 64;
+    case OSH_SCORING_SCORE_TAVGE:
+        return 65;
+    case OSH_SCORING_SCORE_DBETA:
+        return 66;
+    case OSH_SCORING_SCORE_TBETA:
+        return 67;
     default:
         return -1;
     }

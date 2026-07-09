@@ -44,7 +44,11 @@ static void test_save_bdo2019_with_dose_and_dlet(void) {
                               "    Quantity DLET\n"
                               "    Quantity TLET\n"
                               "    Quantity DQEFF\n"
-                              "    Quantity TQEFF\n";
+                              "    Quantity TQEFF\n"
+                              "    Quantity DAVGE\n"
+                              "    Quantity TAVGE\n"
+                              "    Quantity DBETA\n"
+                              "    Quantity TBETA\n";
     struct osh_scoring_workspace *ws;
     struct osh_scoring_runtime rt;
     unsigned char bdo_head[6];
@@ -59,7 +63,7 @@ static void test_save_bdo2019_with_dose_and_dlet(void) {
     ASSERT_TRUE(rc == OSH_OK);
     rc = osh_scoring_compile(ws, NULL, &rt);
     ASSERT_TRUE(rc == OSH_OK);
-    ASSERT_TRUE(rt.npages == 5u);
+    ASSERT_TRUE(rt.npages == 9u);
 
     /* Seed non-zero values and wire data2 (two-pass pages) with matching weights */
     for (i = 0; i < rt.npages; ++i) {

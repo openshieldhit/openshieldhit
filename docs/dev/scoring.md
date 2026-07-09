@@ -211,8 +211,8 @@ because it reads the raw sums. Rather than the absolute `SE` it stores the per-b
 into `data_var`; the save layer then emits the absolute error column as
 `|value| · data_var`, so whatever per-primary / physical-mean / unit scaling the
 writer applies to the value applies to its error automatically — the stored error
-is normalisation-invariant. For the two-pass **AVER** quantities (DLET/TLET/Qeff)
-the reported value is the ratio `data / data2`, so the numerator and denominator
+is normalisation-invariant. For the two-pass **AVER** quantities (DLET/TLET/Qeff/
+AVGE/BETA) the reported value is the ratio `data / data2`, so the numerator and denominator
 relative errors are combined in quadrature (`rel² = rel_num² + rel_den²`); this
 ignores their strong positive correlation and is therefore deliberately
 **conservative** — an over-estimate, never an under-estimate. A bin with
@@ -242,8 +242,8 @@ DICOM RTDOSE is a specialised round-trip writer.
 
 For quick inspection and single-run use. Values are normalised **per primary
 particle** (divided by `nstat`) at write time, except averaged quantities
-(DLET, TLET) which are already physical means after post-processing and are
-written as-is. ASCII output is **not** suitable for merging partial results:
+(DLET, TLET, DQEFF, TQEFF, DAVGE, TAVGE, DBETA, TBETA) which are already physical
+means after post-processing and are written as-is. ASCII output is **not** suitable for merging partial results:
 once divided by `nstat`, each run's absolute weight is lost.
 
 When a page has variance tracking enabled each quantity gains a paired `NAME_ERR`
@@ -265,7 +265,7 @@ supports two merging paths:
 2. **Embarrassingly-parallel / multi-node**: independent runs each emit a
    `.bdo`, and a merge tool weights per scorer kind using each file's `nstat`:
      - `NORM` (DOSE, FLUENCE, ENERGY, …): `X = (sum_j x_j) / (sum_j nstat_j)`
-     - `AVER` (DLET, TLET): `X = (sum_j x_j * nstat_j) / (sum_j nstat_j)`
+     - `AVER` (DLET, TLET, DQEFF, TQEFF, DAVGE, TAVGE, DBETA, TBETA): `X = (sum_j x_j * nstat_j) / (sum_j nstat_j)`
      - `SUM` (COUNT, …): `X = sum_j x_j`
      - `APPEND` (MCPL): concatenation
 
@@ -312,10 +312,16 @@ at score time and never at save.
 | `FLUENCE` | `osh_scoring_estimator_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
 | `DOSE`    | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
 | `DOSEGY`  | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
+| `DIRTYDOSE`   | `osh_scoring_estimator_step_dirtydose` | `osh_scoring_estimator_point_dirtydose` | `postprocess_volume` | as `DOSE`, gated on mass-LET > threshold → ÷volume [MeV/g] |
+| `DIRTYDOSEGY` | `osh_scoring_estimator_step_dirtydose` | `osh_scoring_estimator_point_dirtydose` | `postprocess_dosegy` | as `DIRTYDOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
 | `DLET`    | `osh_scoring_estimator_step_dlet`    | — | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
 | `TLET`    | `osh_scoring_estimator_step_tlet`    | — | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
 | `DQEFF`   | `osh_scoring_estimator_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
 | `TQEFF`   | `osh_scoring_estimator_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `DAVGE`   | `osh_scoring_estimator_step_davge`   | — | `postprocess_ratio` | dose-weighted `(E_kin·w, w)` → `data/data2` [MeV] |
+| `TAVGE`   | `osh_scoring_estimator_step_tavge`   | — | `postprocess_ratio` | track-weighted `(E_kin·w, w)` → `data/data2` [MeV] |
+| `DBETA`   | `osh_scoring_estimator_step_dbeta`   | — | `postprocess_ratio` | dose-weighted `(β·w, w)` → `data/data2` |
+| `TBETA`   | `osh_scoring_estimator_step_tbeta`   | — | `postprocess_ratio` | track-weighted `(β·w, w)` → `data/data2` |
 | `NKERMA`  | —                    | — | `postprocess_volume` | (neutron kerma) → ÷volume [MeV/g] |
 
 **Adding a `Quantity`** = write its handler(s), then add one row to the registry
@@ -349,7 +355,7 @@ one of these states:
 |---|---|---|
 | NORM (DOSE, FLUENCE, …) | intensive per-primary sum (÷volume applied) | divide by `nstat` |
 | NORM (ENERGY, …) | raw accumulated sum (no transform) | divide by `nstat` |
-| AVER (DLET, TLET, DQEFF, TQEFF) | physical mean (`data ÷ data2` done) | none — written as-is |
+| AVER (DLET, TLET, DQEFF, TQEFF, DAVGE, TAVGE, DBETA, TBETA) | physical mean (`data ÷ data2` done) | none — written as-is |
 | SUM (COUNT, …) | raw count | none |
 
 **Merging caveat**: AVER pages cannot be naively summed across BDO files

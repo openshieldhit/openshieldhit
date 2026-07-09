@@ -563,6 +563,185 @@ static void test_score_mesh_dqeff_tqeff(void) {
     osh_scoring_workspace_free(ws);
 }
 
+/* Verify DAVGE and TAVGE produce the step-midpoint kinetic energy, and DBETA
+ * and TBETA produce the corresponding beta = v/c, dose- and track-averaged.
+ * A single monoenergetic step contributes the same scalar to every crossed
+ * bin, so the two-pass ratio equals that scalar regardless of the per-bin
+ * dose/track weight — mirrors test_score_mesh_dqeff_tqeff(), but needs no
+ * mat_tables since kinetic energy and beta are derived from the step and
+ * part.mass alone. */
+static void test_score_mesh_davge_tavge_dbeta_tbeta(void) {
+    char path[512];
+    char const *detect = "Geometry Mesh\n"
+                         "    Name G\n"
+                         "    X -0.5 0.5 1\n"
+                         "    Y -0.5 0.5 1\n"
+                         "    Z  0.0 3.0 3\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename out.bdo\n"
+                         "    Geo G\n"
+                         "    Quantity DAVGE\n"
+                         "    Quantity TAVGE\n"
+                         "    Quantity DBETA\n"
+                         "    Quantity TBETA\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *davge_page;
+    struct osh_scoring_page_runtime *tavge_page;
+    struct osh_scoring_page_runtime *dbeta_page;
+    struct osh_scoring_page_runtime *tbeta_page;
+    double proton_mass_mev = 938.272046;
+    double mean_energy;
+    double gamma_inv;
+    double expected_beta;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    /* mat_tables stays NULL: DAVGE/TAVGE/DBETA/TBETA need only part.mass, no SP tables. */
+
+    memset(&part, 0, sizeof(part));
+    part.z = 1u;
+    part.a = 1u;
+    part.mass = proton_mass_mev;
+
+    memset(&st, 0, sizeof(st));
+    st.p[0] = 0.0;
+    st.p[1] = 0.0;
+    st.p[2] = 0.5;
+    st.p[3] = 150.0;
+    st.q[0] = 0.0;
+    st.q[1] = 0.0;
+    st.q[2] = 2.5;
+    st.q[3] = 148.0;
+    st.v[0] = 0.0;
+    st.v[1] = 0.0;
+    st.v[2] = 1.0;
+    st.ds = 2.0;
+    st.de = 2.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    mean_energy = 0.5 * (150.0 + 148.0);
+    gamma_inv = proton_mass_mev / (mean_energy + proton_mass_mev);
+    expected_beta = sqrt(1.0 - (gamma_inv * gamma_inv));
+
+    davge_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DAVGE);
+    ASSERT_TRUE(davge_page != NULL);
+    assert_close(davge_page->acc.data[0], mean_energy);
+    assert_close(davge_page->acc.data[1], mean_energy);
+    assert_close(davge_page->acc.data[2], mean_energy);
+
+    tavge_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TAVGE);
+    ASSERT_TRUE(tavge_page != NULL);
+    assert_close(tavge_page->acc.data[0], mean_energy);
+    assert_close(tavge_page->acc.data[1], mean_energy);
+    assert_close(tavge_page->acc.data[2], mean_energy);
+
+    dbeta_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DBETA);
+    ASSERT_TRUE(dbeta_page != NULL);
+    assert_close(dbeta_page->acc.data[0], expected_beta);
+    assert_close(dbeta_page->acc.data[1], expected_beta);
+    assert_close(dbeta_page->acc.data[2], expected_beta);
+
+    tbeta_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TBETA);
+    ASSERT_TRUE(tbeta_page != NULL);
+    assert_close(tbeta_page->acc.data[0], expected_beta);
+    assert_close(tbeta_page->acc.data[1], expected_beta);
+    assert_close(tbeta_page->acc.data[2], expected_beta);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* Unlike DLET/TLET/DQEFF/TQEFF, average-kinetic-energy scoring is defined for
+ * neutrals too: kinetic energy needs no charge, so DAVGE/TAVGE apply no
+ * part->z/part->a gate. */
+static void test_score_mesh_davge_neutral(void) {
+    char path[512];
+    char const *detect = "Geometry Mesh\n"
+                         "    Name G\n"
+                         "    X -0.5 0.5 1\n"
+                         "    Y -0.5 0.5 1\n"
+                         "    Z  0.0 1.0 1\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename out.bdo\n"
+                         "    Geo G\n"
+                         "    Quantity DAVGE\n"
+                         "    Quantity TAVGE\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *davge_page;
+    struct osh_scoring_page_runtime *tavge_page;
+    double mean_energy;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&part, 0, sizeof(part));
+    part.z = 0u; /* neutral, e.g. neutron; mass left unset (0.0) */
+    part.a = 0u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[2] = 0.0;
+    st.p[3] = 10.0;
+    st.q[2] = 1.0;
+    st.q[3] = 9.0;
+    st.v[2] = 1.0;
+    st.ds = 1.0;
+    st.de = 1.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    mean_energy = 0.5 * (10.0 + 9.0);
+
+    davge_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DAVGE);
+    ASSERT_TRUE(davge_page != NULL);
+    assert_close(davge_page->acc.data[0], mean_energy);
+
+    tavge_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TAVGE);
+    ASSERT_TRUE(tavge_page != NULL);
+    assert_close(tavge_page->acc.data[0], mean_energy);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 /* LET and QEFF can be differential-axis values for ordinary extensive scores
  * such as FLUENCE.  They are not the same thing as the averaged quantities DLET,
  * TLET, DQEFF, and TQEFF.  This test verifies that a FLUENCE page can bin track
@@ -909,6 +1088,8 @@ int main(void) {
     test_score_mesh_neutron_id_filter();
     test_score_mesh_dose_and_let_geometric();
     test_score_mesh_dqeff_tqeff();
+    test_score_mesh_davge_tavge_dbeta_tbeta();
+    test_score_mesh_davge_neutral();
     test_score_mesh_fluence_diff_let_qeff();
     test_score_zone_energy_fluence_dose();
     test_score_private_then_merge_equals_direct();

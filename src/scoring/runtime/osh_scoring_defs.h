@@ -162,6 +162,8 @@ enum osh_scoring_filter_op {
  * COUNT   [1]           raw event count (no normalisation)
  * NKERMA  [MeV/g]       neutron kerma (no Gy conversion yet)
  * QEFF    [dim.less]    dose/track-averaged (z_eff/β)²
+ * AVGE    [MeV]         dose/track-averaged kinetic energy
+ * BETA    [dim.less]    dose/track-averaged v/c
  */
 enum osh_scoring_score_kind {
 
@@ -204,8 +206,15 @@ enum osh_scoring_score_kind {
 
     /* --- LET-gated ("dirty") dose ----------------------------------------- */
 
-    OSH_SCORING_SCORE_DIRTYDOSE = 15,  /* dose [MeV/g] from charged particles with mass-LET > threshold */
-    OSH_SCORING_SCORE_DIRTYDOSEGY = 16 /* dose [Gy] from charged particles with mass-LET > threshold */
+    OSH_SCORING_SCORE_DIRTYDOSE = 15,   /* dose [MeV/g] from charged particles with mass-LET > threshold */
+    OSH_SCORING_SCORE_DIRTYDOSEGY = 16, /* dose [Gy] from charged particles with mass-LET > threshold */
+
+    /* --- Kinetic-energy- and velocity-averaged quantities ---------------- */
+
+    OSH_SCORING_SCORE_DAVGE = 17, /* dose-averaged kinetic energy  [MeV] */
+    OSH_SCORING_SCORE_TAVGE = 18, /* track-averaged kinetic energy [MeV] */
+    OSH_SCORING_SCORE_DBETA = 19, /* dose-averaged v/c  [dimensionless] */
+    OSH_SCORING_SCORE_TBETA = 20  /* track-averaged v/c [dimensionless] */
 };
 
 #ifdef __cplusplus

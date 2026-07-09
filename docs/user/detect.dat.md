@@ -142,7 +142,8 @@ Supported axis type keywords (same for Diff1Type and Diff2Type):
 | `QEFF` | `ZEFF2BETA2` | (z_eff/β)² |
 
 Differential scoring is supported for `Fluence`, `Dose`, `DoseGy`, and `Energy`.
-Averaged quantities (`DLET`, `TLET`, `DQEFF`, `TQEFF`) cannot carry a differential axis.
+Averaged quantities (`DLET`, `TLET`, `DQEFF`, `TQEFF`, `DAVGE`, `TAVGE`, `DBETA`, `TBETA`)
+cannot carry a differential axis.
 Additive differential pages are reported as differential quantities: after
 spatial postprocessing, each bin is divided by the width of its `Diff1` bin, and
 by the product of `Diff1` and `Diff2` widths for double-differential pages.  For
@@ -230,6 +231,10 @@ outer (slow) loop and Diff2 bins are the inner (fast) loop:
 | `TLET` | MeV/cm | Track-averaged LET |
 | `DQEFF` | dim.less | Dose-averaged `(z_eff/beta)^2` |
 | `TQEFF` | dim.less | Track-averaged `(z_eff/beta)^2` |
+| `DAVGE` | MeV | Dose-averaged kinetic energy |
+| `TAVGE` | MeV | Track-averaged kinetic energy |
+| `DBETA` | dim.less | Dose-averaged relative speed `beta = v/c` |
+| `TBETA` | dim.less | Track-averaged relative speed `beta = v/c` |
 
 Quantities can be restricted to a material via `Settings`:
 
@@ -262,6 +267,18 @@ medium — the override medium. So assuming a user-defined `inWater` settings ov
 then `DirtyDose inWater` scores dose-to-water **and**
 compares the mass-LET *in water* against the fixed threshold.
 A density-only override does not change the mass-LET (Fano-invariant).
+
+### Average kinetic energy and beta
+
+`DAVGE`/`TAVGE` and `DBETA`/`TBETA` are dose- and track-averaged quantities built
+the same way as `DLET`/`TLET` and `DQEFF`/`TQEFF`: each contributing step books a
+per-step scalar — kinetic energy at the step midpoint, or the corresponding
+relative speed `beta = v/c` — weighted by the energy deposited in the bin
+(dose-averaged) or by the physical track length in the bin (track-averaged).
+
+Unlike `DLET`/`TLET`/`DQEFF`/`TQEFF`, kinetic energy and beta are well-defined for
+**any** particle, including neutrals and photons, so `DAVGE`/`TAVGE`/`DBETA`/`TBETA`
+apply no charge gate and require no stopping-power table.
 
 ## Statistical uncertainty (error bars)
 
@@ -305,9 +322,10 @@ immediately after its value column, e.g.
 The error is the standard error of that cell's reported value, in the **same
 units** (it already carries the per-primary or physical-mean scaling), so a plot
 can use it directly as a `± ` bar.  For the averaged quantities (`DLET`, `TLET`,
-`DQEFF`, `TQEFF`) the numerator and denominator errors are combined in
-quadrature; ignoring their (strong, positive) correlation makes this a slightly
-**conservative** over-estimate, never an under-estimate.
+`DQEFF`, `TQEFF`, `DAVGE`, `TAVGE`, `DBETA`, `TBETA`) the numerator and
+denominator errors are combined in quadrature; ignoring their (strong, positive)
+correlation makes this a slightly **conservative** over-estimate, never an
+under-estimate.
 
 **Cost & scope.** Enabling `Variance On` roughly doubles the scoring memory of the
 affected pages (a companion sum-of-squares array per accumulator) and adds one

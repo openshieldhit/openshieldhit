@@ -22,6 +22,10 @@ int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind) {
     case OSH_SCORING_SCORE_TLET:
     case OSH_SCORING_SCORE_DQEFF:
     case OSH_SCORING_SCORE_TQEFF:
+    case OSH_SCORING_SCORE_DAVGE:
+    case OSH_SCORING_SCORE_TAVGE:
+    case OSH_SCORING_SCORE_DBETA:
+    case OSH_SCORING_SCORE_TBETA:
         return 1;
     default:
         return 0;
