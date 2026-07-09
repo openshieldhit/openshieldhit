@@ -211,9 +211,12 @@ sibling a stable address in the event's ordered list of secondaries.
    state plus the child's ordinal.
 2. It leaves the real parent RNG untouched.
 
-The implementation uses a private copy of the parent RNG state, advances that
-copy to the ordinal's seed window, draws the child's `(seed, stream)` pair from
-the copy, and initializes the child with the normal engine initializer. The
+The implementation hashes the parent's current internal state into a lineage
+key, derives the child's `(seed, stream)` pair from that key and the ordinal,
+and initializes the child with the normal engine initializer. It reads the
+parent's state but never advances it, and — because the key comes from the
+parent's raw state words, which the engine permutes before emitting — a child
+seed can never reuse a value the parent will itself draw next (issue #299). The
 parent continues as if no split had happened.
 
 That means children do **not** take alternating numbers from the parent's
@@ -250,8 +253,8 @@ particle, not the schedule:
   space is identical regardless of which physics options are enabled.
 - **Secondaries** (nuclear recoils, abrasion nucleons, Fermi break-up fragments)
   get their stream by **splitting from the parent** with `osh_rng_split(child,
-  parent, ordinal)`. The split seeds the child from a *private copy* of the
-  parent advanced to the child's `ordinal` slot; it **does not consume a draw
+  parent, ordinal)`. The split seeds the child by hashing the parent's current
+  internal state, keyed by the child's `ordinal`; it **does not consume a draw
   from the parent**. The child stream is therefore a pure function of the
   parent's state (itself a pure function of the parent's lineage) and the
   ordinal — reproducible no matter when the secondary is created, and, crucially,
@@ -303,7 +306,7 @@ value whether or not the secondary was ever created:
 
 ```
 parent (hist 7) draws #1,#2:      0.223872  0.725151
-child (ordinal 0) first 2 draws:  0.955397  0.252732
+child (ordinal 0) first 2 draws:  0.091444  0.313103
 parent's next draw, split done:   0.632358
 parent's next draw, no split:     0.632358   (identical)
 ```
@@ -312,7 +315,7 @@ Re-run with any pool capacity / thread / rank — or drop the secondary
 altogether — and both streams are unchanged:
 
 ```
-child (ordinal 0) first 2 draws again:  0.955397  0.252732   (identical)
+child (ordinal 0) first 2 draws again:  0.091444  0.313103   (identical)
 ```
 
 The child stream is a pure function of the parent's lineage and its ordinal,
