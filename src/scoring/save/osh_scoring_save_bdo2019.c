@@ -300,8 +300,10 @@ static char const *page_data_unit(struct osh_scoring_page_runtime const *page) {
         /* SH12A spells reciprocal area units with a leading slash, not "1/". */
         return "/cm^2";
     case OSH_SCORING_SCORE_DOSE:
+    case OSH_SCORING_SCORE_DIRTYDOSE:
         return "MeV/g";
     case OSH_SCORING_SCORE_DOSEGY:
+    case OSH_SCORING_SCORE_DIRTYDOSEGY:
         return "Gy";
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
@@ -579,6 +581,10 @@ static int legacy_score_kind(struct osh_scoring_page_runtime const *page) {
         return 5;
     case OSH_SCORING_SCORE_DOSEGY:
         return 56;
+    case OSH_SCORING_SCORE_DIRTYDOSE:
+        return 57;
+    case OSH_SCORING_SCORE_DIRTYDOSEGY:
+        return 58;
     case OSH_SCORING_SCORE_LETFLU:
         return 4;
     case OSH_SCORING_SCORE_DLET:

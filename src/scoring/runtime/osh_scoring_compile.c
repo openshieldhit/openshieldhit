@@ -79,6 +79,12 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     if (strcmp(quantity, "dosegy") == 0) {
         return OSH_SCORING_SCORE_DOSEGY;
     }
+    if (strcmp(quantity, "dirtydose") == 0) {
+        return OSH_SCORING_SCORE_DIRTYDOSE;
+    }
+    if (strcmp(quantity, "dirtydosegy") == 0) {
+        return OSH_SCORING_SCORE_DIRTYDOSEGY;
+    }
     if (strcmp(quantity, "dlet") == 0) {
         return OSH_SCORING_SCORE_DLET;
     }
@@ -383,6 +389,8 @@ static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
     case OSH_SCORING_SCORE_FLUENCE:
     case OSH_SCORING_SCORE_DOSE:
     case OSH_SCORING_SCORE_DOSEGY:
+    case OSH_SCORING_SCORE_DIRTYDOSE:
+    case OSH_SCORING_SCORE_DIRTYDOSEGY:
     case OSH_SCORING_SCORE_DLET:
     case OSH_SCORING_SCORE_TLET:
     case OSH_SCORING_SCORE_DQEFF:
@@ -911,10 +919,11 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             }
             if (rt->geometries[gidx].geo_kind == OSH_SCORING_GEO_ZONE && score_kind != OSH_SCORING_SCORE_ENERGY
                 && score_kind != OSH_SCORING_SCORE_FLUENCE && score_kind != OSH_SCORING_SCORE_DOSE
-                && score_kind != OSH_SCORING_SCORE_DOSEGY) {
+                && score_kind != OSH_SCORING_SCORE_DOSEGY && score_kind != OSH_SCORING_SCORE_DIRTYDOSE
+                && score_kind != OSH_SCORING_SCORE_DIRTYDOSEGY) {
                 OSH_DIAG_ERRORF(diag,
                                 "Scoring output '%s' uses quantity '%s' on Zone geometry '%s'; only Energy, Fluence, "
-                                "Dose, and DoseGy are supported for Zone scoring",
+                                "Dose, DoseGy, DirtyDose, and DirtyDoseGy are supported for Zone scoring",
                                 ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
                                 ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)",
                                 ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)");

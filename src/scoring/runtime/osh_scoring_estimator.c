@@ -18,6 +18,10 @@ static struct osh_scoring_estimator const k_dose = {
     osh_scoring_estimator_step_dose, osh_scoring_estimator_point_dose, postprocess_volume};
 static struct osh_scoring_estimator const k_dosegy = {
     osh_scoring_estimator_step_dose, osh_scoring_estimator_point_dose, postprocess_dosegy};
+static struct osh_scoring_estimator const k_dirtydose = {
+    osh_scoring_estimator_step_dirtydose, osh_scoring_estimator_point_dirtydose, postprocess_volume};
+static struct osh_scoring_estimator const k_dirtydosegy = {
+    osh_scoring_estimator_step_dirtydose, osh_scoring_estimator_point_dirtydose, postprocess_dosegy};
 static struct osh_scoring_estimator const k_dlet = {osh_scoring_estimator_step_dlet, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_tlet = {osh_scoring_estimator_step_tlet, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_dqeff = {osh_scoring_estimator_step_dqeff, NULL, postprocess_ratio};
@@ -34,6 +38,10 @@ struct osh_scoring_estimator const *osh_scoring_estimator_for(enum osh_scoring_s
         return &k_dose;
     case OSH_SCORING_SCORE_DOSEGY:
         return &k_dosegy;
+    case OSH_SCORING_SCORE_DIRTYDOSE:
+        return &k_dirtydose;
+    case OSH_SCORING_SCORE_DIRTYDOSEGY:
+        return &k_dirtydosegy;
     case OSH_SCORING_SCORE_DLET:
         return &k_dlet;
     case OSH_SCORING_SCORE_TLET:

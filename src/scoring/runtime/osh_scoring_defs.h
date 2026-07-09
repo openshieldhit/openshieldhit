@@ -155,6 +155,8 @@ enum osh_scoring_filter_op {
  * ---------------------------------------------------
  * DOSE    [MeV/g]       raw absorbed dose, no unit conversion (SH12A-compatible)
  * DOSEGY  [Gy]          absorbed dose in Gy — osh_scoring_postprocess() applies OSH_MEVG2GY
+ * DIRTYDOSE   [MeV/g]   as DOSE, but only charged particles with mass-LET > threshold
+ * DIRTYDOSEGY [Gy]      as DOSEGY, but only charged particles with mass-LET > threshold
  * FLUENCE [1/cm^2]
  * LET     [MeV/cm]      or [keV/um] depending on settings rescale
  * COUNT   [1]           raw event count (no normalisation)
@@ -198,7 +200,12 @@ enum osh_scoring_score_kind {
 
     /* --- Gy-converted dose ------------------------------------------------- */
 
-    OSH_SCORING_SCORE_DOSEGY = 14 /* absorbed dose [Gy] — applies OSH_MEVG2GY in postprocessing */
+    OSH_SCORING_SCORE_DOSEGY = 14, /* absorbed dose [Gy] — applies OSH_MEVG2GY in postprocessing */
+
+    /* --- LET-gated ("dirty") dose ----------------------------------------- */
+
+    OSH_SCORING_SCORE_DIRTYDOSE = 15,  /* dose [MeV/g] from charged particles with mass-LET > threshold */
+    OSH_SCORING_SCORE_DIRTYDOSEGY = 16 /* dose [Gy] from charged particles with mass-LET > threshold */
 };
 
 #ifdef __cplusplus
