@@ -26,6 +26,23 @@
 
 static void assert_bytes_equal(unsigned char const *expected, unsigned char const *actual, size_t nbytes);
 
+/* True for the two-pass AVER score kinds exercised by this test file. */
+static int kind_is_aver(enum osh_scoring_score_kind kind) {
+    switch (kind) {
+    case OSH_SCORING_SCORE_DLET:
+    case OSH_SCORING_SCORE_TLET:
+    case OSH_SCORING_SCORE_DQEFF:
+    case OSH_SCORING_SCORE_TQEFF:
+    case OSH_SCORING_SCORE_DAVGE:
+    case OSH_SCORING_SCORE_TAVGE:
+    case OSH_SCORING_SCORE_DBETA:
+    case OSH_SCORING_SCORE_TBETA:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 /* Build a single page descriptor with an allocated accumulator. */
 static void
 make_page(struct osh_scoring_page_runtime *p, enum osh_scoring_score_kind kind, size_t len, int want_data2) {
@@ -35,12 +52,11 @@ make_page(struct osh_scoring_page_runtime *p, enum osh_scoring_score_kind kind, 
     p->score_kind = kind;
     p->has_data2 = (char) (want_data2 ? 1 : 0);
     p->divide = 0;
-    p->postproc =
-        (kind == OSH_SCORING_SCORE_DLET || kind == OSH_SCORING_SCORE_TLET || kind == OSH_SCORING_SCORE_DQEFF
-         || kind == OSH_SCORING_SCORE_TQEFF || kind == OSH_SCORING_SCORE_DAVGE || kind == OSH_SCORING_SCORE_TAVGE
-         || kind == OSH_SCORING_SCORE_DBETA || kind == OSH_SCORING_SCORE_TBETA)
-            ? OSH_SCORING_POSTPROC_AVER
-            : OSH_SCORING_POSTPROC_NONE;
+    if (kind_is_aver(kind)) {
+        p->postproc = OSH_SCORING_POSTPROC_AVER;
+    } else {
+        p->postproc = OSH_SCORING_POSTPROC_NONE;
+    }
 }
 
 static void make_runtime(struct osh_scoring_runtime *rt, struct osh_scoring_page_runtime *pages, size_t npages) {
