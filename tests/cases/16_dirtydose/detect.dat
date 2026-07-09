@@ -1,0 +1,18 @@
+# Very simple test of new scoring system
+
+Geometry Mesh
+   Name MyMesh                    # geometry type
+    X -10.5  10.5    1
+    Y -10.5  10.5    1
+    Z  0.0  10.0   200
+
+Output
+         Filename NB_msh.bdo
+         Geo MyMesh
+         Quantity Energy
+         Quantity Fluence
+         Quantity Dose
+         Quantity DirtyDose
+         Quantity DoseGy
+         Quantity DirtyDoseGy
+         Quantity DLET

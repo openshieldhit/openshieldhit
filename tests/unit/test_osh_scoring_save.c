@@ -27,6 +27,7 @@
 
 static void read_file_bytes(char const *path, unsigned char *buf, size_t nbytes);
 static int file_token_contains_text(char const *path, unsigned long long tag_id, char const *needle);
+static size_t file_token_read_llints(char const *path, unsigned long long tag_id, long long int *values, size_t cap);
 static size_t bdo_payload_size(struct osh_scoring_bdo2019_tag const *tag);
 static void write_detect_file(char const *content);
 
@@ -88,6 +89,47 @@ static void test_save_bdo2019_with_dose_and_dlet(void) {
     osh_scoring_workspace_free(ws);
     remove(DETECT_PATH);
     remove("out_dlet.bdo");
+}
+
+static void test_save_bdo2019_dirtydose_uses_sh12a_page_types(void) {
+    char const *detect_text = "Geometry Mesh\n"
+                              "    Name G\n"
+                              "    X 0 1 1\n"
+                              "    Y 0 1 1\n"
+                              "    Z 0 1 1\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_dirtydose.bdo\n"
+                              "    FileFormat BDO2019\n"
+                              "    Geo G\n"
+                              "    Quantity DirtyDose\n"
+                              "    Quantity DirtyDoseGy\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    long long int page_types[2];
+    enum osh_status rc;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 2u);
+
+    rc = osh_scoring_save(ws, &rt, 1u);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    ASSERT_TRUE(file_token_read_llints("out_dirtydose.bdo", OSHBDO_PAG_TYPE, page_types, 2u) == 2u);
+    ASSERT_TRUE(page_types[0] == 64);
+    ASSERT_TRUE(page_types[1] == 65);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_dirtydose.bdo");
 }
 
 static void test_save_cyl_ascii_and_bdo(void) {
@@ -511,6 +553,7 @@ int main(void) {
     remove(BDO_PATH);
 
     test_save_bdo2019_with_dose_and_dlet();
+    test_save_bdo2019_dirtydose_uses_sh12a_page_types();
     test_save_cyl_ascii_and_bdo();
     test_save_ascii_rejects_mixed_diff_layout();
     test_save_bdo2019_diff_log_units();
@@ -564,6 +607,32 @@ static int file_token_contains_text(char const *path, unsigned long long tag_id,
     }
     ASSERT_TRUE(fclose(fp) == 0);
     return found;
+}
+
+static size_t file_token_read_llints(char const *path, unsigned long long tag_id, long long int *values, size_t cap) {
+    FILE *fp;
+    struct osh_scoring_bdo2019_tag tag;
+    size_t payload_size;
+    size_t nread;
+    unsigned char payload[BDO_TEST_MAX_PAYLOAD];
+
+    fp = fopen(path, "rb");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fseek(fp, 24L, SEEK_SET) == 0); /* magic + endian + version field */
+    nread = 0u;
+    while (fread(&tag, sizeof(tag), 1u, fp) == 1u) {
+        payload_size = bdo_payload_size(&tag);
+        ASSERT_TRUE(payload_size <= sizeof(payload));
+        if (payload_size > 0u) {
+            ASSERT_TRUE(fread(payload, 1u, payload_size, fp) == payload_size);
+        }
+        if (tag.tag == tag_id && strstr(tag.pltype, "i8") && payload_size == 8u && nread < cap) {
+            memcpy(&values[nread], payload, sizeof(values[nread]));
+            ++nread;
+        }
+    }
+    ASSERT_TRUE(fclose(fp) == 0);
+    return nread;
 }
 
 static size_t bdo_payload_size(struct osh_scoring_bdo2019_tag const *tag) {

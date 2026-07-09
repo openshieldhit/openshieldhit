@@ -26,6 +26,8 @@ static int _is_drive_letter(char c);
 #endif
 static int _path_is_absolute(char const *path);
 static size_t _path_root_len(char const *path);
+static int _remove_dir_entry(char const *path, void *user);
+static int _remove_directory(char const *path);
 
 struct oshfile *osh_fopen(char const *filename) {
     FILE *fp;
@@ -376,6 +378,65 @@ enum osh_status osh_path_ensure_dir(char const *path) {
 
     free(tmp);
     return OSH_OK;
+}
+
+/**
+ * @brief Remove @p path and the regular files directly inside it.
+ *
+ * @details
+ * Counterpart to osh_path_ensure_dir(): walks the directory once via
+ * osh_dir_foreach_file() (which only visits regular files, not
+ * subdirectories), removing each one, then removes the now-empty directory
+ * itself. A missing @p path is treated as success so callers can use it
+ * unconditionally in test teardown; any other stat() failure (e.g. a
+ * permission error) is reported as OSH_EIO rather than silently ignored.
+ *
+ * @param[in] path  Directory to remove.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL for invalid input, or OSH_EIO when a
+ *          filesystem operation fails.
+ */
+enum osh_status osh_path_remove_dir(char const *path) {
+    struct stat st;
+
+    if (!path || !path[0]) {
+        return OSH_EINVAL;
+    }
+
+    if (stat(path, &st) != 0) {
+        return (errno == ENOENT) ? OSH_OK : OSH_EIO;
+    }
+    if (!_mode_is_dir(st.st_mode)) {
+        return OSH_EIO;
+    }
+
+    if (osh_dir_foreach_file(path, _remove_dir_entry, NULL) != OSH_OK) {
+        return OSH_EIO;
+    }
+
+    return (_remove_directory(path) == 0) ? OSH_OK : OSH_EIO;
+}
+
+static int _remove_dir_entry(char const *path, void *user) {
+    (void) user;
+    remove(path);
+    return 1;
+}
+
+/**
+ * @brief Remove an empty directory.
+ *
+ * @details
+ * MSVC's `remove()` maps to `_unlink` and cannot remove directories, so
+ * Windows builds use `_rmdir` from `<direct.h>` (already pulled in above for
+ * `_mkdir`). Elsewhere, plain `remove()` removes an empty directory.
+ */
+static int _remove_directory(char const *path) {
+#if defined(_WIN32)
+    return _rmdir(path);
+#else
+    return remove(path);
+#endif
 }
 
 enum osh_status osh_dir_foreach_file(char const *dir, osh_dir_iter_fn fn, void *user) {

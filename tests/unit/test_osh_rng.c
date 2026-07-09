@@ -271,6 +271,104 @@ static void test_split_nonconsuming_and_drop_independent(void) {
     }
 }
 
+/*
+ * P-6 / issue #299 regression: a split child must be seeded from the parent's
+ * internal *state*, not from the parent's forthcoming output window.  The old
+ * design fed the parent's very next two u64 draws into the child as
+ * (seed, stream) for ordinal 0; reconstruct that window-scan child and assert
+ * the current split produces a different stream, so the child seed is no longer
+ * structurally derived from the parent's next draws.  Runs for both engines,
+ * whose lineage-key derivation differs, and re-checks the non-advancing
+ * guarantee.
+ */
+static void test_split_not_seeded_from_parent_output(void) {
+    enum osh_rng_type const engines[2] = {OSH_RNG_TYPE_PCG32, OSH_RNG_TYPE_XOSHIRO256SS};
+
+    int e;
+
+    for (e = 0; e < 2; ++e) {
+        struct osh_rng parent;
+        struct osh_rng before;
+        struct osh_rng scan;
+        struct osh_rng old_style;
+        struct osh_rng child;
+        uint64_t window_seed;
+        uint64_t window_stream;
+        int differ = 0;
+        int k;
+
+        osh_rng_seed_history(&parent, engines[e], 2025u, 7u, OSH_RNG_PURPOSE_PHYSICS);
+        before = parent; /* snapshot: the split must never advance the parent */
+
+        /* The parent's next two u64 draws are exactly what the old window-scan
+         * split fed into osh_rng_init as (seed, stream) for ordinal 0. */
+        scan = parent;
+        window_seed = osh_rng_u64(&scan);
+        window_stream = osh_rng_u64(&scan);
+        osh_rng_init(&old_style, engines[e], window_seed, window_stream);
+
+        osh_rng_split(&child, &parent, 0u);
+
+        /* Non-advancing across both engines. */
+        ASSERT_TRUE(osh_rng_u64(&parent) == osh_rng_u64(&before));
+
+        /* The child no longer reuses the parent's forthcoming output window. */
+        for (k = 0; k < 8; ++k) {
+            if (osh_rng_u64(&child) != osh_rng_u64(&old_style)) {
+                differ = 1;
+            }
+        }
+        ASSERT_TRUE(differ);
+    }
+}
+
+/*
+ * The split's core guarantees must hold for every engine, not only PCG32 —
+ * osh_rng_split derives its lineage key per engine type.  This mirrors
+ * test_split_deterministic / _drop_independent for xoshiro256**.
+ */
+static void test_split_xoshiro_properties(void) {
+    struct osh_rng parent;
+    struct osh_rng pristine;
+    struct osh_rng c0;
+    struct osh_rng c1;
+    struct osh_rng c2;
+    int k;
+
+    osh_rng_seed_history(&parent, OSH_RNG_TYPE_XOSHIRO256SS, 55u, 7u, OSH_RNG_PURPOSE_PHYSICS);
+    for (k = 0; k < 5; ++k) {
+        (void) osh_rng_u64(&parent);
+    }
+    pristine = parent; /* untouched copy of the pre-split state */
+
+    osh_rng_split(&c0, &parent, 0u);
+    osh_rng_split(&c1, &parent, 1u);
+    osh_rng_split(&c2, &parent, 2u);
+
+    /* Distinct ordinals key distinct streams. */
+    {
+        struct osh_rng a = c0;
+        struct osh_rng b = c1;
+        int differ = 0;
+        for (k = 0; k < 8; ++k) {
+            if (osh_rng_u64(&a) != osh_rng_u64(&b)) {
+                differ = 1;
+            }
+        }
+        ASSERT_TRUE(differ);
+    }
+
+    /* Drop-independence: the ordinal-2 child is identical whether or not
+     * ordinals 0 and 1 were ever split (split reads but never advances). */
+    {
+        struct osh_rng c2_alone;
+        osh_rng_split(&c2_alone, &pristine, 2u);
+        for (k = 0; k < 8; ++k) {
+            ASSERT_TRUE(osh_rng_u64(&c2_alone) == osh_rng_u64(&c2));
+        }
+    }
+}
+
 /* ---- Vector helpers (osh_rng_*_vec) ------------------------------------- */
 
 /*
@@ -388,6 +486,8 @@ int main(void) {
     test_seed_history_disjoint_ranges();
     test_split_deterministic();
     test_split_nonconsuming_and_drop_independent();
+    test_split_not_seeded_from_parent_output();
+    test_split_xoshiro_properties();
     test_double_vec_matches_scalar();
     test_float_vec_matches_scalar();
     test_u32_vec_matches_scalar();
