@@ -174,6 +174,76 @@ enum osh_status osh_scoring_estimator_step_dose(struct osh_scoring_runtime const
 }
 
 /**
+ * @brief Accumulate LET-gated ("dirty") dose [MeV/g] into the DIRTYDOSE/DIRTYDOSEGY pages.
+ *
+ * Identical to osh_scoring_estimator_step_dose(), except a page books dose only
+ * when the projectile's mass stopping power in that page's scoring medium exceeds
+ * OSH_DIRTYDOSE_MASS_SP_THRESHOLD [MeV*cm^2/g].  The gate uses the same medium as
+ * the dose: sp_tr for the transport medium, or sp_tr*ratio == S(override) under a
+ * Settings medium override (dose-to-water then also gates on mass-LET in water).
+ * A density-only override is Fano-invariant (ratio == 1), so the gate uses the
+ * transport-medium mass SP.  When the mass SP is unavailable (neutral, no SP-table
+ * entry, or medium < 0) sp_tr is 0 and nothing is scored — dirty dose is a
+ * charged-particle, table-defined quantity.
+ */
+enum osh_status osh_scoring_estimator_step_dirtydose(struct osh_scoring_runtime const *rt,
+                                                     struct osh_scoring_accumulator *acc_set,
+                                                     struct osh_scoring_geometry_score_group const *group,
+                                                     struct osh_voxel_crossing const *crossings,
+                                                     size_t ncross,
+                                                     struct particle const *part,
+                                                     struct step const *st,
+                                                     double score_len) {
+    size_t i;
+    size_t j;
+    size_t db;        /* Index into the differential bins for the current spatial bin */
+    size_t db2;       /* Index into the differential bins for the current spatial bin */
+    size_t score_idx; /* Index into the scoring array for the current spatial bin */
+    double base_scale;
+    double sp_ratio;
+    double mass_sp;
+    double dose_scale;
+    double dose_score;
+    struct osh_scoring_dose_sp_ctx sp;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    if (!(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+    base_scale = st->de / (score_len * st->rho);
+    sp = osh_scoring_estimator_dose_sp_gather(rt, part, st);
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        /* Mass-LET in this page's scoring medium [MeV*cm^2/g]; the override (if any)
+         * is folded in exactly as it is for the dose scale below. */
+        sp_ratio = osh_scoring_estimator_dose_sp_ratio(&sp, rt, page);
+        mass_sp = sp.sp_tr * sp_ratio;
+        if (!(mass_sp > OSH_DIRTYDOSE_MASS_SP_THRESHOLD)) {
+            continue; /* below the dirty-dose LET threshold (or mass SP unavailable) */
+        }
+        dose_scale = base_scale * sp_ratio;
+        if (!osh_scoring_estimator_resolve_diff_bins(page, rt, part, st, &db, &db2)) {
+            continue;
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            score_idx = osh_scoring_estimator_flat_bin(page, crossings[j].idx, db, db2);
+            dose_score = crossings[j].path_len * dose_scale;
+            osh_score_deposit(acc->data, score_idx, dose_score);
+        }
+    }
+    return OSH_OK;
+}
+
+/**
  * @brief Accumulate dose-averaged LET [MeV/cm] via a two-pass accumulator.
  *
  * Uses S(medium,E)*rho from the SP tables when available; falls back to de/score_len.

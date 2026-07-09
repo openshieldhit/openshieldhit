@@ -14,6 +14,8 @@ int osh_scoring_postprocess_writes_data(enum osh_scoring_score_kind kind) {
     switch (kind) {
     case OSH_SCORING_SCORE_DOSE:
     case OSH_SCORING_SCORE_DOSEGY:
+    case OSH_SCORING_SCORE_DIRTYDOSE:
+    case OSH_SCORING_SCORE_DIRTYDOSEGY:
     case OSH_SCORING_SCORE_FLUENCE:
     case OSH_SCORING_SCORE_NKERMA:
     case OSH_SCORING_SCORE_DLET:

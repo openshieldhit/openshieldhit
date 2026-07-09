@@ -98,7 +98,7 @@ Rules and semantics:
   computed from overlapping CSG primitives, so they must be given explicitly; a
   zone with no `Volume` warns and defaults to `1.0 cm3`.
 - The output bin order is exactly the order of the `Zone` lines.
-- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`.
+- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`, `DirtyDose`, `DirtyDoseGy`.
 - `FileFormat BDO` (default) records which transport zone each bin is (`GEO_ZONES`
   tag) for labelling; `FileFormat TEXT` writes one row per zone with a numeric
   zone-index column. The per-zone volume is not stored in either — it is consumed by
@@ -222,6 +222,8 @@ outer (slow) loop and Diff2 bins are the inner (fast) loop:
 |---------|------|-------------|
 | `Dose` | MeV/g | Absorbed dose, SH12A-compatible |
 | `DoseGy` | Gy | Absorbed dose in gray (`Dose * 1.602176634e-10`) |
+| `DirtyDose` | MeV/g | As `Dose`, but only charged particles above the mass-LET threshold (see below) |
+| `DirtyDoseGy` | Gy | As `DoseGy`, but only charged particles above the mass-LET threshold |
 | `Fluence` | 1/cm² | Particle fluence |
 | `Energy` | MeV | Energy deposited in the voxel |
 | `DLET` | MeV/cm | Dose-averaged LET |
@@ -245,11 +247,27 @@ Output
 `Dose inWater` and `DoseGy inWater` score using the stopping power of water
 regardless of the actual traversed material, equivalent to SH12A dose-to-water.
 
+### Dirty dose
+
+`DirtyDose` and `DirtyDoseGy` behave exactly like `Dose` and `DoseGy` but only
+accumulate the contribution of **charged particles whose mass stopping power
+(mass-LET) exceeds a fixed threshold** of `30 MeV·cm²/g` (equivalently `3 keV/µm`
+in water at `ρ = 1 g/cm³`). The threshold is a compile-time constant
+(`OSH_DIRTYDOSE_MASS_SP_THRESHOLD`). Neutral particles and any species without a
+stopping-power table entry contribute nothing.
+
+The mass-LET used for the gate follows the same medium as the dose: normally the
+local (transport) material, or — when a `Settings` block overrides the scoring
+medium — the override medium. So assuming a user-defined `inWater` settings override,
+then `DirtyDose inWater` scores dose-to-water **and**
+compares the mass-LET *in water* against the fixed threshold.
+A density-only override does not change the mass-LET (Fano-invariant).
+
 ## Statistical uncertainty (error bars)
 
-Per-bin Monte-Carlo **standard error** is off by default.  Turn it on **per
-estimator** by attaching a `Settings` block that carries `Variance On` to the
-`Quantity` line — the same mechanism as `Quantity Dose inWater`:
+Per-bin Monte-Carlo **standard error** acquisition is turned off by default.
+Turn it on **per estimator** by attaching a `Settings` block that carries
+`Variance On` to the `Quantity` line — the same mechanism as `Quantity Dose inWater`:
 
 ```text
 Settings
@@ -258,7 +276,7 @@ Settings
 
 Output
     Filename bragg.dat
-    Geo Depth
+    Geo MyDepthDoseCurve
     Quantity Dose withErr
 ```
 

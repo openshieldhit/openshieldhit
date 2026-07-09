@@ -17,6 +17,11 @@
  * use them after geometry has already produced crossings or a located bin.
  */
 
+/* Dirty-dose mass-LET gate: DIRTYDOSE/DIRTYDOSEGY only score dose from charged
+ * particles whose mass stopping power exceeds this threshold [MeV*cm^2/g].
+ * 30 MeV*cm^2/g == 3 keV/um in water (rho = 1 g/cm^3).  Compile-time tunable. */
+#define OSH_DIRTYDOSE_MASS_SP_THRESHOLD 30.0
+
 struct osh_scoring_dose_sp_ctx {
     int have_proj;    /* projectile has an SP-table entry in the transport medium */
     size_t proj_idx;  /* projectile index into the SP tables */

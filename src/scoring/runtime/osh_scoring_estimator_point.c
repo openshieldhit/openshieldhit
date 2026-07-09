@@ -105,3 +105,63 @@ enum osh_status osh_scoring_estimator_point_dose(struct osh_scoring_runtime cons
     }
     return OSH_OK;
 }
+
+/**
+ * @brief Point-deposit counterpart of osh_scoring_estimator_step_dirtydose.
+ *
+ * Identical to osh_scoring_estimator_point_dose(), except a page books dose only
+ * when the projectile's mass stopping power in that page's scoring medium exceeds
+ * OSH_DIRTYDOSE_MASS_SP_THRESHOLD [MeV*cm^2/g].  Neutrals are excluded up front
+ * (charge == 0); the mass-SP gate additionally drops charged particles below the
+ * threshold and any species without an SP-table entry.
+ */
+enum osh_status osh_scoring_estimator_point_dirtydose(struct osh_scoring_runtime const *rt,
+                                                      struct osh_scoring_accumulator *acc_set,
+                                                      struct osh_scoring_geometry_score_group const *group,
+                                                      size_t spatial_idx,
+                                                      struct particle const *part,
+                                                      struct step const *st) {
+    size_t i;
+    size_t db;
+    size_t db2;
+    size_t score_idx;
+    double sp_ratio;
+    double mass_sp;
+    double dose_score;
+    struct osh_scoring_dose_sp_ctx sp;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    if (part->charge == 0) {
+        return OSH_OK;
+    }
+    if (!(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+    sp = osh_scoring_estimator_dose_sp_gather(rt, part, st);
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        /* Mass-LET in this page's scoring medium [MeV*cm^2/g]; the override (if any)
+         * is folded in exactly as it is for the dose scale. */
+        sp_ratio = osh_scoring_estimator_dose_sp_ratio(&sp, rt, page);
+        mass_sp = sp.sp_tr * sp_ratio;
+        if (!(mass_sp > OSH_DIRTYDOSE_MASS_SP_THRESHOLD)) {
+            continue; /* below the dirty-dose LET threshold (or mass SP unavailable) */
+        }
+        if (!osh_scoring_estimator_resolve_diff_bins(page, rt, part, st, &db, &db2)) {
+            continue;
+        }
+        if (spatial_idx >= page->diff_stride) {
+            return OSH_ESTATE;
+        }
+        score_idx = osh_scoring_estimator_flat_bin(page, spatial_idx, db, db2);
+        dose_score = (st->de / st->rho) * sp_ratio;
+        osh_score_deposit(acc->data, score_idx, dose_score);
+    }
+    return OSH_OK;
+}
