@@ -299,8 +299,10 @@ Each estimator owns a trio of handlers, registered in
   form once per bin (÷volume, unit conversion, or two-pass ratio).
 
 A `—` below means the handler is `NULL`: the estimator is not scored on that path
-(`score_point_` needs a track length for FLUENCE/LET), or the accumulator is
-already final (`postprocess_` for ENERGY/COUNT unless the page is differential).
+(`score_point_` needs a track length for FLUENCE and the Qeff averages; DLET/TLET
+instead take the recoil's birth-energy stopping power as a representative dE/dx —
+issue #227), or the accumulator is already final (`postprocess_` for ENERGY/COUNT
+unless the page is differential).
 The scorer deposits the extensive quantity; geometry-specific normalisation
 (÷volume via `geo->bin_vol_inv`) and differential-axis normalisation (÷bin width,
 or ÷width1÷width2 for double-differential pages) live in `postprocess_` — never
@@ -312,8 +314,8 @@ at score time and never at save.
 | `FLUENCE` | `osh_scoring_estimator_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
 | `DOSE`    | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
 | `DOSEGY`  | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
-| `DLET`    | `osh_scoring_estimator_step_dlet`    | — | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
-| `TLET`    | `osh_scoring_estimator_step_tlet`    | — | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `DLET`    | `osh_scoring_estimator_step_dlet`    | `osh_scoring_estimator_point_dlet` | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
+| `TLET`    | `osh_scoring_estimator_step_tlet`    | `osh_scoring_estimator_point_tlet` | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
 | `DQEFF`   | `osh_scoring_estimator_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
 | `TQEFF`   | `osh_scoring_estimator_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
 | `NKERMA`  | —                    | — | `postprocess_volume` | (neutron kerma) → ÷volume [MeV/g] |
@@ -322,6 +324,17 @@ at score time and never at save.
 in `osh_scoring_estimator.c` and one row to this table. `osh_scoring_estimator_point_dose` guards
 neutral particles (they book energy but no local dose); `osh_scoring_estimator_point_energy` books
 the whole point energy deposit (equivalent to a unit-length crossing).
+
+`osh_scoring_estimator_point_dlet`/`_tlet` (issue #227) let a sub-threshold
+recoil/fragment contribute to the LET averages even though it has no track: they
+take the recoil's stopping power at its **birth energy** — `S(medium, E_birth)·ρ`
+from the SP table, resolved at `st->p[3] == st->q[3]` — as its representative LET.
+The dose-weighted numerator uses the whole local energy release `de` (so DLET books
+`(LET·de, de)`); the track-weighted one uses the effective range `de/LET` (so TLET
+books `(de, de/LET)`) — "like a track step" with `LET = de/ds`. Both collapse to
+`LET` for an isolated deposit; the weighting differs only when a bin mixes several
+contributions, exactly as on the step path. A recoil species with no SP-table
+column has no representable dE/dx and is skipped (its energy/dose still score).
 
 !!! note "NKERMA is a registry placeholder (deposit not yet wired)"
     The `NKERMA` row is `{NULL, NULL, postprocess_volume}`: it has neither a

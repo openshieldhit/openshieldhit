@@ -22,8 +22,10 @@ static struct osh_scoring_estimator const k_dirtydose = {
     osh_scoring_estimator_step_dirtydose, osh_scoring_estimator_point_dirtydose, postprocess_volume};
 static struct osh_scoring_estimator const k_dirtydosegy = {
     osh_scoring_estimator_step_dirtydose, osh_scoring_estimator_point_dirtydose, postprocess_dosegy};
-static struct osh_scoring_estimator const k_dlet = {osh_scoring_estimator_step_dlet, NULL, postprocess_ratio};
-static struct osh_scoring_estimator const k_tlet = {osh_scoring_estimator_step_tlet, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_dlet = {
+    osh_scoring_estimator_step_dlet, osh_scoring_estimator_point_dlet, postprocess_ratio};
+static struct osh_scoring_estimator const k_tlet = {
+    osh_scoring_estimator_step_tlet, osh_scoring_estimator_point_tlet, postprocess_ratio};
 static struct osh_scoring_estimator const k_dqeff = {osh_scoring_estimator_step_dqeff, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_tqeff = {osh_scoring_estimator_step_tqeff, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_nkerma = {NULL, NULL, postprocess_volume};
