@@ -79,6 +79,19 @@ char *osh_path_dirname(char const *path);
 enum osh_status osh_path_ensure_dir(char const *path);
 
 /**
+ * @brief Remove a directory and the (non-directory) entries directly inside it.
+ *
+ * @details
+ * Counterpart to osh_path_ensure_dir(), used by tests to tear down scratch
+ * output directories they created. A missing @p path is treated as success.
+ * Does not recurse into subdirectories.
+ *
+ * @return OSH_OK on success, OSH_EINVAL for invalid arguments, or OSH_EIO on
+ *         filesystem errors.
+ */
+enum osh_status osh_path_remove_dir(char const *path);
+
+/**
  * @brief Callback used by osh_dir_foreach_file().
  *
  * @param[in] path  Full path to one non-directory entry.
