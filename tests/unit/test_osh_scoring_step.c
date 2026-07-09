@@ -742,6 +742,144 @@ static void test_score_mesh_davge_neutral(void) {
     remove(path);
 }
 
+/* A page whose filter never matches must be skipped entirely (no deposit into
+ * either accumulator array), for all four new score kinds. */
+static void test_score_mesh_davge_dbeta_filtered_out(void) {
+    char path[512];
+    char const *detect = "Filter\n"
+                         "    Name NeverMatches\n"
+                         "    Z = 99\n"
+                         "\n"
+                         "Geometry Mesh\n"
+                         "    Name G\n"
+                         "    X -0.5 0.5 1\n"
+                         "    Y -0.5 0.5 1\n"
+                         "    Z  0.0 1.0 1\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename out.bdo\n"
+                         "    Geo G\n"
+                         "    Quantity DAVGE NeverMatches\n"
+                         "    Quantity TAVGE NeverMatches\n"
+                         "    Quantity DBETA NeverMatches\n"
+                         "    Quantity TBETA NeverMatches\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    size_t i;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&part, 0, sizeof(part));
+    part.z = 1u;
+    part.a = 1u;
+    part.mass = 938.272046;
+
+    memset(&st, 0, sizeof(st));
+    st.p[2] = 0.0;
+    st.p[3] = 150.0;
+    st.q[2] = 1.0;
+    st.q[3] = 148.0;
+    st.v[2] = 1.0;
+    st.ds = 1.0;
+    st.de = 2.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    ASSERT_TRUE(rt.npages == 4u);
+    for (i = 0; i < rt.npages; ++i) {
+        assert_close(rt.pages[i].acc.data[0], 0.0);
+    }
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* A fully-absorbed photon (zero kinetic energy at both step endpoints, zero
+ * rest mass) makes beta a literal 0/0 -> NaN.  DBETA/TBETA must recognise this
+ * and skip the step rather than book a NaN into the accumulator. */
+static void test_score_mesh_dbeta_massless_zero_energy(void) {
+    char path[512];
+    char const *detect = "Geometry Mesh\n"
+                         "    Name G\n"
+                         "    X -0.5 0.5 1\n"
+                         "    Y -0.5 0.5 1\n"
+                         "    Z  0.0 1.0 1\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename out.bdo\n"
+                         "    Geo G\n"
+                         "    Quantity DBETA\n"
+                         "    Quantity TBETA\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *dbeta_page;
+    struct osh_scoring_page_runtime *tbeta_page;
+    enum osh_status rc;
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    memset(&part, 0, sizeof(part));
+    part.z = 0u; /* photon: zero rest mass */
+    part.a = 0u;
+
+    memset(&st, 0, sizeof(st));
+    st.p[2] = 0.0;
+    st.p[3] = 0.0; /* fully absorbed: zero kinetic energy at both step endpoints */
+    st.q[2] = 1.0;
+    st.q[3] = 0.0;
+    st.v[2] = 1.0;
+    st.ds = 1.0;
+    st.de = 1.0;
+    st.rho = 1.0;
+    st.wt = 1.0;
+    st.medium = 0;
+
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    dbeta_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DBETA);
+    ASSERT_TRUE(dbeta_page != NULL);
+    assert_close(dbeta_page->acc.data[0], 0.0);
+
+    tbeta_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_TBETA);
+    ASSERT_TRUE(tbeta_page != NULL);
+    assert_close(tbeta_page->acc.data[0], 0.0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 /* LET and QEFF can be differential-axis values for ordinary extensive scores
  * such as FLUENCE.  They are not the same thing as the averaged quantities DLET,
  * TLET, DQEFF, and TQEFF.  This test verifies that a FLUENCE page can bin track
@@ -1090,6 +1228,8 @@ int main(void) {
     test_score_mesh_dqeff_tqeff();
     test_score_mesh_davge_tavge_dbeta_tbeta();
     test_score_mesh_davge_neutral();
+    test_score_mesh_davge_dbeta_filtered_out();
+    test_score_mesh_dbeta_massless_zero_energy();
     test_score_mesh_fluence_diff_let_qeff();
     test_score_zone_energy_fluence_dose();
     test_score_private_then_merge_equals_direct();
