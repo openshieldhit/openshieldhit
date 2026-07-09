@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "apps/osh/osh_run.h"
+#include "common/osh_file.h"
 #include "openshieldhit/status.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
@@ -82,6 +83,7 @@ static void test_time_cadence_run_reports_and_reserves(void) {
     fclose(out);
     fclose(err);
     remove(detect_path);
+    ASSERT_TRUE(osh_path_remove_dir(out_dir) == OSH_OK);
 }
 
 /* A valid beam.dat whose cadence comes from the cards themselves — a positive
@@ -131,6 +133,7 @@ static void test_beam_dat_cadence_reports(void) {
     fclose(err);
     remove(beam_path);
     remove(detect_path);
+    ASSERT_TRUE(osh_path_remove_dir(out_dir) == OSH_OK);
 }
 
 /*
@@ -158,6 +161,7 @@ static void test_scheduled_dump_over_budget_is_refused(void) {
     ASSERT_TRUE(osh_run(&opt, NULL, err) == OSH_ENOMEM);
     fclose(err);
     remove(detect_path);
+    ASSERT_TRUE(osh_path_remove_dir(out_dir) == OSH_OK);
 }
 
 int main(void) {
