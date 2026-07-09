@@ -180,9 +180,10 @@ void osh_rng_seed_history(
  * The child stream is a pure function of the parent's current state (itself a
  * pure function of the parent's lineage) and @p ordinal.  The lineage key is
  * hashed from the parent's raw state words, which the engine permutes before
- * emitting, so a child seed can never reuse a value the parent will itself draw
- * next (issue #299).  Siblings produced by one event are separated by giving
- * each a distinct @p ordinal (its index in the event's secondary list).
+ * emitting, so a child seed is no longer drawn from — or structurally
+ * correlated with — the parent's own subsequent output (issue #299).  Siblings
+ * produced by one event are separated by giving each a distinct @p ordinal (its
+ * index in the event's secondary list).
  *
  * @param child   RNG state to initialise (engine type inherited from parent).
  * @param parent  Parent RNG; read only, never advanced.

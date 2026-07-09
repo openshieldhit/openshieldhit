@@ -273,12 +273,13 @@ static void test_split_nonconsuming_and_drop_independent(void) {
 
 /*
  * P-6 / issue #299 regression: a split child must be seeded from the parent's
- * internal *state*, never from the parent's forthcoming output window.  The old
+ * internal *state*, not from the parent's forthcoming output window.  The old
  * design fed the parent's very next two u64 draws into the child as
  * (seed, stream) for ordinal 0; reconstruct that window-scan child and assert
- * the current split produces a different stream, so a child seed can no longer
- * reuse a value the parent will itself draw next.  Runs for both engines, whose
- * lineage-key derivation differs, and re-checks the non-advancing guarantee.
+ * the current split produces a different stream, so the child seed is no longer
+ * structurally derived from the parent's next draws.  Runs for both engines,
+ * whose lineage-key derivation differs, and re-checks the non-advancing
+ * guarantee.
  */
 static void test_split_not_seeded_from_parent_output(void) {
     enum osh_rng_type const engines[2] = {OSH_RNG_TYPE_PCG32, OSH_RNG_TYPE_XOSHIRO256SS};

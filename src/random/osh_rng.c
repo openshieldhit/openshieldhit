@@ -92,12 +92,15 @@ void osh_rng_seed_history(
  * lineage key with rng_mix_stream().
  *
  * The key is derived from the engine's raw state words, never from its output.
- * That distinction is what makes child seeding non-reusing (P-6, issue #299):
- * an engine's output function permutes the state before emitting it (PCG32's
- * XSH-RR permutation of the pre-advance state; xoshiro256**'s rotate/multiply
- * scrambler), so the raw state words a split hashes here are values the parent
- * will never itself draw.  Deriving the child seed from them therefore cannot
- * coincide with any of the parent's subsequent draws.
+ * That distinction is what removes the structural seed reuse P-6 flagged
+ * (issue #299): an engine's output function permutes the state before emitting
+ * it (PCG32's XSH-RR permutation of the pre-advance state; xoshiro256**'s
+ * rotate/multiply scrambler), so the state words a split hashes here are not
+ * the values the parent emits.  The child seed is therefore decoupled from the
+ * parent's output window rather than — as before — taken straight from it.  A
+ * chance 64-bit coincidence with some later parent draw is of course still
+ * possible, but it no longer happens by construction and carries no
+ * information.
  */
 static uint64_t rng_lineage_key(struct osh_rng const *parent) {
     switch (parent->type) {
@@ -138,11 +141,11 @@ void osh_rng_split(struct osh_rng *child, struct osh_rng const *parent, uint64_t
      *
      * Unlike an earlier design that scanned a copy of the parent's *output*
      * window, the lineage key here comes from the parent's raw state words,
-     * which the engine permutes before emitting — so a child seed can never
-     * reuse a value the parent will itself draw next (P-6, issue #299).
-     * Ordinal k owns the disjoint slot pair [2k, 2k+1] on the hash's index
-     * axis, mirroring the old two-slot window layout, and the derivation is
-     * O(1) rather than O(ordinal).
+     * which the engine permutes before emitting — so a child seed is no longer
+     * taken from, or structurally correlated with, the values the parent draws
+     * next (P-6, issue #299).  Ordinal k owns the disjoint slot pair [2k, 2k+1]
+     * on the hash's index axis, mirroring the old two-slot window layout, and
+     * the derivation is O(1) rather than O(ordinal).
      */
     uint64_t const key = rng_lineage_key(parent);
     uint64_t const child_seed = rng_mix_stream(key, 2u * ordinal, 0u);

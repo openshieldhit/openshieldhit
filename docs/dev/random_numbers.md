@@ -215,9 +215,10 @@ The implementation hashes the parent's current internal state into a lineage
 key, derives the child's `(seed, stream)` pair from that key and the ordinal,
 and initializes the child with the normal engine initializer. It reads the
 parent's state but never advances it, and — because the key comes from the
-parent's raw state words, which the engine permutes before emitting — a child
-seed can never reuse a value the parent will itself draw next (issue #299). The
-parent continues as if no split had happened.
+parent's raw state words, which the engine permutes before emitting — the child
+seed is no longer drawn from, or structurally correlated with, the parent's own
+subsequent output (issue #299). The parent continues as if no split had
+happened.
 
 That means children do **not** take alternating numbers from the parent's
 sequence:
