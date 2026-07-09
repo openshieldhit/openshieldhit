@@ -705,7 +705,7 @@ static void test_score_mesh_davge_neutral(void) {
     ASSERT_TRUE(rc == OSH_OK);
 
     memset(&part, 0, sizeof(part));
-    part.z = 0u; /* neutral, e.g. neutron; mass left unset (0.0) */
+    part.z = 0u; /* neutral, e.g. photon; mass left unset (0.0) */
     part.a = 0u;
 
     memset(&st, 0, sizeof(st));
