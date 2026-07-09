@@ -271,6 +271,10 @@ static void test_step_neutral_scores_zero(void) {
         &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
+    /* Assert on postprocessed output (1 cm^3 bins -> volume division is a no-op). */
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
     dose_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DOSE);
     dirty_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DIRTYDOSE);
     ASSERT_TRUE(dose_page != NULL);
@@ -384,6 +388,10 @@ static void test_step_water_override_gates_and_scales(void) {
         &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
+    /* Assert on postprocessed output (1 cm^3 bins -> volume division is a no-op). */
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
     ASSERT_TRUE(rt.noutputs == 1u);
     ASSERT_TRUE(rt.outputs[0].npages == 2u);
     dirty_local = &rt.pages[rt.outputs[0].page_indices[0]];
@@ -465,13 +473,18 @@ static void test_point_gate(void) {
         &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
     ASSERT_TRUE(rc == OSH_OK);
 
+    /* Assert on postprocessed output (1 cm^3 bins -> volume division is a no-op). */
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
     dirty_page = find_page_by_kind(&rt, OSH_SCORING_SCORE_DIRTYDOSE);
     ASSERT_TRUE(dirty_page != NULL);
     assert_close(dirty_page->acc.data[0], 0.0);
     assert_close(dirty_page->acc.data[1], 2.0);
     assert_close(dirty_page->acc.data[2], 0.0);
 
-    /* Now below threshold: the same point books nothing. */
+    /* Now below threshold: the same point books nothing (raw check — the deposit is
+     * zero before any postprocessing). */
     memset(dirty_page->acc.data, 0, dirty_page->len * sizeof(*dirty_page->acc.data));
     init_flat_mat_tables(
         &mat_rt, proj_z, proj_a, proj_mass, rho_arr, sp_values, (float) (OSH_DIRTYDOSE_MASS_SP_THRESHOLD - 10.0));
