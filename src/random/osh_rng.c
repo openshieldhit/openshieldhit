@@ -87,38 +87,69 @@ void osh_rng_seed_history(
     osh_rng_init(rng, type, seed, stream);
 }
 
+/*
+ * rng_lineage_key() — fold a parent RNG's *internal state* into one 64-bit
+ * lineage key with rng_mix_stream().
+ *
+ * The key is derived from the engine's raw state words, never from its output.
+ * That distinction is what removes the structural seed reuse P-6 flagged
+ * (issue #299): an engine's output function permutes the state before emitting
+ * it (PCG32's XSH-RR permutation of the pre-advance state; xoshiro256**'s
+ * rotate/multiply scrambler), so the state words a split hashes here are not
+ * the values the parent emits.  The child seed is therefore decoupled from the
+ * parent's output window rather than — as before — taken straight from it.  A
+ * chance 64-bit coincidence with some later parent draw is of course still
+ * possible, but it no longer happens by construction and carries no
+ * information.
+ */
+static uint64_t rng_lineage_key(struct osh_rng const *parent) {
+    switch (parent->type) {
+    case OSH_RNG_TYPE_XOSHIRO256SS: {
+        /* Fold all four 64-bit state words in, each fully mixed so no bits are
+         * lost: two lineages alias only if their whole 256-bit states hash
+         * together, which is negligibly unlikely. */
+        uint64_t key = parent->u.xoshiro256ss.s[0];
+
+        key = rng_mix_stream(key, parent->u.xoshiro256ss.s[1], 0u);
+        key = rng_mix_stream(key, parent->u.xoshiro256ss.s[2], 0u);
+        key = rng_mix_stream(key, parent->u.xoshiro256ss.s[3], 0u);
+        return key;
+    }
+
+    case OSH_RNG_TYPE_PCG32:
+    default:
+        /* Both state words matter: two PCG streams sharing state but not inc
+         * are different streams, so inc must enter the key. */
+        return rng_mix_stream(parent->u.pcg32.state, parent->u.pcg32.inc, 0u);
+    }
+}
+
 void osh_rng_split(struct osh_rng *child, struct osh_rng const *parent, uint64_t ordinal) {
     /*
-     * Seed the child from a *private copy* of the parent advanced to the
-     * child's ordinal slot.  The parent's own stream is deliberately never
+     * Seed the child by hashing the parent's *current internal state*, keyed by
+     * the child's ordinal.  The parent's own stream is deliberately never
      * consumed: splitting reads parent state but does not advance it.
      *
      * This is what makes secondary seeding drop-, reorder-, and overflow-proof
-     * (issue #213; design in #148).  Because splitting no longer draws from the
+     * (issue #213; design in #148).  Because splitting never draws from the
      * parent, whether a sibling secondary is injected, reordered, or silently
      * dropped when a pool is full can never shift the parent's — or any other
      * sibling's — subsequent draws.  Each child stream is a pure function of
-     * its lineage key (the parent's current state, itself a pure function of
-     * the parent's own draws) and its ordinal, so reproducibility no longer
-     * depends on pool occupancy or wavefront scheduling.
+     * its lineage key (a hash of the parent's current state, itself a pure
+     * function of the parent's own draws) and its ordinal, so reproducibility
+     * no longer depends on pool occupancy or wavefront scheduling.
      *
-     * Ordinal k owns the disjoint two-draw window [2k, 2k+1] of the copied
-     * stream — the exact layout the old sequential split produced — so an
-     * injected child keeps the identical stream it had before, while the parent
-     * is left untouched.  The scan cost is O(ordinal); secondary counts per
-     * event are bounded (OSH_NUCLEAR_MAX_SECONDARIES), so this is negligible.
+     * Unlike an earlier design that scanned a copy of the parent's *output*
+     * window, the lineage key here comes from the parent's raw state words,
+     * which the engine permutes before emitting — so a child seed is no longer
+     * taken from, or structurally correlated with, the values the parent draws
+     * next (P-6, issue #299).  Ordinal k owns the disjoint slot pair [2k, 2k+1]
+     * on the hash's index axis, mirroring the old two-slot window layout, and
+     * the derivation is O(1) rather than O(ordinal).
      */
-    struct osh_rng scan = *parent; /* copy: parent is const and stays put */
-    uint64_t child_seed;
-    uint64_t child_stream;
-    uint64_t i;
-
-    for (i = 0u; i < ordinal; ++i) {
-        (void) osh_rng_u64(&scan);
-        (void) osh_rng_u64(&scan);
-    }
-    child_seed = osh_rng_u64(&scan);
-    child_stream = osh_rng_u64(&scan);
+    uint64_t const key = rng_lineage_key(parent);
+    uint64_t const child_seed = rng_mix_stream(key, 2u * ordinal, 0u);
+    uint64_t const child_stream = rng_mix_stream(key, (2u * ordinal) + 1u, 0u);
 
     osh_rng_init(child, parent->type, child_seed, child_stream);
 }

@@ -170,18 +170,20 @@ void osh_rng_seed_history(
  * @brief Derive an independent child stream from a parent, keyed by ordinal.
  *
  * @details
- * Seeds @p child from a private copy of @p parent advanced to the child's
- * @p ordinal slot.  Crucially it does **not** consume a draw from @p parent:
+ * Seeds @p child by hashing @p parent's current internal state, keyed by the
+ * child's @p ordinal.  Crucially it does **not** consume a draw from @p parent:
  * splitting reads the parent's state but never advances it.  A secondary that
  * is later dropped, reordered, or lost to pool overflow therefore cannot shift
  * its parent's or its siblings' streams, so reproducibility is independent of
  * pool occupancy and wavefront scheduling (issue #213; design in #148).
  *
  * The child stream is a pure function of the parent's current state (itself a
- * pure function of the parent's lineage) and @p ordinal.  Siblings produced by
- * one event are separated by giving each a distinct @p ordinal (its index in
- * the event's secondary list); ordinal @c k reproduces exactly the stream the
- * old sequential split assigned to the k-th secondary.
+ * pure function of the parent's lineage) and @p ordinal.  The lineage key is
+ * hashed from the parent's raw state words, which the engine permutes before
+ * emitting, so a child seed is no longer drawn from — or structurally
+ * correlated with — the parent's own subsequent output (issue #299).  Siblings
+ * produced by one event are separated by giving each a distinct @p ordinal (its
+ * index in the event's secondary list).
  *
  * @param child   RNG state to initialise (engine type inherited from parent).
  * @param parent  Parent RNG; read only, never advanced.
