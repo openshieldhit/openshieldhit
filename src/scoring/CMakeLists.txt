@@ -21,6 +21,13 @@ add_library(osh_scoring
     save/osh_scoring_save_rtdose.c
 )
 
+# Native SVG plot writer (issue #238 prototype): compiled in only when the
+# opt-in OSH_ENABLE_PLOT switch is set, so the stock library carries no
+# plotting code.  The dispatcher in osh_scoring_save.c is #ifdef-gated to match.
+if(OSH_ENABLE_PLOT)
+    target_sources(osh_scoring PRIVATE save/osh_scoring_save_plot.c)
+endif()
+
 target_include_directories(osh_scoring
     PUBLIC
         ${PROJECT_SOURCE_DIR}/src

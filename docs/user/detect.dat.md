@@ -104,6 +104,40 @@ Rules and semantics:
   zone-index column. The per-zone volume is not stored in either — it is consumed by
   the ÷volume in postprocess, so the saved dose/fluence is already final.
 
+### Native plot output — `FileFormat SVG` (experimental, opt-in)
+
+> **Prototype for [issue #238](https://github.com/openshieldhit/openshieldhit/issues/238).**
+> Compiled in only when the project is configured with `-DOSH_ENABLE_PLOT=ON`; the
+> stock binary carries no plotting code. The default plotting path stays
+> `tools/` (matplotlib/pymchelper). This is a zero-dependency **quick-look**
+> renderer, not a publication-figure tool.
+
+A run can drop a viewable 1-D line plot (a depth-dose / Bragg curve or any 1-D
+profile) next to its `.bdo`/`.dat`, so the data can be eyeballed on a machine
+that has only the `openshieldhit` binary — no Python:
+
+```text
+Output
+    Filename bragg          # ".svg" is appended automatically
+    FileFormat SVG
+    Geo MyMesh
+    Quantity Dose
+```
+
+- The plot is an **additional** artifact — BDO stays the source of truth and is
+  never replaced. Values use the same normalisation as `TEXT` output (NORM/SUM
+  ÷ nstat, AVER as the physical mean).
+- Output is a hand-written SVG document (pure `fprintf`, no vendored library):
+  a plot frame, "nice" axis ticks, and one polyline per `Quantity`, viewable in
+  any browser.
+- **Scope of this prototype** is 1-D spatial profiles only:
+  - `Geometry Mesh` with exactly one non-singleton axis (e.g. a `1 × 1 × N`
+    depth mesh), or
+  - `Geometry Cyl` with exactly one non-singleton axis (R or Z).
+- Anything outside that scope (2-D/3-D meshes, differential spectra, `Zone`
+  geometry, rotated meshes) is declined with `OSH_ENOTSUP`; those, plus PNG
+  heatmaps and multipage PDF, are follow-up items under discussion on #238.
+
 ## Differential scoring
 
 A `Quantity` line can be followed by `Diff1`/`Diff1Type` (and optionally `Diff2`/`Diff2Type`)

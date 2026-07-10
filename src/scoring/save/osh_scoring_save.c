@@ -5,6 +5,9 @@
 #include "scoring/save/osh_scoring_save_ascii.h"
 #include "scoring/save/osh_scoring_save_bdo2019.h"
 #include "scoring/save/osh_scoring_save_rtdose.h"
+#ifdef OSH_ENABLE_PLOT
+#include "scoring/save/osh_scoring_save_plot.h"
+#endif
 
 static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
@@ -13,6 +16,9 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
 static int fileformat_is_ascii(char const *fileformat);
 static int fileformat_is_bdo2019(char const *fileformat);
 static int fileformat_is_rtdose(char const *fileformat);
+#ifdef OSH_ENABLE_PLOT
+static int fileformat_is_plot(char const *fileformat);
+#endif
 
 enum osh_status osh_scoring_save(struct osh_scoring_workspace const *ws,
                                  struct osh_scoring_runtime const *rt,
@@ -81,6 +87,11 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
     if (fileformat_is_rtdose(fileformat)) {
         return osh_scoring_save_rtdose_output(ws, rt, nstat, output_idx);
     }
+#ifdef OSH_ENABLE_PLOT
+    if (fileformat_is_plot(fileformat)) {
+        return osh_scoring_save_plot_output(ws, rt, nstat, output_idx);
+    }
+#endif
 
     return OSH_ENOTSUP;
 }
@@ -107,3 +118,14 @@ static int fileformat_is_rtdose(char const *fileformat) {
     }
     return strcmp(fileformat, "rtdose") == 0 || strcmp(fileformat, "RTDOSE") == 0;
 }
+
+#ifdef OSH_ENABLE_PLOT
+/* Native "quick-look" plot formats (prototype, issue #238).  Only SVG is
+ * implemented; the format keyword is stored lowercased by the parser. */
+static int fileformat_is_plot(char const *fileformat) {
+    if (!fileformat) {
+        return 0;
+    }
+    return strcmp(fileformat, "svg") == 0;
+}
+#endif
