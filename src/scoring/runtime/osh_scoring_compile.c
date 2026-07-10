@@ -1398,17 +1398,14 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                  * multi-page page-set cannot supply; reject it in a mixed block.
                  * Single-format RTDOSE is unaffected. */
                 if (format_is_rtdose(fmt)) {
-                    OSH_DIAG_ERRORF(diag,
-                                    "Scoring output '%s' cannot combine RTDOSE with other formats in one block",
-                                    output_name);
+                    OSH_DIAG_ERRORF(
+                        diag, "Scoring output '%s' cannot combine RTDOSE with other formats in one block", output_name);
                     rc = OSH_ENOTSUP;
                     goto fail;
                 }
                 if (format_canonical_ext(fmt) == NULL) {
-                    OSH_DIAG_ERRORF(diag,
-                                    "Scoring output '%s' requests unknown FileFormat '%s'",
-                                    output_name,
-                                    fmt_name);
+                    OSH_DIAG_ERRORF(
+                        diag, "Scoring output '%s' requests unknown FileFormat '%s'", output_name, fmt_name);
                     rc = OSH_ENOTSUP;
                     goto fail;
                 }

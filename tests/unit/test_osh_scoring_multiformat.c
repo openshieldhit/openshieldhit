@@ -33,10 +33,8 @@
 
 static int tmp_counter = 0;
 
-static void write_temp_detect_with_filename(char *path,
-                                            size_t path_cap,
-                                            char const *filename,
-                                            char const *fileformat_line) {
+static void
+write_temp_detect_with_filename(char *path, size_t path_cap, char const *filename, char const *fileformat_line) {
     FILE *fp;
 
     snprintf(path, path_cap, "osh_multiformat_test_%d.tmp", tmp_counter++);
