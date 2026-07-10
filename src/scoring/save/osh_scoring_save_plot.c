@@ -1,23 +1,24 @@
 /*
  * Native SVG plot writer (issue #238) — orchestration.
  *
- * Turns one compiled Output into viewable 1-D line plots next to its .bdo/.dat,
- * so a run can be eyeballed on a machine that has only the openshieldhit binary
- * (no Python/matplotlib).  This unit validates the request, asks
- * osh_scoring_plot_spec.c which pages form a 1-D curve, and writes one SVG file
- * per plotted page via the generic renderer in osh_scoring_svg.c.  A single
- * plotted quantity keeps the given filename; several quantities each get their
- * own file with a "_p1"/"_p2"/... page suffix so none is overwritten.  It is
- * compiled unconditionally; `FileFormat SVG` on an Output block reaches it
- * through the save dispatcher.
+ * Turns one compiled Output into viewable 1-D line plots, so a run can be
+ * eyeballed on a machine that has only the openshieldhit binary (no
+ * Python/matplotlib).  `FileFormat SVG` is that Output's only writer — it does
+ * not also emit `.bdo`/`.dat` for the same block; a separate Output with
+ * `FileFormat BDO`/`TEXT` covers the numeric data.  This unit validates the
+ * request, asks osh_scoring_plot_spec.c which pages form a 1-D curve, and
+ * writes one SVG file per plotted page via the generic renderer in
+ * osh_scoring_svg.c.  A single plotted quantity keeps the given filename;
+ * several quantities each get their own file with a "_p1"/"_p2"/... page
+ * suffix so none is overwritten.  It is compiled unconditionally; `FileFormat
+ * SVG` on an Output block reaches it through the save dispatcher.
  *
  * Normalisation matches the ASCII writer: NORM/SUM quantities are divided by
  * nstat, AVER quantities (DLET/TLET) are written as the physical mean already
  * produced by osh_scoring_postprocess() — which is also where a differential
  * page's bin-width division happens, so acc.data already holds dPhi/dE here.
- * The plot is an additional artifact — BDO stays the source of truth.  Save is a
- * cold path, so the small allocations here are fine (the §10 hot-path ban does
- * not apply).
+ * Save is a cold path, so the small allocations here are fine (the §10
+ * hot-path ban does not apply).
  */
 
 #include "scoring/save/osh_scoring_save_plot.h"

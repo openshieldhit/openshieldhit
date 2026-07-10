@@ -112,8 +112,12 @@ Rules and semantics:
 > figures, load the `.bdo`/`.dat` into
 > [pymchelper](https://github.com/DataMedSci/pymchelper) instead.
 
-Add `FileFormat SVG` to an `Output` and the run drops a 1-D line plot next to
-its `.bdo`/`.dat`. Two plot shapes are recognised automatically:
+Add `FileFormat SVG` to an `Output` and that output writes a 1-D line plot
+instead of numeric data — each `Output` block has exactly one `FileFormat`, so
+`FileFormat SVG` replaces the `.bdo`/`.dat` for that block rather than sitting
+alongside it. To keep both, add a second `Output` block for the same `Geo`/
+`Quantity` with `FileFormat BDO` (or `TEXT`) and a different `Filename`. Two
+plot shapes are recognised automatically:
 
 **Spatial profile** — a depth-dose / Bragg curve or any 1-D profile:
 
@@ -139,9 +143,9 @@ Output
     Diff1Type ENUC         # → x-axis "E/nucleon [MeV/u]", y "…/cm^2/(MeV/u)"
 ```
 
-- The plot is an **additional** artifact — the `.bdo`/`.dat` remains the source
-  of truth and is never replaced. Plotted values use the same normalisation as
-  `TEXT` output.
+- Plotted values use the same normalisation as `TEXT` output, so a separate
+  `FileFormat TEXT`/`BDO` `Output` for the same `Geo`/`Quantity` reports the
+  same numbers.
 - Each plotted `Quantity` is written to its **own** file. A single quantity keeps
   the `Filename` you gave (`bragg.svg`); with several, a `_p1`, `_p2`, … page
   suffix is added (`bragg_p1.svg`, `bragg_p2.svg`, …) so nothing is overwritten.
@@ -158,10 +162,10 @@ Output
     or a one-`Zone` geometry).
 - Anything that is not one of these 1-D shapes — 2-D/3-D meshes, 2-D
   `Diff1 × Diff2` spectra, spectra spanning several spatial bins, multi-zone
-  profiles, rotated meshes — is simply not plotted; the run still writes the
-  usual `.bdo`/`.dat`. To visualise those, open the data with
-  [pymchelper](https://github.com/DataMedSci/pymchelper), which handles 2-D
-  maps, log axes, error bars, and multi-page output.
+  profiles, rotated meshes — cannot be plotted, and that `Output` produces no
+  file at all. Use `FileFormat TEXT`/`BDO` for that geometry instead, then
+  visualise it with [pymchelper](https://github.com/DataMedSci/pymchelper),
+  which handles 2-D maps, log axes, error bars, and multi-page output.
 
 ## Differential scoring
 

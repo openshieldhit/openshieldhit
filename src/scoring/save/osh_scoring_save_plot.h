@@ -13,10 +13,13 @@ extern "C" {
  *
  * @details
  * Issue #238 — a zero-dependency "quick-look" plot so a run can drop a viewable
- * Bragg curve / 1-D profile next to its `.bdo`/`.dat` on a machine that only has
- * the `openshieldhit` binary (no Python/matplotlib).  Always compiled in and
- * reached by `FileFormat SVG` on an `Output` block; the drawing is delegated to
- * the generic renderer in @ref osh_scoring_svg.h.
+ * Bragg curve / 1-D profile on a machine that only has the `openshieldhit`
+ * binary (no Python/matplotlib).  Always compiled in and reached by
+ * `FileFormat SVG` on an `Output` block; the drawing is delegated to the
+ * generic renderer in @ref osh_scoring_svg.h.  `FileFormat SVG` is that
+ * `Output`'s only writer — it does not also emit `.bdo`/`.dat` for the same
+ * block; add a second `Output` with `FileFormat BDO`/`TEXT` for the numeric
+ * data.
  *
  * Two 1-D shapes are chosen automatically from the page model:
  *
@@ -37,13 +40,15 @@ extern "C" {
  * none is overwritten.  Values are normalised per primary exactly as the ASCII
  * writer does (NORM/SUM ÷ nstat, AVER written as the physical mean; a
  * differential page's bin-width division is already applied by @ref
- * osh_scoring_postprocess).  The plot is an **additional** artifact: BDO remains
- * the source of truth and is never replaced.
+ * osh_scoring_postprocess).
  *
  * @c OSH_ENOTSUP is returned when no page fits either shape (2-D / 3-D meshes,
  * 2-D spectra with a second differential axis, spectra spanning more than one
  * spatial bin, categorical multi-zone profiles, rotated meshes, two-pass pages
- * not yet postprocessed).  These are follow-up items for the discussion on #238.
+ * not yet postprocessed).  In that case the `Output` produces no file at all;
+ * use `FileFormat TEXT`/`BDO` for that geometry and an external tool such as
+ * pymchelper to visualise it.  These are follow-up items for the discussion on
+ * #238.
  *
  * @param[in] ws          Scoring workspace with output metadata and file paths.
  * @param[in] rt          Compiled scoring runtime with postprocessed accumulators.
