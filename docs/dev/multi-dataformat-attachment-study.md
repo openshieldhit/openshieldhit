@@ -37,6 +37,88 @@ that separates the two things a `FileFormat` line conflates today:
 The desired user syntax is the terse `FileFormat TEXT BDO` (a list of formats on
 one line), not one line per file.
 
+## A worked example: what actually costs memory
+
+Take a realistic scoring mesh: `100 × 100 × 200` bins (2 mm voxels over a
+`20 × 20 × 40` cm volume), scoring two quantities, `Dose` and `Fluence`.
+
+```
+voxels     = 100 × 100 × 200        = 2,000,000
+one page   = 2,000,000 × 8 bytes    = 16,000,000 bytes  = 16 MB   (Dose OR Fluence)
+page-set   = 2 pages × 16 MB        = 32 MB                       (Dose AND Fluence)
+```
+
+That 32 MB — the block's **page-set** — is the only large, configuration-driven
+allocation involved. Everything else about an `Output` block is tiny by
+comparison.
+
+Today, to get this mesh out as both TEXT and BDO, `detect.dat` needs **two**
+`Output` blocks (exactly the pattern in
+`tests/cases/04_simple_loaddedx/detect.dat`). Pages are never shared between
+blocks, so each block compiles its **own** 32 MB page-set — 64 MB total — and
+the transport hot path deposits into both copies for every history that crosses
+the mesh: double the per-step work for these two quantities, for the entire run.
+
+| Formats requested | Today (duplicate `Output` blocks) | Proposed (one shared page-set) |
+|---|---|---|
+| 1 (TEXT only) | 32 MB | 32 MB |
+| 2 (TEXT + BDO) | 64 MB | 32 MB + a few dozen bytes |
+| 3 (TEXT + BDO + RTDOSE) | 96 MB | 32 MB + a few dozen bytes |
+| 5 | 160 MB | 32 MB + a few dozen bytes |
+
+"Today" grows **linearly** with the number of formats: *N* formats → *N* × 32 MB.
+"Proposed" is **flat**: accumulator memory depends only on the geometry and the
+quantities scored, never on how many ways the result gets written to disk.
+
+### Where the "a few dozen bytes" comes from
+
+An **output descriptor** — "write these pages to this file, in this format" —
+never holds scored values. It holds a filename string, a lowercase format
+keyword (`"text"`, `"bdo"`, …), and a short list of page indices (plain
+`size_t` integers, 8 bytes each) pointing into the *one* shared page-set. Adding
+a second format to a block means adding one more of these tiny descriptors —
+not a second 32 MB array.
+
+### The "same photo, two prints" mental model
+
+Think of a page-set as a photograph, developed once at the end of a run. Today,
+wanting a JPEG print and a PNG print means taking the photo **twice** — one
+exposure developed into a JPEG, a wholly separate exposure developed into a PNG.
+Same image, double the film.
+
+What we actually want is to take the photo **once** and hand that *same* photo
+to two printers. Each printer looks at the same pixels and produces a different
+file — one a JPEG encoder, one a PNG encoder — but neither printer owns its own
+copy of the photo, and neither is allowed to touch the original pixels.
+
+### How that maps onto code: loop over the array, don't copy it
+
+A writer's core job is a **read-only loop** over a page's already-computed
+values. Two writers can run that loop back-to-back over the identical array:
+
+```c
+/* TEXT writer (simplified): read-only pass over the shared accumulator */
+for (i = 0; i < page->len; ++i) {
+    double value = page->acc.data[i] / nstat;   /* ASCII normalises at write time */
+    fprintf(fp, "%.6e\n", value);
+}
+
+/* BDO writer (simplified): a DIFFERENT read-only pass over the SAME array */
+for (i = 0; i < page->len; ++i) {
+    double value = page->acc.data[i];           /* BDO keeps the raw sum, tags nstat separately */
+    fwrite(&value, sizeof(value), 1, fp);
+}
+```
+
+Both loops read `page->acc.data` — the identical pointer, the identical
+2,000,000 doubles. Nothing is copied to feed the second loop. The writers
+disagree only about **how to encode a value on the way out** (text row vs
+binary token; ÷nstat vs raw-sum-plus-tag) — never about **where the value
+lives**. Generalising this is exactly what this issue proposes: an `Output`
+block with several `FileFormat` targets runs that loop once per target, and
+every target reads from the one page-set that was built once, when the run
+started.
+
 ## Current architecture (how a format attaches today)
 
 ### Cold (parsed) form
