@@ -10,7 +10,7 @@
 ## Build
 
 ```bash
-git clone https://github.com/nbassler/openshieldhit.git
+git clone https://github.com/openshieldhit/openshieldhit.git
 cd openshieldhit
 cmake --preset release
 cmake --build --preset release --parallel
