@@ -10,6 +10,7 @@
  *   test_one_batch_zero_error     — B < 2 (zero d.o.f.) → error zeroed
  *   test_empty_bin_zero_error     — a zero-sum bin has no defined relative error → 0
  *   test_variance_off_noop        — pages without M2 arrays are left untouched
+ *   test_rejects_after_postprocess — runtime already postprocessed → OSH_ESTATE
  *   test_null_rejected            — NULL runtime → OSH_EINVAL
  */
 
@@ -161,6 +162,31 @@ static void test_variance_off_noop(void) {
     osh_scoring_accumulator_free(&page.acc);
 }
 
+/* Ordering guard: the relative error is read off the raw sums, so finalize must
+ * precede postprocess.  A runtime already marked postprocessed is rejected with
+ * OSH_ESTATE, before any bin is touched. */
+static void test_rejects_after_postprocess(void) {
+    struct osh_scoring_page_runtime page;
+    struct osh_scoring_runtime rt;
+
+    make_var_page(&page, OSH_SCORING_SCORE_DOSE, 2u, 0, 1);
+    page.acc.data[0] = 24.0;
+    page.acc.data[1] = 8.0;
+    page.acc.data_var[0] = 16.0;
+    page.acc.data_var[1] = 0.0;
+    page.acc.weight = 4.0;
+    page.acc.nbatch = 2u;
+    make_runtime(&rt, &page, 1u);
+    rt.postprocessed = 1; /* postprocess already ran: raw sums are gone */
+
+    ASSERT_TRUE(osh_scoring_finalize_errors(&rt) == OSH_ESTATE);
+    /* Guard fires up front: the M2 array is left exactly as supplied. */
+    ASSERT_TRUE(page.acc.data_var[0] == 16.0);
+    ASSERT_TRUE(page.acc.data_var[1] == 0.0);
+
+    osh_scoring_accumulator_free(&page.acc);
+}
+
 static void test_null_rejected(void) {
     ASSERT_TRUE(osh_scoring_finalize_errors(NULL) == OSH_EINVAL);
 }
@@ -171,6 +197,7 @@ int main(void) {
     test_one_batch_zero_error();
     test_empty_bin_zero_error();
     test_variance_off_noop();
+    test_rejects_after_postprocess();
     test_null_rejected();
     printf("All osh_scoring_finalize_errors tests passed.\n");
     return 0;

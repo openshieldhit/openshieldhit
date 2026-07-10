@@ -206,13 +206,17 @@ required.
 
 `osh_scoring_finalize_errors()` (issue #209) applies this once, **before**
 `osh_scoring_postprocess()` rescales `data` or collapses the two-pass ratios,
-because it reads the raw sums. Rather than the absolute `SE` it stores the per-bin
+because it reads the raw sums — an ordering the function enforces by returning
+`OSH_ESTATE` if the runtime's `postprocessed` flag is set (an *in-place*
+postprocess already ran; an out-of-place `..._into` a distinct `dst` leaves the
+sums intact and is not rejected). Rather than the absolute `SE` it stores the
+per-bin
 **relative** error `SE / |mean| = sqrt(M2 · weight / (nbatch−1)) / |data|` back
 into `data_var`; the save layer then emits the absolute error column as
 `|value| · data_var`, so whatever per-primary / physical-mean / unit scaling the
 writer applies to the value applies to its error automatically — the stored error
-is normalisation-invariant. For the two-pass **AVER** quantities (DLET/TLET/Qeff)
-the reported value is the ratio `data / data2`, so the numerator and denominator
+is normalisation-invariant. For the two-pass **AVER** quantities (DLET/TLET/Qeff/
+AVGE/BETA) the reported value is the ratio `data / data2`, so the numerator and denominator
 relative errors are combined in quadrature (`rel² = rel_num² + rel_den²`); this
 ignores their strong positive correlation and is therefore deliberately
 **conservative** — an over-estimate, never an under-estimate. A bin with
@@ -242,8 +246,8 @@ DICOM RTDOSE is a specialised round-trip writer.
 
 For quick inspection and single-run use. Values are normalised **per primary
 particle** (divided by `nstat`) at write time, except averaged quantities
-(DLET, TLET) which are already physical means after post-processing and are
-written as-is. ASCII output is **not** suitable for merging partial results:
+(DLET, TLET, DQEFF, TQEFF, DAVGE, TAVGE, DBETA, TBETA) which are already physical
+means after post-processing and are written as-is. ASCII output is **not** suitable for merging partial results:
 once divided by `nstat`, each run's absolute weight is lost.
 
 When a page has variance tracking enabled each quantity gains a paired `NAME_ERR`
@@ -265,7 +269,7 @@ supports two merging paths:
 2. **Embarrassingly-parallel / multi-node**: independent runs each emit a
    `.bdo`, and a merge tool weights per scorer kind using each file's `nstat`:
      - `NORM` (DOSE, FLUENCE, ENERGY, …): `X = (sum_j x_j) / (sum_j nstat_j)`
-     - `AVER` (DLET, TLET): `X = (sum_j x_j * nstat_j) / (sum_j nstat_j)`
+     - `AVER` (DLET, TLET, DQEFF, TQEFF, DAVGE, TAVGE, DBETA, TBETA): `X = (sum_j x_j * nstat_j) / (sum_j nstat_j)`
      - `SUM` (COUNT, …): `X = sum_j x_j`
      - `APPEND` (MCPL): concatenation
 
@@ -299,10 +303,10 @@ Each estimator owns a trio of handlers, registered in
   form once per bin (÷volume, unit conversion, or two-pass ratio).
 
 A `—` below means the handler is `NULL`: the estimator is not scored on that path
-(`score_point_` needs a track length for FLUENCE and the Qeff averages; DLET/TLET
-instead take the recoil's birth-energy stopping power as a representative dE/dx —
-issue #227), or the accumulator is already final (`postprocess_` for ENERGY/COUNT
-unless the page is differential).
+(`score_point_` needs a track length for FLUENCE and the track-/dose-averaged
+quantities Qeff, Ē and β; DLET/TLET instead take the recoil's birth-energy stopping
+power as a representative dE/dx — issue #227), or the accumulator is already final
+(`postprocess_` for ENERGY/COUNT unless the page is differential).
 The scorer deposits the extensive quantity; geometry-specific normalisation
 (÷volume via `geo->bin_vol_inv`) and differential-axis normalisation (÷bin width,
 or ÷width1÷width2 for double-differential pages) live in `postprocess_` — never
@@ -314,10 +318,16 @@ at score time and never at save.
 | `FLUENCE` | `osh_scoring_estimator_step_fluence` | — | `postprocess_volume` | track length → ÷volume [1/cm²] |
 | `DOSE`    | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_volume` | `de·(path/score_len)/ρ` [+SP-ratio] → ÷volume [MeV/g] |
 | `DOSEGY`  | `osh_scoring_estimator_step_dose`    | `osh_scoring_estimator_point_dose`  | `postprocess_dosegy` | as `DOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
+| `DIRTYDOSE`   | `osh_scoring_estimator_step_dirtydose` | `osh_scoring_estimator_point_dirtydose` | `postprocess_volume` | as `DOSE`, gated on mass-LET > threshold → ÷volume [MeV/g] |
+| `DIRTYDOSEGY` | `osh_scoring_estimator_step_dirtydose` | `osh_scoring_estimator_point_dirtydose` | `postprocess_dosegy` | as `DIRTYDOSE` → ÷volume, ×`OSH_MEVG2GY` [Gy] |
 | `DLET`    | `osh_scoring_estimator_step_dlet`    | `osh_scoring_estimator_point_dlet` | `postprocess_ratio` | dose-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
 | `TLET`    | `osh_scoring_estimator_step_tlet`    | `osh_scoring_estimator_point_tlet` | `postprocess_ratio` | track-weighted `(LET·w, w)` → `data/data2` [MeV/cm] |
 | `DQEFF`   | `osh_scoring_estimator_step_dqeff`   | — | `postprocess_ratio` | dose-weighted `((z_eff/β)²·w, w)` → `data/data2` |
 | `TQEFF`   | `osh_scoring_estimator_step_tqeff`   | — | `postprocess_ratio` | track-weighted `((z_eff/β)²·w, w)` → `data/data2` |
+| `DAVGE`   | `osh_scoring_estimator_step_davge`   | — | `postprocess_ratio` | dose-weighted `(E_kin·w, w)` → `data/data2` [MeV] |
+| `TAVGE`   | `osh_scoring_estimator_step_tavge`   | — | `postprocess_ratio` | track-weighted `(E_kin·w, w)` → `data/data2` [MeV] |
+| `DBETA`   | `osh_scoring_estimator_step_dbeta`   | — | `postprocess_ratio` | dose-weighted `(β·w, w)` → `data/data2` |
+| `TBETA`   | `osh_scoring_estimator_step_tbeta`   | — | `postprocess_ratio` | track-weighted `(β·w, w)` → `data/data2` |
 | `NKERMA`  | —                    | — | `postprocess_volume` | (neutron kerma) → ÷volume [MeV/g] |
 
 **Adding a `Quantity`** = write its handler(s), then add one row to the registry
@@ -362,23 +372,32 @@ one of these states:
 |---|---|---|
 | NORM (DOSE, FLUENCE, …) | intensive per-primary sum (÷volume applied) | divide by `nstat` |
 | NORM (ENERGY, …) | raw accumulated sum (no transform) | divide by `nstat` |
-| AVER (DLET, TLET, DQEFF, TQEFF) | physical mean (`data ÷ data2` done) | none — written as-is |
+| AVER (DLET, TLET, DQEFF, TQEFF, DAVGE, TAVGE, DBETA, TBETA) | physical mean (`data ÷ data2` done) | none — written as-is |
 | SUM (COUNT, …) | raw count | none |
 
 **Merging caveat**: AVER pages cannot be naively summed across BDO files
 because `data2` is discarded at post-process; merging requires re-weighting by
 each file's `nstat`.
 
-!!! warning "These handlers are on the variance-finalisation critical path"
+!!! note "Variance finalisation is ordered *before* these handlers, not folded into them"
     Because ÷volume moved *into* `postprocess_` (never at score time, never at
-    save), the handlers here own the geometry normalisation — and therefore, once
-    the variance feature (#169) makes `data_var` (M2) live, its finalisation too.
-    `postprocess_volume`/`postprocess_dosegy` scale `data` by `vinv` (×`extra`), so
-    they must scale M2 by `vinv²` (×`extra²`); `postprocess_ratio` forms
-    `data/data2`, so it must propagate error through that quotient. Today M2 is
-    `NULL` and the handlers touch `data` only — correct as-is — but wiring
-    variance (#247) is **not** a deposit-only change: it must extend these
-    handlers. See the coupling note in §4.
+    save), the handlers here own the geometry normalisation. When #251 was written
+    the open question was whether making `data_var` (M2) live would force these
+    handlers to carry the error too — `postprocess_volume`/`postprocess_dosegy`
+    scaling M2 by `vinv²` (×`extra²`), `postprocess_ratio` propagating error through
+    the `data/data2` quotient.
+
+    The batch-means variance (#247, issue #209) resolved it the other way and the
+    handlers were deliberately **left untouched**. `osh_scoring_finalize_errors()`
+    runs **before** postprocess and stores a *relative* standard error in `data_var`
+    (§4). A relative error is invariant under the linear rescales these handlers
+    apply (`data → data · vinv · extra`), so ÷volume and MeV/g→Gy need no M2
+    bookkeeping at all; the ratio's numerator/denominator errors are combined in
+    quadrature at finalise time, before `postprocess_ratio` collapses `data/data2`.
+    The coupling is therefore one of **ordering** — finalise-then-(in-place-)postprocess,
+    enforced by an `OSH_ESTATE` guard in `osh_scoring_finalize_errors()` that fires
+    when the `postprocessed` flag is set (i.e. an in-place postprocess already ran) —
+    not of extending the handlers. See §4.
 
 ## 7. Lifecycle and module boundaries
 

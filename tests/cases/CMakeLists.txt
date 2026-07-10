@@ -19,15 +19,37 @@
 
 file(GLOB CASE_DIRS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*/")
 
+# A real case carries all four documented input files (see the header above).
+# Register a directory only when the complete set is present, so a stray
+# directory the glob may catch — a __pycache__/ left by the Python helpers, or a
+# half-checked-out case from a stashed/rebased branch — is not turned into a
+# phantom failing test (issue #296).
+set(CASE_REQUIRED_INPUTS geo.dat beam.dat mat.dat detect.dat)
+
 foreach(case_dir ${CASE_DIRS})
     if(NOT IS_DIRECTORY "${case_dir}")
         continue()
     endif()
 
-    # A real case always has a detect.dat; skip any other directory the glob may
-    # catch (e.g. a stray __pycache__/ left by running the Python test helpers),
-    # so it is not registered as a broken case.
-    if(NOT EXISTS "${case_dir}/detect.dat")
+    set(_missing_inputs "")
+    foreach(_input ${CASE_REQUIRED_INPUTS})
+        if(NOT EXISTS "${case_dir}/${_input}")
+            list(APPEND _missing_inputs "${_input}")
+        endif()
+    endforeach()
+
+    if(_missing_inputs)
+        # A directory carrying detect.dat but missing another input was almost
+        # certainly meant to be a case; warn so the omission is visible rather
+        # than silently dropped. A directory without even detect.dat is just
+        # noise the glob caught (e.g. __pycache__/), so skip it quietly.
+        if(EXISTS "${case_dir}/detect.dat")
+            get_filename_component(case_name "${case_dir}" NAME)
+            string(REPLACE ";" ", " _missing_str "${_missing_inputs}")
+            message(WARNING
+                "tests/cases: skipping incomplete case '${case_name}' "
+                "(missing input file(s): ${_missing_str})")
+        endif()
         continue()
     endif()
 

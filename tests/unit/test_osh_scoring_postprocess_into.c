@@ -26,6 +26,23 @@
 
 static void assert_bytes_equal(unsigned char const *expected, unsigned char const *actual, size_t nbytes);
 
+/* True for the two-pass AVER score kinds exercised by this test file. */
+static int kind_is_aver(enum osh_scoring_score_kind kind) {
+    switch (kind) {
+    case OSH_SCORING_SCORE_DLET:
+    case OSH_SCORING_SCORE_TLET:
+    case OSH_SCORING_SCORE_DQEFF:
+    case OSH_SCORING_SCORE_TQEFF:
+    case OSH_SCORING_SCORE_DAVGE:
+    case OSH_SCORING_SCORE_TAVGE:
+    case OSH_SCORING_SCORE_DBETA:
+    case OSH_SCORING_SCORE_TBETA:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 /* Build a single page descriptor with an allocated accumulator. */
 static void
 make_page(struct osh_scoring_page_runtime *p, enum osh_scoring_score_kind kind, size_t len, int want_data2) {
@@ -35,10 +52,11 @@ make_page(struct osh_scoring_page_runtime *p, enum osh_scoring_score_kind kind, 
     p->score_kind = kind;
     p->has_data2 = (char) (want_data2 ? 1 : 0);
     p->divide = 0;
-    p->postproc = (kind == OSH_SCORING_SCORE_DLET || kind == OSH_SCORING_SCORE_TLET || kind == OSH_SCORING_SCORE_DQEFF
-                   || kind == OSH_SCORING_SCORE_TQEFF)
-                      ? OSH_SCORING_POSTPROC_AVER
-                      : OSH_SCORING_POSTPROC_NONE;
+    if (kind_is_aver(kind)) {
+        p->postproc = OSH_SCORING_POSTPROC_AVER;
+    } else {
+        p->postproc = OSH_SCORING_POSTPROC_NONE;
+    }
 }
 
 static void make_runtime(struct osh_scoring_runtime *rt, struct osh_scoring_page_runtime *pages, size_t npages) {
@@ -55,6 +73,10 @@ static void test_writes_data_predicate(void) {
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TLET) == 1);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DQEFF) == 1);
     ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TQEFF) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DAVGE) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TAVGE) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_DBETA) == 1);
+    ASSERT_TRUE(osh_scoring_postprocess_writes_data(OSH_SCORING_SCORE_TBETA) == 1);
 
     /* DOSE/FLUENCE (and NKERMA) now transform in postprocess too — they divide by
      * the per-bin volume, so they write data out-of-place like DOSEGY/LET. */
