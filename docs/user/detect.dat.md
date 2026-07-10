@@ -112,31 +112,50 @@ Rules and semantics:
 > `tools/` (matplotlib/pymchelper). This is a zero-dependency **quick-look**
 > renderer, not a publication-figure tool.
 
-A run can drop a viewable 1-D line plot (a depth-dose / Bragg curve or any 1-D
-profile) next to its `.bdo`/`.dat`, so the data can be eyeballed on a machine
-that has only the `openshieldhit` binary — no Python:
+A run can drop a viewable 1-D line plot next to its `.bdo`/`.dat`, so the data
+can be eyeballed on a machine that has only the `openshieldhit` binary — no
+Python. Two 1-D shapes are recognised automatically:
+
+**Spatial profile** — a depth-dose / Bragg curve or any 1-D profile:
 
 ```text
 Output
     Filename bragg          # ".svg" is appended automatically
     FileFormat SVG
-    Geo MyMesh
+    Geo MyMesh              # 1 × 1 × N mesh (one non-singleton axis)
     Quantity Dose
+```
+
+**Spectrum** — a differential page scored over a single spatial bin (a 0-D
+voxel or a single `Zone`); x is the differential axis, log-scaled when the
+binning is `LOG`:
+
+```text
+Output
+    Filename spectrum
+    FileFormat SVG
+    Geo Spot               # 1 × 1 × 1 voxel, or a one-Zone geometry
+    Quantity Fluence
+    Diff1 10 600 40 LOG
+    Diff1Type ENUC         # → x-axis "E/nucleon [MeV/u]", y "…/cm^2/(MeV/u)"
 ```
 
 - The plot is an **additional** artifact — BDO stays the source of truth and is
   never replaced. Values use the same normalisation as `TEXT` output (NORM/SUM
-  ÷ nstat, AVER as the physical mean).
+  ÷ nstat, AVER as the physical mean; a differential page's bin-width division
+  is already applied in postprocessing).
 - Output is a hand-written SVG document (pure `fprintf`, no vendored library):
   a plot frame, "nice" axis ticks, and one polyline per `Quantity`, viewable in
   any browser.
-- **Scope of this prototype** is 1-D spatial profiles only:
-  - `Geometry Mesh` with exactly one non-singleton axis (e.g. a `1 × 1 × N`
-    depth mesh), or
-  - `Geometry Cyl` with exactly one non-singleton axis (R or Z).
-- Anything outside that scope (2-D/3-D meshes, differential spectra, `Zone`
-  geometry, rotated meshes) is declined with `OSH_ENOTSUP`; those, plus PNG
-  heatmaps and multipage PDF, are follow-up items under discussion on #238.
+- **Scope of this prototype:**
+  - Spatial profile — `Geometry Mesh` with exactly one non-singleton axis, or
+    `Geometry Cyl` with one non-singleton axis (R or Z).
+  - Spectrum — a `Diff1` page over a single spatial bin (`1 × 1 × 1` mesh voxel
+    or a one-`Zone` geometry).
+- Anything outside that scope (2-D/3-D meshes, 2-D `Diff1 × Diff2` spectra,
+  spectra spanning several spatial bins, categorical multi-zone profiles,
+  rotated meshes) is declined with `OSH_ENOTSUP`; those, plus PNG heatmaps,
+  multipage PDF, log-y and MC error bars, are follow-up items on #238.
 
 ## Differential scoring
 

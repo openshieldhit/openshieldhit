@@ -18,23 +18,29 @@ extern "C" {
  * whole feature is compiled in only when the project is configured with
  * `-DOSH_ENABLE_PLOT=ON`; the stock binary carries no plotting code.
  *
- * Scope of this prototype is deliberately narrow — SVG only, 1-D spatial
- * profiles only:
+ * Scope of this prototype is deliberately narrow — SVG only, two 1-D shapes,
+ * chosen automatically from the page model:
  *
- *   - MESH with exactly one non-singleton spatial axis (the profile axis), e.g.
- *     a depth-dose / Bragg curve scored on a `1 x 1 x N` mesh.
- *   - CYL with exactly one non-singleton axis (R or Z).
+ *   - **Spatial profile** — MESH with exactly one non-singleton X/Y/Z axis (e.g.
+ *     a depth-dose / Bragg curve on a `1 x 1 x N` mesh), or CYL with one
+ *     non-singleton R/Z axis.  x = spatial coordinate (bin centres, cm).
+ *   - **Spectrum** — a differential page (dPhi/dE, dose-vs-LET, ...) scored over
+ *     a single spatial bin: a `1 x 1 x 1` mesh voxel or a one-`Zone` geometry
+ *     (both detected uniformly as `diff_stride == 1`).  x = the Diff1 bin
+ *     centres of the differential quantity, log-scaled when the binning is LOG.
  *
  * Every page of the output is drawn as its own polyline (auto-scaled to a shared
  * y-axis) with a small legend, so a single-quantity output yields one clean
- * curve.  The x-axis is the spatial coordinate (bin centres, in cm); values are
- * normalised per primary exactly as the ASCII writer does (NORM/SUM ÷ nstat,
- * AVER written as the physical mean).  The plot is an **additional** artifact:
- * BDO remains the source of truth and is never replaced.
+ * curve.  Values are normalised per primary exactly as the ASCII writer does
+ * (NORM/SUM ÷ nstat, AVER written as the physical mean; a differential page's
+ * bin-width division is already applied by @ref osh_scoring_postprocess).  The
+ * plot is an **additional** artifact: BDO remains the source of truth and is
+ * never replaced.
  *
  * Anything outside that scope returns @c OSH_ENOTSUP for now (2-D / 3-D meshes,
- * differential spectra, ZONE geometry, rotated meshes, two-pass pages not yet
- * postprocessed).  These are follow-up items for the discussion on #238.
+ * 2-D spectra with a second differential axis, spectra spanning more than one
+ * spatial bin, categorical multi-zone profiles, rotated meshes, two-pass pages
+ * not yet postprocessed).  These are follow-up items for the discussion on #238.
  *
  * @param[in] ws          Scoring workspace with output metadata and file paths.
  * @param[in] rt          Compiled scoring runtime with postprocessed accumulators.

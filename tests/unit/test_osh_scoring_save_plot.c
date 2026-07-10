@@ -6,9 +6,14 @@
  * osh_scoring_save() dispatcher (never the gated writer symbol directly), so it
  * links and runs in both configurations:
  *
- *   - built with the feature: `FileFormat SVG` yields OSH_OK and a real SVG doc;
+ *   - built with the feature: a supported shape yields OSH_OK and a real SVG doc;
  *   - stock build (default):  `FileFormat SVG` is unrecognised -> OSH_ENOTSUP,
  *     proving the default binary stays plotting-free.
+ *
+ * Every case runs osh_scoring_postprocess() before saving, matching the real
+ * save pipeline (and the writer's contract, which expects postprocessed
+ * accumulators — differential bin-width division and volume normalisation both
+ * happen there).
  */
 
 #include <stdio.h>
@@ -69,6 +74,8 @@ static void test_plot_svg_mesh_profile(void) {
     for (i = 0; i < rt.pages[0].len; ++i) {
         rt.pages[0].acc.data[i] = 1.0 + (double) (i == 5u ? 9 : 0);
     }
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_save(ws, &rt, 10u);
 
@@ -87,6 +94,124 @@ static void test_plot_svg_mesh_profile(void) {
     osh_scoring_workspace_free(ws);
     remove(DETECT_PATH);
     remove("out_plot_profile.svg");
+}
+
+/* An energy spectrum is a differential page over a single voxel (1 x 1 x 1
+ * mesh).  Also a 1-D object: x is the differential (energy) axis, log-scaled. */
+static void test_plot_svg_mesh_spectrum(void) {
+    char const *detect_text = "Geometry Mesh\n"
+                              "    Name G\n"
+                              "    X 0 1 1\n"
+                              "    Y 0 1 1\n"
+                              "    Z 0 1 1\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_plot_spectrum.svg\n"
+                              "    FileFormat SVG\n"
+                              "    Geo G\n"
+                              "    Quantity Fluence\n"
+                              "    Diff1 1 100 16 LOG\n"
+                              "    Diff1Type EKIN\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+    size_t i;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 1u);
+    ASSERT_TRUE(rt.pages[0].diff_nbins == 16u);
+    ASSERT_TRUE(rt.pages[0].diff_stride == 1u); /* single spatial bin */
+
+    for (i = 0; i < rt.pages[0].len; ++i) {
+        rt.pages[0].acc.data[i] = 1.0 + (double) i;
+    }
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_save(ws, &rt, 10u);
+
+#ifdef OSH_ENABLE_PLOT
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(file_contains("out_plot_spectrum.svg", "<polyline"));
+    ASSERT_TRUE(file_contains("out_plot_spectrum.svg", "E [MeV]"));   /* differential x-axis */
+    ASSERT_TRUE(file_contains("out_plot_spectrum.svg", "/cm^2/MeV")); /* differential y unit */
+#else
+    ASSERT_TRUE(rc == OSH_ENOTSUP);
+#endif
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_plot_spectrum.svg");
+}
+
+/* The same spectrum scored over a single Zone.  A one-zone geometry is also a
+ * 0-D spatial bin (diff_stride == 1), so it takes the same spectrum path. */
+static void test_plot_svg_zone_spectrum(void) {
+    char const *detect_text = "Geometry Zone\n"
+                              "    Name Z\n"
+                              "    Zone Target\n"
+                              "    Volume 1.0\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_plot_zspectrum.svg\n"
+                              "    FileFormat SVG\n"
+                              "    Geo Z\n"
+                              "    Quantity Fluence\n"
+                              "    Diff1 1 100 8 LOG\n"
+                              "    Diff1Type EKIN\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+    size_t i;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+    ASSERT_TRUE(ws->geometries[0].nzone_indices == 1u);
+
+    /* Resolve the single Zone selector to a transport zone id (as the ASCII/BDO
+     * zone save test does) so compile can proceed without a geo.dat workspace. */
+    ws->geometries[0].zone_indices = (size_t *) calloc(1u, sizeof(*ws->geometries[0].zone_indices));
+    ASSERT_TRUE(ws->geometries[0].zone_indices != NULL);
+    ws->geometries[0].zone_indices[0] = 3u;
+
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 1u);
+    ASSERT_TRUE(rt.pages[0].diff_stride == 1u); /* single zone */
+
+    for (i = 0; i < rt.pages[0].len; ++i) {
+        rt.pages[0].acc.data[i] = 1.0 + (double) i;
+    }
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_save(ws, &rt, 10u);
+
+#ifdef OSH_ENABLE_PLOT
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(file_contains("out_plot_zspectrum.svg", "<polyline"));
+    ASSERT_TRUE(file_contains("out_plot_zspectrum.svg", "E [MeV]"));
+#else
+    ASSERT_TRUE(rc == OSH_ENOTSUP);
+#endif
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_plot_zspectrum.svg");
 }
 
 /* A 2-D mesh (two non-singleton axes) is out of scope for the 1-D prototype and
@@ -118,6 +243,8 @@ static void test_plot_svg_rejects_2d(void) {
     ASSERT_TRUE(rc == OSH_OK);
 
     rt.pages[0].acc.data[0] = 1.0;
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
     rc = osh_scoring_save(ws, &rt, 1u);
     ASSERT_TRUE(rc == OSH_ENOTSUP);
 
@@ -129,6 +256,8 @@ static void test_plot_svg_rejects_2d(void) {
 
 int main(void) {
     test_plot_svg_mesh_profile();
+    test_plot_svg_mesh_spectrum();
+    test_plot_svg_zone_spectrum();
     test_plot_svg_rejects_2d();
     return 0;
 }
