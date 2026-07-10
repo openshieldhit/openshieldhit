@@ -33,7 +33,10 @@
 
 static int tmp_counter = 0;
 
-static void write_temp_detect(char *path, size_t path_cap, char const *fileformat_line) {
+static void write_temp_detect_with_filename(char *path,
+                                            size_t path_cap,
+                                            char const *filename,
+                                            char const *fileformat_line) {
     FILE *fp;
 
     snprintf(path, path_cap, "osh_multiformat_test_%d.tmp", tmp_counter++);
@@ -47,14 +50,19 @@ static void write_temp_detect(char *path, size_t path_cap, char const *fileforma
                         "    Z 0.0 1.0 4\n"
                         "\n"
                         "Output\n"
-                        "    Filename NB_msh\n"
+                        "    Filename %s\n"
                         "    %s\n"
                         "    Geo MyMesh\n"
                         "    Quantity Energy\n"
                         "    Quantity Fluence\n",
+                        filename,
                         fileformat_line)
                 >= 0);
     ASSERT_TRUE(fclose(fp) == 0);
+}
+
+static void write_temp_detect(char *path, size_t path_cap, char const *fileformat_line) {
+    write_temp_detect_with_filename(path, path_cap, "NB_msh", fileformat_line);
 }
 
 static int file_exists(char const *path) {
@@ -92,7 +100,7 @@ static void test_memory_matches_single(void) {
     ASSERT_TRUE(est_multi.largest_page_bytes == est_single.largest_page_bytes);
     /* 2 quantities × 24 bins × 8 bytes, counted once. */
     ASSERT_TRUE(est_multi.npages == 2u);
-    ASSERT_TRUE(est_multi.accum_bytes == 2u * 24u * sizeof(double));
+    ASSERT_TRUE(est_multi.accum_bytes == (size_t) 2u * 24u * sizeof(double));
 
     osh_scoring_workspace_free(ws_multi);
     osh_scoring_workspace_free(ws_single);
@@ -145,7 +153,7 @@ static void test_derived_filenames(void) {
     struct osh_scoring_workspace *ws = NULL;
     struct osh_scoring_runtime rt;
 
-    write_temp_detect(path, sizeof(path), "FileFormat TEXT BDO");
+    write_temp_detect_with_filename(path, sizeof(path), "NB_msh.DAT", "FileFormat TEXT BDO");
     ASSERT_TRUE(osh_scoring_setup_from_path(path, NULL, &ws) == OSH_OK);
 
     memset(&rt, 0, sizeof(rt));

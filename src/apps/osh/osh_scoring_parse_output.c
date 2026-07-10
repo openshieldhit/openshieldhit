@@ -187,12 +187,14 @@ static enum osh_status output_geo(struct osh_scoring_output_def *out,
  */
 static enum osh_status append_fileformat(struct osh_scoring_output_def *out, char const *keyword) {
     char **tmp = (char **) realloc((void *) out->fileformats, (out->nfileformats + 1u) * sizeof(*tmp));
-    if (!tmp)
+    if (!tmp) {
         return OSH_ENOMEM;
+    }
     out->fileformats = tmp;
     out->fileformats[out->nfileformats] = strdup(keyword);
-    if (!out->fileformats[out->nfileformats])
+    if (!out->fileformats[out->nfileformats]) {
         return OSH_ENOMEM;
+    }
     osh_lower_inplace(out->fileformats[out->nfileformats]);
     out->nfileformats++;
     return OSH_OK;
@@ -223,8 +225,9 @@ static enum osh_status output_fileformat(struct osh_scoring_output_def *out,
     }
     for (i = 1; i < nwords; ++i) {
         rc = append_fileformat(out, words[i]);
-        if (rc != OSH_OK)
+        if (rc != OSH_OK) {
             return rc;
+        }
     }
     return OSH_OK;
 }

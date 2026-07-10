@@ -1,5 +1,6 @@
 #include "scoring/runtime/osh_scoring_compile.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -845,6 +846,24 @@ static int format_is_rtdose(char const *fmt) {
     return fmt && strcmp(fmt, "rtdose") == 0;
 }
 
+static int suffix_case_equal(char const *text, size_t textlen, char const *suffix, size_t suffixlen) {
+    size_t i;
+    unsigned char a;
+    unsigned char b;
+
+    if (textlen < suffixlen) {
+        return 0;
+    }
+    for (i = 0u; i < suffixlen; ++i) {
+        a = (unsigned char) text[textlen - suffixlen + i];
+        b = (unsigned char) suffix[i];
+        if (tolower(a) != tolower(b)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /* Derive a per-format filename from a stem: strip one recognised trailing
  * extension, then append the canonical extension for @p fmt.  Caller owns the
  * returned string; returns NULL on allocation failure (the format is validated
@@ -866,7 +885,7 @@ static char *derive_format_filename(char const *stem, char const *fmt) {
     base = stemlen;
     for (e = 0u; e < sizeof(known_ext) / sizeof(known_ext[0]); ++e) {
         xl = strlen(known_ext[e]);
-        if (stemlen >= xl && strcmp(stem + stemlen - xl, known_ext[e]) == 0) {
+        if (suffix_case_equal(stem, stemlen, known_ext[e], xl)) {
             base = stemlen - xl;
             break;
         }
@@ -1052,6 +1071,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
 
     ordinal = 0u;
     for (i = 0; i < ws->noutputs; ++i) {
+        char const *primary_format;
+
         out = &rt->outputs[i];
 
         out->filename = strdup(ws->outputs[i].filename);
@@ -1062,7 +1083,11 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         /* The block's first requested format (lowercase, as stored by the
          * parser); an empty list defaults to BDO.  Additional formats are fanned
          * out into extra runtime outputs in Phase 7 (issue #308). */
-        out->fileformat = strdup(ws->outputs[i].nfileformats > 0u ? ws->outputs[i].fileformats[0] : "bdo");
+        primary_format = "bdo";
+        if (ws->outputs[i].nfileformats > 0u) {
+            primary_format = ws->outputs[i].fileformats[0];
+        }
+        out->fileformat = strdup(primary_format);
         if (!out->fileformat) {
             rc = OSH_ENOMEM;
             goto fail;
@@ -1349,27 +1374,38 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
 
         for (i = 0; i < ws->noutputs; ++i) {
             size_t nf_i = ws->outputs[i].nfileformats;
+            char const *output_name;
 
             if (nf_i <= 1u) {
                 continue;
             }
+            output_name = "(unnamed)";
+            if (ws->outputs[i].filename) {
+                output_name = ws->outputs[i].filename;
+            }
             for (k = 0; k < nf_i; ++k) {
                 char const *fmt = ws->outputs[i].fileformats[k];
+                char const *fmt_name;
+
+                fmt_name = "(null)";
+                if (fmt) {
+                    fmt_name = fmt;
+                }
                 /* The RTDOSE writer needs exactly one dose page, which a shared
                  * multi-page page-set cannot supply; reject it in a mixed block.
                  * Single-format RTDOSE is unaffected. */
                 if (format_is_rtdose(fmt)) {
                     OSH_DIAG_ERRORF(diag,
                                     "Scoring output '%s' cannot combine RTDOSE with other formats in one block",
-                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                                    output_name);
                     rc = OSH_ENOTSUP;
                     goto fail;
                 }
                 if (format_canonical_ext(fmt) == NULL) {
                     OSH_DIAG_ERRORF(diag,
                                     "Scoring output '%s' requests unknown FileFormat '%s'",
-                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
-                                    fmt ? fmt : "(null)");
+                                    output_name,
+                                    fmt_name);
                     rc = OSH_ENOTSUP;
                     goto fail;
                 }
@@ -1445,14 +1481,30 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 /* Reject two targets in this block that resolve to the same path
                  * (e.g. "FileFormat TEXT DAT" — both canonicalise to .dat). */
                 for (a = 0u; a < nf_i; ++a) {
-                    char const *na = (a == 0u) ? primary->filename : rt->outputs[block_first_extra + a - 1u].filename;
+                    char const *na;
+                    char const *output_name;
+
+                    if (a == 0u) {
+                        na = primary->filename;
+                    } else {
+                        na = rt->outputs[block_first_extra + a - 1u].filename;
+                    }
+                    output_name = "(unnamed)";
+                    if (ws->outputs[i].filename) {
+                        output_name = ws->outputs[i].filename;
+                    }
                     for (b = a + 1u; b < nf_i; ++b) {
-                        char const *nb =
-                            (b == 0u) ? primary->filename : rt->outputs[block_first_extra + b - 1u].filename;
+                        char const *nb;
+
+                        if (b == 0u) {
+                            nb = primary->filename;
+                        } else {
+                            nb = rt->outputs[block_first_extra + b - 1u].filename;
+                        }
                         if (strcmp(na, nb) == 0) {
                             OSH_DIAG_ERRORF(diag,
                                             "Scoring output '%s' requests formats that resolve to the same file '%s'",
-                                            ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                                            output_name,
                                             na);
                             rc = OSH_EINVAL;
                             goto fail;
