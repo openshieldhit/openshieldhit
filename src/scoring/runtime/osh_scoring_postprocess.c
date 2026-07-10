@@ -346,6 +346,17 @@ enum osh_status osh_scoring_finalize_errors(struct osh_scoring_runtime *rt) {
     if (!rt) {
         return OSH_EINVAL;
     }
+    /* Ordering guard: the relative error is derived from the raw sums (data, data2),
+     * so this must run before an in-place postprocess rescales data / collapses the
+     * two-pass ratio.  The postprocessed flag is set only by that destructive path
+     * (dst==src); once set, the raw sums are gone and finalising would report error
+     * against the rescaled value — reject rather than silently mis-report.  An
+     * out-of-place postprocess into a distinct dst never sets the flag and leaves
+     * src's raw sums intact, so finalising src stays valid.  Mirrors the single-shot
+     * guard on the in-place postprocess path. */
+    if (rt->postprocessed) {
+        return OSH_ESTATE;
+    }
 
     for (p = 0; p < rt->npages; ++p) {
         struct osh_scoring_accumulator *acc = &rt->pages[p].acc;
