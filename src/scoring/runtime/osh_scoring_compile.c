@@ -846,6 +846,9 @@ static int format_is_rtdose(char const *fmt) {
     return fmt && strcmp(fmt, "rtdose") == 0;
 }
 
+/* Return 1 when @p text ends with @p suffix (case-insensitive), else 0.
+ * Comparison length is provided by @p textlen / @p suffixlen to avoid repeated
+ * strlen() calls in derive_format_filename(). */
 static int suffix_case_equal(char const *text, size_t textlen, char const *suffix, size_t suffixlen) {
     size_t i;
     unsigned char a;
