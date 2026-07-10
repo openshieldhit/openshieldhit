@@ -815,6 +815,72 @@ enum osh_status osh_scoring_runtime_clone_scratch(struct osh_scoring_runtime con
     return OSH_OK;
 }
 
+/* ---- Multi-format output fan-out (issue #308) ---------------------------- */
+
+/* Canonical filename extension for a (lowercased) format keyword, or NULL when
+ * the keyword is not a recognised writer.  Mirrors the save-layer dispatch in
+ * osh_scoring_save.c so a derived multi-format filename matches the writer that
+ * will consume it. */
+static char const *format_canonical_ext(char const *fmt) {
+    if (!fmt) {
+        return ".bdo";
+    }
+    if (strcmp(fmt, "text") == 0 || strcmp(fmt, "txt") == 0 || strcmp(fmt, "ascii") == 0 || strcmp(fmt, "dat") == 0) {
+        return ".dat";
+    }
+    if (strcmp(fmt, "bdo") == 0 || strcmp(fmt, "bdo2019") == 0 || strcmp(fmt, "binary") == 0
+        || strcmp(fmt, "bin") == 0) {
+        return ".bdo";
+    }
+    if (strcmp(fmt, "rtdose") == 0) {
+        return ".dcm";
+    }
+    if (strcmp(fmt, "svg") == 0) {
+        return ".svg";
+    }
+    return NULL;
+}
+
+static int format_is_rtdose(char const *fmt) {
+    return fmt && strcmp(fmt, "rtdose") == 0;
+}
+
+/* Derive a per-format filename from a stem: strip one recognised trailing
+ * extension, then append the canonical extension for @p fmt.  Caller owns the
+ * returned string; returns NULL on allocation failure (the format is validated
+ * to be known before this is called). */
+static char *derive_format_filename(char const *stem, char const *fmt) {
+    static char const *const known_ext[] = {".dat", ".txt", ".bdo", ".bdz", ".bin", ".dcm", ".svg"};
+    char const *ext = format_canonical_ext(fmt);
+    size_t stemlen;
+    size_t base;
+    size_t extlen;
+    size_t e;
+    size_t xl;
+    char *result;
+
+    if (!stem || !ext) {
+        return NULL;
+    }
+    stemlen = strlen(stem);
+    base = stemlen;
+    for (e = 0u; e < sizeof(known_ext) / sizeof(known_ext[0]); ++e) {
+        xl = strlen(known_ext[e]);
+        if (stemlen >= xl && strcmp(stem + stemlen - xl, known_ext[e]) == 0) {
+            base = stemlen - xl;
+            break;
+        }
+    }
+    extlen = strlen(ext);
+    result = (char *) malloc(base + extlen + 1u);
+    if (!result) {
+        return NULL;
+    }
+    memcpy(result, stem, base);
+    memcpy(result + base, ext, extlen + 1u);
+    return result;
+}
+
 enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                                     struct osh_diag_sink const *diag,
                                     struct osh_scoring_runtime *rt) {
@@ -993,7 +1059,10 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             rc = OSH_ENOMEM;
             goto fail;
         }
-        out->fileformat = strdup(ws->outputs[i].fileformat ? ws->outputs[i].fileformat : "BDO");
+        /* The block's first requested format (lowercase, as stored by the
+         * parser); an empty list defaults to BDO.  Additional formats are fanned
+         * out into extra runtime outputs in Phase 7 (issue #308). */
+        out->fileformat = strdup(ws->outputs[i].nfileformats > 0u ? ws->outputs[i].fileformats[0] : "bdo");
         if (!out->fileformat) {
             rc = OSH_ENOMEM;
             goto fail;
@@ -1258,6 +1327,138 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 rt->geometries[i].groups[current_group].first_page = page_idx;
                 rt->geometries[i].groups[current_group].npages = 1u;
                 rt->geometries[i].groups[current_group].score_kind = rt->pages[page_idx].score_kind;
+            }
+        }
+    }
+
+    /* --- Phase 7: fan out multi-format outputs (issue #308). ---
+     *
+     * Phases 1-6 compiled each cold Output block into exactly one runtime output
+     * (runtime index == cold index i), carrying the block's first requested
+     * format and a verbatim filename.  A block that requests several formats
+     * writes the *same* scored pages once per format: expand it into one extra
+     * runtime output per additional format, each sharing the block's page indices.
+     * page_indices is a cheap size_t copy — nothing in rt->pages[] is duplicated —
+     * so scoring memory is independent of the format count (the guarantee this
+     * feature exists for).  With more than one format the block's Filename becomes
+     * a stem and each target gets a canonical extension; a single format keeps the
+     * filename verbatim, so every existing detect.dat is unaffected. */
+    {
+        size_t n_extra = 0u;
+        size_t next;
+
+        for (i = 0; i < ws->noutputs; ++i) {
+            size_t nf_i = ws->outputs[i].nfileformats;
+
+            if (nf_i <= 1u) {
+                continue;
+            }
+            for (k = 0; k < nf_i; ++k) {
+                char const *fmt = ws->outputs[i].fileformats[k];
+                /* The RTDOSE writer needs exactly one dose page, which a shared
+                 * multi-page page-set cannot supply; reject it in a mixed block.
+                 * Single-format RTDOSE is unaffected. */
+                if (format_is_rtdose(fmt)) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring output '%s' cannot combine RTDOSE with other formats in one block",
+                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+                if (format_canonical_ext(fmt) == NULL) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring output '%s' requests unknown FileFormat '%s'",
+                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                                    fmt ? fmt : "(null)");
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+            }
+            n_extra += nf_i - 1u;
+        }
+
+        if (n_extra > 0u) {
+            struct osh_scoring_output_runtime *grown = (struct osh_scoring_output_runtime *) realloc(
+                rt->outputs, (rt->noutputs + n_extra) * sizeof(*rt->outputs));
+            if (!grown) {
+                rc = OSH_ENOMEM;
+                goto fail;
+            }
+            rt->outputs = grown;
+            /* Zero the new tail so a mid-fan-out goto fail frees only what was
+             * built.  Bump noutputs now (the slots are valid, zeroed entries) so
+             * osh_scoring_runtime_free() covers every slot on any error path. */
+            memset(&rt->outputs[rt->noutputs], 0, n_extra * sizeof(*rt->outputs));
+            next = rt->noutputs;
+            rt->noutputs += n_extra;
+
+            for (i = 0; i < ws->noutputs; ++i) {
+                struct osh_scoring_output_runtime *primary = &rt->outputs[i];
+                char const *stem = ws->outputs[i].filename;
+                size_t nf_i = ws->outputs[i].nfileformats;
+                size_t block_first_extra = next;
+                char *derived;
+                size_t a;
+                size_t b;
+
+                if (nf_i <= 1u) {
+                    continue;
+                }
+
+                /* Re-derive the primary target's filename from the stem. */
+                derived = derive_format_filename(stem, ws->outputs[i].fileformats[0]);
+                if (!derived) {
+                    rc = OSH_ENOMEM;
+                    goto fail;
+                }
+                free(primary->filename);
+                primary->filename = derived;
+
+                for (k = 1u; k < nf_i; ++k) {
+                    struct osh_scoring_output_runtime *extra = &rt->outputs[next];
+                    char const *fmt = ws->outputs[i].fileformats[k];
+
+                    extra->fileformat = strdup(fmt);
+                    if (!extra->fileformat) {
+                        rc = OSH_ENOMEM;
+                        goto fail;
+                    }
+                    extra->filename = derive_format_filename(stem, fmt);
+                    if (!extra->filename) {
+                        rc = OSH_ENOMEM;
+                        goto fail;
+                    }
+                    extra->geometry_idx = primary->geometry_idx;
+                    extra->npages = primary->npages;
+                    if (extra->npages > 0u) {
+                        extra->page_indices = (size_t *) malloc(extra->npages * sizeof(*extra->page_indices));
+                        if (!extra->page_indices) {
+                            rc = OSH_ENOMEM;
+                            goto fail;
+                        }
+                        memcpy(
+                            extra->page_indices, primary->page_indices, extra->npages * sizeof(*extra->page_indices));
+                    }
+                    next++;
+                }
+
+                /* Reject two targets in this block that resolve to the same path
+                 * (e.g. "FileFormat TEXT DAT" — both canonicalise to .dat). */
+                for (a = 0u; a < nf_i; ++a) {
+                    char const *na = (a == 0u) ? primary->filename : rt->outputs[block_first_extra + a - 1u].filename;
+                    for (b = a + 1u; b < nf_i; ++b) {
+                        char const *nb =
+                            (b == 0u) ? primary->filename : rt->outputs[block_first_extra + b - 1u].filename;
+                        if (strcmp(na, nb) == 0) {
+                            OSH_DIAG_ERRORF(diag,
+                                            "Scoring output '%s' requests formats that resolve to the same file '%s'",
+                                            ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                                            na);
+                            rc = OSH_EINVAL;
+                            goto fail;
+                        }
+                    }
+                }
             }
         }
     }

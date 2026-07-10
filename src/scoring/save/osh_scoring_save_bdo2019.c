@@ -455,7 +455,9 @@ static enum osh_status validate_output(struct osh_scoring_workspace const *ws,
     if (!ws || !rt || !out_out || !geo_out) {
         return OSH_EINVAL;
     }
-    if (output_idx >= ws->noutputs || output_idx >= rt->noutputs) {
+    /* Fanned-out multi-format targets live past ws->noutputs (issue #308); every
+     * field this writer needs comes from rt->outputs[output_idx]. */
+    if (output_idx >= rt->noutputs) {
         return OSH_EINVAL;
     }
 

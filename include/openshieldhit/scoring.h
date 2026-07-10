@@ -151,13 +151,21 @@ struct osh_scoring_workspace {
  * @brief Parsed output definition from `detect.dat`.
  *
  * @details
- * Each Output block maps to one output file.  `fileformat` is the format
- * keyword as written (e.g. "BDO", "TEXT"); NULL means unset (default BDO).
+ * Each Output block scores one page-set (geometry + quantities) and may write it
+ * out in one *or several* formats.  `fileformats` holds the requested format
+ * keywords, lowercased (e.g. "bdo", "text"); an empty list means the default
+ * BDO.  The page accumulators are compiled **once** regardless of how many
+ * formats are requested — every requested format becomes a lightweight runtime
+ * output sharing the same pages (see @ref osh_scoring_compile), so scoring memory
+ * never grows with the number of formats.  When more than one format is
+ * requested, `filename` is treated as a stem and a canonical extension is
+ * appended per format; with a single format it is used verbatim.
  */
 struct osh_scoring_output_def {
-    char *filename;      /* Output file name. */
+    char *filename;      /* Output file name (single format) or stem (multiple formats). */
     char *geometry_name; /* Referenced geometry name. */
-    char *fileformat;    /* Optional format keyword. */
+    char **fileformats;  /* Requested format keywords, lowercase (owned); empty = default BDO. */
+    size_t nfileformats; /* Number of requested output formats. */
     struct osh_scoring_page_def *pages;
     size_t npages;
 };

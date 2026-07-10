@@ -238,9 +238,18 @@ byte-for-byte unchanged.
 
 ## 5. Output formats: normalisation and multi-run merging
 
-`osh_scoring_save()` dispatches on each output's `fileformat`. The two
+`osh_scoring_save()` dispatches on each runtime output's `fileformat`. The two
 general-purpose formats take deliberately different positions on normalisation;
 DICOM RTDOSE is a specialised round-trip writer.
+
+Because the writers are non-destructive readers that apply their own scaling at
+write time (ASCII ÷ `nstat`; BDO raw sums + the `nstat` tag), one scored page-set
+can legitimately feed several of them in a row. That is exactly what a
+multi-format `Output` block does (`FileFormat TEXT BDO`, issue #308):
+`osh_scoring_compile()` fans it out into one runtime output per format, all
+sharing the same `page_indices` into the single `rt->pages[]` accumulator set, so
+the accumulator memory is independent of the format count. `osh_scoring_estimate_memory()`
+counts a block's pages once for the same reason.
 
 ### ASCII (`text`, `txt`, `ascii`, `dat`)
 

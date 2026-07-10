@@ -32,6 +32,7 @@ struct output_entry {
 
 static enum osh_status append_page(struct osh_scoring_output_def *out);
 static enum osh_status append_page_filter(struct osh_scoring_page_def *page, char const *name);
+static enum osh_status append_fileformat(struct osh_scoring_output_def *out, char const *keyword);
 static enum osh_status output_filename(struct osh_scoring_output_def *out,
                                        struct osh_diag_sink const *diag,
                                        char **words,
@@ -182,7 +183,30 @@ static enum osh_status output_geo(struct osh_scoring_output_def *out,
 }
 
 /**
- * @brief Parse `Fileformat <name>` (and alias `Format <name>`).
+ * @brief Append one lowercased format keyword to an output's format list.
+ */
+static enum osh_status append_fileformat(struct osh_scoring_output_def *out, char const *keyword) {
+    char **tmp = (char **) realloc((void *) out->fileformats, (out->nfileformats + 1u) * sizeof(*tmp));
+    if (!tmp)
+        return OSH_ENOMEM;
+    out->fileformats = tmp;
+    out->fileformats[out->nfileformats] = strdup(keyword);
+    if (!out->fileformats[out->nfileformats])
+        return OSH_ENOMEM;
+    osh_lower_inplace(out->fileformats[out->nfileformats]);
+    out->nfileformats++;
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse `Fileformat <name> [<name> ...]` (and alias `Format ...`).
+ *
+ * @details
+ * Accepts one or more format keywords on a single line — e.g.
+ * `FileFormat TEXT BDO` requests the same scored page-set be written as both a
+ * TEXT and a BDO file.  Each keyword is appended to the output's format list;
+ * repeated `FileFormat` lines accumulate rather than overwrite.  The page
+ * accumulators are compiled once regardless of how many formats are requested.
  */
 static enum osh_status output_fileformat(struct osh_scoring_output_def *out,
                                          struct osh_diag_sink const *diag,
@@ -190,14 +214,19 @@ static enum osh_status output_fileformat(struct osh_scoring_output_def *out,
                                          int nwords,
                                          char const *path,
                                          unsigned int lineno) {
+    enum osh_status rc;
+    int i;
+
     if (nwords < 2) {
         OSH_DIAG_ERRORF(diag, "%s:%u: Output Fileformat requires a format name", path, lineno);
         return OSH_EPARSE;
     }
-    free(out->fileformat);
-    out->fileformat = strdup(words[1]);
-    osh_lower_inplace(out->fileformat);
-    return out->fileformat ? OSH_OK : OSH_ENOMEM;
+    for (i = 1; i < nwords; ++i) {
+        rc = append_fileformat(out, words[i]);
+        if (rc != OSH_OK)
+            return rc;
+    }
+    return OSH_OK;
 }
 
 /**

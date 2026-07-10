@@ -75,6 +75,46 @@ For `Geometry Cyl`:
 - `BDO2019` stores the geometry as legacy `CYL` metadata with an implicit
   full-azimuth span (`phi = 0..360`, one bin) for compatibility.
 
+### Multiple output formats — `FileFormat TEXT BDO`
+
+One `Output` block can write its scored result in **several** formats at once by
+listing more than one keyword on the `FileFormat` line:
+
+```text
+Output
+    Filename NB_msh          # a stem when several formats are listed
+    FileFormat TEXT BDO      # → NB_msh.dat  +  NB_msh.bdo
+    Geo MyMesh
+    Quantity Energy
+    Quantity Fluence
+```
+
+This scores the geometry **once** and writes it out twice. It is strictly
+cheaper than the old workaround of duplicating the whole `Output` block: the
+scored arrays are shared, so **scoring memory does not grow with the number of
+formats** (two formats or ten, the accumulator memory is the same), and each
+history is deposited only once.
+
+Filename rule:
+
+- **A single format uses `Filename` verbatim** — every existing `detect.dat` is
+  unaffected. `FileFormat TEXT` + `Filename NB_msh.dat` still writes exactly
+  `NB_msh.dat`.
+- **Several formats treat `Filename` as a stem.** A recognised trailing extension
+  (`.dat .txt .bdo .bdz .bin .dcm .svg`) is stripped if present, then a canonical
+  extension is appended per format: `.dat` (TEXT/ASCII/TXT/DAT), `.bdo`
+  (BDO/BDO2019/BINARY/BIN), `.dcm` (RTDOSE), `.svg` (SVG). So both
+  `Filename NB_msh` and `Filename NB_msh.dat` with `FileFormat TEXT BDO` yield
+  `NB_msh.dat` + `NB_msh.bdo`.
+
+Constraints:
+
+- Two formats that resolve to the **same** file (e.g. `FileFormat TEXT DAT`, both
+  `.dat`) are rejected with a clear error.
+- `RTDOSE` cannot be combined with other formats in one block — the RTDOSE writer
+  needs exactly one dose page, which a shared multi-page page-set does not
+  provide. Put `RTDOSE` in its own single-format `Output` block.
+
 ### Zone
 
 Score by `geo.dat` zone, selected **by zone name** — one output bin per listed
@@ -113,10 +153,9 @@ Rules and semantics:
 > [pymchelper](https://github.com/DataMedSci/pymchelper) instead.
 
 Add `FileFormat SVG` to an `Output` and that output writes a 1-D line plot
-instead of numeric data — each `Output` block has exactly one `FileFormat`, so
-`FileFormat SVG` replaces the `.bdo`/`.dat` for that block rather than sitting
-alongside it. To keep both, add a second `Output` block for the same `Geo`/
-`Quantity` with `FileFormat BDO` (or `TEXT`) and a different `Filename`. Two
+instead of numeric data. To get the plot *and* the numbers from one block, list
+both formats — `FileFormat SVG BDO` (or `SVG TEXT`) writes `bragg.svg` alongside
+`bragg.bdo` from the same scored pages (see *Multiple output formats* above). Two
 plot shapes are recognised automatically:
 
 **Spatial profile** — a depth-dose / Bragg curve or any 1-D profile:
