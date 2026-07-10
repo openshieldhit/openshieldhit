@@ -14,9 +14,9 @@ extern "C" {
  *
  * @details
  * Draws a framed 1-D line chart into an open @c FILE*: title/subtitle, a light
- * major + minor grid, "nice" axis ticks (linear or log10 x), one polyline per
- * series, and a right-hand legend.  Pure @c fprintf — no vendored library, no
- * font engine, no raster pipeline.
+ * major + minor grid, "nice" axis ticks (linear or log10 x), and a single data
+ * curve.  Pure @c fprintf — no vendored library, no font engine, no raster
+ * pipeline.
  *
  * This module knows nothing about the scoring model: callers pass plain arrays
  * of doubles and label strings.  The scoring-specific glue that turns pages and
@@ -75,18 +75,10 @@ void osh_svg_begin(FILE *fp,
                    char const *ylabel);
 
 /**
- * @brief Draw one data series as a polyline (with point markers when @p npts is
- *        small).  @c ys[i] is plotted at @c xs[i]; the stroke colour is chosen
- *        from an internal palette by @p series_index.
+ * @brief Draw the data series as a black polyline (with point markers when
+ *        @p npts is small).  @c ys[i] is plotted at @c xs[i].
  */
-void osh_svg_series(
-    FILE *fp, struct osh_svg_plot const *p, double const *xs, double const *ys, size_t npts, size_t series_index);
-
-/**
- * @brief Draw one legend row (colour swatch + label) at slot @p series_index.
- *        @p label is XML-escaped internally.
- */
-void osh_svg_legend_entry(FILE *fp, struct osh_svg_plot const *p, size_t series_index, char const *label);
+void osh_svg_series(FILE *fp, struct osh_svg_plot const *p, double const *xs, double const *ys, size_t npts);
 
 /** @brief Close the document. */
 void osh_svg_end(FILE *fp);

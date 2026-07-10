@@ -106,14 +106,14 @@ Rules and semantics:
 
 ### Native plot output — `FileFormat SVG`
 
-> **From [issue #238](https://github.com/openshieldhit/openshieldhit/issues/238).**
-> A zero-dependency, hand-written SVG writer built into every binary. This is a
-> **quick-look** renderer, not a publication-figure tool; `tools/`
-> (matplotlib/pymchelper) stays the path for polished figures.
+> A **quick-look** plot for sanity-checking a result without leaving the
+> terminal. The `openshieldhit` binary draws it itself — no Python, no plotting
+> library — and the `.svg` opens in any web browser. For publication-quality
+> figures, load the `.bdo`/`.dat` into
+> [pymchelper](https://github.com/DataMedSci/pymchelper) instead.
 
-A run can drop a viewable 1-D line plot next to its `.bdo`/`.dat`, so the data
-can be eyeballed on a machine that has only the `openshieldhit` binary — no
-Python. Two 1-D shapes are recognised automatically:
+Add `FileFormat SVG` to an `Output` and the run drops a 1-D line plot next to
+its `.bdo`/`.dat`. Two plot shapes are recognised automatically:
 
 **Spatial profile** — a depth-dose / Bragg curve or any 1-D profile:
 
@@ -139,26 +139,29 @@ Output
     Diff1Type ENUC         # → x-axis "E/nucleon [MeV/u]", y "…/cm^2/(MeV/u)"
 ```
 
-- The plot is an **additional** artifact — BDO stays the source of truth and is
-  never replaced. Values use the same normalisation as `TEXT` output (NORM/SUM
-  ÷ nstat, AVER as the physical mean; a differential page's bin-width division
-  is already applied in postprocessing).
-- Output is a hand-written SVG document (pure `fprintf`, no vendored library):
-  a plot frame, major + minor grid lines, "nice" axis ticks, and one polyline
-  per plotted `Quantity`, viewable in any browser.
+- The plot is an **additional** artifact — the `.bdo`/`.dat` remains the source
+  of truth and is never replaced. Plotted values use the same normalisation as
+  `TEXT` output.
+- Each plotted `Quantity` is written to its **own** file. A single quantity keeps
+  the `Filename` you gave (`bragg.svg`); with several, a `_p1`, `_p2`, … page
+  suffix is added (`bragg_p1.svg`, `bragg_p2.svg`, …) so nothing is overwritten.
+- The file is a plain SVG line plot — frame, grid, axis ticks, and one curve —
+  that opens in any web browser.
 - **Mixed outputs** are handled per page. When an `Output` holds several
-  `Quantity` pages of which only some are truly 1-D for the chosen shape — e.g.
-  a 1-D depth mesh where one page adds a `Diff1` axis (making it 2-D spatial ×
-  energy) — only the 1-D pages are drawn and the rest are skipped.
+  `Quantity` pages of which only some match the chosen shape — e.g. a 1-D depth
+  mesh where one page adds a `Diff1` axis (making it 2-D spatial × energy) — only
+  the matching pages are plotted and the rest are skipped.
 - **Supported shapes:**
   - Spatial profile — `Geometry Mesh` with exactly one non-singleton axis, or
     `Geometry Cyl` with one non-singleton axis (R or Z).
   - Spectrum — a `Diff1` page over a single spatial bin (`1 × 1 × 1` mesh voxel
     or a one-`Zone` geometry).
-- When no page fits either shape (2-D/3-D meshes, 2-D `Diff1 × Diff2` spectra,
-  spectra spanning several spatial bins, categorical multi-zone profiles,
-  rotated meshes) the writer returns `OSH_ENOTSUP`; those, plus PNG heatmaps,
-  multipage PDF, log-y and MC error bars, are follow-up items on #238.
+- Anything that is not one of these 1-D shapes — 2-D/3-D meshes, 2-D
+  `Diff1 × Diff2` spectra, spectra spanning several spatial bins, multi-zone
+  profiles, rotated meshes — is simply not plotted; the run still writes the
+  usual `.bdo`/`.dat`. To visualise those, open the data with
+  [pymchelper](https://github.com/DataMedSci/pymchelper), which handles 2-D
+  maps, log axes, error bars, and multi-page output.
 
 ## Differential scoring
 

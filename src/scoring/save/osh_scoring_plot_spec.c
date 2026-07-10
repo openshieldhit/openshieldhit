@@ -31,7 +31,6 @@ static char const *plot_data_unit(struct osh_scoring_page_runtime const *page);
 static char const *diff_kind_name(enum osh_scoring_diff_kind kind);
 static char const *diff_kind_unit(enum osh_scoring_diff_kind kind);
 static void page_value_unit_str(struct osh_scoring_page_runtime const *page, char *buf, size_t cap);
-static void build_ylabel(char *buf, size_t cap, struct osh_scoring_runtime const *rt, size_t const *pages, size_t nsel);
 static void upcase_copy(char *dst, size_t cap, char const *src);
 
 enum osh_status osh_plot_spec_build(struct osh_scoring_runtime const *rt,
@@ -60,13 +59,29 @@ void osh_plot_spec_free(struct osh_plot_spec *spec) {
 /* NORM/SUM quantities are divided by nstat; AVER quantities (DLET/TLET) already
  * hold a physical mean after postprocess and must not be. */
 double osh_plot_page_scale(struct osh_scoring_page_runtime const *page, double inv_nstat) {
-    return (page->postproc == OSH_SCORING_POSTPROC_AVER) ? 1.0 : inv_nstat;
+    if (page->postproc == OSH_SCORING_POSTPROC_AVER) {
+        return 1.0;
+    }
+    return inv_nstat;
 }
 
-void osh_plot_spec_series_label(
+/* Per-page y-axis title: "QUANTITY [unit]" for the single page drawn in the
+ * file (e.g. "DOSE [MeV/g]", "FLUENCE [/cm^2/MeV]").  Each plotted page gets its
+ * own file, so the label always describes exactly one quantity. */
+void osh_plot_spec_page_ylabel(
     struct osh_scoring_runtime const *rt, struct osh_plot_spec const *spec, size_t k, char *buf, size_t cap) {
     struct osh_scoring_page_runtime const *page = &rt->pages[spec->pages[k]];
-    upcase_copy(buf, cap, page->quantity ? page->quantity : "?");
+    char qty[64];
+    char unit[48];
+    char const *quantity;
+
+    quantity = page->quantity;
+    if (!quantity) {
+        quantity = "value";
+    }
+    upcase_copy(qty, sizeof(qty), quantity);
+    page_value_unit_str(page, unit, sizeof(unit));
+    snprintf(buf, cap, "%s [%s]", qty, unit);
 }
 
 /* Spatial 1-D profile: MESH/CYL with exactly one non-singleton axis.  Selects
@@ -126,7 +141,6 @@ static enum osh_status build_profile_spec(struct osh_scoring_runtime const *rt,
     }
     spec->xlog = 0;
     snprintf(spec->xlabel, sizeof(spec->xlabel), "%s [cm]", axis->label);
-    build_ylabel(spec->ylabel, sizeof(spec->ylabel), rt, spec->pages, spec->nsel);
     return OSH_OK;
 }
 
@@ -177,7 +191,11 @@ static enum osh_status build_spectrum_spec(struct osh_scoring_runtime const *rt,
     for (i = 0; i < spec->npts; ++i) {
         spec->xs[i] = diff_bin_center(ref, i);
     }
-    spec->xlog = ref->diff_log ? 1 : 0;
+    if (ref->diff_log) {
+        spec->xlog = 1;
+    } else {
+        spec->xlog = 0;
+    }
     name = diff_kind_name(ref->diff_kind);
     unit = diff_kind_unit(ref->diff_kind);
     if (unit[0]) {
@@ -185,7 +203,6 @@ static enum osh_status build_spectrum_spec(struct osh_scoring_runtime const *rt,
     } else {
         snprintf(spec->xlabel, sizeof(spec->xlabel), "%s", name);
     }
-    build_ylabel(spec->ylabel, sizeof(spec->ylabel), rt, spec->pages, spec->nsel);
     return OSH_OK;
 }
 
@@ -315,39 +332,6 @@ static void page_value_unit_str(struct osh_scoring_page_runtime const *page, cha
                 snprintf(buf + used, cap - used, "/%s", du);
             }
         }
-    }
-}
-
-/* Build the y-axis title from the plotted pages.  A single page reads
- * "QUANTITY [unit]".  With several pages the unit is shown only when every page
- * agrees on it ("value [unit]"), and omitted otherwise ("value") so the label
- * never misrepresents a series. */
-static void
-build_ylabel(char *buf, size_t cap, struct osh_scoring_runtime const *rt, size_t const *pages, size_t nsel) {
-    struct osh_scoring_page_runtime const *p0 = &rt->pages[pages[0]];
-    char unit0[48];
-    char unitk[48];
-    int shared;
-    size_t k;
-
-    page_value_unit_str(p0, unit0, sizeof(unit0));
-    shared = 1;
-    for (k = 1; k < nsel; ++k) {
-        page_value_unit_str(&rt->pages[pages[k]], unitk, sizeof(unitk));
-        if (strcmp(unit0, unitk) != 0) {
-            shared = 0;
-            break;
-        }
-    }
-
-    if (nsel == 1u) {
-        char qty[64];
-        upcase_copy(qty, sizeof(qty), p0->quantity ? p0->quantity : "value");
-        snprintf(buf, cap, "%s [%s]", qty, unit0);
-    } else if (shared) {
-        snprintf(buf, cap, "value [%s]", unit0);
-    } else {
-        snprintf(buf, cap, "value");
     }
 }
 

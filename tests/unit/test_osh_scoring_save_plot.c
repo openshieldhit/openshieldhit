@@ -30,6 +30,7 @@
 #define DETECT_PATH "osh_scoring_save_plot_detect.tmp"
 
 static void write_detect_file(char const *content);
+static int file_exists(char const *path);
 static int file_contains(char const *path, char const *needle);
 static int file_count(char const *path, char const *needle);
 
@@ -63,7 +64,11 @@ static void test_plot_svg_mesh_profile(void) {
 
     /* A crude Bragg-like bump so the polyline is non-degenerate. */
     for (i = 0; i < rt.pages[0].len; ++i) {
-        rt.pages[0].acc.data[i] = 1.0 + (double) (i == 5u ? 9 : 0);
+        double bump = 0.0;
+        if (i == 5u) {
+            bump = 9.0;
+        }
+        rt.pages[0].acc.data[i] = 1.0 + bump;
     }
     rc = osh_scoring_postprocess(&rt);
     ASSERT_TRUE(rc == OSH_OK);
@@ -191,8 +196,9 @@ static void test_plot_svg_zone_spectrum(void) {
 
 /* Mixed output on a 1-D depth mesh: two plain (1-D profile) pages plus one page
  * that adds a Diff1 axis (making it 2-D spatial x energy on this geometry).
- * The SVG must plot only the two truly-1-D pages and skip the differential one:
- * exactly two polylines, a spatial x-axis, and no differential x-axis. */
+ * Only the two truly-1-D pages are plotted; the differential one is skipped.
+ * With two plotted pages the writer emits one file each with a _p1/_p2 suffix
+ * (never the un-suffixed name), each holding a single spatial-profile curve. */
 static void test_plot_svg_mixed_pages_profile(void) {
     char const *detect_text = "Geometry Mesh\n"
                               "    Name G\n"
@@ -235,17 +241,25 @@ static void test_plot_svg_mixed_pages_profile(void) {
 
     rc = osh_scoring_save(ws, &rt, 10u);
     ASSERT_TRUE(rc == OSH_OK);
-    /* Only the two plain pages are 1-D here; the differential page is skipped. */
-    ASSERT_TRUE(file_count("out_plot_mixed.svg", "<polyline") == 2);
-    ASSERT_TRUE(file_contains("out_plot_mixed.svg", "Z [cm]"));   /* spatial profile */
-    ASSERT_TRUE(!file_contains("out_plot_mixed.svg", "E [MeV]")); /* not a spectrum */
-    ASSERT_TRUE(file_contains("out_plot_mixed.svg", "DOSE"));
-    ASSERT_TRUE(file_contains("out_plot_mixed.svg", "FLUENCE"));
+    /* Two plotted pages -> two suffixed files, never the un-suffixed name. */
+    ASSERT_TRUE(!file_exists("out_plot_mixed.svg"));
+    /* Page 1: Dose profile.  One curve, a spatial x-axis, no differential axis. */
+    ASSERT_TRUE(file_count("out_plot_mixed_p1.svg", "<polyline") == 1);
+    ASSERT_TRUE(file_contains("out_plot_mixed_p1.svg", "Z [cm]"));
+    ASSERT_TRUE(!file_contains("out_plot_mixed_p1.svg", "E [MeV]"));
+    ASSERT_TRUE(file_contains("out_plot_mixed_p1.svg", "DOSE"));
+    /* Page 2: Fluence profile.  One curve. */
+    ASSERT_TRUE(file_count("out_plot_mixed_p2.svg", "<polyline") == 1);
+    ASSERT_TRUE(file_contains("out_plot_mixed_p2.svg", "Z [cm]"));
+    ASSERT_TRUE(file_contains("out_plot_mixed_p2.svg", "FLUENCE"));
+    /* The differential page is skipped: no third file. */
+    ASSERT_TRUE(!file_exists("out_plot_mixed_p3.svg"));
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
     remove(DETECT_PATH);
-    remove("out_plot_mixed.svg");
+    remove("out_plot_mixed_p1.svg");
+    remove("out_plot_mixed_p2.svg");
 }
 
 /* A 2-D mesh (two non-singleton axes) fits neither shape and is declined. */
@@ -302,6 +316,17 @@ static void write_detect_file(char const *content) {
     ASSERT_TRUE(fp != NULL);
     ASSERT_TRUE(fputs(content, fp) >= 0);
     ASSERT_TRUE(fclose(fp) == 0);
+}
+
+static int file_exists(char const *path) {
+    FILE *fp;
+
+    fp = fopen(path, "r");
+    if (!fp) {
+        return 0;
+    }
+    fclose(fp);
+    return 1;
 }
 
 static int file_contains(char const *path, char const *needle) {

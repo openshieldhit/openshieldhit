@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 /**
- * @brief Save one compiled output as a native, dependency-free SVG line plot.
+ * @brief Save one compiled output as native, dependency-free SVG line plots.
  *
  * @details
  * Issue #238 — a zero-dependency "quick-look" plot so a run can drop a viewable
@@ -31,9 +31,11 @@ extern "C" {
  * An output may mix pages that fit the chosen shape with pages that do not — for
  * example a 1-D depth mesh whose extra page adds a Diff1 axis (making that page
  * 2-D spatial x energy).  Only the pages that are truly 1-D for the shape are
- * drawn (each as its own polyline, auto-scaled to a shared y-axis, with a
- * legend); the rest are skipped.  Values are normalised per primary exactly as
- * the ASCII writer does (NORM/SUM ÷ nstat, AVER written as the physical mean; a
+ * plotted; the rest are skipped.  Each plotted page is written to its own file
+ * as a single black curve: one plotted quantity keeps the given filename, while
+ * several each get a `_p1`/`_p2`/... page suffix before the `.svg` extension so
+ * none is overwritten.  Values are normalised per primary exactly as the ASCII
+ * writer does (NORM/SUM ÷ nstat, AVER written as the physical mean; a
  * differential page's bin-width division is already applied by @ref
  * osh_scoring_postprocess).  The plot is an **additional** artifact: BDO remains
  * the source of truth and is never replaced.

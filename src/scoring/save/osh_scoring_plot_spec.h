@@ -28,15 +28,15 @@ extern "C" {
  *
  * @details
  * @c pages lists the page indices (into @c rt->pages) that are truly 1-D for the
- * chosen shape; each is drawn as one series at the shared @c xs coordinates.
- * Owns its @c xs and @c pages arrays — release with @ref osh_plot_spec_free.
+ * chosen shape; each is plotted into its own SVG file as a single series at the
+ * shared @c xs coordinates.  Owns its @c xs and @c pages arrays — release with
+ * @ref osh_plot_spec_free.
  */
 struct osh_plot_spec {
     size_t npts;     /* number of data points (== used page data length) */
     double *xs;      /* [npts] x-coordinates in data space (owned) */
     int xlog;        /* 1 = log10 x-axis */
-    char xlabel[32]; /* x-axis title */
-    char ylabel[96]; /* y-axis title */
+    char xlabel[32]; /* x-axis title (shared by every plotted page) */
     size_t *pages;   /* [nsel] plotted page indices into rt->pages (owned) */
     size_t nsel;     /* number of plotted pages */
 };
@@ -68,10 +68,10 @@ void osh_plot_spec_free(struct osh_plot_spec *spec);
 double osh_plot_page_scale(struct osh_scoring_page_runtime const *page, double inv_nstat);
 
 /**
- * @brief Write the legend label (the uppercased quantity keyword) for the
- *        plotted series at index @p k into @p buf.
+ * @brief Write the y-axis title for plotted page @p k into @p buf, as the
+ *        uppercased quantity keyword followed by its unit (e.g. "DOSE [MeV/g]").
  */
-void osh_plot_spec_series_label(
+void osh_plot_spec_page_ylabel(
     struct osh_scoring_runtime const *rt, struct osh_plot_spec const *spec, size_t k, char *buf, size_t cap);
 
 #ifdef __cplusplus
