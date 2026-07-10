@@ -1,19 +1,11 @@
 /*
- * Native SVG plot writer (issue #238 prototype).
+ * Native SVG plot writer (issue #238).
  *
- * The feature is compiled in only under -DOSH_ENABLE_PLOT=ON, which also defines
- * the OSH_ENABLE_PLOT macro globally.  This test drives only the public
- * osh_scoring_save() dispatcher (never the gated writer symbol directly), so it
- * links and runs in both configurations:
- *
- *   - built with the feature: a supported shape yields OSH_OK and a real SVG doc;
- *   - stock build (default):  `FileFormat SVG` is unrecognised -> OSH_ENOTSUP,
- *     proving the default binary stays plotting-free.
- *
- * Every case runs osh_scoring_postprocess() before saving, matching the real
- * save pipeline (and the writer's contract, which expects postprocessed
- * accumulators — differential bin-width division and volume normalisation both
- * happen there).
+ * SVG output is always compiled in, reached through the public
+ * osh_scoring_save() dispatcher via `FileFormat SVG`.  Every case runs
+ * osh_scoring_postprocess() before saving, matching the real save pipeline (the
+ * writer's contract expects postprocessed accumulators — differential bin-width
+ * division and volume normalisation both happen there).
  */
 
 #include <stdio.h>
@@ -38,9 +30,8 @@
 #define DETECT_PATH "osh_scoring_save_plot_detect.tmp"
 
 static void write_detect_file(char const *content);
-#ifdef OSH_ENABLE_PLOT
 static int file_contains(char const *path, char const *needle);
-#endif
+static int file_count(char const *path, char const *needle);
 
 /* A 1-D depth profile (1 x 1 x N mesh) is the flagship case: one polyline. */
 static void test_plot_svg_mesh_profile(void) {
@@ -78,17 +69,11 @@ static void test_plot_svg_mesh_profile(void) {
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_save(ws, &rt, 10u);
-
-#ifdef OSH_ENABLE_PLOT
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(file_contains("out_plot_profile.svg", "<svg"));
     ASSERT_TRUE(file_contains("out_plot_profile.svg", "<polyline"));
     ASSERT_TRUE(file_contains("out_plot_profile.svg", "ENERGY"));
     ASSERT_TRUE(file_contains("out_plot_profile.svg", "Z [cm]"));
-#else
-    /* Stock build: the SVG format is not compiled in, so it is unsupported. */
-    ASSERT_TRUE(rc == OSH_ENOTSUP);
-#endif
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
@@ -136,15 +121,10 @@ static void test_plot_svg_mesh_spectrum(void) {
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_save(ws, &rt, 10u);
-
-#ifdef OSH_ENABLE_PLOT
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(file_contains("out_plot_spectrum.svg", "<polyline"));
     ASSERT_TRUE(file_contains("out_plot_spectrum.svg", "E [MeV]"));   /* differential x-axis */
     ASSERT_TRUE(file_contains("out_plot_spectrum.svg", "/cm^2/MeV")); /* differential y unit */
-#else
-    ASSERT_TRUE(rc == OSH_ENOTSUP);
-#endif
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
@@ -199,14 +179,9 @@ static void test_plot_svg_zone_spectrum(void) {
     ASSERT_TRUE(rc == OSH_OK);
 
     rc = osh_scoring_save(ws, &rt, 10u);
-
-#ifdef OSH_ENABLE_PLOT
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(file_contains("out_plot_zspectrum.svg", "<polyline"));
     ASSERT_TRUE(file_contains("out_plot_zspectrum.svg", "E [MeV]"));
-#else
-    ASSERT_TRUE(rc == OSH_ENOTSUP);
-#endif
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
@@ -214,9 +189,66 @@ static void test_plot_svg_zone_spectrum(void) {
     remove("out_plot_zspectrum.svg");
 }
 
-/* A 2-D mesh (two non-singleton axes) is out of scope for the 1-D prototype and
- * must be declined cleanly.  It is OSH_ENOTSUP either way: the writer rejects the
- * shape when built in, the dispatcher rejects the format when not. */
+/* Mixed output on a 1-D depth mesh: two plain (1-D profile) pages plus one page
+ * that adds a Diff1 axis (making it 2-D spatial x energy on this geometry).
+ * The SVG must plot only the two truly-1-D pages and skip the differential one:
+ * exactly two polylines, a spatial x-axis, and no differential x-axis. */
+static void test_plot_svg_mixed_pages_profile(void) {
+    char const *detect_text = "Geometry Mesh\n"
+                              "    Name G\n"
+                              "    X 0 1 1\n"
+                              "    Y 0 1 1\n"
+                              "    Z 0 8 8\n"
+                              "\n"
+                              "Output\n"
+                              "    Filename out_plot_mixed.svg\n"
+                              "    FileFormat SVG\n"
+                              "    Geo G\n"
+                              "    Quantity Dose\n"
+                              "    Quantity Fluence\n"
+                              "    Quantity Fluence\n"
+                              "    Diff1 1 100 8 LOG\n"
+                              "    Diff1Type EKIN\n";
+    struct osh_scoring_workspace *ws;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+    size_t p;
+    size_t i;
+
+    write_detect_file(detect_text);
+
+    ws = NULL;
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_setup_from_path(DETECT_PATH, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(rt.npages == 3u); /* Dose, Fluence, Fluence+Diff1 */
+
+    for (p = 0; p < rt.npages; ++p) {
+        for (i = 0; i < rt.pages[p].len; ++i) {
+            rt.pages[p].acc.data[i] = 1.0 + (double) i;
+        }
+    }
+    rc = osh_scoring_postprocess(&rt);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    rc = osh_scoring_save(ws, &rt, 10u);
+    ASSERT_TRUE(rc == OSH_OK);
+    /* Only the two plain pages are 1-D here; the differential page is skipped. */
+    ASSERT_TRUE(file_count("out_plot_mixed.svg", "<polyline") == 2);
+    ASSERT_TRUE(file_contains("out_plot_mixed.svg", "Z [cm]"));   /* spatial profile */
+    ASSERT_TRUE(!file_contains("out_plot_mixed.svg", "E [MeV]")); /* not a spectrum */
+    ASSERT_TRUE(file_contains("out_plot_mixed.svg", "DOSE"));
+    ASSERT_TRUE(file_contains("out_plot_mixed.svg", "FLUENCE"));
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(DETECT_PATH);
+    remove("out_plot_mixed.svg");
+}
+
+/* A 2-D mesh (two non-singleton axes) fits neither shape and is declined. */
 static void test_plot_svg_rejects_2d(void) {
     char const *detect_text = "Geometry Mesh\n"
                               "    Name G\n"
@@ -258,6 +290,7 @@ int main(void) {
     test_plot_svg_mesh_profile();
     test_plot_svg_mesh_spectrum();
     test_plot_svg_zone_spectrum();
+    test_plot_svg_mixed_pages_profile();
     test_plot_svg_rejects_2d();
     return 0;
 }
@@ -271,24 +304,28 @@ static void write_detect_file(char const *content) {
     ASSERT_TRUE(fclose(fp) == 0);
 }
 
-#ifdef OSH_ENABLE_PLOT
 static int file_contains(char const *path, char const *needle) {
+    return file_count(path, needle) > 0;
+}
+
+/* Count occurrences of @p needle across the whole file. */
+static int file_count(char const *path, char const *needle) {
     FILE *fp;
-    char line[1024];
-    int found;
+    char line[4096];
+    int n;
 
     fp = fopen(path, "r");
     if (!fp) {
-        return 0;
+        return -1;
     }
-    found = 0;
+    n = 0;
     while (fgets(line, sizeof(line), fp) != NULL) {
-        if (strstr(line, needle) != NULL) {
-            found = 1;
-            break;
+        char const *pos = line;
+        while ((pos = strstr(pos, needle)) != NULL) {
+            ++n;
+            pos += 1;
         }
     }
     fclose(fp);
-    return found;
+    return n;
 }
-#endif

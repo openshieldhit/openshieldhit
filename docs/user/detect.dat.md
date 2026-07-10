@@ -104,13 +104,12 @@ Rules and semantics:
   zone-index column. The per-zone volume is not stored in either — it is consumed by
   the ÷volume in postprocess, so the saved dose/fluence is already final.
 
-### Native plot output — `FileFormat SVG` (experimental, opt-in)
+### Native plot output — `FileFormat SVG`
 
-> **Prototype for [issue #238](https://github.com/openshieldhit/openshieldhit/issues/238).**
-> Compiled in only when the project is configured with `-DOSH_ENABLE_PLOT=ON`; the
-> stock binary carries no plotting code. The default plotting path stays
-> `tools/` (matplotlib/pymchelper). This is a zero-dependency **quick-look**
-> renderer, not a publication-figure tool.
+> **From [issue #238](https://github.com/openshieldhit/openshieldhit/issues/238).**
+> A zero-dependency, hand-written SVG writer built into every binary. This is a
+> **quick-look** renderer, not a publication-figure tool; `tools/`
+> (matplotlib/pymchelper) stays the path for polished figures.
 
 A run can drop a viewable 1-D line plot next to its `.bdo`/`.dat`, so the data
 can be eyeballed on a machine that has only the `openshieldhit` binary — no
@@ -145,16 +144,20 @@ Output
   ÷ nstat, AVER as the physical mean; a differential page's bin-width division
   is already applied in postprocessing).
 - Output is a hand-written SVG document (pure `fprintf`, no vendored library):
-  a plot frame, "nice" axis ticks, and one polyline per `Quantity`, viewable in
-  any browser.
-- **Scope of this prototype:**
+  a plot frame, major + minor grid lines, "nice" axis ticks, and one polyline
+  per plotted `Quantity`, viewable in any browser.
+- **Mixed outputs** are handled per page. When an `Output` holds several
+  `Quantity` pages of which only some are truly 1-D for the chosen shape — e.g.
+  a 1-D depth mesh where one page adds a `Diff1` axis (making it 2-D spatial ×
+  energy) — only the 1-D pages are drawn and the rest are skipped.
+- **Supported shapes:**
   - Spatial profile — `Geometry Mesh` with exactly one non-singleton axis, or
     `Geometry Cyl` with one non-singleton axis (R or Z).
   - Spectrum — a `Diff1` page over a single spatial bin (`1 × 1 × 1` mesh voxel
     or a one-`Zone` geometry).
-- Anything outside that scope (2-D/3-D meshes, 2-D `Diff1 × Diff2` spectra,
+- When no page fits either shape (2-D/3-D meshes, 2-D `Diff1 × Diff2` spectra,
   spectra spanning several spatial bins, categorical multi-zone profiles,
-  rotated meshes) is declined with `OSH_ENOTSUP`; those, plus PNG heatmaps,
+  rotated meshes) the writer returns `OSH_ENOTSUP`; those, plus PNG heatmaps,
   multipage PDF, log-y and MC error bars, are follow-up items on #238.
 
 ## Differential scoring

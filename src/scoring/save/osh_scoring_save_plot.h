@@ -12,14 +12,13 @@ extern "C" {
  * @brief Save one compiled output as a native, dependency-free SVG line plot.
  *
  * @details
- * Prototype for issue #238 — a zero-dependency "quick-look" plot so a run can
- * drop a viewable Bragg curve / 1-D profile next to its `.bdo`/`.dat` on a
- * machine that only has the `openshieldhit` binary (no Python/matplotlib).  The
- * whole feature is compiled in only when the project is configured with
- * `-DOSH_ENABLE_PLOT=ON`; the stock binary carries no plotting code.
+ * Issue #238 — a zero-dependency "quick-look" plot so a run can drop a viewable
+ * Bragg curve / 1-D profile next to its `.bdo`/`.dat` on a machine that only has
+ * the `openshieldhit` binary (no Python/matplotlib).  Always compiled in and
+ * reached by `FileFormat SVG` on an `Output` block; the drawing is delegated to
+ * the generic renderer in @ref osh_scoring_svg.h.
  *
- * Scope of this prototype is deliberately narrow — SVG only, two 1-D shapes,
- * chosen automatically from the page model:
+ * Two 1-D shapes are chosen automatically from the page model:
  *
  *   - **Spatial profile** — MESH with exactly one non-singleton X/Y/Z axis (e.g.
  *     a depth-dose / Bragg curve on a `1 x 1 x N` mesh), or CYL with one
@@ -29,15 +28,17 @@ extern "C" {
  *     (both detected uniformly as `diff_stride == 1`).  x = the Diff1 bin
  *     centres of the differential quantity, log-scaled when the binning is LOG.
  *
- * Every page of the output is drawn as its own polyline (auto-scaled to a shared
- * y-axis) with a small legend, so a single-quantity output yields one clean
- * curve.  Values are normalised per primary exactly as the ASCII writer does
- * (NORM/SUM ÷ nstat, AVER written as the physical mean; a differential page's
- * bin-width division is already applied by @ref osh_scoring_postprocess).  The
- * plot is an **additional** artifact: BDO remains the source of truth and is
- * never replaced.
+ * An output may mix pages that fit the chosen shape with pages that do not — for
+ * example a 1-D depth mesh whose extra page adds a Diff1 axis (making that page
+ * 2-D spatial x energy).  Only the pages that are truly 1-D for the shape are
+ * drawn (each as its own polyline, auto-scaled to a shared y-axis, with a
+ * legend); the rest are skipped.  Values are normalised per primary exactly as
+ * the ASCII writer does (NORM/SUM ÷ nstat, AVER written as the physical mean; a
+ * differential page's bin-width division is already applied by @ref
+ * osh_scoring_postprocess).  The plot is an **additional** artifact: BDO remains
+ * the source of truth and is never replaced.
  *
- * Anything outside that scope returns @c OSH_ENOTSUP for now (2-D / 3-D meshes,
+ * @c OSH_ENOTSUP is returned when no page fits either shape (2-D / 3-D meshes,
  * 2-D spectra with a second differential axis, spectra spanning more than one
  * spatial bin, categorical multi-zone profiles, rotated meshes, two-pass pages
  * not yet postprocessed).  These are follow-up items for the discussion on #238.

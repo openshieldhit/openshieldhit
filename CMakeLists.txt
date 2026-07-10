@@ -139,18 +139,6 @@ if(OSH_ENABLE_SANITIZERS)
     endif()
 endif()
 
-# Opt-in native "quick-look" plot output (issue #238 prototype). OFF by default
-# so the stock binary is byte-for-byte unchanged and carries zero plotting code;
-# tools/ (matplotlib/pymchelper) stays the default plotting path. When enabled,
-# the scoring library compiles a hand-rolled, dependency-free SVG line-plot
-# writer reachable via `FileFormat SVG` on an Output block. The compile
-# definition gates the dispatcher and the writer's translation unit alike.
-option(OSH_ENABLE_PLOT "Enable native SVG plot output for scorer results" OFF)
-if(OSH_ENABLE_PLOT)
-    add_compile_definitions(OSH_ENABLE_PLOT)
-    message(STATUS "Native SVG plot output: ENABLED (FileFormat SVG)")
-endif()
-
 # ---- Libraries / modules (these create osh_common, osh_random, etc.) ----
 add_subdirectory(src/common)
 add_subdirectory(src/random)
