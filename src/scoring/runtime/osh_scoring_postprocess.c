@@ -342,6 +342,14 @@ enum osh_status osh_scoring_finalize_errors(struct osh_scoring_runtime *rt) {
     if (!rt) {
         return OSH_EINVAL;
     }
+    /* Ordering guard: the relative error is derived from the raw sums (data, data2),
+     * so this must run before osh_scoring_postprocess() rescales data / collapses the
+     * two-pass ratio.  A runtime already postprocessed would yield error relative to
+     * the wrong (rescaled) value — reject rather than silently mis-report.  Mirrors
+     * the single-shot guard on the in-place postprocess path. */
+    if (rt->postprocessed) {
+        return OSH_ESTATE;
+    }
 
     for (p = 0; p < rt->npages; ++p) {
         struct osh_scoring_accumulator *acc = &rt->pages[p].acc;

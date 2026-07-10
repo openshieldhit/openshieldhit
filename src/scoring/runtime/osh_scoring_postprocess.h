@@ -89,13 +89,16 @@ enum osh_status osh_scoring_postprocess_into(struct osh_scoring_runtime *dst, st
  *
  * @b Ordering: this reads the raw sums (@c data, @c data2) and their M2 arrays, so
  * it must run **before** @ref osh_scoring_postprocess rescales @c data or collapses
- * the LET ratio.  @c B < 2 (zero degrees of freedom), a zero mean, or a zero
- * weight yield a 0 error for that bin.  Pages without M2 arrays (variance off, or
- * the dump shadow) are skipped, so this is a no-op unless a page enabled variance
- * tracking via a "Variance On" Settings block.
+ * the LET ratio.  That order is enforced: a runtime already postprocessed is
+ * rejected with @c OSH_ESTATE rather than mis-reporting error against the rescaled
+ * value.  @c B < 2 (zero degrees of freedom), a zero mean, or a zero weight yield a
+ * 0 error for that bin.  Pages without M2 arrays (variance off, or the dump shadow)
+ * are skipped, so this is a no-op unless a page enabled variance tracking via a
+ * "Variance On" Settings block.
  *
  * @param[in,out] rt  Scoring runtime whose variance pages are finalised in place.
- * @returns OSH_OK on success, OSH_EINVAL if @p rt is NULL.
+ * @returns OSH_OK on success, OSH_EINVAL if @p rt is NULL, or OSH_ESTATE if @p rt
+ *          has already been postprocessed (the raw sums are gone — finalise first).
  */
 enum osh_status osh_scoring_finalize_errors(struct osh_scoring_runtime *rt);
 

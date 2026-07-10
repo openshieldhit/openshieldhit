@@ -206,7 +206,9 @@ required.
 
 `osh_scoring_finalize_errors()` (issue #209) applies this once, **before**
 `osh_scoring_postprocess()` rescales `data` or collapses the two-pass ratios,
-because it reads the raw sums. Rather than the absolute `SE` it stores the per-bin
+because it reads the raw sums — an ordering the function enforces by returning
+`OSH_ESTATE` if the runtime has already been postprocessed. Rather than the
+absolute `SE` it stores the per-bin
 **relative** error `SE / |mean| = sqrt(M2 · weight / (nbatch−1)) / |data|` back
 into `data_var`; the save layer then emits the absolute error column as
 `|value| · data_var`, so whatever per-primary / physical-mean / unit scaling the
@@ -356,16 +358,24 @@ one of these states:
 because `data2` is discarded at post-process; merging requires re-weighting by
 each file's `nstat`.
 
-!!! warning "These handlers are on the variance-finalisation critical path"
+!!! note "Variance finalisation is ordered *before* these handlers, not folded into them"
     Because ÷volume moved *into* `postprocess_` (never at score time, never at
-    save), the handlers here own the geometry normalisation — and therefore, once
-    the variance feature (#169) makes `data_var` (M2) live, its finalisation too.
-    `postprocess_volume`/`postprocess_dosegy` scale `data` by `vinv` (×`extra`), so
-    they must scale M2 by `vinv²` (×`extra²`); `postprocess_ratio` forms
-    `data/data2`, so it must propagate error through that quotient. Today M2 is
-    `NULL` and the handlers touch `data` only — correct as-is — but wiring
-    variance (#247) is **not** a deposit-only change: it must extend these
-    handlers. See the coupling note in §4.
+    save), the handlers here own the geometry normalisation. When #251 was written
+    the open question was whether making `data_var` (M2) live would force these
+    handlers to carry the error too — `postprocess_volume`/`postprocess_dosegy`
+    scaling M2 by `vinv²` (×`extra²`), `postprocess_ratio` propagating error through
+    the `data/data2` quotient.
+
+    The batch-means variance (#247, issue #209) resolved it the other way and the
+    handlers were deliberately **left untouched**. `osh_scoring_finalize_errors()`
+    runs **before** postprocess and stores a *relative* standard error in `data_var`
+    (§4). A relative error is invariant under the linear rescales these handlers
+    apply (`data → data · vinv · extra`), so ÷volume and MeV/g→Gy need no M2
+    bookkeeping at all; the ratio's numerator/denominator errors are combined in
+    quadrature at finalise time, before `postprocess_ratio` collapses `data/data2`.
+    The coupling is therefore one of **ordering** — finalise-then-postprocess,
+    enforced by an `OSH_ESTATE` guard in `osh_scoring_finalize_errors()` — not of
+    extending the handlers. See §4.
 
 ## 7. Lifecycle and module boundaries
 
