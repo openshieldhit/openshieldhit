@@ -207,8 +207,10 @@ required.
 `osh_scoring_finalize_errors()` (issue #209) applies this once, **before**
 `osh_scoring_postprocess()` rescales `data` or collapses the two-pass ratios,
 because it reads the raw sums — an ordering the function enforces by returning
-`OSH_ESTATE` if the runtime has already been postprocessed. Rather than the
-absolute `SE` it stores the per-bin
+`OSH_ESTATE` if the runtime's `postprocessed` flag is set (an *in-place*
+postprocess already ran; an out-of-place `..._into` a distinct `dst` leaves the
+sums intact and is not rejected). Rather than the absolute `SE` it stores the
+per-bin
 **relative** error `SE / |mean| = sqrt(M2 · weight / (nbatch−1)) / |data|` back
 into `data_var`; the save layer then emits the absolute error column as
 `|value| · data_var`, so whatever per-primary / physical-mean / unit scaling the
@@ -373,9 +375,10 @@ each file's `nstat`.
     apply (`data → data · vinv · extra`), so ÷volume and MeV/g→Gy need no M2
     bookkeeping at all; the ratio's numerator/denominator errors are combined in
     quadrature at finalise time, before `postprocess_ratio` collapses `data/data2`.
-    The coupling is therefore one of **ordering** — finalise-then-postprocess,
-    enforced by an `OSH_ESTATE` guard in `osh_scoring_finalize_errors()` — not of
-    extending the handlers. See §4.
+    The coupling is therefore one of **ordering** — finalise-then-(in-place-)postprocess,
+    enforced by an `OSH_ESTATE` guard in `osh_scoring_finalize_errors()` that fires
+    when the `postprocessed` flag is set (i.e. an in-place postprocess already ran) —
+    not of extending the handlers. See §4.
 
 ## 7. Lifecycle and module boundaries
 
