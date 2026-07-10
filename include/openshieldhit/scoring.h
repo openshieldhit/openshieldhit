@@ -162,10 +162,11 @@ struct osh_scoring_workspace {
  * appended per format; with a single format it is used verbatim.
  */
 struct osh_scoring_output_def {
-    char *filename;      /* Output file name (single format) or stem (multiple formats). */
-    char *geometry_name; /* Referenced geometry name. */
-    char **fileformats;  /* Requested format keywords, lowercase (owned); empty = default BDO. */
-    size_t nfileformats; /* Number of requested output formats. */
+    char *filename;              /* Output file name (single format) or stem (multiple formats). */
+    char *geometry_name;         /* Referenced geometry name. */
+    char **fileformats;          /* Requested format keywords, lowercase (owned); empty = default BDO. */
+    char **fileformat_filenames; /* Optional per-format explicit filenames (owned); NULL => derive/use Filename. */
+    size_t nfileformats;         /* Number of requested output formats. */
     struct osh_scoring_page_def *pages;
     size_t npages;
 };

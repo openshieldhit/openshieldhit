@@ -28,6 +28,7 @@ enum osh_status osh_scoring_save_outputs(struct osh_scoring_workspace const *ws,
                                          size_t const *want,
                                          size_t n_want) {
     enum osh_status rc;
+    enum osh_status first_rc;
     size_t i;
 
     if (!ws || !rt) {
@@ -44,26 +45,28 @@ enum osh_status osh_scoring_save_outputs(struct osh_scoring_workspace const *ws,
     }
 
     if (want == NULL) {
+        first_rc = OSH_OK;
         for (i = 0; i < rt->noutputs; ++i) {
             rc = save_one_output(ws, rt, nstat, i);
-            if (rc != OSH_OK) {
-                return rc;
+            if (rc != OSH_OK && first_rc == OSH_OK) {
+                first_rc = rc;
             }
         }
-        return OSH_OK;
+        return first_rc;
     }
 
+    first_rc = OSH_OK;
     for (i = 0; i < n_want; ++i) {
         if (want[i] >= rt->noutputs) {
             return OSH_EINVAL;
         }
         rc = save_one_output(ws, rt, nstat, want[i]);
-        if (rc != OSH_OK) {
-            return rc;
+        if (rc != OSH_OK && first_rc == OSH_OK) {
+            first_rc = rc;
         }
     }
 
-    return OSH_OK;
+    return first_rc;
 }
 
 static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,

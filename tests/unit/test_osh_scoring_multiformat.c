@@ -15,9 +15,11 @@
  *                                   both outputs point at the same pages
  *   test_derived_filenames        — stem + canonical extension per format
  *   test_single_format_verbatim   — one format keeps the filename byte-for-byte
+ *   test_override_filenames        — per-target override names are used verbatim
  *   test_writes_all_files         — save emits one file per format
+ *   test_partial_write_best_effort — failed target does not stop later targets
  *   test_collision_rejected       — two formats resolving to one path is an error
- *   test_rtdose_mixed_rejected    — RTDOSE cannot share a multi-format block
+ *   test_rtdose_mixed_uses_dose   — mixed RTDOSE keeps only the dose page
  */
 
 #include <stdio.h>
@@ -61,6 +63,30 @@ write_temp_detect_with_filename(char *path, size_t path_cap, char const *filenam
 
 static void write_temp_detect(char *path, size_t path_cap, char const *fileformat_line) {
     write_temp_detect_with_filename(path, path_cap, "NB_msh", fileformat_line);
+}
+
+static void write_temp_detect_dose_and_fluence(char *path, size_t path_cap, char const *fileformat_line) {
+    FILE *fp;
+
+    snprintf(path, path_cap, "osh_multiformat_test_%d.tmp", tmp_counter++);
+    fp = fopen(path, "w");
+    ASSERT_TRUE(fp != NULL);
+    ASSERT_TRUE(fprintf(fp,
+                        "Geometry Mesh\n"
+                        "    Name MyMesh\n"
+                        "    X 0.0 1.0 2\n"
+                        "    Y 0.0 1.0 3\n"
+                        "    Z 0.0 1.0 4\n"
+                        "\n"
+                        "Output\n"
+                        "    Filename NB_msh\n"
+                        "    %s\n"
+                        "    Geo MyMesh\n"
+                        "    Quantity Dose\n"
+                        "    Quantity Fluence\n",
+                        fileformat_line)
+                >= 0);
+    ASSERT_TRUE(fclose(fp) == 0);
 }
 
 static int file_exists(char const *path) {
@@ -187,6 +213,27 @@ static void test_single_format_verbatim(void) {
     remove(path);
 }
 
+/* A per-target override on FileFormat is used verbatim for that target. */
+static void test_override_filenames(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+
+    write_temp_detect(path, sizeof(path), "FileFormat TEXT legacy.out BDO run.bdo");
+    ASSERT_TRUE(osh_scoring_setup_from_path(path, NULL, &ws) == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    ASSERT_TRUE(osh_scoring_compile(ws, NULL, &rt) == OSH_OK);
+
+    ASSERT_TRUE(rt.noutputs == 2u);
+    ASSERT_TRUE(strcmp(rt.outputs[0].filename, "legacy.out") == 0);
+    ASSERT_TRUE(strcmp(rt.outputs[1].filename, "run.bdo") == 0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 /* Saving a two-format block emits one file per format. */
 static void test_writes_all_files(void) {
     char path[512];
@@ -215,6 +262,30 @@ static void test_writes_all_files(void) {
     remove("NB_msh.bdo");
 }
 
+/* Save is best-effort: if one target fails, later targets are still attempted. */
+static void test_partial_write_best_effort(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+
+    write_temp_detect(path, sizeof(path), "FileFormat TEXT /definitely/missing/path/out.dat BDO ok_out.bdo");
+    ASSERT_TRUE(osh_scoring_setup_from_path(path, NULL, &ws) == OSH_OK);
+
+    memset(&rt, 0, sizeof(rt));
+    ASSERT_TRUE(osh_scoring_compile(ws, NULL, &rt) == OSH_OK);
+
+    remove("ok_out.bdo");
+    rc = osh_scoring_save(ws, &rt, 10u);
+    ASSERT_TRUE(rc != OSH_OK);
+    ASSERT_TRUE(file_exists("ok_out.bdo"));
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+    remove("ok_out.bdo");
+}
+
 /* Two formats that canonicalise to the same path (TEXT and DAT both -> .dat)
  * are rejected at compile time. */
 static void test_collision_rejected(void) {
@@ -233,18 +304,23 @@ static void test_collision_rejected(void) {
     remove(path);
 }
 
-/* RTDOSE needs exactly one dose page and cannot share a multi-page block, so
- * combining it with another format in one block is rejected. */
-static void test_rtdose_mixed_rejected(void) {
+/* In a mixed block RTDOSE keeps only one dose page; other targets keep all pages. */
+static void test_rtdose_mixed_uses_dose(void) {
     char path[512];
     struct osh_scoring_workspace *ws = NULL;
     struct osh_scoring_runtime rt;
 
-    write_temp_detect(path, sizeof(path), "FileFormat BDO RTDOSE");
+    write_temp_detect_dose_and_fluence(path, sizeof(path), "FileFormat BDO RTDOSE");
     ASSERT_TRUE(osh_scoring_setup_from_path(path, NULL, &ws) == OSH_OK);
 
     memset(&rt, 0, sizeof(rt));
-    ASSERT_TRUE(osh_scoring_compile(ws, NULL, &rt) == OSH_ENOTSUP);
+    ASSERT_TRUE(osh_scoring_compile(ws, NULL, &rt) == OSH_OK);
+    ASSERT_TRUE(rt.noutputs == 2u);
+    ASSERT_TRUE(strcmp(rt.outputs[0].fileformat, "bdo") == 0);
+    ASSERT_TRUE(strcmp(rt.outputs[1].fileformat, "rtdose") == 0);
+    ASSERT_TRUE(rt.outputs[0].npages == 2u);
+    ASSERT_TRUE(rt.outputs[1].npages == 1u);
+    ASSERT_TRUE(rt.outputs[1].page_indices[0] == rt.outputs[0].page_indices[0]);
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
@@ -256,8 +332,10 @@ int main(void) {
     test_fanout_shares_pages();
     test_derived_filenames();
     test_single_format_verbatim();
+    test_override_filenames();
     test_writes_all_files();
+    test_partial_write_best_effort();
     test_collision_rejected();
-    test_rtdose_mixed_rejected();
+    test_rtdose_mixed_uses_dose();
     return 0;
 }

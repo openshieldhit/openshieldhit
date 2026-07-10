@@ -824,7 +824,7 @@ enum osh_status osh_scoring_runtime_clone_scratch(struct osh_scoring_runtime con
  * will consume it. */
 static char const *format_canonical_ext(char const *fmt) {
     if (!fmt) {
-        return ".bdo";
+        return NULL;
     }
     if (strcmp(fmt, "text") == 0 || strcmp(fmt, "txt") == 0 || strcmp(fmt, "ascii") == 0 || strcmp(fmt, "dat") == 0) {
         return ".dat";
@@ -844,6 +844,10 @@ static char const *format_canonical_ext(char const *fmt) {
 
 static int format_is_rtdose(char const *fmt) {
     return fmt && strcmp(fmt, "rtdose") == 0;
+}
+
+static int score_kind_is_rtdose_compatible(enum osh_scoring_score_kind kind) {
+    return kind == OSH_SCORING_SCORE_DOSE || kind == OSH_SCORING_SCORE_DOSEGY;
 }
 
 /* Return 1 when @p text ends with @p suffix (case-insensitive), else 0.
@@ -1378,14 +1382,18 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         for (i = 0; i < ws->noutputs; ++i) {
             size_t nf_i = ws->outputs[i].nfileformats;
             char const *output_name;
+            int has_rtdose_target;
+            int has_dose_page;
+            size_t p;
 
-            if (nf_i <= 1u) {
+            if (nf_i == 0u) {
                 continue;
             }
             output_name = "(unnamed)";
             if (ws->outputs[i].filename) {
                 output_name = ws->outputs[i].filename;
             }
+            has_rtdose_target = 0;
             for (k = 0; k < nf_i; ++k) {
                 char const *fmt = ws->outputs[i].fileformats[k];
                 char const *fmt_name;
@@ -1394,14 +1402,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 if (fmt) {
                     fmt_name = fmt;
                 }
-                /* The RTDOSE writer needs exactly one dose page, which a shared
-                 * multi-page page-set cannot supply; reject it in a mixed block.
-                 * Single-format RTDOSE is unaffected. */
                 if (format_is_rtdose(fmt)) {
-                    OSH_DIAG_ERRORF(
-                        diag, "Scoring output '%s' cannot combine RTDOSE with other formats in one block", output_name);
-                    rc = OSH_ENOTSUP;
-                    goto fail;
+                    has_rtdose_target = 1;
                 }
                 if (format_canonical_ext(fmt) == NULL) {
                     OSH_DIAG_ERRORF(
@@ -1410,9 +1412,30 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                     goto fail;
                 }
             }
-            n_extra += nf_i - 1u;
+            if (has_rtdose_target) {
+                has_dose_page = 0;
+                for (p = 0u; p < ws->outputs[i].npages; ++p) {
+                    enum osh_scoring_score_kind kind;
+
+                    kind = quantity_to_score_kind(ws->outputs[i].pages[p].quantity);
+                    if (score_kind_is_rtdose_compatible(kind)) {
+                        has_dose_page = 1;
+                        break;
+                    }
+                }
+                if (!has_dose_page) {
+                    OSH_DIAG_ERRORF(
+                        diag, "Scoring output '%s' requests RTDOSE but has no Dose/DoseGy page", output_name);
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+            }
+            if (nf_i > 1u) {
+                n_extra += nf_i - 1u;
+            }
         }
 
+        next = rt->noutputs;
         if (n_extra > 0u) {
             struct osh_scoring_output_runtime *grown = (struct osh_scoring_output_runtime *) realloc(
                 rt->outputs, (rt->noutputs + n_extra) * sizeof(*rt->outputs));
@@ -1425,90 +1448,174 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
              * built.  Bump noutputs now (the slots are valid, zeroed entries) so
              * osh_scoring_runtime_free() covers every slot on any error path. */
             memset(&rt->outputs[rt->noutputs], 0, n_extra * sizeof(*rt->outputs));
-            next = rt->noutputs;
             rt->noutputs += n_extra;
+        }
 
-            for (i = 0; i < ws->noutputs; ++i) {
-                struct osh_scoring_output_runtime *primary = &rt->outputs[i];
-                char const *stem = ws->outputs[i].filename;
-                size_t nf_i = ws->outputs[i].nfileformats;
-                size_t block_first_extra = next;
-                char *derived;
-                size_t a;
-                size_t b;
+        for (i = 0; i < ws->noutputs; ++i) {
+            struct osh_scoring_output_runtime *primary = &rt->outputs[i];
+            char const *stem = ws->outputs[i].filename;
+            size_t nf_i = ws->outputs[i].nfileformats;
+            size_t block_first_extra = next;
+            char *resolved_name;
+            size_t a;
+            size_t b;
+            size_t primary_npages_full;
+            size_t *primary_pages_full;
+            size_t dose_page_index;
+            int have_dose_page;
+            int primary_is_rtdose;
+            int block_has_rtdose;
+            int has_primary_override;
 
-                if (nf_i <= 1u) {
-                    continue;
+            if (nf_i == 0u) {
+                continue;
+            }
+
+            primary_npages_full = primary->npages;
+            primary_pages_full = primary->page_indices;
+            dose_page_index = 0u;
+            have_dose_page = 0;
+            primary_is_rtdose = format_is_rtdose(ws->outputs[i].fileformats[0]);
+            has_primary_override =
+                ws->outputs[i].fileformat_filenames != NULL && ws->outputs[i].fileformat_filenames[0] != NULL;
+            block_has_rtdose = 0;
+            for (k = 0u; k < nf_i; ++k) {
+                if (format_is_rtdose(ws->outputs[i].fileformats[k])) {
+                    block_has_rtdose = 1;
+                    break;
                 }
+            }
+            if (block_has_rtdose) {
+                size_t page_idx;
 
-                /* Re-derive the primary target's filename from the stem. */
-                derived = derive_format_filename(stem, ws->outputs[i].fileformats[0]);
-                if (!derived) {
-                    rc = OSH_ENOMEM;
-                    goto fail;
+                for (a = 0u; a < primary_npages_full; ++a) {
+                    page_idx = primary_pages_full[a];
+                    if (score_kind_is_rtdose_compatible(rt->pages[page_idx].score_kind)) {
+                        dose_page_index = page_idx;
+                        have_dose_page = 1;
+                        break;
+                    }
                 }
-                free(primary->filename);
-                primary->filename = derived;
-
-                for (k = 1u; k < nf_i; ++k) {
-                    struct osh_scoring_output_runtime *extra = &rt->outputs[next];
-                    char const *fmt = ws->outputs[i].fileformats[k];
-
-                    extra->fileformat = strdup(fmt);
-                    if (!extra->fileformat) {
-                        rc = OSH_ENOMEM;
-                        goto fail;
-                    }
-                    extra->filename = derive_format_filename(stem, fmt);
-                    if (!extra->filename) {
-                        rc = OSH_ENOMEM;
-                        goto fail;
-                    }
-                    extra->geometry_idx = primary->geometry_idx;
-                    extra->npages = primary->npages;
-                    if (extra->npages > 0u) {
-                        extra->page_indices = (size_t *) malloc(extra->npages * sizeof(*extra->page_indices));
-                        if (!extra->page_indices) {
-                            rc = OSH_ENOMEM;
-                            goto fail;
-                        }
-                        memcpy(
-                            extra->page_indices, primary->page_indices, extra->npages * sizeof(*extra->page_indices));
-                    }
-                    next++;
-                }
-
-                /* Reject two targets in this block that resolve to the same path
-                 * (e.g. "FileFormat TEXT DAT" — both canonicalise to .dat). */
-                for (a = 0u; a < nf_i; ++a) {
-                    char const *na;
-                    char const *output_name;
-
-                    if (a == 0u) {
-                        na = primary->filename;
-                    } else {
-                        na = rt->outputs[block_first_extra + a - 1u].filename;
-                    }
-                    output_name = "(unnamed)";
+                if (!have_dose_page) {
+                    char const *output_name = "(unnamed)";
                     if (ws->outputs[i].filename) {
                         output_name = ws->outputs[i].filename;
                     }
-                    for (b = a + 1u; b < nf_i; ++b) {
-                        char const *nb;
+                    OSH_DIAG_ERRORF(
+                        diag, "Scoring output '%s' requests RTDOSE but no Dose/DoseGy page was found", output_name);
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+            }
 
-                        if (b == 0u) {
-                            nb = primary->filename;
-                        } else {
-                            nb = rt->outputs[block_first_extra + b - 1u].filename;
-                        }
-                        if (strcmp(na, nb) == 0) {
-                            OSH_DIAG_ERRORF(diag,
-                                            "Scoring output '%s' requests formats that resolve to the same file '%s'",
-                                            output_name,
-                                            na);
-                            rc = OSH_EINVAL;
-                            goto fail;
-                        }
+            resolved_name = NULL;
+            if (has_primary_override) {
+                resolved_name = strdup(ws->outputs[i].fileformat_filenames[0]);
+            } else if (nf_i > 1u) {
+                resolved_name = derive_format_filename(stem, ws->outputs[i].fileformats[0]);
+            }
+            if (resolved_name != NULL) {
+                free(primary->filename);
+                primary->filename = resolved_name;
+            } else if (has_primary_override || nf_i > 1u) {
+                rc = OSH_ENOMEM;
+                goto fail;
+            }
+
+            for (k = 1u; k < nf_i; ++k) {
+                struct osh_scoring_output_runtime *extra = &rt->outputs[next];
+                char const *fmt = ws->outputs[i].fileformats[k];
+                int extra_is_rtdose = format_is_rtdose(fmt);
+                size_t copy_npages;
+
+                if (!fmt) {
+                    char const *output_name = "(unnamed)";
+                    if (ws->outputs[i].filename) {
+                        output_name = ws->outputs[i].filename;
+                    }
+                    OSH_DIAG_ERRORF(diag, "Scoring output '%s' has a null FileFormat entry", output_name);
+                    rc = OSH_EINVAL;
+                    goto fail;
+                }
+                extra->fileformat = strdup(fmt);
+                if (!extra->fileformat) {
+                    rc = OSH_ENOMEM;
+                    goto fail;
+                }
+                if (ws->outputs[i].fileformat_filenames != NULL && ws->outputs[i].fileformat_filenames[k] != NULL) {
+                    extra->filename = strdup(ws->outputs[i].fileformat_filenames[k]);
+                } else {
+                    extra->filename = derive_format_filename(stem, fmt);
+                }
+                if (!extra->filename) {
+                    rc = OSH_ENOMEM;
+                    goto fail;
+                }
+                extra->geometry_idx = primary->geometry_idx;
+                copy_npages = primary_npages_full;
+                if (extra_is_rtdose) {
+                    copy_npages = 1u;
+                }
+                extra->npages = copy_npages;
+                if (extra->npages > 0u) {
+                    extra->page_indices = (size_t *) malloc(extra->npages * sizeof(*extra->page_indices));
+                    if (!extra->page_indices) {
+                        rc = OSH_ENOMEM;
+                        goto fail;
+                    }
+                    if (extra_is_rtdose) {
+                        extra->page_indices[0] = dose_page_index;
+                    } else {
+                        memcpy(extra->page_indices, primary_pages_full, extra->npages * sizeof(*extra->page_indices));
+                    }
+                }
+                next++;
+            }
+
+            if (primary_is_rtdose && primary_npages_full > 0u) {
+                size_t *single_page;
+
+                single_page = (size_t *) malloc(sizeof(*single_page));
+                if (!single_page) {
+                    rc = OSH_ENOMEM;
+                    goto fail;
+                }
+                single_page[0] = dose_page_index;
+                free(primary->page_indices);
+                primary->page_indices = single_page;
+                primary->npages = 1u;
+            }
+
+            /* Reject two targets in this block that resolve to the same path
+             * (e.g. "FileFormat TEXT DAT" — both canonicalise to .dat). */
+            for (a = 0u; a < nf_i; ++a) {
+                char const *na;
+                char const *output_name;
+
+                if (a == 0u) {
+                    na = primary->filename;
+                } else {
+                    na = rt->outputs[block_first_extra + a - 1u].filename;
+                }
+                output_name = "(unnamed)";
+                if (ws->outputs[i].filename) {
+                    output_name = ws->outputs[i].filename;
+                }
+                for (b = a + 1u; b < nf_i; ++b) {
+                    char const *nb;
+
+                    if (b == 0u) {
+                        nb = primary->filename;
+                    } else {
+                        nb = rt->outputs[block_first_extra + b - 1u].filename;
+                    }
+                    if (strcmp(na, nb) == 0) {
+                        OSH_DIAG_ERRORF(diag,
+                                        "Scoring output '%s' requests formats that resolve to the same file '%s'",
+                                        output_name,
+                                        na);
+                        rc = OSH_EINVAL;
+                        goto fail;
                     }
                 }
             }

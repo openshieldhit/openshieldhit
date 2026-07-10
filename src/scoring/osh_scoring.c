@@ -62,8 +62,10 @@ enum osh_status osh_scoring_workspace_free(struct osh_scoring_workspace *ws) {
         free(ws->outputs[i].geometry_name);
         for (f = 0; f < ws->outputs[i].nfileformats; ++f) {
             free(ws->outputs[i].fileformats[f]);
+            free(ws->outputs[i].fileformat_filenames[f]);
         }
         free((void *) ws->outputs[i].fileformats);
+        free((void *) ws->outputs[i].fileformat_filenames);
         for (j = 0; j < ws->outputs[i].npages; ++j) {
             size_t k;
 
