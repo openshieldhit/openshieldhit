@@ -104,6 +104,69 @@ Rules and semantics:
   zone-index column. The per-zone volume is not stored in either — it is consumed by
   the ÷volume in postprocess, so the saved dose/fluence is already final.
 
+### Native plot output — `FileFormat SVG`
+
+> A **quick-look** plot for sanity-checking a result without leaving the
+> terminal. The `openshieldhit` binary draws it itself — no Python, no plotting
+> library — and the `.svg` opens in any web browser. For publication-quality
+> figures, load the `.bdo`/`.dat` into
+> [pymchelper](https://github.com/DataMedSci/pymchelper) instead.
+
+Add `FileFormat SVG` to an `Output` and that output writes a 1-D line plot
+instead of numeric data — each `Output` block has exactly one `FileFormat`, so
+`FileFormat SVG` replaces the `.bdo`/`.dat` for that block rather than sitting
+alongside it. To keep both, add a second `Output` block for the same `Geo`/
+`Quantity` with `FileFormat BDO` (or `TEXT`) and a different `Filename`. Two
+plot shapes are recognised automatically:
+
+**Spatial profile** — a depth-dose / Bragg curve or any 1-D profile:
+
+```text
+Output
+    Filename bragg          # ".svg" is appended automatically
+    FileFormat SVG
+    Geo MyMesh              # 1 × 1 × N mesh (one non-singleton axis)
+    Quantity Dose
+```
+
+**Spectrum** — a differential page scored over a single spatial bin (a 0-D
+voxel or a single `Zone`); x is the differential axis, log-scaled when the
+binning is `LOG`:
+
+```text
+Output
+    Filename spectrum
+    FileFormat SVG
+    Geo Spot               # 1 × 1 × 1 voxel, or a one-Zone geometry
+    Quantity Fluence
+    Diff1 10 600 40 LOG
+    Diff1Type ENUC         # → x-axis "E/nucleon [MeV/u]", y "…/cm^2/(MeV/u)"
+```
+
+- Plotted values use the same normalisation as `TEXT` output, so a separate
+  `FileFormat TEXT`/`BDO` `Output` for the same `Geo`/`Quantity` reports the
+  same numbers.
+- Each plotted `Quantity` is written to its **own** file. A single quantity keeps
+  the `Filename` you gave (`bragg.svg`); with several, a `_p1`, `_p2`, … page
+  suffix is added (`bragg_p1.svg`, `bragg_p2.svg`, …) so nothing is overwritten.
+- The file is a plain SVG line plot — frame, grid, axis ticks, and one curve —
+  that opens in any web browser.
+- **Mixed outputs** are handled per page. When an `Output` holds several
+  `Quantity` pages of which only some match the chosen shape — e.g. a 1-D depth
+  mesh where one page adds a `Diff1` axis (making it 2-D spatial × energy) — only
+  the matching pages are plotted and the rest are skipped.
+- **Supported shapes:**
+  - Spatial profile — `Geometry Mesh` with exactly one non-singleton axis, or
+    `Geometry Cyl` with one non-singleton axis (R or Z).
+  - Spectrum — a `Diff1` page over a single spatial bin (`1 × 1 × 1` mesh voxel
+    or a one-`Zone` geometry).
+- Anything that is not one of these 1-D shapes — 2-D/3-D meshes, 2-D
+  `Diff1 × Diff2` spectra, spectra spanning several spatial bins, multi-zone
+  profiles, rotated meshes — cannot be plotted, and that `Output` produces no
+  file at all. Use `FileFormat TEXT`/`BDO` for that geometry instead, then
+  visualise it with [pymchelper](https://github.com/DataMedSci/pymchelper),
+  which handles 2-D maps, log axes, error bars, and multi-page output.
+
 ## Differential scoring
 
 A `Quantity` line can be followed by `Diff1`/`Diff1Type` (and optionally `Diff2`/`Diff2Type`)

@@ -19,6 +19,9 @@ add_library(osh_scoring
     save/osh_scoring_save_bdo2019_raw.c
     save/osh_scoring_save_bdo2019.c
     save/osh_scoring_save_rtdose.c
+    save/osh_scoring_save_plot.c
+    save/osh_scoring_plot_spec.c
+    save/osh_scoring_svg.c
 )
 
 target_include_directories(osh_scoring
