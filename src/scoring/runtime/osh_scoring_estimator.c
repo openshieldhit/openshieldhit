@@ -26,6 +26,10 @@ static struct osh_scoring_estimator const k_dlet = {osh_scoring_estimator_step_d
 static struct osh_scoring_estimator const k_tlet = {osh_scoring_estimator_step_tlet, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_dqeff = {osh_scoring_estimator_step_dqeff, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_tqeff = {osh_scoring_estimator_step_tqeff, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_davge = {osh_scoring_estimator_step_davge, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_tavge = {osh_scoring_estimator_step_tavge, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_dbeta = {osh_scoring_estimator_step_dbeta, NULL, postprocess_ratio};
+static struct osh_scoring_estimator const k_tbeta = {osh_scoring_estimator_step_tbeta, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_nkerma = {NULL, NULL, postprocess_volume};
 
 struct osh_scoring_estimator const *osh_scoring_estimator_for(enum osh_scoring_score_kind kind) {
@@ -50,6 +54,14 @@ struct osh_scoring_estimator const *osh_scoring_estimator_for(enum osh_scoring_s
         return &k_dqeff;
     case OSH_SCORING_SCORE_TQEFF:
         return &k_tqeff;
+    case OSH_SCORING_SCORE_DAVGE:
+        return &k_davge;
+    case OSH_SCORING_SCORE_TAVGE:
+        return &k_tavge;
+    case OSH_SCORING_SCORE_DBETA:
+        return &k_dbeta;
+    case OSH_SCORING_SCORE_TBETA:
+        return &k_tbeta;
     case OSH_SCORING_SCORE_NKERMA:
         return &k_nkerma;
     default:

@@ -124,7 +124,7 @@ int osh_scoring_postprocess_page_writes_data(struct osh_scoring_page_runtime con
  * (osh_scoring_estimator.c).  Each finalises one page's accumulator:
  *   postprocess_volume — DOSE/FLUENCE/NKERMA: multiply each bin by geo->bin_vol_inv.
  *   postprocess_dosegy — as volume, then MeV/g -> Gy.
- *   postprocess_ratio  — DLET/TLET/DQEFF/TQEFF: finalise the data/data2 average. */
+ *   postprocess_ratio  — DLET/TLET/DQEFF/TQEFF/DAVGE/TAVGE/DBETA/TBETA: finalise the data/data2 average. */
 enum osh_status postprocess_volume(struct osh_scoring_page_runtime *dst,
                                    struct osh_scoring_page_runtime const *src,
                                    struct osh_scoring_geometry_runtime const *geo);

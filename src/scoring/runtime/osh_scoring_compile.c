@@ -97,6 +97,18 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     if (strcmp(quantity, "tqeff") == 0) {
         return OSH_SCORING_SCORE_TQEFF;
     }
+    if (strcmp(quantity, "davge") == 0) {
+        return OSH_SCORING_SCORE_DAVGE;
+    }
+    if (strcmp(quantity, "tavge") == 0) {
+        return OSH_SCORING_SCORE_TAVGE;
+    }
+    if (strcmp(quantity, "dbeta") == 0) {
+        return OSH_SCORING_SCORE_DBETA;
+    }
+    if (strcmp(quantity, "tbeta") == 0) {
+        return OSH_SCORING_SCORE_TBETA;
+    }
     return OSH_SCORING_SCORE_UNKNOWN;
 }
 
@@ -187,6 +199,10 @@ static char score_kind_uses_data2(enum osh_scoring_score_kind score_kind) {
     case OSH_SCORING_SCORE_TLET:
     case OSH_SCORING_SCORE_DQEFF:
     case OSH_SCORING_SCORE_TQEFF:
+    case OSH_SCORING_SCORE_DAVGE:
+    case OSH_SCORING_SCORE_TAVGE:
+    case OSH_SCORING_SCORE_DBETA:
+    case OSH_SCORING_SCORE_TBETA:
         return 1;
     default:
         return 0;
@@ -395,6 +411,10 @@ static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
     case OSH_SCORING_SCORE_TLET:
     case OSH_SCORING_SCORE_DQEFF:
     case OSH_SCORING_SCORE_TQEFF:
+    case OSH_SCORING_SCORE_DAVGE:
+    case OSH_SCORING_SCORE_TAVGE:
+    case OSH_SCORING_SCORE_DBETA:
+    case OSH_SCORING_SCORE_TBETA:
         return 1;
     default:
         return 0;
@@ -1050,9 +1070,10 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         dst_page->diff_stride = rt->geometries[dst_page->geometry_idx].nbins;
         if (src_page->diff_nbins > 0u) {
             if (dst_page->has_data2) {
-                /* Two-pass averaged quantities (DLET, TLET, DQEFF, TQEFF) cannot be
-                 * used as the primary quantity of a differential scorer because the
-                 * two-pass postprocessor operates on the full flat array. */
+                /* Two-pass averaged quantities (DLET, TLET, DQEFF, TQEFF, DAVGE,
+                 * TAVGE, DBETA, TBETA) cannot be used as the primary quantity of a
+                 * differential scorer because the two-pass postprocessor operates
+                 * on the full flat array. */
                 OSH_DIAG_ERRORF(diag,
                                 "Scoring page '%s': differential axis not supported for averaged quantities",
                                 src_page->quantity ? src_page->quantity : "(unnamed)");

@@ -545,3 +545,229 @@ enum osh_status osh_scoring_estimator_step_tqeff(struct osh_scoring_runtime cons
     }
     return OSH_OK;
 }
+
+/**
+ * @brief Accumulate dose-averaged kinetic energy [MeV] via a two-pass accumulator.
+ *
+ * Averages the step-midpoint kinetic energy 0.5*(p[3]+q[3]) [MeV] — the same
+ * scalar already computed for DQEFF — weighted by the per-crossing
+ * energy-deposition share.  Unlike LET/QEFF, kinetic energy is well-defined
+ * for neutrals too, so this handler applies no charge/mass gate.
+ *
+ * Raw accumulator meaning before postprocess:
+ *   acc->data  = sum(mean_energy * dose_weight) per spatial bin
+ *   acc->data2 = sum(dose_weight) per spatial bin
+ *
+ * postprocess_ratio() later returns acc->data / acc->data2, i.e. DAVGE.
+ */
+enum osh_status osh_scoring_estimator_step_davge(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len) {
+    size_t i;
+    size_t j;
+    double mean_energy;       /* kinetic energy at the step midpoint [MeV] */
+    double dose_weight;       /* energy-deposition weight for the crossed bin [MeV] */
+    double davge_numerator;   /* mean_energy * dose_weight, booked into acc->data */
+    double davge_denominator; /* dose_weight, booked into acc->data2 */
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    /* Kinetic energy is a single scalar for this step; only the averaging
+     * weight varies per crossing. */
+    mean_energy = 0.5 * (st->p[3] + st->q[3]);
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        /* DAVGE stores a dose-weighted average in two explicit accumulators.
+         * Differential axes are not valid for DAVGE pages, so crossing.idx is
+         * the complete bin index. */
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            dose_weight = st->de * crossings[j].path_len / score_len;
+            davge_numerator = mean_energy * dose_weight;
+            davge_denominator = dose_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, davge_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, davge_denominator);
+        }
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Accumulate track-averaged kinetic energy [MeV] via a two-pass accumulator.
+ *
+ * Same as osh_scoring_estimator_step_davge() but uses track-length ds_vox as
+ * the weight rather than dose weight.
+ *
+ * Raw accumulator meaning before postprocess:
+ *   acc->data  = sum(mean_energy * track_weight) per spatial bin
+ *   acc->data2 = sum(track_weight) per spatial bin
+ *
+ * postprocess_ratio() later returns acc->data / acc->data2, i.e. TAVGE.
+ */
+enum osh_status osh_scoring_estimator_step_tavge(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len) {
+    size_t i;
+    size_t j;
+    double mean_energy;       /* kinetic energy at the step midpoint [MeV] */
+    double track_weight;      /* track-length weight for the crossed bin [cm] */
+    double tavge_numerator;   /* mean_energy * track_weight, booked into acc->data */
+    double tavge_denominator; /* track_weight, booked into acc->data2 */
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    mean_energy = 0.5 * (st->p[3] + st->q[3]);
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            track_weight = st->ds * crossings[j].path_len / score_len;
+            tavge_numerator = mean_energy * track_weight;
+            tavge_denominator = track_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, tavge_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, tavge_denominator);
+        }
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Accumulate dose-averaged relative speed beta = v/c [dimensionless]
+ *        via a two-pass accumulator.
+ *
+ * beta is derived from the same step-midpoint kinetic energy as DAVGE via
+ * osh_scoring_estimator_particle_beta(), which is exact for massless
+ * particles too (part->mass == 0 for photons), so no charge/mass gate is
+ * needed.  The isnan-style guard below only rejects the degenerate case where
+ * both kinetic energy and rest mass are zero (0/0).
+ *
+ * Raw accumulator meaning before postprocess:
+ *   acc->data  = sum(beta * dose_weight) per spatial bin
+ *   acc->data2 = sum(dose_weight) per spatial bin
+ *
+ * postprocess_ratio() later returns acc->data / acc->data2, i.e. DBETA.
+ */
+enum osh_status osh_scoring_estimator_step_dbeta(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len) {
+    size_t i;
+    size_t j;
+    double mean_energy;
+    double beta;
+    double dose_weight;
+    double dbeta_numerator;
+    double dbeta_denominator;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    mean_energy = 0.5 * (st->p[3] + st->q[3]);
+    beta = osh_scoring_estimator_particle_beta(mean_energy, part->mass);
+    if (!(beta >= 0.0)) {
+        return OSH_OK;
+    }
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            dose_weight = st->de * crossings[j].path_len / score_len;
+            dbeta_numerator = beta * dose_weight;
+            dbeta_denominator = dose_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, dbeta_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, dbeta_denominator);
+        }
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Accumulate track-averaged relative speed beta = v/c [dimensionless]
+ *        via a two-pass accumulator.
+ *
+ * Same as osh_scoring_estimator_step_dbeta() but uses track-length ds_vox as
+ * the weight rather than dose weight.
+ *
+ * Raw accumulator meaning before postprocess:
+ *   acc->data  = sum(beta * track_weight) per spatial bin
+ *   acc->data2 = sum(track_weight) per spatial bin
+ *
+ * postprocess_ratio() later returns acc->data / acc->data2, i.e. TBETA.
+ */
+enum osh_status osh_scoring_estimator_step_tbeta(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 struct osh_voxel_crossing const *crossings,
+                                                 size_t ncross,
+                                                 struct particle const *part,
+                                                 struct step const *st,
+                                                 double score_len) {
+    size_t i;
+    size_t j;
+    double mean_energy;
+    double beta;
+    double track_weight;
+    double tbeta_numerator;
+    double tbeta_denominator;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    mean_energy = 0.5 * (st->p[3] + st->q[3]);
+    beta = osh_scoring_estimator_particle_beta(mean_energy, part->mass);
+    if (!(beta >= 0.0)) {
+        return OSH_OK;
+    }
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            track_weight = st->ds * crossings[j].path_len / score_len;
+            tbeta_numerator = beta * track_weight;
+            tbeta_denominator = track_weight;
+            osh_score_deposit(acc->data, crossings[j].idx, tbeta_numerator);
+            osh_score_deposit(acc->data2, crossings[j].idx, tbeta_denominator);
+        }
+    }
+    return OSH_OK;
+}
