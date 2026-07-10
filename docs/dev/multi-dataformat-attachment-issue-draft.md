@@ -23,9 +23,27 @@ work** for those quantities — and invites the two quantity lists to silently
 drift apart.
 
 Letting one estimator dump several formats at once would score **once** and write
-**N** files. It's a nice-to-have, and it turns out to be cheap. Full write-up
-committed as `docs/dev/multi-dataformat-attachment-study.md` on branch
+**N** files — at **1× the accumulator memory regardless of format count**. It's a
+nice-to-have, and it turns out to be cheap. Full write-up committed as
+`docs/dev/multi-dataformat-attachment-study.md` on branch
 `claude/multi-dataformat-attachment-study-4nhb9m`.
+
+## The memory point (the priority)
+
+The large allocation is the per-page accumulator — `data[]` (+ optional
+`data2[]`/variance), sized `spatial_bins × diff1 × diff2 × sizeof(double)`. An
+*output descriptor* is trivially cheap: a filename, a format keyword, and a
+`size_t[]` list of page indices into the shared `rt->pages[]`.
+
+- **Duplicate-block workaround: O(formats × accumulators)** — TEXT+BDO holds two
+  identical `data[]` arrays and deposits into both every step.
+- **Multi-format estimator: O(accumulators), independent of formats** — one
+  page-set, one more cheap descriptor per format, all pointing at the same pages.
+
+So the ask is a small **redesign of the output system**: separate the *scored
+page-set* (built once) from the *(format, filename) write targets* (many, cheap).
+`osh_scoring_estimate_memory()` must then count a block's pages **once**, never
+× the format count.
 
 ## Why it's feasible (grounded in the code)
 
@@ -54,37 +72,51 @@ Two properties make fan-out easy:
 
 ## Proposed shape (recommendation — open to discussion)
 
-**Syntax (A1): repeatable `FileFormat <fmt> [filename]`.**
+**Syntax: terse format list `FileFormat TEXT BDO`.**
 
 ```text
 Output
+    Filename NB_msh          # stem (extension optional)
+    FileFormat TEXT BDO      # -> NB_msh.dat  +  NB_msh.bdo
     Geo MyMesh
     Quantity Energy
     Quantity Fluence
-    FileFormat TEXT NB_msh.dat
-    FileFormat BDO  NB_msh.bdo
 ```
 
-Each `FileFormat` line pushes one *(format, filename)* target. A lone
-`FileFormat TEXT` + `Filename …` stays the single-target shorthand, so every
-existing `detect.dat` is unaffected and BDO stays the default. The two-arg form
-is needed because ASCII/BDO use the filename **verbatim** — no extension is
-derived (only RTDOSE appends `.dcm`), so two formats need two names.
+ASCII/BDO use the filename **verbatim** today (only RTDOSE appends `.dcm`), so
+with several formats sharing one `Filename` the writer derives a path per format.
+Backward-compatible rule:
+
+- **Single format → filename verbatim** (zero behaviour change; every existing
+  `detect.dat` and `tests/cases/` fixture is byte-for-byte unaffected).
+- **Multiple formats → `Filename` is a stem**: strip a recognised extension
+  (`.dat .txt .bdo .bdz .bin .dcm`) if present, append the canonical one per
+  format — `.dat` (TEXT), `.bdo`/`.bdz` (BDO), `.dcm` (RTDOSE).
+
+Optional escape hatch if wanted: `FileFormat TEXT NB_legacy.out` (a filename
+after a single keyword) overrides the derived name for that target.
 
 **Wiring (B1): fan-out at compile time.**
 Build the block's pages/accumulators **once**, then emit one
-`osh_scoring_output_runtime` per target sharing the same `page_indices`. The hot
+`osh_scoring_output_runtime` per format sharing the same `page_indices`. The hot
 path and all three writers are untouched; the save dispatcher reads the format
 from `rt->outputs[i].fileformat` (already populated) and the
-`ws->noutputs == rt->noutputs` invariant relaxes to `rt->noutputs`.
+`ws->noutputs == rt->noutputs` invariant relaxes to `rt->noutputs`. (A more
+explicit page-set/target split — B2 in the study — is possible if we later want
+to dedup identical page-sets *across* blocks, but it isn't needed to hit the
+memory goal.)
 
 ## Blast radius
 
-Touched: input parser (`osh_scoring_parse_output.c`), cold struct
-(`osh_scoring_output_def` in `include/openshieldhit/scoring.h`), compile
-(`osh_scoring_compile.c`), save dispatch (`osh_scoring_save.c` + bounds checks in
-the ASCII/BDO writers), memory estimate (`osh_scoring_estimate_memory` — count a
-block's pages **once**), `docs/user/detect.dat.md`, and tests.
+Touched: input parser (`osh_scoring_parse_output.c` — accept a format list),
+cold struct (`osh_scoring_output_def` in `include/openshieldhit/scoring.h` — hold
+a format list + filename stem), compile (`osh_scoring_compile.c` — one runtime
+output per format sharing page indices, derive per-format filenames), save
+dispatch (`osh_scoring_save.c` + relax the `ws->noutputs` bounds checks in the
+ASCII/BDO writers), memory estimate (`osh_scoring_estimate_memory` — count a
+block's pages **once**, the guarantee), `docs/user/detect.dat.md`, and tests
+(TEXT+BDO from one block; assert byte-identical to the duplicate-block output and
+unchanged memory estimate).
 
 **Not** touched: the transport hot path, `osh_scoring_step.*`, the
 accumulator/merge machinery, the DICOM writer core. Snapshot/periodic dumps
@@ -92,15 +124,18 @@ accumulator/merge machinery, the DICOM writer core. Snapshot/periodic dumps
 
 ## Open questions
 
-1. **Syntax** — A1 (`FileFormat TEXT foo.dat`, recommended), A2 (base name +
-   auto-derived extension), or A3 (a new `Emit <file> <fmt>` verb)?
+1. **Extension policy** — confirm the canonical extension per format (`.dat`
+   TEXT, `.bdo`/`.bdz` BDO, `.dcm` RTDOSE) and the stem-stripping set. Do we also
+   want the optional per-target filename override (`FileFormat TEXT foo.out`)?
 2. **RTDOSE in a mixed block** — the RTDOSE writer needs a voxel geometry and
    exactly one page (`osh_scoring_save_rtdose.c:45`). Reject a mixed block, or
    allow it and document that the RTDOSE target consumes only the dose page?
 3. **Partial-write failure** — if the k-th target's `fopen` fails, is that fatal
    for the run, or best-effort with a warning?
-4. **Filename policy** — if we ever add the terse A2 form, what's the canonical
-   extension per format, and what happens when the base name already has one?
+4. **Wiring depth** — B1 (compile-time fan-out, recommended: least code, meets
+   the memory goal) vs B2 (explicit page-set/target split, opening cross-block
+   accumulator dedup later)? Is cross-block dedup a goal worth the extra
+   generality now?
 5. **Default** — strictly per-`Output`, or is there appetite for a run-wide
    "also emit BDO" switch?
 
