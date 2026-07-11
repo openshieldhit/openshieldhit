@@ -1,15 +1,16 @@
 /**
  * @file osh_scoring_multiformat.c
  *
- * @brief Compile-time fan-out of multi-format scoring `Output` blocks (issue #308).
+ * @brief Compile-time expansion of multi-format scoring `Output` blocks (issue #308).
  *
  * @details
  * Extracted from osh_scoring_compile.c to keep that translation unit focused on
  * building the page/geometry runtime.  The single entry point,
- * @ref osh_scoring_fan_out_multiformat, is the former "Phase 7": it turns one
- * cold block requesting K formats into K runtime outputs that share the block's
- * page indices, derives per-format filenames, resolves the RTDOSE target's single
- * page, and rejects blocks whose targets would collide or misuse RTDOSE.
+ * @ref osh_scoring_expand_multiformat_outputs, is the former "Phase 7": it turns
+ * one cold block requesting K formats into K runtime outputs that share the
+ * block's page indices, derives per-format filenames, resolves the RTDOSE
+ * target's single page, and rejects blocks whose targets would collide or misuse
+ * RTDOSE.
  */
 
 #include "scoring/runtime/osh_scoring_multiformat.h"
@@ -141,8 +142,11 @@ static char *derive_format_filename(char const *stem, char const *fmt) {
     return result;
 }
 
-/* Human-readable block label for diagnostics — the block's Filename, or a
- * placeholder when it was omitted. */
+/* Label used only inside diagnostic message text to identify a block — its
+ * Filename, or the placeholder "(unnamed)" when no Filename was given.  The
+ * parenthesised placeholder is never used as (nor written to) a real output path;
+ * the brackets make clear in a message that no name exists.  Matches the
+ * convention already used across osh_scoring_compile.c. */
 static char const *output_display_name(struct osh_scoring_output_def const *out) {
     if (out->filename) {
         return out->filename;
@@ -151,7 +155,7 @@ static char const *output_display_name(struct osh_scoring_output_def const *out)
 }
 
 /* First pass: validate every requested format keyword and count how many extra
- * runtime outputs the fan-out will add (one per additional format per block). */
+ * runtime outputs the expansion will add (one per additional format per block). */
 static enum osh_status
 count_extra_outputs(struct osh_scoring_workspace const *ws, struct osh_diag_sink const *diag, size_t *n_extra_out) {
     size_t i;
@@ -297,7 +301,7 @@ static enum osh_status expand_one_block(struct osh_scoring_workspace const *ws,
     size_t k;
 
     /* A block with no FileFormat line keeps its default (BDO) runtime output from
-     * phases 1-6 verbatim — nothing to fan out, and fileformats[] is empty. */
+     * phases 1-6 as is — nothing to expand, and fileformats[] is empty. */
     if (nf_i == 0u) {
         return OSH_OK;
     }
@@ -390,9 +394,9 @@ static enum osh_status expand_one_block(struct osh_scoring_workspace const *ws,
     return check_block_collisions(ws, rt, diag, block_idx, block_first_extra, nf_i, primary->filename);
 }
 
-enum osh_status osh_scoring_fan_out_multiformat(struct osh_scoring_workspace const *ws,
-                                                struct osh_diag_sink const *diag,
-                                                struct osh_scoring_runtime *rt) {
+enum osh_status osh_scoring_expand_multiformat_outputs(struct osh_scoring_workspace const *ws,
+                                                       struct osh_diag_sink const *diag,
+                                                       struct osh_scoring_runtime *rt) {
     enum osh_status rc;
     size_t n_extra;
     size_t next;
@@ -414,7 +418,7 @@ enum osh_status osh_scoring_fan_out_multiformat(struct osh_scoring_workspace con
             return OSH_ENOMEM;
         }
         rt->outputs = grown;
-        /* Zero the new tail so a mid-fan-out failure leaves every slot either
+        /* Zero the new tail so a mid-expansion failure leaves every slot either
          * fully built or cleanly zeroed; bump noutputs now so
          * osh_scoring_runtime_free() (run by the caller on error) covers them. */
         memset(&rt->outputs[rt->noutputs], 0, n_extra * sizeof(*rt->outputs));

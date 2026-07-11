@@ -303,7 +303,10 @@ static void test_partial_write_best_effort(void) {
     struct osh_scoring_runtime rt;
     enum osh_status rc;
 
-    write_temp_detect(path, sizeof(path), "FileFormat TEXT /definitely/missing/path/out.dat BDO ok_out.bdo");
+    /* Force the first target to fail portably: "." is a directory, so fopen()
+     * for writing fails the same way on POSIX and Windows. The second target must
+     * still be written. */
+    write_temp_detect(path, sizeof(path), "FileFormat TEXT . BDO ok_out.bdo");
     ASSERT_TRUE(osh_scoring_setup_from_path(path, NULL, &ws) == OSH_OK);
 
     memset(&rt, 0, sizeof(rt));

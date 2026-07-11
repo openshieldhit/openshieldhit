@@ -66,7 +66,7 @@ static enum osh_status save_dispatch(struct osh_scoring_workspace const *ws,
     if (nstat == 0ull) {
         return OSH_EINVAL;
     }
-    /* Multi-format blocks fan out into extra runtime outputs (issue #308), so the
+    /* A multi-format block expands into extra runtime outputs (issue #308), so the
      * runtime holds at least as many outputs as the cold workspace — never fewer.
      * Fewer means a workspace/runtime mismatch. */
     if (rt->noutputs < ws->noutputs) {
@@ -84,10 +84,14 @@ static enum osh_status save_dispatch(struct osh_scoring_workspace const *ws,
         return first_rc;
     }
 
+    /* Validate the whole selection up front so a bad index cannot leave a partial
+     * write behind (fail-fast validation, best-effort writing). */
     for (i = 0; i < n_want; ++i) {
         if (want[i] >= rt->noutputs) {
             return OSH_EINVAL;
         }
+    }
+    for (i = 0; i < n_want; ++i) {
         rc = save_one_output(ws, rt, nstat, want[i], diag);
         if (rc != OSH_OK && first_rc == OSH_OK) {
             first_rc = rc;
@@ -110,7 +114,7 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
     }
 
     /* Dispatch on the runtime output's own format, not the cold workspace's:
-     * a fanned-out multi-format target (issue #308) has no cold counterpart. */
+     * an expanded multi-format target (issue #308) has no cold counterpart. */
     fileformat = rt->outputs[output_idx].fileformat;
     if (fileformat_is_ascii(fileformat)) {
         rc = osh_scoring_save_ascii_output(ws, rt, nstat, output_idx);

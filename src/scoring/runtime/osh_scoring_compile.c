@@ -998,8 +998,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             goto fail;
         }
         /* The block's first requested format (lowercase, as stored by the
-         * parser); an empty list defaults to BDO.  Additional formats are fanned
-         * out into extra runtime outputs in Phase 7 (issue #308). */
+         * parser); an empty list defaults to BDO.  Additional formats become
+         * extra runtime outputs in Phase 7 (issue #308). */
         primary_format = "bdo";
         if (ws->outputs[i].nfileformats > 0u) {
             primary_format = ws->outputs[i].fileformats[0];
@@ -1273,13 +1273,13 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
     }
 
-    /* --- Phase 7: fan out multi-format outputs (issue #308). ---
+    /* --- Phase 7: expand multi-format outputs (issue #308). ---
      * A block that requests several formats writes the *same* scored pages once
-     * per format; osh_scoring_fan_out_multiformat() expands it into one extra
-     * runtime output per additional format, all sharing the block's page indices
-     * (a cheap size_t copy — nothing in rt->pages[] is duplicated), so scoring
-     * memory is independent of the format count.  See osh_scoring_multiformat.c. */
-    rc = osh_scoring_fan_out_multiformat(ws, diag, rt);
+     * per format; osh_scoring_expand_multiformat_outputs() adds one extra runtime
+     * output per additional format, all sharing the block's page indices (a cheap
+     * size_t copy — nothing in rt->pages[] is duplicated), so scoring memory is
+     * independent of the format count.  See osh_scoring_multiformat.c. */
+    rc = osh_scoring_expand_multiformat_outputs(ws, diag, rt);
     if (rc != OSH_OK) {
         goto fail;
     }

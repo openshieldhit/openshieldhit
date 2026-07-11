@@ -250,7 +250,7 @@ Because the writers are non-destructive readers that apply their own scaling at
 write time (ASCII ÷ `nstat`; BDO raw sums + the `nstat` tag), one scored page-set
 can legitimately feed several of them in a row. That is exactly what a
 multi-format `Output` block does (`FileFormat TEXT BDO`, issue #308):
-`osh_scoring_compile()` fans it out into one runtime output per format, all
+`osh_scoring_compile()` expands it into one runtime output per format, all
 sharing the same `page_indices` into the single `rt->pages[]` accumulator set, so
 the accumulator memory is independent of the format count. `osh_scoring_estimate_memory()`
 counts a block's pages once for the same reason.
@@ -298,7 +298,7 @@ layer), replaces the pixel data with scored values normalised by `nstat` and
 `dose_grid_scaling`, and writes a new `.dcm`. All other DICOM metadata is
 preserved unchanged. The writer itself only ever handles a single page: a
 multi-page runtime output handed to it returns `OSH_ENOTSUP`. In a multi-format
-block (`FileFormat TEXT BDO RTDOSE`, issue #308) the compile-time fan-out gives
+block (`FileFormat TEXT BDO RTDOSE`, issue #308) the compile-time expansion gives
 the RTDOSE target exactly the block's first `Dose`/`DoseGy` page — the remaining
 pages feed the other targets and are not seen by the `.dcm` — so the single-page
 constraint is satisfied without a separate `Output` block.
