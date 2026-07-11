@@ -1525,7 +1525,7 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             for (k = 1u; k < nf_i; ++k) {
                 struct osh_scoring_output_runtime *extra = &rt->outputs[next];
                 char const *fmt = ws->outputs[i].fileformats[k];
-                int extra_is_rtdose = format_is_rtdose(fmt);
+                int extra_is_rtdose;
                 size_t copy_npages;
 
                 if (!fmt) {
@@ -1537,6 +1537,7 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                     rc = OSH_EINVAL;
                     goto fail;
                 }
+                extra_is_rtdose = format_is_rtdose(fmt);
                 extra->fileformat = strdup(fmt);
                 if (!extra->fileformat) {
                     rc = OSH_ENOMEM;
