@@ -144,18 +144,29 @@ Constraints:
 
 - Two formats that resolve to the **same** file (e.g. `FileFormat TEXT DAT`, both
   `.dat`) are rejected with a clear error.
-- `RTDOSE` **may** be combined with other formats in one block. The RTDOSE writer
-  needs exactly one dose page, so the RTDOSE target consumes only the first
-  `Dose`/`DoseGy` page of the shared page-set; the other pages exist for the
-  TEXT/BDO/SVG targets and are **silently skipped** by the `.dcm` (do not expect
-  `Fluence`/`LET` in it). A mixed block with **no** `Dose`/`DoseGy` page is
-  rejected with a clear error.
+
+`RTDOSE` writes exactly **one** page (grid) into the `.dcm`, so which page it uses
+depends on how the block is written:
+
+- **`RTDOSE` on its own** writes the block's single scored page — of **any**
+  quantity. `FileFormat RTDOSE` + `Quantity Energy` writes energy-per-primary into
+  the grid (proper absorbed-dose scoring is a separate quantity). An RTDOSE-only
+  block that scores **more than one** quantity is rejected — RTDOSE cannot hold
+  several pages, so combine it with another format instead (below).
+- **`RTDOSE` combined with other formats** (e.g. `FileFormat BDO RTDOSE`) is
+  allowed. The other formats write every page; the RTDOSE target writes only the
+  first `Dose`/`DoseGy` page of the shared page-set (chosen by quantity, not by
+  listing order). The remaining pages are **silently skipped** by the `.dcm` (do
+  not expect `Fluence`/`LET` in it). A mixed block with **no** `Dose`/`DoseGy`
+  page is rejected with a clear error, because the `.dcm` target would then be
+  ambiguous.
 
 Failure handling:
 
 - Saving is **best-effort**: if one target cannot be written (e.g. its directory
-  does not exist), the remaining targets are still written and the run's exit
-  status reflects that a write failed. It is not all-or-nothing across targets.
+  does not exist), the remaining targets are still written, a warning names the
+  offending file and format, and the run's exit status reflects that a write
+  failed. It is not all-or-nothing across targets.
 
 ### Zone
 

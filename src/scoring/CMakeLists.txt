@@ -2,6 +2,7 @@ add_library(osh_scoring
     osh_scoring.c
     runtime/osh_scoring_accumulator.c
     runtime/osh_scoring_compile.c
+    runtime/osh_scoring_multiformat.c
     runtime/osh_scoring_estimator.c
     runtime/osh_scoring_estimator_common.c
     runtime/osh_scoring_estimator_point.c
