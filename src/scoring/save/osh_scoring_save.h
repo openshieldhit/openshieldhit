@@ -9,6 +9,8 @@
 extern "C" {
 #endif
 
+struct osh_diag_sink;
+
 /**
  * @brief Save all compiled outputs described by the workspace/runtime pair.
  *
@@ -34,6 +36,28 @@ extern "C" {
 enum osh_status osh_scoring_save(struct osh_scoring_workspace const *ws,
                                  struct osh_scoring_runtime const *rt,
                                  unsigned long long nstat);
+
+/**
+ * @brief Save all compiled outputs, reporting each per-target failure to @p diag.
+ *
+ * @details
+ * Identical to @ref osh_scoring_save (same best-effort semantics and return
+ * value), but when a target fails to write, a warning naming the file, the
+ * format, and the status is emitted to @p diag before continuing with the
+ * remaining targets. This is the entry point the run driver uses so a partial
+ * write tells the user *which* output failed, not just that "saving failed".
+ *
+ * @param[in] ws     Scoring workspace with output metadata and file paths.
+ * @param[in] rt     Compiled scoring runtime with postprocessed accumulators.
+ * @param[in] nstat  Actual number of primary particles simulated; must be > 0.
+ * @param[in] diag   Diagnostic sink for per-target warnings (may be NULL).
+ *
+ * @returns Same as @ref osh_scoring_save.
+ */
+enum osh_status osh_scoring_save_diag(struct osh_scoring_workspace const *ws,
+                                      struct osh_scoring_runtime const *rt,
+                                      unsigned long long nstat,
+                                      struct osh_diag_sink const *diag);
 
 /**
  * @brief Save a selected subset of outputs (G2), or all of them.

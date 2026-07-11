@@ -2,24 +2,40 @@
 
 #include <string.h>
 
+#include "common/osh_diag.h"
 #include "scoring/save/osh_scoring_save_ascii.h"
 #include "scoring/save/osh_scoring_save_bdo2019.h"
 #include "scoring/save/osh_scoring_save_plot.h"
 #include "scoring/save/osh_scoring_save_rtdose.h"
 
+static enum osh_status save_dispatch(struct osh_scoring_workspace const *ws,
+                                     struct osh_scoring_runtime const *rt,
+                                     unsigned long long nstat,
+                                     size_t const *want,
+                                     size_t n_want,
+                                     struct osh_diag_sink const *diag);
 static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
                                        unsigned long long nstat,
-                                       size_t output_idx);
+                                       size_t output_idx,
+                                       struct osh_diag_sink const *diag);
 static int fileformat_is_ascii(char const *fileformat);
 static int fileformat_is_bdo2019(char const *fileformat);
 static int fileformat_is_rtdose(char const *fileformat);
 static int fileformat_is_plot(char const *fileformat);
+static char const *fileformat_label(char const *fileformat);
 
 enum osh_status osh_scoring_save(struct osh_scoring_workspace const *ws,
                                  struct osh_scoring_runtime const *rt,
                                  unsigned long long nstat) {
-    return osh_scoring_save_outputs(ws, rt, nstat, NULL, 0u);
+    return save_dispatch(ws, rt, nstat, NULL, 0u, NULL);
+}
+
+enum osh_status osh_scoring_save_diag(struct osh_scoring_workspace const *ws,
+                                      struct osh_scoring_runtime const *rt,
+                                      unsigned long long nstat,
+                                      struct osh_diag_sink const *diag) {
+    return save_dispatch(ws, rt, nstat, NULL, 0u, diag);
 }
 
 enum osh_status osh_scoring_save_outputs(struct osh_scoring_workspace const *ws,
@@ -27,6 +43,19 @@ enum osh_status osh_scoring_save_outputs(struct osh_scoring_workspace const *ws,
                                          unsigned long long nstat,
                                          size_t const *want,
                                          size_t n_want) {
+    return save_dispatch(ws, rt, nstat, want, n_want, NULL);
+}
+
+/* Shared worker for every public entry point.  Argument/state validation is
+ * fail-fast; the actual writing is best-effort (issue #308): every requested
+ * target is attempted and the first error observed is returned, so one bad path
+ * neither aborts the others nor hides itself from the exit status. */
+static enum osh_status save_dispatch(struct osh_scoring_workspace const *ws,
+                                     struct osh_scoring_runtime const *rt,
+                                     unsigned long long nstat,
+                                     size_t const *want,
+                                     size_t n_want,
+                                     struct osh_diag_sink const *diag) {
     enum osh_status rc;
     enum osh_status first_rc;
     size_t i;
@@ -44,10 +73,10 @@ enum osh_status osh_scoring_save_outputs(struct osh_scoring_workspace const *ws,
         return OSH_ESTATE;
     }
 
+    first_rc = OSH_OK;
     if (want == NULL) {
-        first_rc = OSH_OK;
         for (i = 0; i < rt->noutputs; ++i) {
-            rc = save_one_output(ws, rt, nstat, i);
+            rc = save_one_output(ws, rt, nstat, i, diag);
             if (rc != OSH_OK && first_rc == OSH_OK) {
                 first_rc = rc;
             }
@@ -55,25 +84,26 @@ enum osh_status osh_scoring_save_outputs(struct osh_scoring_workspace const *ws,
         return first_rc;
     }
 
-    first_rc = OSH_OK;
     for (i = 0; i < n_want; ++i) {
         if (want[i] >= rt->noutputs) {
             return OSH_EINVAL;
         }
-        rc = save_one_output(ws, rt, nstat, want[i]);
+        rc = save_one_output(ws, rt, nstat, want[i], diag);
         if (rc != OSH_OK && first_rc == OSH_OK) {
             first_rc = rc;
         }
     }
-
     return first_rc;
 }
 
 static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
                                        unsigned long long nstat,
-                                       size_t output_idx) {
+                                       size_t output_idx,
+                                       struct osh_diag_sink const *diag) {
     char const *fileformat;
+    char const *filename;
+    enum osh_status rc;
 
     if (output_idx >= rt->noutputs) {
         return OSH_EINVAL;
@@ -83,19 +113,29 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
      * a fanned-out multi-format target (issue #308) has no cold counterpart. */
     fileformat = rt->outputs[output_idx].fileformat;
     if (fileformat_is_ascii(fileformat)) {
-        return osh_scoring_save_ascii_output(ws, rt, nstat, output_idx);
-    }
-    if (fileformat_is_bdo2019(fileformat)) {
-        return osh_scoring_save_bdo2019_output(ws, rt, nstat, output_idx);
-    }
-    if (fileformat_is_rtdose(fileformat)) {
-        return osh_scoring_save_rtdose_output(ws, rt, nstat, output_idx);
-    }
-    if (fileformat_is_plot(fileformat)) {
-        return osh_scoring_save_plot_output(ws, rt, nstat, output_idx);
+        rc = osh_scoring_save_ascii_output(ws, rt, nstat, output_idx);
+    } else if (fileformat_is_bdo2019(fileformat)) {
+        rc = osh_scoring_save_bdo2019_output(ws, rt, nstat, output_idx);
+    } else if (fileformat_is_rtdose(fileformat)) {
+        rc = osh_scoring_save_rtdose_output(ws, rt, nstat, output_idx);
+    } else if (fileformat_is_plot(fileformat)) {
+        rc = osh_scoring_save_plot_output(ws, rt, nstat, output_idx);
+    } else {
+        rc = OSH_ENOTSUP;
     }
 
-    return OSH_ENOTSUP;
+    if (rc != OSH_OK) {
+        filename = rt->outputs[output_idx].filename;
+        if (!filename) {
+            filename = "(unnamed)";
+        }
+        OSH_DIAG_WARNF(diag,
+                       "scoring: could not write output '%s' as %s (status %d); continuing with remaining targets",
+                       filename,
+                       fileformat_label(fileformat),
+                       (int) rc);
+    }
+    return rc;
 }
 
 static int fileformat_is_ascii(char const *fileformat) {
@@ -130,4 +170,12 @@ static int fileformat_is_plot(char const *fileformat) {
         return 0;
     }
     return strcmp(fileformat, "svg") == 0;
+}
+
+/* Display label for diagnostics; a NULL runtime format means the default BDO. */
+static char const *fileformat_label(char const *fileformat) {
+    if (!fileformat) {
+        return "bdo (default)";
+    }
+    return fileformat;
 }
