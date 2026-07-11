@@ -240,7 +240,11 @@ byte-for-byte unchanged.
 
 `osh_scoring_save()` dispatches on each runtime output's `fileformat`. The two
 general-purpose formats take deliberately different positions on normalisation;
-DICOM RTDOSE is a specialised round-trip writer.
+DICOM RTDOSE is a specialised round-trip writer. Saving is **best-effort**: a
+target that fails to write does not abort the others — every runtime output is
+attempted and the first error observed is returned (so a partial write still
+surfaces in the process exit status). Argument/state validation (see
+`osh_scoring_save_outputs`) is checked up front and remains fail-fast.
 
 Because the writers are non-destructive readers that apply their own scaling at
 write time (ASCII ÷ `nstat`; BDO raw sums + the `nstat` tag), one scored page-set
@@ -292,8 +296,12 @@ recorded in `rtdose_template_path` (set by the app when the output format is
 RTDOSE, and carried from compile through the geometry runtime to the save
 layer), replaces the pixel data with scored values normalised by `nstat` and
 `dose_grid_scaling`, and writes a new `.dcm`. All other DICOM metadata is
-preserved unchanged. Only single-page (single-quantity) outputs are supported;
-multi-page output returns `OSH_ENOTSUP`.
+preserved unchanged. The writer itself only ever handles a single page: a
+multi-page runtime output handed to it returns `OSH_ENOTSUP`. In a multi-format
+block (`FileFormat TEXT BDO RTDOSE`, issue #308) the compile-time fan-out gives
+the RTDOSE target exactly the block's first `Dose`/`DoseGy` page — the remaining
+pages feed the other targets and are not seen by the `.dcm` — so the single-page
+constraint is satisfied without a separate `Output` block.
 
 ## 6. Estimators and post-processing
 

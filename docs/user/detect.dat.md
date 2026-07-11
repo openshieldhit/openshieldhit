@@ -107,13 +107,55 @@ Filename rule:
   `Filename NB_msh` and `Filename NB_msh.dat` with `FileFormat TEXT BDO` yield
   `NB_msh.dat` + `NB_msh.bdo`.
 
+#### Per-target filename overrides
+
+By default the derived stem + canonical extension names every target. To give one
+target a **verbatim** name instead — e.g. to keep a legacy filename that does not
+match the canonical extension — write that name immediately after its format
+keyword:
+
+```text
+Output
+    Filename NB_msh
+    FileFormat TEXT legacy.out BDO run.bdo   # → legacy.out  +  run.bdo
+    Geo MyMesh
+    Quantity Dose
+```
+
+Grammar and rules:
+
+- A token that **is** a recognised format keyword (`TEXT/ASCII/TXT/DAT`,
+  `BDO/BDO2019/BINARY/BIN`, `RTDOSE`, `SVG`) starts a new target.
+- A token that is **not** a recognised keyword and immediately follows a format
+  keyword is that target's override filename. It is used **verbatim** — stem
+  stripping and canonical-extension derivation are skipped for that one target.
+- Overrides can be mixed with derived names on the same line, and repeated
+  `FileFormat` lines still accumulate.
+- Collision detection runs after all names are resolved (derived or overridden):
+  two targets resolving to the same path are rejected.
+- **Ambiguity to be aware of:** because "not a known keyword ⇒ filename", a
+  mistyped format (`FileFormat TEXT BDX`) is silently taken as an override
+  filename (`BDX`) for the preceding format, not flagged as an unknown format.
+  Likewise, a file whose name happens to be a bare format keyword (e.g. a file
+  literally named `bdo`) cannot be expressed as an override. At most one override
+  may follow each format keyword; a second trailing non-keyword token is an error.
+
 Constraints:
 
 - Two formats that resolve to the **same** file (e.g. `FileFormat TEXT DAT`, both
   `.dat`) are rejected with a clear error.
-- `RTDOSE` cannot be combined with other formats in one block — the RTDOSE writer
-  needs exactly one dose page, which a shared multi-page page-set does not
-  provide. Put `RTDOSE` in its own single-format `Output` block.
+- `RTDOSE` **may** be combined with other formats in one block. The RTDOSE writer
+  needs exactly one dose page, so the RTDOSE target consumes only the first
+  `Dose`/`DoseGy` page of the shared page-set; the other pages exist for the
+  TEXT/BDO/SVG targets and are **silently skipped** by the `.dcm` (do not expect
+  `Fluence`/`LET` in it). A mixed block with **no** `Dose`/`DoseGy` page is
+  rejected with a clear error.
+
+Failure handling:
+
+- Saving is **best-effort**: if one target cannot be written (e.g. its directory
+  does not exist), the remaining targets are still written and the run's exit
+  status reflects that a write failed. It is not all-or-nothing across targets.
 
 ### Zone
 

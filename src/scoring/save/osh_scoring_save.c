@@ -118,7 +118,9 @@ static int fileformat_is_rtdose(char const *fileformat) {
     if (!fileformat) {
         return 0;
     }
-    return strcmp(fileformat, "rtdose") == 0 || strcmp(fileformat, "RTDOSE") == 0;
+    /* Format keywords are lowercased at parse time, so only "rtdose" can match —
+     * keep this consistent with the ascii/bdo/plot predicates above. */
+    return strcmp(fileformat, "rtdose") == 0;
 }
 
 /* Native "quick-look" plot formats (issue #238).  Only SVG is implemented; the
