@@ -1,8 +1,8 @@
 site_name: OpenShieldHIT
 site_description: Open-source Monte Carlo particle transport code for shielding and therapy physics
-site_url: https://nbassler.github.io/openshieldhit
-repo_url: https://github.com/nbassler/openshieldhit
-repo_name: nbassler/openshieldhit
+site_url: https://openshieldhit.github.io/openshieldhit/
+repo_url: https://github.com/openshieldhit/openshieldhit
+repo_name: openshieldhit/openshieldhit
 edit_uri: edit/main/docs/
 
 theme:
