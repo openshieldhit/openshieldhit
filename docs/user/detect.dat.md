@@ -95,24 +95,21 @@ scored arrays are shared, so **scoring memory does not grow with the number of
 formats** (two formats or ten, the accumulator memory is the same), and each
 history is deposited only once.
 
-Filename rule:
+File names:
 
-- **A single format uses `Filename` verbatim** — every existing `detect.dat` is
-  unaffected. `FileFormat TEXT` + `Filename NB_msh.dat` still writes exactly
-  `NB_msh.dat`.
-- **Several formats treat `Filename` as a stem.** A recognised trailing extension
-  (`.dat .txt .bdo .bdz .bin .dcm .svg`) is stripped if present, then a canonical
-  extension is appended per format: `.dat` (TEXT/ASCII/TXT/DAT), `.bdo`
-  (BDO/BDO2019/BINARY/BIN), `.dcm` (RTDOSE), `.svg` (SVG). So both
-  `Filename NB_msh` and `Filename NB_msh.dat` with `FileFormat TEXT BDO` yield
-  `NB_msh.dat` + `NB_msh.bdo`.
+- **With one format, `Filename` is used as written** — so an existing input file
+  keeps working unchanged (`FileFormat TEXT` + `Filename NB_msh.dat` writes
+  `NB_msh.dat`).
+- **With several formats, `Filename` is a name stem.** A known extension
+  (`.dat .txt .bdo .bdz .bin .dcm .svg`) is dropped if present, then the matching
+  one is added per format: `.dat` (TEXT), `.bdo` (BDO), `.dcm` (RTDOSE), `.svg`
+  (SVG). So `Filename NB_msh` with `FileFormat TEXT BDO` writes `NB_msh.dat` and
+  `NB_msh.bdo`.
 
-#### Per-target filename overrides
+#### Naming one target yourself
 
-By default the derived stem + canonical extension names every target. To give one
-target a **verbatim** name instead — e.g. to keep a legacy filename that does not
-match the canonical extension — write that name immediately after its format
-keyword:
+To give one format a specific file name instead of the auto-generated one, write
+the name right after that format's keyword:
 
 ```text
 Output
@@ -122,28 +119,17 @@ Output
     Quantity Dose
 ```
 
-Grammar and rules:
-
-- A token that **is** a recognised format keyword (`TEXT/ASCII/TXT/DAT`,
-  `BDO/BDO2019/BINARY/BIN`, `RTDOSE`, `SVG`) starts a new target.
-- A token that is **not** a recognised keyword and immediately follows a format
-  keyword is that target's override filename. It is used **verbatim** — stem
-  stripping and canonical-extension derivation are skipped for that one target.
-- Overrides can be mixed with derived names on the same line, and repeated
-  `FileFormat` lines still accumulate.
-- Collision detection runs after all names are resolved (derived or overridden):
-  two targets resolving to the same path are rejected.
-- **Ambiguity to be aware of:** because "not a known keyword ⇒ filename", a
-  mistyped format (`FileFormat TEXT BDX`) is silently taken as an override
-  filename (`BDX`) for the preceding format, not flagged as an unknown format.
-  Likewise, a file whose name happens to be a bare format keyword (e.g. a file
-  literally named `bdo`) cannot be expressed as an override. At most one override
-  may follow each format keyword; a second trailing non-keyword token is an error.
-
-Constraints:
-
-- Two formats that resolve to the **same** file (e.g. `FileFormat TEXT DAT`, both
-  `.dat`) are rejected with a clear error.
+- A recognised keyword (`TEXT/ASCII/TXT/DAT`, `BDO/BDO2019/BINARY/BIN`, `RTDOSE`,
+  `SVG`) starts a new target; a word that is *not* a keyword, right after a
+  format, is that format's file name (used as written, no extension added). At
+  most one name may follow each format.
+- You can mix your own names with auto-generated ones, and split the formats over
+  several `FileFormat` lines.
+- Two targets that end up with the same file name are rejected.
+- **Watch out:** since "not a keyword" means "a file name", a misspelled format
+  (`FileFormat TEXT BDX`) is quietly taken as a file named `BDX` for the TEXT
+  target, not reported as a bad format. (A file whose name is itself a format
+  keyword, such as `bdo`, cannot be written this way.)
 
 `RTDOSE` writes exactly **one** page (grid) into the `.dcm`, so which page it uses
 depends on how the block is written:
@@ -206,18 +192,25 @@ Rules and semantics:
 > [pymchelper](https://github.com/DataMedSci/pymchelper) instead.
 
 Add `FileFormat SVG` to an `Output` and that output writes a 1-D line plot
-instead of numeric data. To get the plot *and* the numbers from one block, list
-both formats — `FileFormat SVG BDO` (or `SVG TEXT`) writes `bragg.svg` alongside
-`bragg.bdo` from the same scored pages (see *Multiple output formats* above). Two
-plot shapes are recognised automatically:
+instead of numeric data.
+
+**Recommended: save SVG together with BDO** — `FileFormat SVG BDO` writes both
+`bragg.svg` and `bragg.bdo` from the same scored pages (see *Multiple output
+formats* above), at no extra scoring cost. Use the `.svg` for a quick look; once
+it confirms the result looks right, the `.bdo` is already on disk for further
+post-processing (e.g. in
+[pymchelper](https://github.com/DataMedSci/pymchelper)). `SVG TEXT` pairs the
+plot with a text table in the same way.
+
+Two plot shapes are recognised automatically:
 
 **Spatial profile** — a depth-dose / Bragg curve or any 1-D profile:
 
 ```text
 Output
-    Filename bragg          # ".svg" is appended automatically
-    FileFormat SVG
-    Geo MyMesh              # 1 × 1 × N mesh (one non-singleton axis)
+    Filename bragg              # → bragg.svg + bragg.bdo
+    FileFormat SVG BDO          # quick-look plot plus data for post-processing
+    Geo MyMesh                  # 1 × 1 × N mesh (one non-singleton axis)
     Quantity Dose
 ```
 
