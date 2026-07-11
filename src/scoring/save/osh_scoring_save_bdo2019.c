@@ -585,7 +585,7 @@ static int legacy_score_kind(struct osh_scoring_page_runtime const *page) {
     case OSH_SCORING_SCORE_DOSE:
         return 5;
     case OSH_SCORING_SCORE_DOSEGY:
-        return 56;
+        return 39;
     case OSH_SCORING_SCORE_DIRTYDOSE:
         return 64;
     case OSH_SCORING_SCORE_DIRTYDOSEGY:
