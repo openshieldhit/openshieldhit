@@ -1402,7 +1402,7 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 if (fmt) {
                     fmt_name = fmt;
                 }
-                if (format_is_rtdose(fmt)) {
+                if (fmt && format_is_rtdose(fmt)) {
                     has_rtdose_target = 1;
                 }
                 if (format_canonical_ext(fmt) == NULL) {
