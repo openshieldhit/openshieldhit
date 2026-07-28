@@ -969,13 +969,34 @@ static void test_checkpoint_nuclear_invariant_across_batches_and_capacity(void) 
     }
 }
 
+#define SEEDOFFSET_CONTENT_CAP 32768u
+
+/* Read a whole (small) text file into @p buf, NUL-terminated. Used to fingerprint
+ * a run's full scored output rather than a single aggregate sum, so the issue
+ * #317 regression below cannot pass on an unlucky sum collision between two
+ * genuinely different sets of per-bin values. */
+static void read_file_text(char const *path, char *buf, size_t cap) {
+    FILE *fp;
+    size_t n;
+
+    fp = fopen(path, "r");
+    ASSERT_TRUE(fp != NULL);
+    n = fread(buf, 1u, cap - 1u, fp);
+    ASSERT_TRUE(!ferror(fp));
+    ASSERT_TRUE(n < cap - 1u); /* the file must not have been truncated by cap */
+    buf[n] = '\0';
+    fclose(fp);
+}
+
 /* Like run_checkpoint_case_with_ncut, but drives RNDOFFSET instead of the
  * checkpoint cadence / pool capacity, for the issue #317 regression below. */
 static void run_seedoffset_case(char const *case_name,
                                 unsigned long long nstat,
                                 int rndoffset,
                                 unsigned long long *completed_out,
-                                double *energy_sum_out) {
+                                double *energy_sum_out,
+                                char *content_out,
+                                size_t content_cap) {
     char geo_path[512];
     char beam_path[512];
     char mat_path[512];
@@ -1025,6 +1046,7 @@ static void run_seedoffset_case(char const *case_name,
 
     ASSERT_TRUE(osh_simulation_save(sim) == OSH_OK);
     *energy_sum_out = sum_last_column(out_path);
+    read_file_text(out_path, content_out, content_cap);
 
     ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
     osh_geometry_workspace_free(geo);
@@ -1041,9 +1063,14 @@ static void run_seedoffset_case(char const *case_name,
  * the fix, RNDOFFSET shifted the index instead of folding into the seed, so
  * two adjacent offsets (the SH12A generatemc array-job convention: -N 0, 1,
  * 2, ...) shared (nstat-1)/nstat history streams and scored byte-identical
- * energy -- near-duplicate replicas instead of independent ones. This runs
+ * output -- near-duplicate replicas instead of independent ones. This runs
  * the same case with rndoffset 0 (twice, to confirm ordinary reproducibility
  * survives the fix) and rndoffset 1, and asserts the offset-1 run diverges.
+ *
+ * The comparison is on the *full* per-bin TEXT payload (200 Z-mesh bins),
+ * not a single aggregate sum: an aggregate could in principle match by
+ * coincidence even if every individual bin differs, which would let this
+ * regression lock pass on a fluke rather than on genuine independence.
  */
 static void test_seedoffset_selects_independent_stream_family(void) {
     unsigned long long const nstat = 200ull;
@@ -1053,22 +1080,29 @@ static void test_seedoffset_selects_independent_stream_family(void) {
     double energy_0a = 0.0;
     double energy_0b = 0.0;
     double energy_1 = 0.0;
+    char content_0a[SEEDOFFSET_CONTENT_CAP];
+    char content_0b[SEEDOFFSET_CONTENT_CAP];
+    char content_1[SEEDOFFSET_CONTENT_CAP];
 
-    run_seedoffset_case("00_minimal", nstat, 0, &completed_0a, &energy_0a);
-    run_seedoffset_case("00_minimal", nstat, 0, &completed_0b, &energy_0b);
-    run_seedoffset_case("00_minimal", nstat, 1, &completed_1, &energy_1);
+    run_seedoffset_case("00_minimal", nstat, 0, &completed_0a, &energy_0a, content_0a, sizeof(content_0a));
+    run_seedoffset_case("00_minimal", nstat, 0, &completed_0b, &energy_0b, content_0b, sizeof(content_0b));
+    run_seedoffset_case("00_minimal", nstat, 1, &completed_1, &energy_1, content_1, sizeof(content_1));
 
     ASSERT_TRUE(completed_0a == nstat);
     ASSERT_TRUE(completed_0b == nstat);
     ASSERT_TRUE(completed_1 == nstat);
     ASSERT_TRUE(energy_0a > 0.0);
 
-    /* Reproducibility: rndoffset = 0 re-run twice stays bit-identical. */
-    ASSERT_TRUE(energy_0a == energy_0b);
+    /* Reproducibility: rndoffset = 0 re-run twice stays bit-identical, down to
+     * every scored bin. */
+    ASSERT_TRUE(strcmp(content_0a, content_0b) == 0);
 
     /* Independence: rndoffset = 1 must decorrelate the whole run from
-     * rndoffset = 0, not just its non-overlapping tail. */
-    ASSERT_TRUE(energy_1 != energy_0a);
+     * rndoffset = 0, not just its non-overlapping tail. Comparing the full
+     * per-bin payload (rather than the aggregate energy sum) means this can
+     * only pass if the two runs differ throughout, not by chance in one
+     * summary statistic. */
+    ASSERT_TRUE(strcmp(content_1, content_0a) != 0);
 }
 
 /*

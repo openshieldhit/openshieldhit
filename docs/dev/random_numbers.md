@@ -121,16 +121,17 @@ Appropriate for the small λ of nuclear secondary multiplicities.
   into SplitMix64 seeding. Same seed + different stream ⇒ statistically
   independent sequences.
 
-Users set these through the `RNDSEED` and `RNDOFFSET` beam-file cards (the
-latter also settable via `-N`/`--seedoffset`). `RNDOFFSET` folds additively
-into the run seed (`seed = RNDSEED + RNDOFFSET`) to select an **independent
-stream family**: two runs sharing `RNDSEED` but using different `RNDOFFSET`
-values get statistically independent streams over the *same* history-index
-range `[0, nstat)`, so parallel array-job replicas (e.g. the SH12A
-`generatemc` convention of consecutive small `-N` values) merge without
-correlation (issue #317). This is a different axis from process/MPI/worker
-splitting (see §6), which instead assigns each worker a **disjoint
-history-index range** — `RNDOFFSET` does not touch the history index at all.
+Users set `seed` through the `RNDSEED` beam-file card; `RNDOFFSET` has no
+beam-file card and is set only via the `-N`/`--seedoffset` CLI flag.
+`RNDOFFSET` folds additively into the run seed (`seed = RNDSEED + RNDOFFSET`)
+to select an **independent stream family**: two runs sharing `RNDSEED` but
+using different `RNDOFFSET` values get statistically independent streams over
+the *same* history-index range `[0, nstat)`, so parallel array-job replicas
+(e.g. the SH12A `generatemc` convention of consecutive small `-N` values)
+merge without correlation (issue #317). This is a different axis from
+process/MPI/worker splitting (see §6), which instead assigns each worker a
+**disjoint history-index range** — `RNDOFFSET` does not touch the history
+index at all.
 
 ---
 

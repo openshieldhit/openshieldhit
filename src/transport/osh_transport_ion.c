@@ -75,12 +75,14 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  *   4. Compact the pool, removing dead entries.
  *   5. Repeat until every history in the range is done and the pool is empty.
  *
- * Each primary is seeded from its global history index (rndoffset + hist_lo +
- * the worker-local primary index), assembled by passing hist_lo + primaries_done
+ * Each primary is seeded from its global history index (hist_lo + the
+ * worker-local primary index), assembled by passing hist_lo + primaries_done
  * as the explicit global base to osh_beam_runtime_fill_pool_at().  Splitting the
  * run into arbitrary disjoint sub-ranges and replaying them in any order
  * therefore reproduces the canonical per-history streams exactly — the seed is a
  * pure function of the index, with no shared, mutable beam cursor in the path.
+ * (rndoffset is a separate knob folded into the run seed itself, not the
+ * index — see the seeding-context comment below.)
  * Deposits currently land in the shared master accumulators in @p score_rt;
  * per-worker private accumulators (@c wctx->accumulators) will route here once
  * parallel scoring lands.
