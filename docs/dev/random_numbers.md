@@ -121,10 +121,16 @@ Appropriate for the small λ of nuclear secondary multiplicities.
   into SplitMix64 seeding. Same seed + different stream ⇒ statistically
   independent sequences.
 
-Users set these through the `RNDSEED` and `RNDOFFSET` beam-file cards.
-`RNDOFFSET` is the **global history-index base** (see §6): giving each process
-or MPI rank a disjoint offset range produces disjoint, non-overlapping streams,
-so independent runs merge without correlation.
+Users set these through the `RNDSEED` and `RNDOFFSET` beam-file cards (the
+latter also settable via `-N`/`--seedoffset`). `RNDOFFSET` folds additively
+into the run seed (`seed = RNDSEED + RNDOFFSET`) to select an **independent
+stream family**: two runs sharing `RNDSEED` but using different `RNDOFFSET`
+values get statistically independent streams over the *same* history-index
+range `[0, nstat)`, so parallel array-job replicas (e.g. the SH12A
+`generatemc` convention of consecutive small `-N` values) merge without
+correlation (issue #317). This is a different axis from process/MPI/worker
+splitting (see §6), which instead assigns each worker a **disjoint
+history-index range** — `RNDOFFSET` does not touch the history index at all.
 
 ---
 
@@ -171,11 +177,11 @@ stopped.  Instead, each primary history starts its own RNG stream from its
 global history index:
 
 ```text
-history_index = RNDOFFSET + worker_range_start + worker_local_index
+history_index = worker_range_start + worker_local_index
 ```
 
-So worker 1's first primary is seeded from history index `RNDOFFSET + 250`,
-regardless of how many random numbers worker 0 consumed.  The important
+So worker 1's first primary is seeded from history index `250`, regardless of
+how many random numbers worker 0 consumed.  The important
 parallelism rule is therefore simple: worker ranges must be disjoint and
 together cover `[0, nstat)`.  Then each history ID is generated once, and each
 history gets the same random stream no matter which worker runs it.
@@ -249,7 +255,7 @@ Every history owns an **independent stream keyed by its global index**, carried
 particle, not the schedule:
 
 - **Primaries** seed from their global history index:
-  `stream_id = mix(rndseed, RNDOFFSET + prim_idx, purpose)`. A separate `BEAM`
+  `stream_id = mix(rndseed + RNDOFFSET, prim_idx, purpose)`. A separate `BEAM`
   purpose seeds a transient generator for source sampling, so the source phase
   space is identical regardless of which physics options are enabled.
 - **Secondaries** (nuclear recoils, abrasion nucleons, Fermi break-up fragments)
@@ -466,7 +472,9 @@ through TestU01 if you mean to use it for real work.
 - Per-history seeding (`osh_rng_seed_history`, `osh_rng_split`) with independent
   `BEAM`/`PHYSICS` sub-streams and lineage-deterministic secondaries.
 - One RNG stream carried per particle-pool slot, surviving compaction.
-- `RNDOFFSET` as the global history-index base for process/MPI splitting.
+- `RNDOFFSET` folded into the run seed to select an independent stream family
+  across whole runs (parallel array-job replicas); process/MPI/worker
+  splitting is the separate, orthogonal disjoint-history-range mechanism.
 - Scored-output invariance across pool capacities, up to floating-point
   reduction order (`bench::capacity_invariance`).
 

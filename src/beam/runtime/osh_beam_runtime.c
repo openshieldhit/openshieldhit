@@ -96,23 +96,16 @@ enum osh_status osh_beam_runtime_fill_pool_at(struct osh_beam_runtime *rt,
     if (pool->n > pool->capacity || n > pool->capacity - pool->n) {
         return OSH_EINVAL;
     }
-    /* The last primary in this fill has prim_idx = global_prim_base + (n - 1)
-     * and hist_index = seeding->hist_base + prim_idx.  Reject any range that
-     * would wrap either value rather than silently reusing indices/RNG streams.
-     * (Unreachable in practice -- it needs ~2^64 histories -- but this is the
-     * contract for parallel fills, so fail loudly instead of corrupting tallies.) */
+    /* The last primary in this fill has prim_idx = global_prim_base + (n - 1),
+     * which is also the history index used for seeding (see fill_from_spots).
+     * Reject any range that would wrap it rather than silently reusing
+     * indices/RNG streams.  (Unreachable in practice -- it needs ~2^64
+     * histories -- but this is the contract for parallel fills, so fail
+     * loudly instead of corrupting tallies.) */
     {
         uint64_t const last_offset = (uint64_t) n - 1u;
-        uint64_t first_hist_index;
 
         if (global_prim_base > UINT64_MAX - last_offset) {
-            return OSH_EINVAL;
-        }
-        if (seeding->hist_base > UINT64_MAX - global_prim_base) {
-            return OSH_EINVAL;
-        }
-        first_hist_index = seeding->hist_base + global_prim_base;
-        if (first_hist_index > UINT64_MAX - last_offset) {
             return OSH_EINVAL;
         }
     }
@@ -210,12 +203,11 @@ static enum osh_status fill_from_spots(struct osh_beam_runtime *rt,
      */
     for (i = 0u; i < n; ++i) {
         uint64_t const prim_idx = global_prim_base + i;
-        uint64_t const hist_index = seeding->hist_base + prim_idx;
         struct osh_rng beam_rng;
 
         slot = pool->n + i;
 
-        osh_rng_seed_history(&beam_rng, seeding->type, seeding->seed, hist_index, OSH_RNG_PURPOSE_BEAM);
+        osh_rng_seed_history(&beam_rng, seeding->type, seeding->seed, prim_idx, OSH_RNG_PURPOSE_BEAM);
         rc = osh_beam_new_primary(rt->workspace, &beam_rng, &ray);
         if (rc != OSH_OK) {
             return rc;
@@ -236,7 +228,7 @@ static enum osh_status fill_from_spots(struct osh_beam_runtime *rt,
         pool->species[slot] = &rt->primary;
 
         /* Persistent transport stream for this slot, independent of BEAM. */
-        osh_rng_seed_history(&pool->rng[slot], seeding->type, seeding->seed, hist_index, OSH_RNG_PURPOSE_PHYSICS);
+        osh_rng_seed_history(&pool->rng[slot], seeding->type, seeding->seed, prim_idx, OSH_RNG_PURPOSE_PHYSICS);
     }
 
     pool->n += n;
@@ -280,7 +272,7 @@ static enum osh_status fill_from_phsp(struct osh_beam_runtime *rt,
      *   2. Convert each MCPL particle record to pool SoA layout.
      *   3. Advance rt->source.phsp.file_pos; rewind when exhausted.
      *   4. Assign prim_idx from global_prim_base + i and gen = 0.
-     *   5. Seed pool->rng[slot] via osh_rng_seed_history(..., hist_index,
+     *   5. Seed pool->rng[slot] via osh_rng_seed_history(..., prim_idx,
      *      OSH_RNG_PURPOSE_PHYSICS) exactly as the spots path does, so PHSP
      *      transport is reproducible and capacity-independent too.
      *

@@ -133,17 +133,18 @@ void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, ui
  * @brief Run-wide RNG seeding context for per-history streams.
  *
  * @details
- * Carries the three values needed to derive an independent stream for any
- * history index: the engine @p type, the run @p seed (RNDSEED), and a
- * @p hist_base offset (RNDOFFSET) added to every history index.  Disjoint
- * @p hist_base ranges give disjoint, non-overlapping streams, which is what
- * makes process- and MPI-level splitting trivially reproducible: rank r owns
- * history indices [hist_base + r·N, hist_base + (r+1)·N).
+ * Carries the two values needed to derive an independent stream for any
+ * history index: the engine @p type and the run @p seed.  @p seed already
+ * folds in RNDOFFSET (see @ref osh_transport_params::rndoffset), so distinct
+ * RNDOFFSET values from the same RNDSEED select decorrelated stream families
+ * over the same history-index range.  Process/MPI/worker splitting is a
+ * separate, orthogonal concern: callers pass disjoint history-index ranges
+ * explicitly (e.g. @ref osh_beam_runtime_fill_pool_at's global_prim_base), so
+ * rank r owns history indices [r·N, (r+1)·N) regardless of @p seed.
  */
 struct osh_rng_seeding {
     enum osh_rng_type type; /**< Engine used for every stream in the run. */
-    uint64_t seed;          /**< Run seed (RNDSEED). */
-    uint64_t hist_base;     /**< Global history-index base (RNDOFFSET). */
+    uint64_t seed;          /**< Run seed; already folds in RNDSEED + RNDOFFSET. */
 };
 
 /**
@@ -160,7 +161,7 @@ struct osh_rng_seeding {
  * @param rng        RNG state to initialise.
  * @param type       Engine type.
  * @param seed       Run seed.
- * @param hist_index Global history index (already includes any hist_base).
+ * @param hist_index Global history index (e.g. hist_lo + worker-local index).
  * @param purpose    Sub-stream selector (see @ref osh_rng_purpose).
  */
 void osh_rng_seed_history(

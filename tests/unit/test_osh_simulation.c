@@ -969,6 +969,108 @@ static void test_checkpoint_nuclear_invariant_across_batches_and_capacity(void) 
     }
 }
 
+/* Like run_checkpoint_case_with_ncut, but drives RNDOFFSET instead of the
+ * checkpoint cadence / pool capacity, for the issue #317 regression below. */
+static void run_seedoffset_case(char const *case_name,
+                                unsigned long long nstat,
+                                int rndoffset,
+                                unsigned long long *completed_out,
+                                double *energy_sum_out) {
+    char geo_path[512];
+    char beam_path[512];
+    char mat_path[512];
+    char scoring_path[512];
+    char scoring_text[1024];
+    char out_path[256];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+    struct osh_results const *results = NULL;
+
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/%s/geo.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/%s/beam.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/%s/mat.dat", OSH_PROJECT_SOURCE_DIR, case_name);
+
+    snprintf(out_path, sizeof(out_path), "osh_seedoffset_%d.dat", tmp_counter++);
+    snprintf(scoring_text,
+             sizeof(scoring_text),
+             "Geometry Mesh\n"
+             "  Name M\n"
+             "  X -5.0 5.0 1\n"
+             "  Y -5.0 5.0 1\n"
+             "  Z 0.0 20.0 200\n"
+             "Output\n"
+             "  Filename %s\n"
+             "  Fileformat TEXT\n"
+             "  Geo M\n"
+             "  Quantity Energy\n",
+             out_path);
+    write_temp_file(scoring_path, sizeof(scoring_path), scoring_text);
+
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(scoring_path, NULL, &scoring) == OSH_OK);
+
+    beam->nstat = (size_t) nstat; /* set before create so pools size to it */
+    beam->rndoffset = rndoffset;
+
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_run(sim) == OSH_OK);
+
+    ASSERT_TRUE(osh_simulation_get_results(sim, &results) == OSH_OK);
+    *completed_out = osh_results_completed_nstat(results);
+
+    ASSERT_TRUE(osh_simulation_save(sim) == OSH_OK);
+    *energy_sum_out = sum_last_column(out_path);
+
+    ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+    remove(out_path);
+    remove(scoring_path);
+}
+
+/*
+ * Regression lock for issue #317: -N/RNDOFFSET must select an independent
+ * stream family across the *whole* run, not shift the history index. Before
+ * the fix, RNDOFFSET shifted the index instead of folding into the seed, so
+ * two adjacent offsets (the SH12A generatemc array-job convention: -N 0, 1,
+ * 2, ...) shared (nstat-1)/nstat history streams and scored byte-identical
+ * energy -- near-duplicate replicas instead of independent ones. This runs
+ * the same case with rndoffset 0 (twice, to confirm ordinary reproducibility
+ * survives the fix) and rndoffset 1, and asserts the offset-1 run diverges.
+ */
+static void test_seedoffset_selects_independent_stream_family(void) {
+    unsigned long long const nstat = 200ull;
+    unsigned long long completed_0a = 0ull;
+    unsigned long long completed_0b = 0ull;
+    unsigned long long completed_1 = 0ull;
+    double energy_0a = 0.0;
+    double energy_0b = 0.0;
+    double energy_1 = 0.0;
+
+    run_seedoffset_case("00_minimal", nstat, 0, &completed_0a, &energy_0a);
+    run_seedoffset_case("00_minimal", nstat, 0, &completed_0b, &energy_0b);
+    run_seedoffset_case("00_minimal", nstat, 1, &completed_1, &energy_1);
+
+    ASSERT_TRUE(completed_0a == nstat);
+    ASSERT_TRUE(completed_0b == nstat);
+    ASSERT_TRUE(completed_1 == nstat);
+    ASSERT_TRUE(energy_0a > 0.0);
+
+    /* Reproducibility: rndoffset = 0 re-run twice stays bit-identical. */
+    ASSERT_TRUE(energy_0a == energy_0b);
+
+    /* Independence: rndoffset = 1 must decorrelate the whole run from
+     * rndoffset = 0, not just its non-overlapping tail. */
+    ASSERT_TRUE(energy_1 != energy_0a);
+}
+
 /*
  * Overflow accounting (issue #213), the positive counterpart to the
  * ion_secondaries_dropped == 0 assertions above.  Those prove the default
@@ -1095,6 +1197,7 @@ int main(void) {
     test_checkpoint_live_batches_drain_families_with_nuclear();
     test_neutron_cutoff_residual_is_deposited();
     test_checkpoint_nuclear_invariant_across_batches_and_capacity();
+    test_seedoffset_selects_independent_stream_family();
     test_checkpoint_nuclear_overflow_is_counted_not_silent();
     test_checkpoint_profiling_accumulates_across_batches();
     test_dump_control_is_non_destructive();

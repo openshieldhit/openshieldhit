@@ -139,11 +139,11 @@ static void test_seed_history_purpose_independence(void) {
     ASSERT_TRUE(differ);
 }
 
-/* Disjoint history-index ranges (e.g. one per MPI rank via hist_base) must not
- * alias.  Two streams alias only if they are seeded to the *same generator
- * state*, so we compare the seeded PCG32 state (state, inc) pairs rather than a
- * single output: distinct streams can legitimately share a first draw, but they
- * must never share full state. */
+/* Disjoint history-index ranges (e.g. one per MPI rank via a disjoint
+ * global_prim_base) must not alias.  Two streams alias only if they are
+ * seeded to the *same generator state*, so we compare the seeded PCG32 state
+ * (state, inc) pairs rather than a single output: distinct streams can
+ * legitimately share a first draw, but they must never share full state. */
 static void test_seed_history_disjoint_ranges(void) {
     uint64_t state[HIST_N];
     uint64_t inc[HIST_N];
@@ -161,6 +161,29 @@ static void test_seed_history_disjoint_ranges(void) {
         for (j = i + 1u; j < HIST_N; ++j) {
             ASSERT_TRUE(state[i] != state[j] || inc[i] != inc[j]);
         }
+    }
+}
+
+/* Regression lock for issue #317: two runs sharing an RNDSEED but using
+ * distinct RNDOFFSET values (folded additively into the seed passed here)
+ * must decorrelate streams across the *entire* shared [0, HIST_N) history-
+ * index range -- not just a non-overlapping tail. Before the fix, RNDOFFSET
+ * shifted the history index instead of the seed, so two offsets one apart
+ * (e.g. -N 0 and -N 1) produced byte-identical streams for every index they
+ * both cover, and only the disjoint tail differed. */
+static void test_seed_history_independent_seedoffsets(void) {
+    uint64_t const rndseed = 42u;
+    uint64_t const seed_a = rndseed + 0u;
+    uint64_t const seed_b = rndseed + 1u;
+    uint64_t h;
+
+    for (h = 0u; h < HIST_N; ++h) {
+        struct osh_rng ra;
+        struct osh_rng rb;
+
+        osh_rng_seed_history(&ra, OSH_RNG_TYPE_PCG32, seed_a, h, OSH_RNG_PURPOSE_PHYSICS);
+        osh_rng_seed_history(&rb, OSH_RNG_TYPE_PCG32, seed_b, h, OSH_RNG_PURPOSE_PHYSICS);
+        ASSERT_TRUE(ra.u.pcg32.state != rb.u.pcg32.state || ra.u.pcg32.inc != rb.u.pcg32.inc);
     }
 }
 
@@ -484,6 +507,7 @@ int main(void) {
     test_seed_history_order_independence();
     test_seed_history_purpose_independence();
     test_seed_history_disjoint_ranges();
+    test_seed_history_independent_seedoffsets();
     test_split_deterministic();
     test_split_nonconsuming_and_drop_independent();
     test_split_not_seeded_from_parent_output();

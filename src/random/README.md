@@ -36,8 +36,12 @@ but that does not affect any other worker because each primary history is seeded
 from its own global index:
 
 ```text
-history_index = rndoffset + hist_lo + worker_local_index
+history_index = hist_lo + worker_local_index
 ```
+
+(`rndoffset`/`-N` is a separate, orthogonal knob: it folds into the run seed
+to select an independent stream family across whole runs — e.g. parallel
+array-job replicas — rather than shifting the history index.)
 
 That is why the beam fill path takes the first global history index for the
 current fill explicitly.  The beam runtime should not ask "how many primaries

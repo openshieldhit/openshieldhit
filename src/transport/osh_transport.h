@@ -82,10 +82,13 @@ struct osh_transport_params {
     float ncut;                        /**< Lower neutron energy cutoff [MeV]; <=0 uses the default in
                                             physics/neutron/osh_neutron_const.h (OSH_NEUTRON_CUTOFF_DEFAULT_MEV). */
     int rndseed;                       /**< Base RNG seed (RNDSEED); fixes the whole run's streams. */
-    int rndoffset;                     /**< Global history-index base (RNDOFFSET): added to every
-                                            history index before seeding, so disjoint ranges (e.g.
-                                            one per process/MPI rank) give disjoint, non-overlapping
-                                            streams.  Not a value added to rndseed. */
+    int rndoffset;                     /**< Independent-stream selector (RNDOFFSET): folded into
+                                            rndseed before seeding, so distinct offsets from the same
+                                            rndseed give statistically independent, reproducible
+                                            stream families over the same history-index range. This
+                                            is what decorrelates parallel array-job replicas (issue
+                                            #317); it does not shift the history index (that is a
+                                            separate, orthogonal split — see osh_rng_seeding). */
     char mcs_mode;                     /**< enum osh_transport_mcs_mode value. */
     char straggling_mode;              /**< enum osh_transport_straggling_mode value. */
     char nuclear_inelastic;            /**< Non-zero to enable inelastic nuclear reactions (Tripathi). */
