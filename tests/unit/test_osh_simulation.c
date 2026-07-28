@@ -1000,7 +1000,13 @@ static void strip_comment_lines(char *buf) {
 
     while (*read_ptr != '\0') {
         char const *newline = strchr(read_ptr, '\n');
-        size_t line_len = (newline != NULL) ? (size_t) (newline - read_ptr) + 1u : strlen(read_ptr);
+        size_t line_len;
+
+        if (newline != NULL) {
+            line_len = (size_t) (newline - read_ptr) + 1u;
+        } else {
+            line_len = strlen(read_ptr); /* final line has no trailing newline */
+        }
 
         if (*read_ptr != '#') {
             memmove(write_ptr, read_ptr, line_len);

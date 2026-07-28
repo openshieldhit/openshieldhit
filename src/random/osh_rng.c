@@ -92,7 +92,18 @@ void osh_rng_seeding_init(struct osh_rng_seeding *seeding,
                           uint64_t rndseed,
                           uint64_t rndoffset) {
     seeding->type = type;
-    seeding->seed = (rndoffset == 0u) ? rndseed : rng_mix_stream(rndseed, rndoffset, 0u);
+    if (rndoffset == 0u) {
+        /* Identity case: no -N/--seedoffset (or -N 0) leaves the seed
+         * unchanged, so the ordinary single-run path is byte-for-byte
+         * unaffected by this function existing. */
+        seeding->seed = rndseed;
+    } else {
+        /* Hash rndseed and rndoffset together rather than summing them, so
+         * two independently-chosen (rndseed, rndoffset) configurations can
+         * only collide by a generic ~2^-64 hash coincidence instead of by
+         * construction (see the function doc in osh_rng.h). */
+        seeding->seed = rng_mix_stream(rndseed, rndoffset, 0u);
+    }
 }
 
 /*
