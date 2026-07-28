@@ -988,6 +988,29 @@ static void read_file_text(char const *path, char *buf, size_t cap) {
     fclose(fp);
 }
 
+/* Drop every '#' header/comment line from @p buf in place (e.g. the ASCII
+ * writer's "# Calculated <wall-clock time>" line), leaving only the numeric
+ * per-bin payload. Two runs launched back to back can straddle a wall-clock
+ * second boundary, so comparing raw file bytes including that line makes an
+ * otherwise-reproducible pair of runs flake; the per-bin payload itself has
+ * no such volatile content. */
+static void strip_comment_lines(char *buf) {
+    char const *read_ptr = buf;
+    char *write_ptr = buf;
+
+    while (*read_ptr != '\0') {
+        char const *newline = strchr(read_ptr, '\n');
+        size_t line_len = (newline != NULL) ? (size_t) (newline - read_ptr) + 1u : strlen(read_ptr);
+
+        if (*read_ptr != '#') {
+            memmove(write_ptr, read_ptr, line_len);
+            write_ptr += line_len;
+        }
+        read_ptr += line_len;
+    }
+    *write_ptr = '\0';
+}
+
 /* Like run_checkpoint_case_with_ncut, but drives RNDOFFSET instead of the
  * checkpoint cadence / pool capacity, for the issue #317 regression below. */
 static void run_seedoffset_case(char const *case_name,
@@ -1047,6 +1070,7 @@ static void run_seedoffset_case(char const *case_name,
     ASSERT_TRUE(osh_simulation_save(sim) == OSH_OK);
     *energy_sum_out = sum_last_column(out_path);
     read_file_text(out_path, content_out, content_cap);
+    strip_comment_lines(content_out);
 
     ASSERT_TRUE(osh_simulation_free(sim) == OSH_OK);
     osh_geometry_workspace_free(geo);
@@ -1071,6 +1095,22 @@ static void run_seedoffset_case(char const *case_name,
  * not a single aggregate sum: an aggregate could in principle match by
  * coincidence even if every individual bin differs, which would let this
  * regression lock pass on a fluke rather than on genuine independence.
+ * strip_comment_lines() drops the '#' header first, notably the wall-clock
+ * "# Calculated" line, so this is a comparison of scored data only -- without
+ * it, two otherwise-identical rndoffset=0 runs can straddle a one-second
+ * boundary and fail the reproducibility check below for a reason that has
+ * nothing to do with RNG correctness.
+ *
+ * This integration test locks end-to-end plumbing (CLI/beam/transport wiring
+ * reaches the RNG correctly); it intentionally only asserts inequality
+ * between rndoffset 0 and 1, not the divergence's magnitude, since a tiny,
+ * genuine one-history difference and a fully independent stream family both
+ * make every floating-point bin's printed text differ somewhere. The precise,
+ * magnitude-sensitive regression locks for both the #317 index-vs-seed bug
+ * and the RNDSEED/RNDOFFSET aliasing pitfall live at the RNG unit level
+ * (test_seed_history_independent_seedoffsets, test_seedoffset_does_not_alias_rndseed
+ * in test_osh_rng.c), where exact PCG32 state can be compared directly instead
+ * of through floating-point summation and text formatting.
  */
 static void test_seedoffset_selects_independent_stream_family(void) {
     unsigned long long const nstat = 200ull;
