@@ -34,9 +34,11 @@ struct osh_transport_profile;
  * base from its own range, so the beam runtime is shared read-only.
  *
  * The assigned work is the half-open history range [@ref hist_lo, @ref hist_hi).
- * Per-history RNG seeding is derived from the global history index
- * (rndoffset + history), so disjoint ranges produce disjoint, non-overlapping
- * random streams and the scored result is independent of how the range is split.
+ * Per-history RNG seeding is derived from the global history index alone, so
+ * disjoint ranges produce disjoint, non-overlapping random streams and the
+ * scored result is independent of how the range is split.  (rndoffset is a
+ * separate, orthogonal knob folded into the run seed to select an independent
+ * stream family across whole runs, e.g. parallel array-job replicas.)
  *
  * In the current single-worker build exactly one context covers the whole run,
  * [0, nstat), and deposits go straight into the shared master accumulators.

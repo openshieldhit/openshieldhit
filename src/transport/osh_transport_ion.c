@@ -75,12 +75,14 @@ static enum osh_status validate_transport_modes(struct osh_transport_context con
  *   4. Compact the pool, removing dead entries.
  *   5. Repeat until every history in the range is done and the pool is empty.
  *
- * Each primary is seeded from its global history index (rndoffset + hist_lo +
- * the worker-local primary index), assembled by passing hist_lo + primaries_done
+ * Each primary is seeded from its global history index (hist_lo + the
+ * worker-local primary index), assembled by passing hist_lo + primaries_done
  * as the explicit global base to osh_beam_runtime_fill_pool_at().  Splitting the
  * run into arbitrary disjoint sub-ranges and replaying them in any order
  * therefore reproduces the canonical per-history streams exactly — the seed is a
  * pure function of the index, with no shared, mutable beam cursor in the path.
+ * (rndoffset is a separate knob folded into the run seed itself, not the
+ * index — see the seeding-context comment below.)
  * Deposits currently land in the shared master accumulators in @p score_rt;
  * per-worker private accumulators (@c wctx->accumulators) will route here once
  * parallel scoring lands.
@@ -134,16 +136,24 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
      * separate purposes makes NUCRE/MSCAT/STRAGG comparisons launch the same
      * primary histories.
      *
-     * The global history index is rndoffset + (hist_lo + worker-local index).
-     * We keep hist_base at rndoffset alone and carry the worker's hist_lo in the
-     * explicit global base passed to osh_beam_runtime_fill_pool_at() below, so
-     * the full global index is assembled in exactly one place.  Splitting the
-     * run into disjoint sub-ranges and running them in any order then reproduces
-     * the canonical per-history streams, because each primary's seed depends
-     * only on its index — never on a shared, mutable beam cursor. */
-    seeding.type = OSH_RNG_TYPE_PCG32;
-    seeding.seed = (uint64_t) params->rndseed;
-    seeding.hist_base = (uint64_t) params->rndoffset;
+     * The global history index is purely (hist_lo + worker-local index): the
+     * worker's hist_lo is carried in the explicit global base passed to
+     * osh_beam_runtime_fill_pool_at() below, so the full global index is
+     * assembled in exactly one place.  Splitting the run into disjoint
+     * sub-ranges and running them in any order then reproduces the canonical
+     * per-history streams, because each primary's seed depends only on its
+     * index — never on a shared, mutable beam cursor.
+     *
+     * rndoffset (-N / RNDOFFSET) instead selects an independent, reproducible
+     * stream family: osh_rng_seeding_init() hashes rndseed and rndoffset
+     * together (identity when rndoffset is 0), so two runs with the same
+     * rndseed but different rndoffset get decorrelated streams across the
+     * whole [0, nstat) index range, which is what makes parallel array-job
+     * replicas (e.g. the SH12A generatemc convention) statistically
+     * independent instead of near-duplicate (issue #317) -- without the
+     * resulting seed colliding with some other run's plain rndseed (see
+     * osh_rng_seeding_init). */
+    osh_rng_seeding_init(&seeding, OSH_RNG_TYPE_PCG32, (uint64_t) params->rndseed, (uint64_t) params->rndoffset);
 
     /* Deposit target for the score-step calls below.  The worker owns the pair;
      * NULL fields resolve to the shared master views inside osh_scoring_score_step

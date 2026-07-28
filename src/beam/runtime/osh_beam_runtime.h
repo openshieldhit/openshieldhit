@@ -149,7 +149,7 @@ void osh_beam_runtime_free(struct osh_beam_runtime **rt);
  * For PHSP mode: not yet implemented; returns OSH_ENOTSUP.
  *
  * @param[in,out] rt               Beam runtime (read-only here; cursor untouched).
- * @param[in]     seeding          Run-wide RNG seeding context (engine, seed, base).
+ * @param[in]     seeding          Run-wide RNG seeding context (engine, seed).
  * @param[in,out] pool             Pool to fill; must have capacity >= pool->n + n.
  * @param[in]     n                Number of primaries to generate.
  * @param[in]     global_prim_base Global history index of the first primary.
@@ -176,7 +176,7 @@ enum osh_status osh_beam_runtime_fill_pool_at(struct osh_beam_runtime *rt,
  * Behaviour is otherwise identical to @ref osh_beam_runtime_fill_pool_at.
  *
  * @param[in,out] rt       Beam runtime (primaries_generated is advanced).
- * @param[in]     seeding  Run-wide RNG seeding context (engine, seed, base).
+ * @param[in]     seeding  Run-wide RNG seeding context (engine, seed).
  * @param[in,out] pool     Pool to fill; must have capacity >= pool->n + n.
  * @param[in]     n        Number of primaries to generate.
  *

@@ -85,8 +85,10 @@ Determinism notes for a future threaded implementation:
 - RNG streams are keyed by global history index, not by position in one shared
   draw sequence.  Workers therefore own disjoint history ranges such as
   `[0, 250)` and `[250, 500)`, and each primary is seeded from
-  `rndoffset + hist_lo + worker_local_index`.  This lets one history consume any
-  number of random draws without shifting another worker's streams.
+  `hist_lo + worker_local_index`.  This lets one history consume any number of
+  random draws without shifting another worker's streams.  (`rndoffset`/`-N`
+  is a separate knob, folded into the run seed to select an independent
+  stream family across whole runs, not into the history index.)
 - Chunk ownership should be explicit and stable enough that runs can be debugged.
 - Secondary merges should happen at clear boundaries rather than by fully
   shared push-on-every-step queues.
