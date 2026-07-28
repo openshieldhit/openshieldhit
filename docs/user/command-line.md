@@ -91,6 +91,27 @@ build/bin/openshieldhit --dump-every 10m tests/cases/00_minimal/
                                   private-accumulator sub-ranges, then merge (n <= nstat)
 ```
 
+## Parallel array-job replicas (`-N`/`--seedoffset`)
+
+`-N`/`--seedoffset <n>` (`RNDOFFSET`; CLI-only, no `beam.dat` card) selects an
+independent, reproducible RNG stream family from the same `RNDSEED`. Two runs
+with the same `RNDSEED` but different `-N` values are statistically
+independent replicas of the same case, not correlated re-runs, even though
+every other input is identical.
+
+This is the mechanism for splitting one campaign across an HPC job array (the
+SH12A `generatemc` convention): submit the same case with `-N 0`, `-N 1`,
+`-N 2`, ... (up to 9999), one value per job and each with its own `--outdir`,
+then merge the resulting `.bdo` files with a merge tool that weights each file
+by its own completed `nstat` (see `docs/dev/scoring.md`). Because independence
+comes from `-N`, not from `nstat`, jobs do not need to request the same
+`nstat` — a merge weighted by each file's own history count handles replicas
+of different sizes correctly.
+
+`-N` does not change which histories a run computes — every replica still
+covers the full `[0, nstat)` range for its own job — only which RNG stream
+family it draws from.
+
 ## Stopping a run early
 
 A run stops cleanly — rather than being killed mid-history — in two ways:

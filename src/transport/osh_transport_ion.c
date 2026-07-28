@@ -144,14 +144,16 @@ static enum osh_status run_history_range(struct osh_worker_context *wctx,
      * per-history streams, because each primary's seed depends only on its
      * index — never on a shared, mutable beam cursor.
      *
-     * rndoffset (-N / RNDOFFSET) instead folds into the run seed to select an
-     * independent, reproducible stream family: two runs with the same rndseed
-     * but different rndoffset get decorrelated streams across the whole
-     * [0, nstat) index range, which is what makes parallel array-job replicas
-     * (e.g. the SH12A generatemc convention) statistically independent instead
-     * of near-duplicate (issue #317). */
-    seeding.type = OSH_RNG_TYPE_PCG32;
-    seeding.seed = (uint64_t) params->rndseed + (uint64_t) params->rndoffset;
+     * rndoffset (-N / RNDOFFSET) instead selects an independent, reproducible
+     * stream family: osh_rng_seeding_init() hashes rndseed and rndoffset
+     * together (identity when rndoffset is 0), so two runs with the same
+     * rndseed but different rndoffset get decorrelated streams across the
+     * whole [0, nstat) index range, which is what makes parallel array-job
+     * replicas (e.g. the SH12A generatemc convention) statistically
+     * independent instead of near-duplicate (issue #317) -- without the
+     * resulting seed colliding with some other run's plain rndseed (see
+     * osh_rng_seeding_init). */
+    osh_rng_seeding_init(&seeding, OSH_RNG_TYPE_PCG32, (uint64_t) params->rndseed, (uint64_t) params->rndoffset);
 
     /* Deposit target for the score-step calls below.  The worker owns the pair;
      * NULL fields resolve to the shared master views inside osh_scoring_score_step

@@ -165,26 +165,48 @@ static void test_seed_history_disjoint_ranges(void) {
 }
 
 /* Regression lock for issue #317: two runs sharing an RNDSEED but using
- * distinct RNDOFFSET values (folded additively into the seed passed here)
- * must decorrelate streams across the *entire* shared [0, HIST_N) history-
- * index range -- not just a non-overlapping tail. Before the fix, RNDOFFSET
- * shifted the history index instead of the seed, so two offsets one apart
- * (e.g. -N 0 and -N 1) produced byte-identical streams for every index they
- * both cover, and only the disjoint tail differed. */
+ * distinct RNDOFFSET values must decorrelate streams across the *entire*
+ * shared [0, HIST_N) history-index range -- not just a non-overlapping tail.
+ * Before the fix, RNDOFFSET shifted the history index instead of the seed, so
+ * two offsets one apart (e.g. -N 0 and -N 1) produced byte-identical streams
+ * for every index they both cover, and only the disjoint tail differed.
+ *
+ * Goes through osh_rng_seeding_init() -- the real production fold -- rather
+ * than hand-computing the two seeds, so a regression in the fold itself (not
+ * just in rng_mix_stream) would be caught here too. */
 static void test_seed_history_independent_seedoffsets(void) {
-    uint64_t const rndseed = 42u;
-    uint64_t const seed_a = rndseed + 0u;
-    uint64_t const seed_b = rndseed + 1u;
+    struct osh_rng_seeding seeding_a;
+    struct osh_rng_seeding seeding_b;
     uint64_t h;
+
+    osh_rng_seeding_init(&seeding_a, OSH_RNG_TYPE_PCG32, 42u, 0u);
+    osh_rng_seeding_init(&seeding_b, OSH_RNG_TYPE_PCG32, 42u, 1u);
 
     for (h = 0u; h < HIST_N; ++h) {
         struct osh_rng ra;
         struct osh_rng rb;
 
-        osh_rng_seed_history(&ra, OSH_RNG_TYPE_PCG32, seed_a, h, OSH_RNG_PURPOSE_PHYSICS);
-        osh_rng_seed_history(&rb, OSH_RNG_TYPE_PCG32, seed_b, h, OSH_RNG_PURPOSE_PHYSICS);
+        osh_rng_seed_history(&ra, OSH_RNG_TYPE_PCG32, seeding_a.seed, h, OSH_RNG_PURPOSE_PHYSICS);
+        osh_rng_seed_history(&rb, OSH_RNG_TYPE_PCG32, seeding_b.seed, h, OSH_RNG_PURPOSE_PHYSICS);
         ASSERT_TRUE(ra.u.pcg32.state != rb.u.pcg32.state || ra.u.pcg32.inc != rb.u.pcg32.inc);
     }
+}
+
+/* Regression lock for the RNDSEED/RNDOFFSET aliasing pitfall found reviewing
+ * the #317 fix: folding RNDOFFSET into the seed by plain addition made
+ * (RNDSEED=S, RNDOFFSET=k) indistinguishable from (RNDSEED=S+k,
+ * RNDOFFSET=0) -- two different, independently-chosen configurations
+ * silently sharing one stream family, which double-counts histories if their
+ * outputs are ever merged as independent replicas. osh_rng_seeding_init()
+ * must decorrelate these via a hash-mix instead of letting the sums collide. */
+static void test_seedoffset_does_not_alias_rndseed(void) {
+    struct osh_rng_seeding seeding_a;
+    struct osh_rng_seeding seeding_b;
+
+    osh_rng_seeding_init(&seeding_a, OSH_RNG_TYPE_PCG32, 100u, 1u);
+    osh_rng_seeding_init(&seeding_b, OSH_RNG_TYPE_PCG32, 101u, 0u);
+
+    ASSERT_TRUE(seeding_a.seed != seeding_b.seed);
 }
 
 /* osh_rng_split is deterministic along a lineage: identical parents at the
@@ -508,6 +530,7 @@ int main(void) {
     test_seed_history_purpose_independence();
     test_seed_history_disjoint_ranges();
     test_seed_history_independent_seedoffsets();
+    test_seedoffset_does_not_alias_rndseed();
     test_split_deterministic();
     test_split_nonconsuming_and_drop_independent();
     test_split_not_seeded_from_parent_output();

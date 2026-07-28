@@ -135,7 +135,7 @@ void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, ui
  * @details
  * Carries the two values needed to derive an independent stream for any
  * history index: the engine @p type and the run @p seed.  @p seed already
- * folds in RNDOFFSET (see @ref osh_transport_params::rndoffset), so distinct
+ * combines RNDSEED and RNDOFFSET (see @ref osh_rng_seeding_init), so distinct
  * RNDOFFSET values from the same RNDSEED select decorrelated stream families
  * over the same history-index range.  Process/MPI/worker splitting is a
  * separate, orthogonal concern: callers pass disjoint history-index ranges
@@ -144,8 +144,35 @@ void osh_rng_init(struct osh_rng *rng, enum osh_rng_type type, uint64_t seed, ui
  */
 struct osh_rng_seeding {
     enum osh_rng_type type; /**< Engine used for every stream in the run. */
-    uint64_t seed;          /**< Run seed; already folds in RNDSEED + RNDOFFSET. */
+    uint64_t seed;          /**< Run seed; already combines RNDSEED and RNDOFFSET (@ref osh_rng_seeding_init). */
 };
+
+/**
+ * @brief Build a seeding context from RNDSEED and RNDOFFSET.
+ *
+ * @details
+ * @p rndoffset == 0 (no `-N`/`--seedoffset`, or `-N 0`) is the identity case:
+ * @p seed comes out equal to @p rndseed, so the ordinary single-run path is
+ * unchanged. A non-zero @p rndoffset instead hashes the pair through the same
+ * SplitMix64-style mixer used for per-history streams (`rng_mix_stream()` in
+ * osh_rng.c), rather than adding it to @p rndseed. Addition would let two
+ * independently-chosen configurations collide: (RNDSEED=S, RNDOFFSET=k) and
+ * (RNDSEED=S+k, RNDOFFSET=0) sum to the same value and would therefore
+ * produce byte-identical output, silently merging as though the two runs
+ * were independent replicas and double-counting histories. The hash-mix
+ * reduces that to a generic 64-bit hash coincidence (~2^-64), the same
+ * residual risk already accepted for every other stream-separation axis in
+ * this module.
+ *
+ * @param[out] seeding   Seeding context to initialise.
+ * @param[in]  type      Engine to use for every stream in the run.
+ * @param[in]  rndseed   Base RNG seed (RNDSEED).
+ * @param[in]  rndoffset Independent-stream selector (RNDOFFSET / `-N`).
+ */
+void osh_rng_seeding_init(struct osh_rng_seeding *seeding,
+                          enum osh_rng_type type,
+                          uint64_t rndseed,
+                          uint64_t rndoffset);
 
 /**
  * @brief Seed an RNG for one history, keyed by its global index and purpose.

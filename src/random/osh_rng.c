@@ -87,6 +87,14 @@ void osh_rng_seed_history(
     osh_rng_init(rng, type, seed, stream);
 }
 
+void osh_rng_seeding_init(struct osh_rng_seeding *seeding,
+                          enum osh_rng_type type,
+                          uint64_t rndseed,
+                          uint64_t rndoffset) {
+    seeding->type = type;
+    seeding->seed = (rndoffset == 0u) ? rndseed : rng_mix_stream(rndseed, rndoffset, 0u);
+}
+
 /*
  * rng_lineage_key() — fold a parent RNG's *internal state* into one 64-bit
  * lineage key with rng_mix_stream().
