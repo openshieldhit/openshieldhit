@@ -65,6 +65,60 @@ TMAX0   200.0   2.0    # 200 MeV/nucleon, σ = 2 MeV/nucleon
 TMAX0  -1000.0         # p₀ = 1000 MeV/c
 ```
 
+The spread is an ordinary (untruncated) Gaussian.  Add [`TCUT0`](#tcut0) to
+confine it to a window, e.g. N(60, 5²) MeV restricted to [58, 62] MeV.
+
+### TCUT0
+
+```
+TCUT0  <lower>  <upper>   [MeV/nucleon]
+```
+
+Confines the [`TMAX0`](#tmax0) energy spread to a window: primary energies are
+drawn from a **truncated** Gaussian on `[lower, upper]` instead of the full
+N(T₀, σ²).  Every primary is born inside the window — nothing is clipped or
+piled up at the edges.
+
+Both arguments are required, in MeV/nucleon to match the `TMAX0` convention
+(`openshieldhit` converts them to absolute MeV for the primary species).
+
+```
+TCUT0   58.0   62.0    # with TMAX0 60.0 5.0: N(60, 5²) MeV confined to [58, 62]
+TCUT0    0.0   61.0    # upper bound only — nothing above 61 MeV
+```
+
+**Defaults.** Without `TCUT0` the spread is an ordinary untruncated Gaussian.
+`TCUT0` affects only the energy primaries are *born* with; it is not a transport
+cutoff and does not kill particles that slow down during transport.
+
+**Mono-energetic beams** (`TMAX0` σ = 0, or omitted) ignore `TCUT0` — there is
+no spread to confine, so T₀ is used as given.
+
+**Unusual input:**
+
+| Input | Result |
+|-------|--------|
+| `upper` < `lower` | Rejected: `TCUT0 upper bound must be >= lower bound` |
+| either bound negative | Rejected: `TCUT0 bounds must not be negative` |
+| `upper` = 0 | Rejected: `TCUT0 upper bound must be > 0` — it would pin every primary at 0 MeV |
+| `lower` = 0 | Fine: an upper bound only |
+| `lower` = `upper` | Accepted, with a warning; every primary gets exactly that energy |
+| window far from T₀ | Accepted, with a warning (below); sampling is still correct |
+
+A window that captures very little of the requested Gaussian is legal but
+rarely intended, so setup warns once when less than one draw in a million would
+have landed inside it:
+
+```text
+warning: TCUT0 window [20, 21] MeV captures only 6.22e-16 of the N(60, 5^2)
+         energy spread; the sampled spectrum is a thin slice of the requested
+         Gaussian
+```
+
+Two runs differing only in `TCUT0` stay directly comparable: the window does not
+change how many random numbers a history consumes, so the rest of each
+primary's phase space is drawn identically.
+
 ---
 
 ## Beam geometry
@@ -406,5 +460,4 @@ independent runs — the standard approach for Monte Carlo uncertainty estimatio
 | `BMODTRANS` | deprecated | Logs a warning, ignored |
 | `EXTSPEC` | supported | External energy spectrum file |
 | `MAKELN` | supported | Write primary phase-space to file (0/1) |
-| `TCUT0` | supported | Kinetic energy cutoff for primary particle |
 | `APCORR` | supported | AP correction factor |

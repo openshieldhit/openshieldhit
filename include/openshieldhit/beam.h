@@ -171,8 +171,23 @@ struct osh_beam_workspace {
     int rndseed;                        /**< RNG seed; same seed gives bit-for-bit reproducible results (RNDSEED). */
     int rndoffset;                      /**< RNG stream offset for producing independent parallel runs
                                              from the same seed. */
-    float tcut;                         /**< Primary kinetic energy cutoff [MeV/nucleon]; primaries
-                                             below this are killed (TCUT0). */
+    float tcut_lower;                   /**< Lower bound [MeV/nucleon] of the primary energy sampling
+                                             window (TCUT0 lower argument).  Meaningful only when
+                                             @ref tcut_upper is set. */
+    float tcut_upper;                   /**< Upper bound [MeV/nucleon] of the primary energy sampling
+                                             window (TCUT0 upper argument); 0 = no TCUT0, meaning the
+                                             primary energy is drawn from the plain (untruncated)
+                                             Gaussian N(t0, tsigma^2).  When set, TMAX0's spread becomes
+                                             a truncated Gaussian confined to [tcut_lower, tcut_upper].
+                                             This bounds only the energy primaries are *born* with; it
+                                             has no effect on in-flight transport. */
+    float tcut_transport;               /**< Ion transport cutoff [MeV/nucleon]: primaries, and per-ion
+                                             any fragment, are killed once their kinetic energy drops
+                                             below it.  Independent of the TCUT0 sampling window above.
+                                             Not settable from beam.dat yet, so it stays 0, which leaves
+                                             transport on its table-validity floor
+                                             (OSH_TRANSPORT_ION_EMIN_MEV_PER_U); this field can only
+                                             raise the effective cutoff, never lower it. */
     float pcut;                         /**< Secondary proton kinetic energy cutoff [MeV]. */
     float ncut;                         /**< Neutron energy cutoff [MeV]; <=0 uses the transport
                                              default (NEUTRLCUT). */

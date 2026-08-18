@@ -2,6 +2,7 @@ add_library(osh_random
     osh_rng_pcg32.c
     osh_rng_xoshiro256ss.c
     osh_rng.c
+    osh_rng_gauss_trunc.c
 )
 
 # Make sure consumers of the library see the headers

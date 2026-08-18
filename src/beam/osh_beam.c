@@ -13,13 +13,26 @@
 #include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
 
+/*
+ * Acceptance mass below which a TCUT0 window is reported as suspiciously
+ * narrow: fewer than one in a million untruncated draws would land inside it.
+ * Purely diagnostic — the inversion sampler is exact at any mass.
+ */
+#define OSH_BEAM_ETRUNC_MIN_MASS 1.0e-6
+
 static void _wb_defaults(struct beam_workspace *wb);
 static int _wb_validate(const struct beam_workspace *wb, struct osh_diag_sink const *diag);
-static int _wb_postparse(struct beam_workspace *wb);
+static int _wb_postparse(struct beam_workspace *wb, struct osh_diag_sink const *diag);
 static int _spot_shape_valid(char shape);
 static int _spot_has_finite_values(struct beam_spot const *spot);
 static int _resolve_primary_particle(struct beam_workspace const *wb, struct particle *part_out);
 static void _postparse_spot_energy(struct beam_spot *spot, struct particle const *part);
+static int _postparse_spot_etrunc(struct beam_spot const *spot,
+                                  double lo,
+                                  double hi,
+                                  struct osh_gauss_trunc *tg,
+                                  struct osh_diag_sink const *diag,
+                                  int *warned);
 static void _build_spot_tm(struct beam_spot const *spot, struct beam_shared const *sh, double tm_out[16]);
 static void _beam_print_primary(struct particle const *p, struct osh_diag_sink const *diag);
 static char const *_beam_onoff(int value);
@@ -65,7 +78,7 @@ enum osh_status osh_beam_workspace_prepare(struct beam_workspace *wb, struct osh
         return rc;
     }
 
-    rc = _wb_postparse(wb);
+    rc = _wb_postparse(wb, diag);
     if (rc != OSH_OK) {
         return rc;
     }
@@ -130,6 +143,7 @@ enum osh_status osh_beam_workspace_free(struct beam_workspace *wb) {
     if (wb->prepared) {
         free(wb->prepared->cum_wt);
         free(wb->prepared->tm);
+        free(wb->prepared->etrunc);
         free(wb->prepared);
     }
     /* wb->shared is embedded by value — no free needed */
@@ -388,30 +402,111 @@ static void _build_spot_tm(struct beam_spot const *spot, const struct beam_share
 }
 
 /**
+ * @brief Precompute one spot's inverse-CDF constants for the truncated energy draw.
+ *
+ * @details
+ * Called once per spot at setup so that the per-particle path in
+ * _sample_energy() costs a single uniform deviate.  The four erfc()
+ * evaluations behind osh_gauss_trunc_prepare() would be wasteful per history
+ * and are pure functions of (t0, tsigma, lo, hi), which are all fixed by the
+ * time post-parse runs.
+ *
+ * Spots with tsigma <= 0 are mono-energetic: _sample_energy() returns t0
+ * directly without consulting @p tg, so the entry is left zeroed (and is never
+ * read).  This matches the pre-existing behaviour, where TCUT0 did not clamp a
+ * mono-energetic spot either.
+ *
+ * A window that captures almost none of a spot's Gaussian is a physics-input
+ * smell rather than a sampler problem — inversion reproduces such a
+ * distribution exactly — so it is reported once as a warning and sampling
+ * proceeds.  Under the previous rejection sampler the same configuration
+ * silently collapsed to a point mass at the window edge.
+ *
+ * @param[in]     spot   Spot with t0/tsigma already scaled to absolute MeV.
+ * @param[in]     lo     Truncation window lower bound, absolute MeV.
+ * @param[in]     hi     Truncation window upper bound, absolute MeV.
+ * @param[out]    tg     Interval constants to fill.
+ * @param[in]     diag   Diagnostic sink, may be NULL.
+ * @param[in,out] warned Set to 1 once a narrow-window warning has been issued,
+ *                       so a large SOBP spot list reports it only once.
+ *
+ * @returns OSH_OK on success, OSH_EINVAL if the window is unusable.
+ */
+static int _postparse_spot_etrunc(struct beam_spot const *spot,
+                                  double lo,
+                                  double hi,
+                                  struct osh_gauss_trunc *tg,
+                                  struct osh_diag_sink const *diag,
+                                  int *warned) {
+    enum osh_status rc;
+
+    if (spot->tsigma <= 0.0) {
+        return OSH_OK;
+    }
+
+    rc = osh_gauss_trunc_prepare(tg, spot->t0, spot->tsigma, lo, hi);
+    if (rc != OSH_OK) {
+        return (int) rc;
+    }
+
+    if (!*warned && (tg->degenerate || tg->span < OSH_BEAM_ETRUNC_MIN_MASS)) {
+        *warned = 1;
+        OSH_DIAG_WARNF(diag,
+                       "TCUT0 window [%g, %g] MeV captures only %.3g of the N(%g, %g^2) energy spread; "
+                       "the sampled spectrum is a thin slice of the requested Gaussian",
+                       lo,
+                       hi,
+                       tg->span,
+                       spot->t0,
+                       spot->tsigma);
+    }
+    return OSH_OK;
+}
+
+/**
  * @brief Run all post-parse derivations on a fully-parsed beam workspace.
  *
  * @details
  * Iterates over all spots and for each:
  *   - derives missing energy/momentum via _postparse_spot_energy()
  *   - builds the PZALIGN->UNIVERSE affine matrix via _build_spot_tm()
+ *   - when TCUT0 is active, precomputes that spot's truncated-energy
+ *     inverse-CDF constants via _postparse_spot_etrunc()
  *   - accumulates the cumulative weight array for SOBP spot selection
  *   - tracks the maximum energy and momentum across all spots
+ *
+ * Also converts the TCUT0 sampling window (wb->tcut_lower, wb->tcut_upper —
+ * MeV/nucleon) to absolute MeV using the primary species' mass number, the
+ * same scale factor _postparse_spot_energy() applies to TMAX0's t0/tsigma.
+ * The result is stored in prepared->tcut_lo/tcut_hi for _sample_energy() to
+ * use; the workspace fields keep their MeV/nucleon values as the file gave
+ * them. This window is unrelated to wb->tcut_transport, the in-flight ion
+ * cutoff, which transport re-scales per ion (including for fragments whose
+ * mass number differs from the primary's).
+ *
+ * The window is shared by every spot but t0/tsigma are not, so the inversion
+ * constants derived from it are per spot: prepared->etrunc is an array of
+ * nspots entries, allocated only when TCUT0 supplied an upper bound and NULL
+ * otherwise (which is what _sample_energy() tests to pick its path).
  *
  * The cumulative weight array is reallocated on every call so that
  * _wb_postparse() can be called again after a spot list is replaced.
  *
- * @param[in,out] wb  Workspace to finalise; must not be NULL.
+ * @param[in,out] wb    Workspace to finalise; must not be NULL.
+ * @param[in]     diag  Diagnostic sink for setup warnings, may be NULL.
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure,
  *          OSH_EINVAL if any spot weight is negative.
  */
-static int _wb_postparse(struct beam_workspace *wb) {
+static int _wb_postparse(struct beam_workspace *wb, struct osh_diag_sink const *diag) {
     size_t i;
     double wt_acc;
+    double scale;
     struct particle primary_part;
     struct particle const *part;
     int rc;
     struct osh_beam_prepared *prepared;
+    int etrunc_warned;
 
     if (!wb) {
         return OSH_EINVAL;
@@ -437,30 +532,57 @@ static int _wb_postparse(struct beam_workspace *wb) {
 
     free(prepared->cum_wt);
     free(prepared->tm);
+    free(prepared->etrunc);
     prepared->cum_wt = NULL;
     prepared->tm = NULL;
+    prepared->etrunc = NULL;
     prepared->wt_sum = 0.0;
     prepared->emax = 0.0;
     prepared->pmax = 0.0;
+    prepared->tcut_lo = 0.0;
+    prepared->tcut_hi = 0.0;
     prepared->nspots = wb->nspots;
+
+    if (wb->tcut_upper > 0.0f) {
+        scale = 1.0;
+        if (part && part->is_nucleus && part->a > 1u) {
+            scale = (double) part->a;
+        }
+        prepared->tcut_lo = (double) wb->tcut_lower * scale;
+        prepared->tcut_hi = (double) wb->tcut_upper * scale;
+    }
 
     if (wb->nspots > 0) {
         prepared->cum_wt = (double *) calloc(wb->nspots, sizeof(double));
         prepared->tm = (double *) calloc(wb->nspots * 16u, sizeof(double));
-        if (!prepared->cum_wt || !prepared->tm) {
+        if (prepared->tcut_hi > 0.0) {
+            prepared->etrunc = (struct osh_gauss_trunc *) calloc(wb->nspots, sizeof(*prepared->etrunc));
+        }
+        if (!prepared->cum_wt || !prepared->tm || (prepared->tcut_hi > 0.0 && !prepared->etrunc)) {
             free(prepared->cum_wt);
             free(prepared->tm);
+            free(prepared->etrunc);
             prepared->cum_wt = NULL;
             prepared->tm = NULL;
+            prepared->etrunc = NULL;
             prepared->nspots = 0u;
             return OSH_ENOMEM;
         }
     }
 
     wt_acc = 0.0;
+    etrunc_warned = 0;
     for (i = 0; i < wb->nspots; i++) {
         _postparse_spot_energy(&wb->spots[i], part);
         _build_spot_tm(&wb->spots[i], &wb->shared, &prepared->tm[i * 16u]);
+
+        if (prepared->etrunc) {
+            rc = _postparse_spot_etrunc(
+                &wb->spots[i], prepared->tcut_lo, prepared->tcut_hi, &prepared->etrunc[i], diag, &etrunc_warned);
+            if (rc != OSH_OK) {
+                return rc;
+            }
+        }
 
         if (wb->spots[i].wt < 0.0) {
             return OSH_EINVAL;

@@ -8,6 +8,7 @@
 #include "common/osh_interpolate.h"
 #include "common/osh_vect.h"
 #include "openshieldhit/status.h"
+#include "random/osh_rng_gauss_trunc.h"
 
 /* ---- Step 1: spot selection ---------------------------------------------- */
 
@@ -60,20 +61,44 @@ static struct beam_spot const *_select_spot(struct beam_workspace const *wb, str
  * @brief Sample total kinetic energy [MeV] for one primary.
  *
  * @details
- * Draws from a Gaussian N(t0, tsigma²) and clamps the result to zero to
- * avoid unphysical negative energies. When tsigma <= 0 the beam is
+ * Draws from a Gaussian N(t0, tsigma²). When tsigma <= 0 the beam is
  * mono-energetic and t0 is returned directly.
  *
- * @param[in] rng   Random-number generator.
- * @param[in] spot  Beam spot carrying t0 [MeV] and tsigma [MeV].
+ * When TCUT0 supplied a truncation window, `prepared->etrunc` holds the
+ * inverse-CDF constants for it (one entry per spot, built in _wb_postparse()),
+ * and the draw becomes a **truncated** Gaussian on [tcut_lo, tcut_hi]:
+ * one uniform deviate mapped through the probit restricted to that window.
+ *
+ * The transform discards nothing, so it is exact wherever the user put the
+ * window and costs one deviate regardless — which also keeps this history's
+ * stream position independent of TCUT0, so changing the window no longer shifts
+ * the position and direction draws that follow it. See
+ * random/osh_rng_gauss_trunc.h.
+ *
+ * Without TCUT0 (`etrunc == NULL`, the default) the result is only clamped to
+ * zero to avoid unphysical negative energies, matching the plain-Gaussian
+ * behaviour used when TCUT0 is absent.
+ *
+ * @param[in] rng       Random-number generator.
+ * @param[in] spot      Beam spot carrying t0 [MeV] and tsigma [MeV].
+ * @param[in] prepared  Prepared beam state carrying the per-spot TCUT0
+ *                       inversion constants, or NULL.
+ * @param[in] spot_idx  Index of @p spot in the spot list, < prepared->nspots.
  *
  * @returns Sampled kinetic energy in MeV, >= 0.
  */
-static double _sample_energy(struct osh_rng *rng, struct beam_spot const *spot) {
+static double _sample_energy(struct osh_rng *rng,
+                             struct beam_spot const *spot,
+                             struct osh_beam_prepared const *prepared,
+                             size_t spot_idx) {
     double e;
 
     if (spot->tsigma <= 0.0) {
         return spot->t0;
+    }
+
+    if (prepared && prepared->etrunc) {
+        return osh_rng_gauss_trunc(&prepared->etrunc[spot_idx], rng);
     }
 
     e = osh_rng_gauss(rng, spot->t0, spot->tsigma);
@@ -453,7 +478,7 @@ static int _sample_one_primary(struct beam_workspace const *wb, struct osh_rng *
     }
 
     /* 2. Sample energy — stored in ray_out->p[3] */
-    ray_out->p[3] = _sample_energy(rng, spot);
+    ray_out->p[3] = _sample_energy(rng, spot, prepared, spot_idx);
 
     /* 3. Sample transverse phase space (x, y, x', y') in PZALIGN */
     rc = _sample_phase_space_xy(rng, spot, pos, ang);

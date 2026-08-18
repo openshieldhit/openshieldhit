@@ -109,6 +109,51 @@ phase space and Gaussian straggling/scattering.
 product-of-uniforms algorithm, O(λ) on average, with a finite loop guard.
 Appropriate for the small λ of nuclear secondary multiplicities.
 
+**Truncated normal — inverse CDF.** `osh_rng_gauss_trunc` draws from
+N(μ, σ²) restricted to `[lo, hi]` (used for the `TCUT0` primary-energy window)
+with **exactly one** uniform per draw:
+
+```text
+x = μ + σ · Φ⁻¹( Φ(α) + u · [Φ(β) − Φ(α)] ),   α = (lo−μ)/σ,  β = (hi−μ)/σ
+```
+
+The interval constants `Φ(α)` and the span `Φ(β) − Φ(α)` are precomputed once
+per parameter set by `osh_gauss_trunc_prepare` (four `erfc` calls) and reused
+per draw; `struct osh_gauss_trunc` is a plain value type holding them.
+`Φ⁻¹` is Acklam's rational approximation, ~1.15e-9 relative, with no
+Newton/Halley polish — that would pull `erfc` and `exp` into the per-particle
+path to refine a value already far below any physical energy resolution.
+
+Nothing loops: there are no draws to discard, so the cost is constant and the
+result is exact wherever the window sits. That matters well before the extreme
+cases — a window 3 σ off the mean holds 0.14% of the untruncated distribution,
+so discarding out-of-window draws would need ~740 of them per accepted sample,
+and any bounded retry count would run out and have to fall back to something
+that is no longer the requested distribution.
+
+Two numerical details matter and are worth not re-deriving:
+
+- **The span is formed from the two *smaller* CDF values**, choosing the side by
+  the sign of `α + β`: `Φ(β) − Φ(α)` when both cuts are low, `Φᶜ(α) − Φᶜ(β)`
+  when both are high, where `Φ` and `Φᶜ` each come straight from `erfc` and
+  neither is ever computed as `1` minus the other. Subtracting the two large
+  values instead cancels away every significant digit when both cuts sit deep in
+  the same tail.
+- **`p` and `q = 1 − p` are carried separately** into the probit
+  (`p_lo + u·span` and `q_lo − u·span`), so each keeps relative accuracy on its
+  own side. That is what makes `min(p, q)` exact, folds the upper tail onto the
+  lower one, and removes the "mirror the interval into the lower half" trick the
+  standard formulation needs as `p → 1`.
+
+A window whose probability mass underflows to zero is flagged `degenerate` and
+falls back to a uniform draw over the window — the correct limit for a
+vanishingly narrow interval.
+
+The fixed one-deviate cost also buys reproducibility: the stream position after
+sampling does not depend on the truncation, so changing `TCUT0` leaves every
+subsequent draw in the history — position, direction — untouched, and the two
+runs stay comparable under common random numbers.
+
 ---
 
 ## 4. The seeding model: `seed`, `stream`, `RNDOFFSET`
@@ -476,7 +521,8 @@ through TestU01 if you mean to use it for real work.
 **Available today**
 
 - Two production engines (PCG32, xoshiro256\*\*), runtime-selectable.
-- Uniform, Gaussian, and Poisson distributions, plus batched vector fills.
+- Uniform, Gaussian, truncated-Gaussian, and Poisson distributions, plus
+  batched vector fills.
 - Per-history seeding (`osh_rng_seed_history`, `osh_rng_split`) with independent
   `BEAM`/`PHYSICS` sub-streams and lineage-deterministic secondaries.
 - One RNG stream carried per particle-pool slot, surviving compaction.
@@ -505,6 +551,12 @@ per-history seeding here is the shared foundation all four build on.
   ranges, Gaussian known values, vector/scalar equivalence, Poisson, and the
   seeding primitives (order-independence, purpose-independence, no aliasing of
   seeded state across a large index range, split determinism).
+- `tests/unit/test_osh_rng_gauss_trunc.c` — truncated normal: probit round-trip
+  accuracy against `erfc` over ±37 σ, sampled moments against the closed forms
+  for five windows (including 8 σ off the mean), a Kolmogorov–Smirnov test
+  against the exact truncated CDF, monotonicity and endpoint mapping of the
+  quantile transform, fixed one-deviate stream consumption, and the degenerate /
+  zero-width / unbounded window paths.
 - `tests/bench/run_capacity_invariance.cmake` — end-to-end pool-capacity
   invariance of scored output.
 
@@ -526,6 +578,13 @@ per-history seeding here is the shared foundation all four build on.
   Poisson) and Vol. 3 §6.4 (multiplicative/Fibonacci hashing).
 - G. Marsaglia, T. A. Bray, *A Convenient Method for Generating Normal
   Variables*, SIAM Review 6(3), 1964 (polar method).
+- P. J. Acklam, *An algorithm for computing the inverse normal cumulative
+  distribution function*, unpublished note (2000–2010) — the probit rational
+  approximation and its coefficients, stated as relative error < 1.15e-9 over
+  the whole range. Acklam's own page has been offline for years; the algorithm
+  and its constants are preserved and explained in L. M. Barros, *Acklam's
+  Algorithm for the Inverse Normal CDF*, 2017.
+  <https://stackedboxes.org/2017/05/01/acklams-normal-quantile-function/>
 - P. L'Ecuyer, R. Simard, *TestU01: A C Library for Empirical Testing of Random
   Number Generators*, ACM TOMS 33(4), 2007.
 - J. K. Salmon, M. A. Moraes, R. O. Dror, D. E. Shaw, *Parallel Random Numbers:

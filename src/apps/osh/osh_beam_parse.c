@@ -1088,27 +1088,50 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
 }
 
 /**
- * @brief Parse TCUT0: transport energy cutoff window.
+ * @brief Parse TCUT0: primary energy sampling window (truncated Gaussian).
  *
  * @details
  * Syntax: TCUT0 \<lower\> \<upper\>  [MeV/nucleon]
  *
- * Only the lower cutoff is stored; particles below it are killed.
- * The upper bound is not kept because it is effectively emax (the maximum
- * beam energy), which is derived in the post-parse step from TMAX0.
+ * Confines the TMAX0 energy spread to [lower, upper]: primary energies are
+ * drawn from N(t0, tsigma^2) **truncated** to the window rather than from the
+ * plain untruncated Gaussian used when TCUT0 is absent.  The draw is an exact
+ * inverse-CDF transform (see osh_rng_gauss_trunc.h), so the window may sit
+ * anywhere relative to t0.
  *
- * @param[in,out] beam  Writes beam->tcut (lower cutoff).
+ * This bounds only the energy primaries are born with.  It is unrelated to the
+ * ion transport cutoff (beam->tcut_transport), which kills particles that slow
+ * down past a threshold in flight and is not settable from beam.dat.
+ *
+ * Both bounds are converted from MeV/nucleon to absolute MeV for the primary
+ * species during the post-parse step (see _wb_postparse() in osh_beam.c),
+ * mirroring how TMAX0's t0/tsigma are scaled.
+ *
+ * Rejected input: a missing argument, a negative bound (kinetic energy cannot
+ * be negative), an upper bound below the lower one, and a non-positive upper
+ * bound — the last would force every primary to 0 MeV, which is never what the
+ * user meant and would otherwise be indistinguishable from "no TCUT0".
+ *
+ * @param[in,out] beam  Writes beam->tcut_lower and beam->tcut_upper.
  * @param[in]     oshf  Used for error diagnostics.
  * @param[in]     args  Two floats: lower upper.
  *
- * @returns OSH_OK on success.
+ * @returns OSH_OK on success, OSH_EPARSE on any rejected input above.
  */
 static int _parse_tcut0(PARSE_HANDLER_ARGS) {
     float _f[2];
     _f[0] = 0.0f;
     _f[1] = 0.0f;
-    if (sscanf(args, "%f %f", &_f[0], &_f[1]) > 2) {
+    if (sscanf(args, "%f %f", &_f[0], &_f[1]) < 2) {
         OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
+        return OSH_EPARSE;
+    }
+    if (_f[0] < 0.0f || _f[1] < 0.0f) {
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: TCUT0 bounds must not be negative", oshf->filename, oshf->lineno);
+        return OSH_EPARSE;
+    }
+    if (_f[1] <= 0.0f) {
+        OSH_DIAG_ERRORF(state->diag, "in %s line %i: TCUT0 upper bound must be > 0", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
     if (_f[0] > _f[1]) {
@@ -1116,7 +1139,8 @@ static int _parse_tcut0(PARSE_HANDLER_ARGS) {
             state->diag, "in %s line %i: TCUT0 upper bound must be >= lower bound", oshf->filename, oshf->lineno);
         return OSH_EPARSE;
     }
-    beam->tcut = fabs(_f[0]);
+    beam->tcut_lower = _f[0];
+    beam->tcut_upper = _f[1];
     return OSH_OK;
 }
 
