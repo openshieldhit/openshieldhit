@@ -365,7 +365,7 @@ static void test_single_spot_truncated_gaussian_sampling(void) {
     /* Drive the truncation window through the fields TCUT0 writes, so that
      * osh_beam_workspace_prepare() derives the per-spot inversion constants
      * the sampler actually reads.  A = 1 here, so no per-nucleon scaling. */
-    wb.tcut = (float) lo;
+    wb.tcut_lower = (float) lo;
     wb.tcut_upper = (float) hi;
     rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
@@ -440,7 +440,7 @@ static enum osh_status prepare_with_window(
     wb->shared.use_sad = 0;
     wb->shared.theta = 0.0;
     wb->shared.phi = 0.0;
-    wb->tcut = (float) lo;
+    wb->tcut_lower = (float) lo;
     wb->tcut_upper = (float) hi;
 
     /* WARN threshold keeps the beam configuration dump (INFO) out of the way. */
@@ -514,7 +514,7 @@ static void test_sobp_truncation_constants_are_per_spot(void) {
     wb.shared.use_sad = 0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
-    wb.tcut = 59.0f;
+    wb.tcut_lower = 59.0f;
     wb.tcut_upper = 61.0f;
     rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
@@ -560,7 +560,7 @@ static void test_truncation_skipped_for_monoenergetic_spot(void) {
     wb.shared.use_sad = 0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
-    wb.tcut = 58.0f;
+    wb.tcut_lower = 58.0f;
     wb.tcut_upper = 62.0f;
     rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);

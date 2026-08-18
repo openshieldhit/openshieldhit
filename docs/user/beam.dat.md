@@ -65,9 +65,59 @@ TMAX0   200.0   2.0    # 200 MeV/nucleon, σ = 2 MeV/nucleon
 TMAX0  -1000.0         # p₀ = 1000 MeV/c
 ```
 
-By default the spread is an ordinary (untruncated) Gaussian. Add
-[`TCUT0`](#tcut0) with an upper bound to truncate it to a window, e.g. a
-truncated N(60, 5²) MeV clipped to [58, 62] MeV.
+The spread is an ordinary (untruncated) Gaussian.  Add [`TCUT0`](#tcut0) to
+confine it to a window, e.g. N(60, 5²) MeV restricted to [58, 62] MeV.
+
+### TCUT0
+
+```
+TCUT0  <lower>  <upper>   [MeV/nucleon]
+```
+
+Confines the [`TMAX0`](#tmax0) energy spread to a window: primary energies are
+drawn from a **truncated** Gaussian on `[lower, upper]` instead of the full
+N(T₀, σ²).  Every primary is born inside the window — nothing is clipped or
+piled up at the edges.
+
+Both arguments are required, in MeV/nucleon to match the `TMAX0` convention
+(`openshieldhit` converts them to absolute MeV for the primary species).
+
+```
+TCUT0   58.0   62.0    # with TMAX0 60.0 5.0: N(60, 5²) MeV confined to [58, 62]
+TCUT0    0.0   61.0    # upper bound only — nothing above 61 MeV
+```
+
+**Defaults.** Without `TCUT0` the spread is an ordinary untruncated Gaussian.
+`TCUT0` affects only the energy primaries are *born* with; it is not a transport
+cutoff and does not kill particles that slow down during transport.
+
+**Mono-energetic beams** (`TMAX0` σ = 0, or omitted) ignore `TCUT0` — there is
+no spread to confine, so T₀ is used as given.
+
+**Unusual input:**
+
+| Input | Result |
+|-------|--------|
+| `upper` < `lower` | Rejected: `TCUT0 upper bound must be >= lower bound` |
+| either bound negative | Rejected: `TCUT0 bounds must not be negative` |
+| `upper` = 0 | Rejected: `TCUT0 upper bound must be > 0` — it would pin every primary at 0 MeV |
+| `lower` = 0 | Fine: an upper bound only |
+| `lower` = `upper` | Accepted, with a warning; every primary gets exactly that energy |
+| window far from T₀ | Accepted, with a warning (below); sampling is still correct |
+
+A window that captures very little of the requested Gaussian is legal but
+rarely intended, so setup warns once when less than one draw in a million would
+have landed inside it:
+
+```text
+warning: TCUT0 window [20, 21] MeV captures only 6.22e-16 of the N(60, 5^2)
+         energy spread; the sampled spectrum is a thin slice of the requested
+         Gaussian
+```
+
+Two runs differing only in `TCUT0` stay directly comparable: the window does not
+change how many random numbers a history consumes, so the rest of each
+primary's phase space is drawn identically.
 
 ---
 
@@ -296,51 +346,6 @@ neutron's remaining kinetic energy is scored as a local point deposit, so it
 contributes to `Energy`, `Dose`, and `DoseGy` pages.  `0.0` keeps the transport
 default, currently `1e-9 MeV` (`1 meV`), below the thermal clamp at
 `2.53e-8 MeV` (`25.3 meV`).
-
-### TCUT0
-
-```
-TCUT0  <lower>  <upper>   [MeV/nucleon]
-```
-
-Lower and upper primary kinetic energy bounds.
-
-| Bound | Effect |
-|-------|--------|
-| `lower` | Transport cutoff — primaries (and, per-ion, any fragment) are killed once their kinetic energy drops below it. |
-| `upper` | Turns the [`TMAX0`](#tmax0) energy spread into a **truncated Gaussian**: primary energies are drawn from N(T₀, σ²) restricted to `[lower, upper]`. |
-
-Both arguments are required and are always given in MeV/nucleon, matching the
-`TMAX0` convention; `openshieldhit` converts them to absolute MeV for the
-primary species internally. `upper` must be `>= lower`.
-
-```
-TCUT0   58.0   62.0    # combined with TMAX0 60.0 5.0: truncated N(60, 5²)
-                        # sampled only in [58, 62] MeV
-```
-
-Without `TCUT0`, `TMAX0`'s spread is an ordinary (untruncated) Gaussian —
-see [`TMAX0`](#tmax0).
-
-The window is sampled by inverse-CDF transform, so it is exact wherever you put
-it: a window several σ away from T₀ still reproduces the correct truncated
-spectrum rather than piling every primary up against the nearer bound.  It also
-costs exactly one random number per primary, so moving the window does not shift
-the rest of a history's random draws — two runs differing only in `TCUT0` remain
-directly comparable.
-
-A window that captures very little of the requested Gaussian is legal but
-rarely intended, so setup warns once when it captures less than one draw in a
-million:
-
-```text
-warning: TCUT0 window [20, 21] MeV captures only 6.22e-16 of the N(60, 5^2)
-         energy spread; the sampled spectrum is a thin slice of the requested
-         Gaussian
-```
-
-A mono-energetic beam (`TMAX0` σ = 0) is unaffected by `upper`: there is no
-spread to truncate and T₀ is used as given.
 
 ### DELTAE
 

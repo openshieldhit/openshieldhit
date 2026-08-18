@@ -16,19 +16,20 @@
  * depend only on the truncation, so they are computed once by
  * osh_gauss_trunc_prepare() and reused for every draw.
  *
- * Why inversion rather than rejection: rejection resamples until the draw
- * lands inside the window, which costs 1/Z draws on average (Z is the
- * acceptance mass, @ref osh_gauss_trunc::span).  Z shrinks fast as the window
- * moves off the mean -- at 3 sigma it is 1.3e-3, at 8 sigma 6e-16 -- so any
- * bounded-retry rejection sampler eventually degenerates into a point mass at
- * the window edge, and it does so silently.  Inversion is exact at any cut,
- * has constant cost, and consumes a fixed number of random deviates so the
- * per-history stream position no longer depends on the cut settings.
+ * Nothing loops: no draw is ever discarded, so the cost is constant and the
+ * result is exact wherever the window sits.  Discarding out-of-window draws
+ * instead would cost 1/Z samples, where Z is the acceptance mass
+ * (@ref osh_gauss_trunc::span) -- already ~740 per accepted sample for a window
+ * 3 sigma off the mean -- and any bounded retry count would run out and have to
+ * fall back to something that is no longer the requested distribution.  The
+ * fixed deviate count also keeps a history's stream position independent of the
+ * truncation.
  *
  * Accuracy is set by Acklam's rational approximation to the probit,
  * ~1.15e-9 relative worst case.  No Newton/Halley polish step is applied: it
  * would pull erfc() and exp() into the per-particle path to refine a value
- * already far below any physically meaningful energy resolution.
+ * already far below any physically meaningful energy resolution.  The reference
+ * for Acklam's coefficients is given at osh_norm_ppf() in the .c file.
  */
 
 #include "openshieldhit/status.h"

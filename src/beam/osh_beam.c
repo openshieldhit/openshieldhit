@@ -475,13 +475,14 @@ static int _postparse_spot_etrunc(struct beam_spot const *spot,
  *   - accumulates the cumulative weight array for SOBP spot selection
  *   - tracks the maximum energy and momentum across all spots
  *
- * Also converts the TCUT0 sampling-truncation window (wb->tcut,
- * wb->tcut_upper — MeV/nucleon) to absolute MeV using the primary species'
- * mass number, the same scale factor _postparse_spot_energy() applies to
- * TMAX0's t0/tsigma. The result is stored in prepared->tcut_lo/tcut_hi for
- * _sample_energy() to use; wb->tcut itself is left untouched because
- * transport still needs it in MeV/nucleon (it is re-scaled per ion there,
- * including for fragments whose mass number differs from the primary's).
+ * Also converts the TCUT0 sampling window (wb->tcut_lower, wb->tcut_upper —
+ * MeV/nucleon) to absolute MeV using the primary species' mass number, the
+ * same scale factor _postparse_spot_energy() applies to TMAX0's t0/tsigma.
+ * The result is stored in prepared->tcut_lo/tcut_hi for _sample_energy() to
+ * use; the workspace fields keep their MeV/nucleon values as the file gave
+ * them. This window is unrelated to wb->tcut_transport, the in-flight ion
+ * cutoff, which transport re-scales per ion (including for fragments whose
+ * mass number differs from the primary's).
  *
  * The window is shared by every spot but t0/tsigma are not, so the inversion
  * constants derived from it are per spot: prepared->etrunc is an array of
@@ -547,7 +548,7 @@ static int _wb_postparse(struct beam_workspace *wb, struct osh_diag_sink const *
         if (part && part->is_nucleus && part->a > 1u) {
             scale = (double) part->a;
         }
-        prepared->tcut_lo = (double) wb->tcut * scale;
+        prepared->tcut_lo = (double) wb->tcut_lower * scale;
         prepared->tcut_hi = (double) wb->tcut_upper * scale;
     }
 

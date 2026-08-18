@@ -53,7 +53,8 @@
  * to table validity and no energy below it is extrapolated.  Referenced from
  * the macro (not a duplicated literal) so the two cannot drift apart; the
  * _MEV_PER_U suffix signals the units the transport code applies it in.
- * TCUT0 can only raise the effective cutoff above this floor, never lower it.
+ * params->tcut can only raise the effective cutoff above this floor, never
+ * lower it.
  */
 #define OSH_TRANSPORT_ION_EMIN_MEV_PER_U OSH_MATERIAL_RUNTIME_EMIN
 

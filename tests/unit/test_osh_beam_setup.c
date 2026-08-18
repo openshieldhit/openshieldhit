@@ -650,8 +650,10 @@ static void test_setup_tcut0_sets_lower_and_upper_for_proton(void) {
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wb != NULL);
     /* A = 1, so the MeV/nucleon bounds and the absolute-MeV bounds coincide. */
-    ASSERT_TRUE(fabs(wb->tcut - 58.0) < 1e-6);
+    ASSERT_TRUE(fabs(wb->tcut_lower - 58.0) < 1e-6);
     ASSERT_TRUE(fabs(wb->tcut_upper - 62.0) < 1e-6);
+    /* TCUT0 is the sampling window only: it must not touch the transport cutoff. */
+    ASSERT_TRUE(wb->tcut_transport == 0.0f);
     ASSERT_TRUE(wb->prepared != NULL);
     ASSERT_TRUE(fabs(wb->prepared->tcut_lo - 58.0) < 1e-6);
     ASSERT_TRUE(fabs(wb->prepared->tcut_hi - 62.0) < 1e-6);
@@ -681,12 +683,13 @@ static void test_setup_tcut0_scales_by_mass_number_for_ion(void) {
 
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wb != NULL);
-    /* wb->tcut/tcut_upper stay in MeV/nucleon (as TCUT0 wrote them); the
+    /* wb->tcut_lower/tcut_upper stay in MeV/nucleon (as TCUT0 wrote them); the
      * prepared bounds are scaled to absolute MeV by A = 12, matching how
      * TMAX0's t0/tsigma are scaled for the same ion (see
      * test_setup_primary_za_resolves_ion). */
-    ASSERT_TRUE(fabs(wb->tcut - 350.0) < 1e-6);
+    ASSERT_TRUE(fabs(wb->tcut_lower - 350.0) < 1e-6);
     ASSERT_TRUE(fabs(wb->tcut_upper - 450.0) < 1e-6);
+    ASSERT_TRUE(wb->tcut_transport == 0.0f);
     ASSERT_TRUE(wb->prepared != NULL);
     ASSERT_TRUE(fabs(wb->prepared->tcut_lo - 4200.0) < 1e-6);
     ASSERT_TRUE(fabs(wb->prepared->tcut_hi - 5400.0) < 1e-6);
@@ -715,8 +718,9 @@ static void test_setup_no_tcut0_leaves_truncation_disabled(void) {
 
     ASSERT_TRUE(rc == OSH_OK);
     ASSERT_TRUE(wb != NULL);
-    ASSERT_TRUE(wb->tcut == 0.0f);
+    ASSERT_TRUE(wb->tcut_lower == 0.0f);
     ASSERT_TRUE(wb->tcut_upper == 0.0f);
+    ASSERT_TRUE(wb->tcut_transport == 0.0f);
     ASSERT_TRUE(wb->prepared != NULL);
     ASSERT_TRUE(wb->prepared->tcut_lo == 0.0);
     ASSERT_TRUE(wb->prepared->tcut_hi == 0.0);
@@ -741,6 +745,70 @@ static void test_setup_tcut0_upper_below_lower_returns_eparse(void) {
 
     ASSERT_TRUE(rc == OSH_EPARSE);
 
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+/*
+ * TCUT0 defines a kinetic-energy window, so a negative bound is meaningless
+ * and a non-positive upper bound would pin every primary at 0 MeV.  Both are
+ * rejected at parse time rather than surfacing later as a confusing setup
+ * failure or a silently useless window.
+ */
+static void test_setup_tcut0_negative_bound_returns_eparse(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 60.0 5.0\nBEAMPOS 0.0 0.0 -10.0\nTCUT0 -62.0 -58.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+static void test_setup_tcut0_zero_upper_returns_eparse(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 60.0 5.0\nBEAMPOS 0.0 0.0 -10.0\nTCUT0 0.0 0.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_EPARSE);
+
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+/* A zero lower bound is legal and means "bound the spread from above only". */
+static void test_setup_tcut0_zero_lower_is_upper_only_window(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 60.0 5.0\nBEAMPOS 0.0 0.0 -10.0\nTCUT0 0.0 61.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb->tcut_lower == 0.0f);
+    ASSERT_TRUE(fabs(wb->tcut_upper - 61.0) < 1e-6);
+    ASSERT_TRUE(wb->prepared->etrunc != NULL);
+    ASSERT_TRUE(wb->prepared->etrunc[0].lo == 0.0);
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].hi - 61.0) < 1e-6);
+    /* Phi(0.2) = 0.5793 of the untruncated N(60, 5^2) lies below 61 MeV, and
+     * essentially none of it below 0. */
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].span - 0.5792597) < 1e-6);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
@@ -788,6 +856,9 @@ int main(void) {
     test_setup_tcut0_scales_by_mass_number_for_ion();
     test_setup_no_tcut0_leaves_truncation_disabled();
     test_setup_tcut0_upper_below_lower_returns_eparse();
+    test_setup_tcut0_negative_bound_returns_eparse();
+    test_setup_tcut0_zero_upper_returns_eparse();
+    test_setup_tcut0_zero_lower_is_upper_only_window();
     test_setup_tcut0_missing_argument_returns_eparse();
     return 0;
 }

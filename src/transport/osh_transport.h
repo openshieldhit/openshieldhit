@@ -78,7 +78,9 @@ struct osh_transport_params {
                                             path with zero concurrency; it does not speed anything up. */
     float deltae;                      /**< Max fractional energy loss per CSDA substep [dimensionless]. */
     float demin;                       /**< Min energy loss per material substep [MeV/nucleon]. */
-    float tcut;                        /**< Lower ion energy cutoff [MeV/nucleon]. */
+    float tcut;                        /**< Lower ion transport cutoff [MeV/nucleon]; fed from
+                                            beam->tcut_transport.  Unrelated to the TCUT0 primary
+                                            energy sampling window, which only bounds birth energies. */
     float ncut;                        /**< Lower neutron energy cutoff [MeV]; <=0 uses the default in
                                             physics/neutron/osh_neutron_const.h (OSH_NEUTRON_CUTOFF_DEFAULT_MEV). */
     int rndseed;                       /**< Base RNG seed (RNDSEED); fixes the whole run's streams. */

@@ -69,14 +69,11 @@ static struct beam_spot const *_select_spot(struct beam_workspace const *wb, str
  * and the draw becomes a **truncated** Gaussian on [tcut_lo, tcut_hi]:
  * one uniform deviate mapped through the probit restricted to that window.
  *
- * Inversion rather than rejection because the acceptance mass of the window is
- * user input: a window 3 sigma off t0 accepts 0.13% of untruncated draws, one
- * 8 sigma off accepts 6e-16, and a bounded-retry rejection loop degenerates
- * into a point mass at the window edge long before that — silently, and while
- * still reporting a Gaussian. Inversion is exact at any offset, costs exactly
- * one deviate, and keeps this history's stream position independent of the
- * window, so changing TCUT0 no longer shifts the position and direction draws
- * that follow it. See random/osh_rng_gauss_trunc.h.
+ * The transform discards nothing, so it is exact wherever the user put the
+ * window and costs one deviate regardless — which also keeps this history's
+ * stream position independent of TCUT0, so changing the window no longer shifts
+ * the position and direction draws that follow it. See
+ * random/osh_rng_gauss_trunc.h.
  *
  * Without TCUT0 (`etrunc == NULL`, the default) the result is only clamped to
  * zero to avoid unphysical negative energies, matching the plain-Gaussian

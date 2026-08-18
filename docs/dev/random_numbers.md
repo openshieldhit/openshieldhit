@@ -124,22 +124,12 @@ per draw; `struct osh_gauss_trunc` is a plain value type holding them.
 Newton/Halley polish — that would pull `erfc` and `exp` into the per-particle
 path to refine a value already far below any physical energy resolution.
 
-Rejection sampling — draw, discard if outside, repeat — is the obvious
-alternative and it is what this replaced. It costs `1/Z` draws where `Z` is the
-span, and `Z` is *user input*:
-
-| window offset from μ | `Z` | mean draws to accept |
-|---|---|---|
-| +0.2 σ | 5.8e-1 | 1.7 |
-| −2 σ | 2.3e-2 | 44 |
-| −3 σ | 1.4e-3 | 741 |
-| −8 σ | 6.2e-16 | 1.6e15 |
-
-Any bounded-retry rejection loop therefore needs a fallback, and clamping to the
-nearer bound turns the distribution into a point mass there — silently, while
-still reporting a Gaussian. Inversion is exact at every row of that table
-(verified against the closed-form moments in `test_osh_rng_gauss_trunc.c`,
-including the −8 σ case).
+Nothing loops: there are no draws to discard, so the cost is constant and the
+result is exact wherever the window sits. That matters well before the extreme
+cases — a window 3 σ off the mean holds 0.14% of the untruncated distribution,
+so discarding out-of-window draws would need ~740 of them per accepted sample,
+and any bounded retry count would run out and have to fall back to something
+that is no longer the requested distribution.
 
 Two numerical details matter and are worth not re-deriving:
 
@@ -159,10 +149,10 @@ A window whose probability mass underflows to zero is flagged `degenerate` and
 falls back to a uniform draw over the window — the correct limit for a
 vanishingly narrow interval.
 
-The fixed one-deviate cost also buys reproducibility that rejection cannot: the
-stream position after sampling no longer depends on the truncation, so changing
-`TCUT0` leaves every subsequent draw in the history — position, direction —
-untouched, and the two runs stay comparable under common random numbers.
+The fixed one-deviate cost also buys reproducibility: the stream position after
+sampling does not depend on the truncation, so changing `TCUT0` leaves every
+subsequent draw in the history — position, direction — untouched, and the two
+runs stay comparable under common random numbers.
 
 ---
 
@@ -588,6 +578,13 @@ per-history seeding here is the shared foundation all four build on.
   Poisson) and Vol. 3 §6.4 (multiplicative/Fibonacci hashing).
 - G. Marsaglia, T. A. Bray, *A Convenient Method for Generating Normal
   Variables*, SIAM Review 6(3), 1964 (polar method).
+- P. J. Acklam, *An algorithm for computing the inverse normal cumulative
+  distribution function*, unpublished note (2000–2010) — the probit rational
+  approximation and its coefficients, stated as relative error < 1.15e-9 over
+  the whole range. Acklam's own page has been offline for years; the algorithm
+  and its constants are preserved and explained in L. M. Barros, *Acklam's
+  Algorithm for the Inverse Normal CDF*, 2017.
+  <https://stackedboxes.org/2017/05/01/acklams-normal-quantile-function/>
 - P. L'Ecuyer, R. Simard, *TestU01: A C Library for Empirical Testing of Random
   Number Generators*, ACM TOMS 33(4), 2007.
 - J. K. Salmon, M. A. Moraes, R. O. Dror, D. E. Shaw, *Parallel Random Numbers:

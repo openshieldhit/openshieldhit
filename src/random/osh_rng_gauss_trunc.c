@@ -26,6 +26,11 @@ double osh_norm_cdf_upper(double x) {
  * Two regions: a rational in (p - 1/2)^2 near the centre, and a rational in
  * sqrt(-2 log p) in the tail, switching at p = 0.02425.
  *
+ * The coefficients below are Acklam's; his own page has been offline for years,
+ * so the reference for them (and for the derivation) is
+ * L. M. Barros, "Acklam's Algorithm for the Inverse Normal CDF", 2017:
+ * https://stackedboxes.org/2017/05/01/acklams-normal-quantile-function/
+ *
  * The region test is a real branch rather than a blend of both rationals.
  * That is the right trade for scalar code: the beam sampler is called once
  * per primary from a loop that seeds a fresh RNG stream per history
