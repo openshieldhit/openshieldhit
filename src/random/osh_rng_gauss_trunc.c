@@ -3,20 +3,17 @@
 #include <float.h>
 #include <math.h>
 
+#include "openshieldhit/const.h"
 #include "random/osh_rng.h"
 
 /* ---- Standard normal CDF and its complement -------------------------------- */
 
-/* 1/sqrt(2); OSH_M_SQRT1_2 is not among the constants in common/osh_const.h,
- * and this file is the only consumer. */
-#define OSH_NORM_SQRT1_2 0.70710678118654752440
-
 double osh_norm_cdf(double x) {
-    return 0.5 * erfc(-x * OSH_NORM_SQRT1_2);
+    return 0.5 * erfc(-x * OSH_M_SQRT1_2);
 }
 
 double osh_norm_cdf_upper(double x) {
-    return 0.5 * erfc(x * OSH_NORM_SQRT1_2);
+    return 0.5 * erfc(x * OSH_M_SQRT1_2);
 }
 
 /* ---- Probit -------------------------------------------------------------- */

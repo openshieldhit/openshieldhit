@@ -32,6 +32,7 @@
 #define OSH_M_PI 3.14159265358979323846       /* pi */
 #define OSH_M_1_PI 0.31830988618379067154     /* 1/pi */
 #define OSH_M_PI_180 0.0174532925199432957692 /* pi/180 */
+#define OSH_M_SQRT1_2 0.70710678118654752440  /* 1/sqrt(2); scales a normal deviate for erf/erfc */
 
 #define OSH_SIGMA2FWHM 2.3548200450309493  /* 1σ → FWHM of Gaussian: 2·sqrt(2·ln(2)) */
 #define OSH_FWHM2SIGMA 0.42466090014400953 /* 1/OSH_SIGMA2FWHM */
