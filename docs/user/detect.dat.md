@@ -75,6 +75,85 @@ For `Geometry Cyl`:
 - `BDO2019` stores the geometry as legacy `CYL` metadata with an implicit
   full-azimuth span (`phi = 0..360`, one bin) for compatibility.
 
+### Multiple output formats — `FileFormat TEXT BDO`
+
+One `Output` block can write its scored result in **several** formats at once by
+listing more than one keyword on the `FileFormat` line:
+
+```text
+Output
+    Filename NB_msh          # a stem when several formats are listed
+    FileFormat TEXT BDO      # → NB_msh.dat  +  NB_msh.bdo
+    Geo MyMesh
+    Quantity Energy
+    Quantity Fluence
+```
+
+This scores the geometry **once** and writes it out twice. It is strictly
+cheaper than the old workaround of duplicating the whole `Output` block: the
+scored arrays are shared, so **scoring memory does not grow with the number of
+formats** (two formats or ten, the accumulator memory is the same), and each
+history is deposited only once.
+
+File names:
+
+- **With one format, `Filename` is used as written** — so an existing input file
+  keeps working unchanged (`FileFormat TEXT` + `Filename NB_msh.dat` writes
+  `NB_msh.dat`).
+- **With several formats, `Filename` is a name stem.** A known extension
+  (`.dat .txt .bdo .bdz .bin .dcm .svg`) is dropped if present, then the matching
+  one is added per format: `.dat` (TEXT), `.bdo` (BDO), `.dcm` (RTDOSE), `.svg`
+  (SVG). So `Filename NB_msh` with `FileFormat TEXT BDO` writes `NB_msh.dat` and
+  `NB_msh.bdo`.
+
+#### Naming one target yourself
+
+To give one format a specific file name instead of the auto-generated one, write
+the name right after that format's keyword:
+
+```text
+Output
+    Filename NB_msh
+    FileFormat TEXT legacy.out BDO run.bdo   # → legacy.out  +  run.bdo
+    Geo MyMesh
+    Quantity Dose
+```
+
+- A recognised keyword (`TEXT/ASCII/TXT/DAT`, `BDO/BDO2019/BINARY/BIN`, `RTDOSE`,
+  `SVG`) starts a new target; a word that is *not* a keyword, right after a
+  format, is that format's file name (used as written, no extension added). At
+  most one name may follow each format.
+- You can mix your own names with auto-generated ones, and split the formats over
+  several `FileFormat` lines.
+- Two targets that end up with the same file name are rejected.
+- **Watch out:** since "not a keyword" means "a file name", a misspelled format
+  (`FileFormat TEXT BDX`) is quietly taken as a file named `BDX` for the TEXT
+  target, not reported as a bad format. (A file whose name is itself a format
+  keyword, such as `bdo`, cannot be written this way.)
+
+`RTDOSE` writes exactly **one** page (grid) into the `.dcm`, so which page it uses
+depends on how the block is written:
+
+- **`RTDOSE` on its own** writes the block's single scored page — of **any**
+  quantity. `FileFormat RTDOSE` + `Quantity Energy` writes energy-per-primary into
+  the grid (proper absorbed-dose scoring is a separate quantity). An RTDOSE-only
+  block that scores **more than one** quantity is rejected — RTDOSE cannot hold
+  several pages, so combine it with another format instead (below).
+- **`RTDOSE` combined with other formats** (e.g. `FileFormat BDO RTDOSE`) is
+  allowed. The other formats write every page; the RTDOSE target writes only the
+  first `Dose`/`DoseGy` page of the shared page-set (chosen by quantity, not by
+  listing order). The remaining pages are **silently skipped** by the `.dcm` (do
+  not expect `Fluence`/`LET` in it). A mixed block with **no** `Dose`/`DoseGy`
+  page is rejected with a clear error, because the `.dcm` target would then be
+  ambiguous.
+
+Failure handling:
+
+- Saving is **best-effort**: if one target cannot be written (e.g. its directory
+  does not exist), the remaining targets are still written, a warning names the
+  offending file and format, and the run's exit status reflects that a write
+  failed. It is not all-or-nothing across targets.
+
 ### Zone
 
 Score by `geo.dat` zone, selected **by zone name** — one output bin per listed
@@ -113,19 +192,25 @@ Rules and semantics:
 > [pymchelper](https://github.com/DataMedSci/pymchelper) instead.
 
 Add `FileFormat SVG` to an `Output` and that output writes a 1-D line plot
-instead of numeric data — each `Output` block has exactly one `FileFormat`, so
-`FileFormat SVG` replaces the `.bdo`/`.dat` for that block rather than sitting
-alongside it. To keep both, add a second `Output` block for the same `Geo`/
-`Quantity` with `FileFormat BDO` (or `TEXT`) and a different `Filename`. Two
-plot shapes are recognised automatically:
+instead of numeric data.
+
+**Recommended: save SVG together with BDO** — `FileFormat SVG BDO` writes both
+`bragg.svg` and `bragg.bdo` from the same scored pages (see *Multiple output
+formats* above), at no extra scoring cost. Use the `.svg` for a quick look; once
+it confirms the result looks right, the `.bdo` is already on disk for further
+post-processing (e.g. in
+[pymchelper](https://github.com/DataMedSci/pymchelper)). `SVG TEXT` pairs the
+plot with a text table in the same way.
+
+Two plot shapes are recognised automatically:
 
 **Spatial profile** — a depth-dose / Bragg curve or any 1-D profile:
 
 ```text
 Output
-    Filename bragg          # ".svg" is appended automatically
-    FileFormat SVG
-    Geo MyMesh              # 1 × 1 × N mesh (one non-singleton axis)
+    Filename bragg              # → bragg.svg + bragg.bdo
+    FileFormat SVG BDO          # quick-look plot plus data for post-processing
+    Geo MyMesh                  # 1 × 1 × N mesh (one non-singleton axis)
     Quantity Dose
 ```
 

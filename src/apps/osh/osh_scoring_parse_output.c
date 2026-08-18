@@ -14,6 +14,7 @@
  * references for late resolution.
  */
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -32,6 +33,10 @@ struct output_entry {
 
 static enum osh_status append_page(struct osh_scoring_output_def *out);
 static enum osh_status append_page_filter(struct osh_scoring_page_def *page, char const *name);
+static enum osh_status append_fileformat(struct osh_scoring_output_def *out, char const *keyword);
+static enum osh_status set_fileformat_filename(struct osh_scoring_output_def *out, size_t idx, char const *name);
+static int ascii_case_equal(char const *a, char const *b);
+static int is_known_fileformat_keyword(char const *word);
 static enum osh_status output_filename(struct osh_scoring_output_def *out,
                                        struct osh_diag_sink const *diag,
                                        char **words,
@@ -182,7 +187,98 @@ static enum osh_status output_geo(struct osh_scoring_output_def *out,
 }
 
 /**
- * @brief Parse `Fileformat <name>` (and alias `Format <name>`).
+ * @brief Append one lowercased format keyword to an output's format list.
+ */
+static enum osh_status append_fileformat(struct osh_scoring_output_def *out, char const *keyword) {
+    char **tmp = (char **) realloc((void *) out->fileformats, (out->nfileformats + 1u) * sizeof(*tmp));
+    char **tmp_names;
+
+    if (!tmp) {
+        return OSH_ENOMEM;
+    }
+    out->fileformats = tmp;
+    tmp_names = (char **) realloc((void *) out->fileformat_filenames, (out->nfileformats + 1u) * sizeof(*tmp_names));
+    if (!tmp_names) {
+        return OSH_ENOMEM;
+    }
+    out->fileformat_filenames = tmp_names;
+    out->fileformats[out->nfileformats] = strdup(keyword);
+    if (!out->fileformats[out->nfileformats]) {
+        return OSH_ENOMEM;
+    }
+    osh_lower_inplace(out->fileformats[out->nfileformats]);
+    out->fileformat_filenames[out->nfileformats] = NULL;
+    out->nfileformats++;
+    return OSH_OK;
+}
+
+static enum osh_status set_fileformat_filename(struct osh_scoring_output_def *out, size_t idx, char const *name) {
+    char *copy;
+
+    if (idx >= out->nfileformats) {
+        return OSH_EINVAL;
+    }
+    copy = strdup(name);
+    if (!copy) {
+        return OSH_ENOMEM;
+    }
+    free(out->fileformat_filenames[idx]);
+    out->fileformat_filenames[idx] = copy;
+    return OSH_OK;
+}
+
+static int ascii_case_equal(char const *a, char const *b) {
+    size_t i;
+    size_t na;
+    size_t nb;
+    unsigned char ca;
+    unsigned char cb;
+
+    if (a == NULL || b == NULL) {
+        return 0;
+    }
+    na = strlen(a);
+    nb = strlen(b);
+    if (na != nb) {
+        return 0;
+    }
+    for (i = 0u; i < na; ++i) {
+        ca = (unsigned char) a[i];
+        cb = (unsigned char) b[i];
+        if ((char) tolower(ca) != (char) tolower(cb)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int is_known_fileformat_keyword(char const *word) {
+    if (word == NULL) {
+        return 0;
+    }
+    if (ascii_case_equal(word, "text") || ascii_case_equal(word, "txt") || ascii_case_equal(word, "ascii")
+        || ascii_case_equal(word, "dat")) {
+        return 1;
+    }
+    if (ascii_case_equal(word, "bdo") || ascii_case_equal(word, "bdo2019") || ascii_case_equal(word, "binary")
+        || ascii_case_equal(word, "bin")) {
+        return 1;
+    }
+    if (ascii_case_equal(word, "rtdose") || ascii_case_equal(word, "svg")) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * @brief Parse `Fileformat <name> [<name> ...]` (and alias `Format ...`).
+ *
+ * @details
+ * Accepts one or more format keywords on a single line — e.g.
+ * `FileFormat TEXT BDO` requests the same scored page-set be written as both a
+ * TEXT and a BDO file.  Each keyword is appended to the output's format list;
+ * repeated `FileFormat` lines accumulate rather than overwrite.  The page
+ * accumulators are compiled once regardless of how many formats are requested.
  */
 static enum osh_status output_fileformat(struct osh_scoring_output_def *out,
                                          struct osh_diag_sink const *diag,
@@ -190,14 +286,58 @@ static enum osh_status output_fileformat(struct osh_scoring_output_def *out,
                                          int nwords,
                                          char const *path,
                                          unsigned int lineno) {
+    enum osh_status rc;
+    int i;
+    size_t last_format_idx;
+    int have_pending_format;
+    size_t before_count;
+    size_t idx;
+
     if (nwords < 2) {
         OSH_DIAG_ERRORF(diag, "%s:%u: Output Fileformat requires a format name", path, lineno);
         return OSH_EPARSE;
     }
-    free(out->fileformat);
-    out->fileformat = strdup(words[1]);
-    osh_lower_inplace(out->fileformat);
-    return out->fileformat ? OSH_OK : OSH_ENOMEM;
+    before_count = out->nfileformats;
+    last_format_idx = 0u;
+    have_pending_format = 0;
+    for (i = 1; i < nwords; ++i) {
+        if (is_known_fileformat_keyword(words[i])) {
+            rc = append_fileformat(out, words[i]);
+            if (rc != OSH_OK) {
+                return rc;
+            }
+            last_format_idx = out->nfileformats - 1u;
+            have_pending_format = 1;
+            continue;
+        }
+
+        if (!have_pending_format) {
+            OSH_DIAG_ERRORF(
+                diag, "%s:%u: Output Fileformat override '%s' must follow a format keyword", path, lineno, words[i]);
+            return OSH_EPARSE;
+        }
+
+        idx = last_format_idx;
+        if (out->fileformat_filenames[idx] != NULL) {
+            OSH_DIAG_ERRORF(diag,
+                            "%s:%u: Output Fileformat format '%s' already has an override filename",
+                            path,
+                            lineno,
+                            out->fileformats[idx]);
+            return OSH_EPARSE;
+        }
+        rc = set_fileformat_filename(out, idx, words[i]);
+        if (rc != OSH_OK) {
+            return rc;
+        }
+        have_pending_format = 0;
+    }
+
+    if (out->nfileformats == before_count) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: Output Fileformat requires at least one known format keyword", path, lineno);
+        return OSH_EPARSE;
+    }
+    return OSH_OK;
 }
 
 /**

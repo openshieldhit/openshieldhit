@@ -98,9 +98,10 @@ static void test_save_outputs_errors(void) {
     ASSERT_TRUE(osh_scoring_save_outputs(ws, &rt, 0u, NULL, 0u) == OSH_EINVAL);    /* nstat must be > 0 */
     ASSERT_TRUE(osh_scoring_save_outputs(ws, &rt, 5u, bad_idx, 1u) == OSH_EINVAL); /* index out of range */
 
-    /* Workspace/runtime output-count mismatch -> ESTATE. */
+    /* Runtime with fewer outputs than the cold workspace -> ESTATE.  (A runtime
+     * with *more* outputs is legitimate: multi-format blocks fan out, issue #308.) */
     saved_noutputs = rt.noutputs;
-    rt.noutputs = saved_noutputs + 1u;
+    rt.noutputs = saved_noutputs - 1u;
     ASSERT_TRUE(osh_scoring_save_outputs(ws, &rt, 5u, NULL, 0u) == OSH_ESTATE);
     rt.noutputs = saved_noutputs;
 
