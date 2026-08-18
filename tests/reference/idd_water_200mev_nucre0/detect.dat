@@ -107,9 +107,10 @@ Output
     Diff1Type EKIN
 
 # Depth-resolved LET by species on the narrow column (issue #212 LET criterion).
-# NB: sub-threshold recoils are point-deposited (issue #179) and feed dose/energy
-# but not yet LET, so HeavyRec LET here reflects only above-threshold transported
-# recoils until the score_point LET tables land.
+# NB: sub-threshold recoils are point-deposited (issue #179).  They now feed the
+# DLET/TLET averages too (issue #227), using the recoil's birth-energy stopping
+# power as a representative dE/dx, so HeavyRec LET is no longer above-threshold
+# transported recoils only.
 Output
     Filename let.dat
     Fileformat TEXT

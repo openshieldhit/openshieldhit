@@ -102,7 +102,8 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
             struct osh_scoring_estimator const *est;
 
             /* A NULL score_point means the estimator has no point meaning (FLUENCE
-             * and LET/Qeff need a track length): skip it. */
+             * and Qeff need a track length): skip it.  DLET/TLET do define a point
+             * meaning via the recoil's birth-energy stopping power (issue #227). */
             est = osh_scoring_estimator_for(geo->groups[g].score_kind);
             if (est && est->score_point) {
                 rc = est->score_point(rt, acc_set, &geo->groups[g], idx, part, st);
