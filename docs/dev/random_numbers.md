@@ -109,6 +109,61 @@ phase space and Gaussian straggling/scattering.
 product-of-uniforms algorithm, O(λ) on average, with a finite loop guard.
 Appropriate for the small λ of nuclear secondary multiplicities.
 
+**Truncated normal — inverse CDF.** `osh_rng_gauss_trunc` draws from
+N(μ, σ²) restricted to `[lo, hi]` (used for the `TCUT0` primary-energy window)
+with **exactly one** uniform per draw:
+
+```text
+x = μ + σ · Φ⁻¹( Φ(α) + u · [Φ(β) − Φ(α)] ),   α = (lo−μ)/σ,  β = (hi−μ)/σ
+```
+
+The interval constants `Φ(α)` and the span `Φ(β) − Φ(α)` are precomputed once
+per parameter set by `osh_gauss_trunc_prepare` (four `erfc` calls) and reused
+per draw; `struct osh_gauss_trunc` is a plain value type holding them.
+`Φ⁻¹` is Acklam's rational approximation, ~1.15e-9 relative, with no
+Newton/Halley polish — that would pull `erfc` and `exp` into the per-particle
+path to refine a value already far below any physical energy resolution.
+
+Rejection sampling — draw, discard if outside, repeat — is the obvious
+alternative and it is what this replaced. It costs `1/Z` draws where `Z` is the
+span, and `Z` is *user input*:
+
+| window offset from μ | `Z` | mean draws to accept |
+|---|---|---|
+| +0.2 σ | 5.8e-1 | 1.7 |
+| −2 σ | 2.3e-2 | 44 |
+| −3 σ | 1.4e-3 | 741 |
+| −8 σ | 6.2e-16 | 1.6e15 |
+
+Any bounded-retry rejection loop therefore needs a fallback, and clamping to the
+nearer bound turns the distribution into a point mass there — silently, while
+still reporting a Gaussian. Inversion is exact at every row of that table
+(verified against the closed-form moments in `test_osh_rng_gauss_trunc.c`,
+including the −8 σ case).
+
+Two numerical details matter and are worth not re-deriving:
+
+- **The span is formed from the two *smaller* CDF values**, choosing the side by
+  the sign of `α + β`: `Φ(β) − Φ(α)` when both cuts are low, `Φᶜ(α) − Φᶜ(β)`
+  when both are high, where `Φ` and `Φᶜ` each come straight from `erfc` and
+  neither is ever computed as `1` minus the other. Subtracting the two large
+  values instead cancels away every significant digit when both cuts sit deep in
+  the same tail.
+- **`p` and `q = 1 − p` are carried separately** into the probit
+  (`p_lo + u·span` and `q_lo − u·span`), so each keeps relative accuracy on its
+  own side. That is what makes `min(p, q)` exact, folds the upper tail onto the
+  lower one, and removes the "mirror the interval into the lower half" trick the
+  standard formulation needs as `p → 1`.
+
+A window whose probability mass underflows to zero is flagged `degenerate` and
+falls back to a uniform draw over the window — the correct limit for a
+vanishingly narrow interval.
+
+The fixed one-deviate cost also buys reproducibility that rejection cannot: the
+stream position after sampling no longer depends on the truncation, so changing
+`TCUT0` leaves every subsequent draw in the history — position, direction —
+untouched, and the two runs stay comparable under common random numbers.
+
 ---
 
 ## 4. The seeding model: `seed`, `stream`, `RNDOFFSET`
@@ -476,7 +531,8 @@ through TestU01 if you mean to use it for real work.
 **Available today**
 
 - Two production engines (PCG32, xoshiro256\*\*), runtime-selectable.
-- Uniform, Gaussian, and Poisson distributions, plus batched vector fills.
+- Uniform, Gaussian, truncated-Gaussian, and Poisson distributions, plus
+  batched vector fills.
 - Per-history seeding (`osh_rng_seed_history`, `osh_rng_split`) with independent
   `BEAM`/`PHYSICS` sub-streams and lineage-deterministic secondaries.
 - One RNG stream carried per particle-pool slot, surviving compaction.
@@ -505,6 +561,12 @@ per-history seeding here is the shared foundation all four build on.
   ranges, Gaussian known values, vector/scalar equivalence, Poisson, and the
   seeding primitives (order-independence, purpose-independence, no aliasing of
   seeded state across a large index range, split determinism).
+- `tests/unit/test_osh_rng_gauss_trunc.c` — truncated normal: probit round-trip
+  accuracy against `erfc` over ±37 σ, sampled moments against the closed forms
+  for five windows (including 8 σ off the mean), a Kolmogorov–Smirnov test
+  against the exact truncated CDF, monotonicity and endpoint mapping of the
+  quantile transform, fixed one-deviate stream consumption, and the degenerate /
+  zero-width / unbounded window paths.
 - `tests/bench/run_capacity_invariance.cmake` — end-to-end pool-capacity
   invariance of scored output.
 

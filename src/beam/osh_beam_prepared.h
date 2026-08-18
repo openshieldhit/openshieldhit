@@ -3,9 +3,16 @@
 
 #include <stddef.h>
 
+#include "random/osh_rng_gauss_trunc.h"
+
 struct osh_beam_prepared {
     double *cum_wt; /* SOBP cumulative weights, length nspots */
     double *tm;     /* affine transforms, 16 doubles per spot */
+    /* Inverse-CDF constants for the TCUT0-truncated energy draw, one entry per
+     * spot, or NULL when TCUT0 is unset.  Per spot rather than per run because
+     * the window (tcut_lo, tcut_hi) is shared but t0/tsigma are not, so the
+     * standardised cuts -- and hence the interval constants -- differ per spot. */
+    struct osh_gauss_trunc *etrunc;
     double wt_sum;
     double emax;
     double pmax;

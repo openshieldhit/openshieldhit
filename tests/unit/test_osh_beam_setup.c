@@ -655,6 +655,14 @@ static void test_setup_tcut0_sets_lower_and_upper_for_proton(void) {
     ASSERT_TRUE(wb->prepared != NULL);
     ASSERT_TRUE(fabs(wb->prepared->tcut_lo - 58.0) < 1e-6);
     ASSERT_TRUE(fabs(wb->prepared->tcut_hi - 62.0) < 1e-6);
+    /* The window is turned into per-spot inverse-CDF constants at setup, so
+     * the per-particle draw costs one uniform (see _sample_energy). */
+    ASSERT_TRUE(wb->prepared->etrunc != NULL);
+    ASSERT_TRUE(wb->prepared->etrunc[0].lo == wb->prepared->tcut_lo);
+    ASSERT_TRUE(wb->prepared->etrunc[0].hi == wb->prepared->tcut_hi);
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].mu - 60.0) < 1e-6);
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].sigma - 5.0) < 1e-6);
+    ASSERT_TRUE(wb->prepared->etrunc[0].span > 0.0 && wb->prepared->etrunc[0].span < 1.0);
 
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
     ASSERT_TRUE(remove(beam_path) == 0);
@@ -682,6 +690,13 @@ static void test_setup_tcut0_scales_by_mass_number_for_ion(void) {
     ASSERT_TRUE(wb->prepared != NULL);
     ASSERT_TRUE(fabs(wb->prepared->tcut_lo - 4200.0) < 1e-6);
     ASSERT_TRUE(fabs(wb->prepared->tcut_hi - 5400.0) < 1e-6);
+    /* The inversion constants use the same absolute-MeV window and the spot's
+     * absolute-MeV t0/tsigma (400 * 12 = 4800, 1 * 12 = 12). */
+    ASSERT_TRUE(wb->prepared->etrunc != NULL);
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].mu - 4800.0) < 1e-6);
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].sigma - 12.0) < 1e-6);
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].lo - 4200.0) < 1e-6);
+    ASSERT_TRUE(fabs(wb->prepared->etrunc[0].hi - 5400.0) < 1e-6);
 
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
     ASSERT_TRUE(remove(beam_path) == 0);
@@ -705,6 +720,9 @@ static void test_setup_no_tcut0_leaves_truncation_disabled(void) {
     ASSERT_TRUE(wb->prepared != NULL);
     ASSERT_TRUE(wb->prepared->tcut_lo == 0.0);
     ASSERT_TRUE(wb->prepared->tcut_hi == 0.0);
+    /* No window, no inversion state: _sample_energy() takes the plain
+     * untruncated Gaussian path. */
+    ASSERT_TRUE(wb->prepared->etrunc == NULL);
 
     ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
     ASSERT_TRUE(remove(beam_path) == 0);

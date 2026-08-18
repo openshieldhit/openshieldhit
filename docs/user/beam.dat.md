@@ -308,7 +308,7 @@ Lower and upper primary kinetic energy bounds.
 | Bound | Effect |
 |-------|--------|
 | `lower` | Transport cutoff — primaries (and, per-ion, any fragment) are killed once their kinetic energy drops below it. |
-| `upper` | Turns the [`TMAX0`](#tmax0) energy spread into a **truncated Gaussian**: primary energies are drawn from N(T₀, σ²) and resampled until they fall in `[lower, upper]`. |
+| `upper` | Turns the [`TMAX0`](#tmax0) energy spread into a **truncated Gaussian**: primary energies are drawn from N(T₀, σ²) restricted to `[lower, upper]`. |
 
 Both arguments are required and are always given in MeV/nucleon, matching the
 `TMAX0` convention; `openshieldhit` converts them to absolute MeV for the
@@ -321,6 +321,26 @@ TCUT0   58.0   62.0    # combined with TMAX0 60.0 5.0: truncated N(60, 5²)
 
 Without `TCUT0`, `TMAX0`'s spread is an ordinary (untruncated) Gaussian —
 see [`TMAX0`](#tmax0).
+
+The window is sampled by inverse-CDF transform, so it is exact wherever you put
+it: a window several σ away from T₀ still reproduces the correct truncated
+spectrum rather than piling every primary up against the nearer bound.  It also
+costs exactly one random number per primary, so moving the window does not shift
+the rest of a history's random draws — two runs differing only in `TCUT0` remain
+directly comparable.
+
+A window that captures very little of the requested Gaussian is legal but
+rarely intended, so setup warns once when it captures less than one draw in a
+million:
+
+```text
+warning: TCUT0 window [20, 21] MeV captures only 6.22e-16 of the N(60, 5^2)
+         energy spread; the sampled spectrum is a thin slice of the requested
+         Gaussian
+```
+
+A mono-energetic beam (`TMAX0` σ = 0) is unaffected by `upper`: there is no
+spread to truncate and T₀ is used as given.
 
 ### DELTAE
 

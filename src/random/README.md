@@ -1,7 +1,7 @@
 # Random Module (`src/random/`)
 
 OpenShieldHIT's random-number layer: the pseudo-random **engines**, the
-**distributions** built on them (uniform, Gaussian, Poisson), and the
+**distributions** built on them (uniform, Gaussian, truncated Gaussian, Poisson), and the
 **per-history seeding** that makes Monte Carlo transport reproducible and
 parallel-ready. Every routine is a pure function of an explicit
 `struct osh_rng` passed by pointer — there is **no global RNG state**.
@@ -12,6 +12,7 @@ parallel-ready. Every routine is a pure function of an explicit
 |---|---|
 | `osh_rng.h` | Public API: `struct osh_rng`, engine types, distributions, and the per-history seeding primitives (`osh_rng_seed_history`, `osh_rng_split`). |
 | `osh_rng.c` | Engine dispatch, distributions (Marsaglia-polar Gaussian, Knuth Poisson), and the stream-mixing/seeding logic. |
+| `osh_rng_gauss_trunc.h/.c` | Truncated normal by inverse CDF: normal CDF/complement, probit (Acklam), and the prepared-interval sampler used for the `TCUT0` primary-energy window. |
 | `osh_rng_pcg32.c` | PCG32 engine (O'Neill) — the default; 16-byte state, built-in stream selector. |
 | `osh_rng_xoshiro256ss.c` | xoshiro256\*\* engine (Blackman & Vigna) — 64-bit output, 2²⁵⁶ period. |
 

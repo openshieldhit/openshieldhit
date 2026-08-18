@@ -1,11 +1,13 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "beam/osh_beam.h"
 #include "beam/osh_beam_model.h"
 #include "beam/osh_beam_prepared.h"
 #include "common/osh_const.h"
+#include "common/osh_diag.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_particle_pdg.h"
 #include "random/osh_rng.h"
@@ -24,6 +26,7 @@ static void cleanup_manual_wb(struct beam_workspace *wb) {
     }
     free(wb->prepared->cum_wt);
     free(wb->prepared->tm);
+    free(wb->prepared->etrunc);
     free(wb->prepared);
     wb->prepared = NULL;
 }
@@ -358,15 +361,17 @@ static void test_single_spot_truncated_gaussian_sampling(void) {
     wb.shared.use_sad = 0;
     wb.shared.theta = 0.0;
     wb.shared.phi = 0.0;
+
+    /* Drive the truncation window through the fields TCUT0 writes, so that
+     * osh_beam_workspace_prepare() derives the per-spot inversion constants
+     * the sampler actually reads.  A = 1 here, so no per-nucleon scaling. */
+    wb.tcut = (float) lo;
+    wb.tcut_upper = (float) hi;
     rc = osh_beam_workspace_prepare(&wb, NULL);
     ASSERT_TRUE(rc == OSH_OK);
-
-    /* Bypass TCUT0 parsing and drive the sampler's truncation window
-     * directly through the prepared struct it actually reads — this is
-     * exactly what _wb_postparse() would have written from TCUT0 58 62
-     * for a species with A = 1 (no per-nucleon scaling). */
-    wb.prepared->tcut_lo = lo;
-    wb.prepared->tcut_hi = hi;
+    ASSERT_TRUE(wb.prepared->tcut_lo == lo);
+    ASSERT_TRUE(wb.prepared->tcut_hi == hi);
+    ASSERT_TRUE(wb.prepared->etrunc != NULL);
 
     osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 2024u, 8u);
 
@@ -389,11 +394,183 @@ static void test_single_spot_truncated_gaussian_sampling(void) {
         }
     }
 
-    /* The window is only 0.4*sigma wide around t0, so most draws land near
-     * the two edges under rejection sampling, but the range should still be
-     * genuinely spread (not every draw clamped to the exact same bound). */
+    /* The window is 0.8*sigma wide around t0, so the truncated density is
+     * nearly flat across it: draws must fill the interior rather than pile up
+     * at either bound. */
     ASSERT_TRUE(saw_interior);
-    ASSERT_TRUE(e_max - e_min > 1e-6);
+    ASSERT_TRUE(e_max - e_min > 0.5 * (hi - lo));
+    cleanup_manual_wb(&wb);
+}
+
+/*
+ * The TCUT0 window is per run but t0/tsigma are per spot, so the inversion
+ * constants have to be per spot too.  A single shared set would silently give
+ * every spot the first spot's energy distribution.
+ */
+/* Counts warnings mentioning TCUT0, for the narrow-window diagnostic below. */
+struct tcut0_warn_capture {
+    int tcut0_warns;
+};
+
+static void
+tcut0_warn_emit(void *user, int level, char const *file, int line, char const *function, char const *message) {
+    struct tcut0_warn_capture *cap = (struct tcut0_warn_capture *) user;
+    (void) file;
+    (void) line;
+    (void) function;
+
+    if (level >= OSH_DIAG_LEVEL_WARN && message && strstr(message, "TCUT0")) {
+        cap->tcut0_warns += 1;
+    }
+}
+
+static enum osh_status prepare_with_window(
+    struct beam_workspace *wb, struct beam_spot *spot, double lo, double hi, struct tcut0_warn_capture *cap) {
+    struct osh_diag_sink diag;
+
+    wb->spots = spot;
+    wb->nspots = 1;
+    wb->primary.pdg = OSH_PART_PDG_PROTON;
+    wb->primary.z = 1u;
+    wb->primary.a = 1u;
+    wb->has_primary = 1;
+    spot->shape = OSH_BEAM_SHAPE_PENCIL;
+    spot->t0 = 60.0;
+    spot->tsigma = 5.0;
+    wb->shared.use_sad = 0;
+    wb->shared.theta = 0.0;
+    wb->shared.phi = 0.0;
+    wb->tcut = (float) lo;
+    wb->tcut_upper = (float) hi;
+
+    /* WARN threshold keeps the beam configuration dump (INFO) out of the way. */
+    diag.emit = tcut0_warn_emit;
+    diag.user = cap;
+    diag.min_level = OSH_DIAG_LEVEL_WARN;
+
+    return osh_beam_workspace_prepare(wb, &diag);
+}
+
+/*
+ * A window far off t0 samples correctly but is almost certainly not what the
+ * user meant, so setup says so once.  Under the previous rejection sampler the
+ * same input silently produced a point mass at the window edge.
+ */
+static void test_far_tcut0_window_warns_but_still_samples(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    struct tcut0_warn_capture cap = {0};
+    int i;
+    enum osh_status rc;
+
+    /* 8 sigma below t0: acceptance mass ~6e-16. */
+    rc = prepare_with_window(&wb, &spot, 20.0, 21.0, &cap);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(cap.tcut0_warns == 1);
+    ASSERT_TRUE(!wb.prepared->etrunc[0].degenerate);
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 11u, 22u);
+    for (i = 0; i < 200; i++) {
+        rc = osh_beam_new_primary(&wb, &rng, &ray);
+        ASSERT_TRUE(rc == OSH_OK);
+        ASSERT_TRUE(ray.p[3] >= 20.0 && ray.p[3] <= 21.0);
+    }
+    cleanup_manual_wb(&wb);
+}
+
+static void test_reasonable_tcut0_window_does_not_warn(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct tcut0_warn_capture cap = {0};
+    enum osh_status rc;
+
+    rc = prepare_with_window(&wb, &spot, 58.0, 62.0, &cap);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(cap.tcut0_warns == 0);
+    cleanup_manual_wb(&wb);
+}
+
+static void test_sobp_truncation_constants_are_per_spot(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spots[3] = {0};
+    int i;
+    enum osh_status rc;
+
+    wb.spots = spots;
+    wb.nspots = 3;
+    wb.primary.pdg = OSH_PART_PDG_PROTON;
+    wb.primary.z = 1u;
+    wb.primary.a = 1u;
+    wb.has_primary = 1;
+    for (i = 0; i < 3; i++) {
+        spots[i].shape = OSH_BEAM_SHAPE_PENCIL;
+        spots[i].t0 = 58.0 + 2.0 * (double) i; /* 58, 60, 62 */
+        spots[i].tsigma = 1.0;
+        spots[i].wt = 1.0;
+    }
+
+    wb.shared.use_sad = 0;
+    wb.shared.theta = 0.0;
+    wb.shared.phi = 0.0;
+    wb.tcut = 59.0f;
+    wb.tcut_upper = 61.0f;
+    rc = osh_beam_workspace_prepare(&wb, NULL);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb.prepared->etrunc != NULL);
+
+    for (i = 0; i < 3; i++) {
+        ASSERT_TRUE(wb.prepared->etrunc[i].mu == spots[i].t0);
+        ASSERT_TRUE(wb.prepared->etrunc[i].sigma == spots[i].tsigma);
+        ASSERT_TRUE(wb.prepared->etrunc[i].lo == 59.0);
+        ASSERT_TRUE(wb.prepared->etrunc[i].hi == 61.0);
+        ASSERT_TRUE(!wb.prepared->etrunc[i].degenerate);
+    }
+
+    /* The window is centred on spot 1 and one sigma off the outer two, so the
+     * middle spot must capture strictly more of its own Gaussian. */
+    ASSERT_TRUE(wb.prepared->etrunc[1].span > wb.prepared->etrunc[0].span);
+    ASSERT_TRUE(wb.prepared->etrunc[1].span > wb.prepared->etrunc[2].span);
+    /* Spots 0 and 2 sit symmetrically about the window. */
+    ASSERT_TRUE(fabs(wb.prepared->etrunc[0].span - wb.prepared->etrunc[2].span) < 1e-15);
+
+    cleanup_manual_wb(&wb);
+}
+
+/* A mono-energetic spot ignores the window, as it did before TCUT0 gained an
+ * upper bound: t0 is returned unchanged and no deviate is consumed. */
+static void test_truncation_skipped_for_monoenergetic_spot(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    enum osh_status rc;
+
+    wb.spots = &spot;
+    wb.nspots = 1;
+    wb.primary.pdg = OSH_PART_PDG_PROTON;
+    wb.primary.z = 1u;
+    wb.primary.a = 1u;
+    wb.has_primary = 1;
+    spot.shape = OSH_BEAM_SHAPE_PENCIL;
+    spot.t0 = 100.0;
+    spot.tsigma = 0.0;
+
+    wb.shared.use_sad = 0;
+    wb.shared.theta = 0.0;
+    wb.shared.phi = 0.0;
+    wb.tcut = 58.0f;
+    wb.tcut_upper = 62.0f;
+    rc = osh_beam_workspace_prepare(&wb, NULL);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb.prepared->etrunc != NULL);
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 7u, 7u);
+    rc = osh_beam_new_primary(&wb, &rng, &ray);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ray.p[3] == 100.0);
+
     cleanup_manual_wb(&wb);
 }
 
@@ -445,6 +622,10 @@ int main(void) {
     test_single_spot_circular_sampling();
     test_weighted_spot_selection();
     test_single_spot_truncated_gaussian_sampling();
+    test_far_tcut0_window_warns_but_still_samples();
+    test_reasonable_tcut0_window_does_not_warn();
+    test_sobp_truncation_constants_are_per_spot();
+    test_truncation_skipped_for_monoenergetic_spot();
     test_single_spot_gaussian_sampling_unaffected_without_tcut0();
     return 0;
 }
