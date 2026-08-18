@@ -332,11 +332,119 @@ static void test_weighted_spot_selection(void) {
     cleanup_manual_wb(&wb);
 }
 
+static void test_single_spot_truncated_gaussian_sampling(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    double const lo = 58.0;
+    double const hi = 62.0;
+    double e_min;
+    double e_max;
+    int saw_interior;
+    int i;
+    enum osh_status rc;
+
+    wb.spots = &spot;
+    wb.nspots = 1;
+    wb.primary.pdg = OSH_PART_PDG_PROTON;
+    wb.primary.z = 1u;
+    wb.primary.a = 1u;
+    wb.has_primary = 1;
+    spot.shape = OSH_BEAM_SHAPE_PENCIL;
+    spot.t0 = 60.0;
+    spot.tsigma = 5.0;
+
+    wb.shared.use_sad = 0;
+    wb.shared.theta = 0.0;
+    wb.shared.phi = 0.0;
+    rc = osh_beam_workspace_prepare(&wb, NULL);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    /* Bypass TCUT0 parsing and drive the sampler's truncation window
+     * directly through the prepared struct it actually reads — this is
+     * exactly what _wb_postparse() would have written from TCUT0 58 62
+     * for a species with A = 1 (no per-nucleon scaling). */
+    wb.prepared->tcut_lo = lo;
+    wb.prepared->tcut_hi = hi;
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 2024u, 8u);
+
+    e_min = hi;
+    e_max = lo;
+    saw_interior = 0;
+    for (i = 0; i < 5000; i++) {
+        rc = osh_beam_new_primary(&wb, &rng, &ray);
+        ASSERT_TRUE(rc == OSH_OK);
+        ASSERT_TRUE(ray.p[3] >= lo - 1e-9);
+        ASSERT_TRUE(ray.p[3] <= hi + 1e-9);
+        if (ray.p[3] < e_min) {
+            e_min = ray.p[3];
+        }
+        if (ray.p[3] > e_max) {
+            e_max = ray.p[3];
+        }
+        if (ray.p[3] > lo + 1e-6 && ray.p[3] < hi - 1e-6) {
+            saw_interior = 1;
+        }
+    }
+
+    /* The window is only 0.4*sigma wide around t0, so most draws land near
+     * the two edges under rejection sampling, but the range should still be
+     * genuinely spread (not every draw clamped to the exact same bound). */
+    ASSERT_TRUE(saw_interior);
+    ASSERT_TRUE(e_max - e_min > 1e-6);
+    cleanup_manual_wb(&wb);
+}
+
+static void test_single_spot_gaussian_sampling_unaffected_without_tcut0(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    struct osh_rng rng_ref;
+    double e_exp;
+    enum osh_status rc;
+
+    wb.spots = &spot;
+    wb.nspots = 1;
+    wb.primary.pdg = OSH_PART_PDG_PROTON;
+    wb.primary.z = 1u;
+    wb.primary.a = 1u;
+    wb.has_primary = 1;
+    spot.shape = OSH_BEAM_SHAPE_PENCIL;
+    spot.t0 = 60.0;
+    spot.tsigma = 5.0;
+
+    wb.shared.use_sad = 0;
+    wb.shared.theta = 0.0;
+    wb.shared.phi = 0.0;
+    rc = osh_beam_workspace_prepare(&wb, NULL);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb.prepared->tcut_hi == 0.0);
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 42u, 54u);
+    osh_rng_init(&rng_ref, OSH_RNG_TYPE_PCG32, 42u, 54u);
+
+    e_exp = osh_rng_gauss(&rng_ref, spot.t0, spot.tsigma);
+    if (e_exp < 0.0) {
+        e_exp = 0.0;
+    }
+
+    rc = osh_beam_new_primary(&wb, &rng, &ray);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(fabs(ray.p[3] - e_exp) < 1e-12);
+    cleanup_manual_wb(&wb);
+}
+
 int main(void) {
     test_single_spot_gaussian_sampling();
     test_single_spot_sad_fanout();
     test_single_spot_square_sampling();
     test_single_spot_circular_sampling();
     test_weighted_spot_selection();
+    test_single_spot_truncated_gaussian_sampling();
+    test_single_spot_gaussian_sampling_unaffected_without_tcut0();
     return 0;
 }

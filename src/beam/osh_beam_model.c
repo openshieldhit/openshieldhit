@@ -56,24 +56,61 @@ static struct beam_spot const *_select_spot(struct beam_workspace const *wb, str
 
 /* ---- Step 2: energy sampling --------------------------------------------- */
 
+/*
+ * Bounded retry count for truncated-Gaussian rejection sampling. Keeps the
+ * sampler branch-free of allocation and guarantees termination even for a
+ * TCUT0 window many sigma away from t0, where the acceptance probability
+ * per draw is tiny; the final fallback clamp (below) covers that case.
+ */
+#define OSH_BEAM_ETRUNC_MAX_TRIES 1000
+
 /**
  * @brief Sample total kinetic energy [MeV] for one primary.
  *
  * @details
- * Draws from a Gaussian N(t0, tsigma²) and clamps the result to zero to
- * avoid unphysical negative energies. When tsigma <= 0 the beam is
+ * Draws from a Gaussian N(t0, tsigma²). When tsigma <= 0 the beam is
  * mono-energetic and t0 is returned directly.
  *
- * @param[in] rng   Random-number generator.
- * @param[in] spot  Beam spot carrying t0 [MeV] and tsigma [MeV].
+ * When `prepared->tcut_hi` is positive (TCUT0 supplied an upper bound), the
+ * draw is instead a **truncated** Gaussian: resample by rejection until the
+ * value falls inside [prepared->tcut_lo, prepared->tcut_hi], up to
+ * OSH_BEAM_ETRUNC_MAX_TRIES attempts, then clamp the last draw to the
+ * nearer bound as a fallback so this can never loop unbounded. Otherwise
+ * (tcut_hi <= 0, the default) the result is only clamped to zero to avoid
+ * unphysical negative energies, matching the plain-Gaussian behaviour used
+ * when TCUT0 is absent.
+ *
+ * @param[in] rng       Random-number generator.
+ * @param[in] spot      Beam spot carrying t0 [MeV] and tsigma [MeV].
+ * @param[in] prepared  Prepared beam state carrying the TCUT0 truncation
+ *                       window (tcut_lo, tcut_hi), both absolute MeV.
  *
  * @returns Sampled kinetic energy in MeV, >= 0.
  */
-static double _sample_energy(struct osh_rng *rng, struct beam_spot const *spot) {
+static double
+_sample_energy(struct osh_rng *rng, struct beam_spot const *spot, struct osh_beam_prepared const *prepared) {
     double e;
+    double lo;
+    double hi;
+    int tries;
 
     if (spot->tsigma <= 0.0) {
         return spot->t0;
+    }
+
+    if (prepared && prepared->tcut_hi > 0.0) {
+        lo = prepared->tcut_lo;
+        hi = prepared->tcut_hi;
+        e = osh_rng_gauss(rng, spot->t0, spot->tsigma);
+        for (tries = 1; tries < OSH_BEAM_ETRUNC_MAX_TRIES && (e < lo || e > hi); tries++) {
+            e = osh_rng_gauss(rng, spot->t0, spot->tsigma);
+        }
+        if (e < lo) {
+            e = lo;
+        } else if (e > hi) {
+            e = hi;
+        }
+        return e;
     }
 
     e = osh_rng_gauss(rng, spot->t0, spot->tsigma);
@@ -453,7 +490,7 @@ static int _sample_one_primary(struct beam_workspace const *wb, struct osh_rng *
     }
 
     /* 2. Sample energy — stored in ray_out->p[3] */
-    ray_out->p[3] = _sample_energy(rng, spot);
+    ray_out->p[3] = _sample_energy(rng, spot, prepared);
 
     /* 3. Sample transverse phase space (x, y, x', y') in PZALIGN */
     rc = _sample_phase_space_xy(rng, spot, pos, ang);

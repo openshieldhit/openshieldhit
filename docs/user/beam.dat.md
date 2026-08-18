@@ -65,6 +65,10 @@ TMAX0   200.0   2.0    # 200 MeV/nucleon, σ = 2 MeV/nucleon
 TMAX0  -1000.0         # p₀ = 1000 MeV/c
 ```
 
+By default the spread is an ordinary (untruncated) Gaussian. Add
+[`TCUT0`](#tcut0) with an upper bound to truncate it to a window, e.g. a
+truncated N(60, 5²) MeV clipped to [58, 62] MeV.
+
 ---
 
 ## Beam geometry
@@ -293,6 +297,31 @@ contributes to `Energy`, `Dose`, and `DoseGy` pages.  `0.0` keeps the transport
 default, currently `1e-9 MeV` (`1 meV`), below the thermal clamp at
 `2.53e-8 MeV` (`25.3 meV`).
 
+### TCUT0
+
+```
+TCUT0  <lower>  <upper>   [MeV/nucleon]
+```
+
+Lower and upper primary kinetic energy bounds.
+
+| Bound | Effect |
+|-------|--------|
+| `lower` | Transport cutoff — primaries (and, per-ion, any fragment) are killed once their kinetic energy drops below it. |
+| `upper` | Turns the [`TMAX0`](#tmax0) energy spread into a **truncated Gaussian**: primary energies are drawn from N(T₀, σ²) and resampled until they fall in `[lower, upper]`. |
+
+Both arguments are required and are always given in MeV/nucleon, matching the
+`TMAX0` convention; `openshieldhit` converts them to absolute MeV for the
+primary species internally. `upper` must be `>= lower`.
+
+```
+TCUT0   58.0   62.0    # combined with TMAX0 60.0 5.0: truncated N(60, 5²)
+                        # sampled only in [58, 62] MeV
+```
+
+Without `TCUT0`, `TMAX0`'s spread is an ordinary (untruncated) Gaussian —
+see [`TMAX0`](#tmax0).
+
 ### DELTAE
 
 ```
@@ -406,5 +435,4 @@ independent runs — the standard approach for Monte Carlo uncertainty estimatio
 | `BMODTRANS` | deprecated | Logs a warning, ignored |
 | `EXTSPEC` | supported | External energy spectrum file |
 | `MAKELN` | supported | Write primary phase-space to file (0/1) |
-| `TCUT0` | supported | Kinetic energy cutoff for primary particle |
 | `APCORR` | supported | AP correction factor |

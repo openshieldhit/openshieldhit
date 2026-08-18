@@ -1088,16 +1088,23 @@ static int _parse_tmax0(PARSE_HANDLER_ARGS) {
 }
 
 /**
- * @brief Parse TCUT0: transport energy cutoff window.
+ * @brief Parse TCUT0: primary energy cutoff / sampling-truncation window.
  *
  * @details
  * Syntax: TCUT0 \<lower\> \<upper\>  [MeV/nucleon]
  *
- * Only the lower cutoff is stored; particles below it are killed.
- * The upper bound is not kept because it is effectively emax (the maximum
- * beam energy), which is derived in the post-parse step from TMAX0.
+ * The lower bound (beam->tcut) is the existing transport cutoff: primaries
+ * (and, per-ion, any fragment) are killed once their kinetic energy drops
+ * below it. The upper bound (beam->tcut_upper) additionally turns the
+ * initial-energy sampler (TMAX0 spread) into a truncated Gaussian: primary
+ * energies are drawn from N(t0, tsigma^2) rejection-sampled to the window
+ * [lower, upper], instead of the plain untruncated Gaussian used when
+ * tcut_upper is left at its default of 0. Both bounds are converted from
+ * MeV/nucleon to absolute MeV for the primary species during the post-parse
+ * step (see _wb_postparse() in osh_beam.c), mirroring how TMAX0's t0/tsigma
+ * are scaled.
  *
- * @param[in,out] beam  Writes beam->tcut (lower cutoff).
+ * @param[in,out] beam  Writes beam->tcut (lower) and beam->tcut_upper (upper).
  * @param[in]     oshf  Used for error diagnostics.
  * @param[in]     args  Two floats: lower upper.
  *
@@ -1107,7 +1114,7 @@ static int _parse_tcut0(PARSE_HANDLER_ARGS) {
     float _f[2];
     _f[0] = 0.0f;
     _f[1] = 0.0f;
-    if (sscanf(args, "%f %f", &_f[0], &_f[1]) > 2) {
+    if (sscanf(args, "%f %f", &_f[0], &_f[1]) < 2) {
         OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
@@ -1117,6 +1124,7 @@ static int _parse_tcut0(PARSE_HANDLER_ARGS) {
         return OSH_EPARSE;
     }
     beam->tcut = fabs(_f[0]);
+    beam->tcut_upper = fabs(_f[1]);
     return OSH_OK;
 }
 

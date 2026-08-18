@@ -172,7 +172,14 @@ struct osh_beam_workspace {
     int rndoffset;                      /**< RNG stream offset for producing independent parallel runs
                                              from the same seed. */
     float tcut;                         /**< Primary kinetic energy cutoff [MeV/nucleon]; primaries
-                                             below this are killed (TCUT0). */
+                                             below this are killed during transport, and it doubles as
+                                             the lower bound of the initial-sampling truncation window
+                                             when tcut_upper is set (TCUT0). */
+    float tcut_upper;                   /**< Upper bound [MeV/nucleon] of the initial-sampling truncation
+                                             window (TCUT0 upper argument); 0 = unset, meaning the primary
+                                             energy is drawn from the plain (untruncated) Gaussian N(t0,
+                                             tsigma^2).  Unlike tcut, this does not affect in-flight
+                                             transport — it only bounds the energy primaries are born with. */
     float pcut;                         /**< Secondary proton kinetic energy cutoff [MeV]. */
     float ncut;                         /**< Neutron energy cutoff [MeV]; <=0 uses the transport
                                              default (NEUTRLCUT). */

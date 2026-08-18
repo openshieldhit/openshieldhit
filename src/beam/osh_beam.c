@@ -397,6 +397,14 @@ static void _build_spot_tm(struct beam_spot const *spot, const struct beam_share
  *   - accumulates the cumulative weight array for SOBP spot selection
  *   - tracks the maximum energy and momentum across all spots
  *
+ * Also converts the TCUT0 sampling-truncation window (wb->tcut,
+ * wb->tcut_upper — MeV/nucleon) to absolute MeV using the primary species'
+ * mass number, the same scale factor _postparse_spot_energy() applies to
+ * TMAX0's t0/tsigma. The result is stored in prepared->tcut_lo/tcut_hi for
+ * _sample_energy() to use; wb->tcut itself is left untouched because
+ * transport still needs it in MeV/nucleon (it is re-scaled per ion there,
+ * including for fragments whose mass number differs from the primary's).
+ *
  * The cumulative weight array is reallocated on every call so that
  * _wb_postparse() can be called again after a spot list is replaced.
  *
@@ -408,6 +416,7 @@ static void _build_spot_tm(struct beam_spot const *spot, const struct beam_share
 static int _wb_postparse(struct beam_workspace *wb) {
     size_t i;
     double wt_acc;
+    double scale;
     struct particle primary_part;
     struct particle const *part;
     int rc;
@@ -442,7 +451,18 @@ static int _wb_postparse(struct beam_workspace *wb) {
     prepared->wt_sum = 0.0;
     prepared->emax = 0.0;
     prepared->pmax = 0.0;
+    prepared->tcut_lo = 0.0;
+    prepared->tcut_hi = 0.0;
     prepared->nspots = wb->nspots;
+
+    if (wb->tcut_upper > 0.0f) {
+        scale = 1.0;
+        if (part && part->is_nucleus && part->a > 1u) {
+            scale = (double) part->a;
+        }
+        prepared->tcut_lo = (double) wb->tcut * scale;
+        prepared->tcut_hi = (double) wb->tcut_upper * scale;
+    }
 
     if (wb->nspots > 0) {
         prepared->cum_wt = (double *) calloc(wb->nspots, sizeof(double));
