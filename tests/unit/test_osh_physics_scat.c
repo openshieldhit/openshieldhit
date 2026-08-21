@@ -64,6 +64,72 @@ static void test_theta0_fallback_to_thickness(void) {
     ASSERT_TRUE(fabs(a - b) < 1e-12);
 }
 
+/* ---- Step cap from the tolerated per-step lateral displacement ----------- */
+
+/* The cap is the exact inverse of theta0(s)*s: at s = s_lateral the lateral
+ * displacement built up over the step equals the requested tolerance. */
+static void test_s_lateral_inverts_theta0_times_s(void) {
+    double t;      /* MeV                                             */
+    double m;      /* MeV                                             */
+    double rho;    /* g/cm^3 (dry air)                                */
+    double x0;     /* g/cm^2 (dry air)                                */
+    double r0;     /* g/cm^2: macroscopic path scale for the log term */
+    double want;   /* tolerated lateral displacement [cm]             */
+    double s;      /* returned cap [cm]                               */
+    double theta0; /* theta0 over exactly that step [rad]             */
+
+    t = 70.2;
+    m = 938.272;
+    rho = 1.205e-3;
+    x0 = 36.62;
+    r0 = 4.08;
+    want = 0.02;
+
+    s = osh_physics_highland_s_lateral(t, m, 1.0, rho, r0, x0, want);
+    ASSERT_TRUE(s > 0.0);
+    theta0 = osh_physics_highland_theta0(t, m, 1.0, rho * s, r0, x0);
+    ASSERT_TRUE(fabs(theta0 * s - want) < 1e-9 * want);
+}
+
+/* A denser medium scatters more, so it must be capped to a shorter step; a
+ * looser tolerance must allow a longer one. */
+static void test_s_lateral_monotonicity(void) {
+    double t;
+    double m;
+    double x0;
+    double air;
+    double water;
+    double loose;
+
+    t = 70.2;
+    m = 938.272;
+    x0 = 36.6;
+
+    air = osh_physics_highland_s_lateral(t, m, 1.0, 1.205e-3, 4.08, x0, 0.02);
+    water = osh_physics_highland_s_lateral(t, m, 1.0, 1.0, 4.08, x0, 0.02);
+    loose = osh_physics_highland_s_lateral(t, m, 1.0, 1.205e-3, 4.08, x0, 0.2);
+
+    ASSERT_TRUE(water > 0.0 && air > water);
+    ASSERT_TRUE(loose > air);
+    /* theta0 ~ sqrt(rho) => s_max ~ rho^(-1/3): 1000x density is 10x shorter. */
+    ASSERT_TRUE(fabs(air / water - pow(1.0 / 1.205e-3, 1.0 / 3.0)) < 1e-9 * air / water);
+}
+
+/* Degenerate inputs report "no limit" (0) rather than a bogus finite cap. */
+static void test_s_lateral_invalid_inputs(void) {
+    double t;
+    double m;
+
+    t = 70.2;
+    m = 938.272;
+
+    ASSERT_TRUE(osh_physics_highland_s_lateral(t, m, 1.0, 0.0, 4.08, 36.6, 0.02) == 0.0);
+    ASSERT_TRUE(osh_physics_highland_s_lateral(t, m, 1.0, -1.0, 4.08, 36.6, 0.02) == 0.0);
+    ASSERT_TRUE(osh_physics_highland_s_lateral(t, m, 1.0, 1.0, 4.08, 36.6, 0.0) == 0.0);
+    ASSERT_TRUE(osh_physics_highland_s_lateral(t, m, 1.0, 1.0, 4.08, 0.0, 0.02) == 0.0);
+    ASSERT_TRUE(osh_physics_highland_s_lateral(t, m, 0.0, 1.0, 4.08, 36.6, 0.02) == 0.0);
+}
+
 /* ---- Molière B equation -------------------------------------------------- */
 
 static void test_solve_b_equation(void) {
@@ -284,6 +350,18 @@ static int run_named_test(char const *name) {
         test_theta0_fallback_to_thickness();
         return 0;
     }
+    if (strcmp(name, "s_lateral_inverts_theta0_times_s") == 0) {
+        test_s_lateral_inverts_theta0_times_s();
+        return 0;
+    }
+    if (strcmp(name, "s_lateral_monotonicity") == 0) {
+        test_s_lateral_monotonicity();
+        return 0;
+    }
+    if (strcmp(name, "s_lateral_invalid_inputs") == 0) {
+        test_s_lateral_invalid_inputs();
+        return 0;
+    }
     if (strcmp(name, "solve_b_equation") == 0) {
         test_solve_b_equation();
         return 0;
@@ -329,6 +407,9 @@ int main(int argc, char *argv[]) {
     }
     test_theta0_path_scale_additivity();
     test_theta0_fallback_to_thickness();
+    test_s_lateral_inverts_theta0_times_s();
+    test_s_lateral_monotonicity();
+    test_s_lateral_invalid_inputs();
     test_solve_b_equation();
     test_solve_b_threshold();
     test_reduced_f0_analytic();
