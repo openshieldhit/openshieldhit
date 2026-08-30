@@ -132,6 +132,7 @@ static void write_temp_file(char *path_out, size_t cap, char const *content) {
 static double profile_sigma_cm(char const *path) {
     FILE *fp;
     char line[4096];
+    char *p;        /* cursor into `line`, past leading whitespace */
     double bin_w;   /* radial bin width [cm]                       */
     double r_inner; /* inner edge of the current annulus [cm]      */
     double r_c;     /* bin centre read back from the file [cm]     */
@@ -148,8 +149,6 @@ static double profile_sigma_cm(char const *path) {
     fp = fopen(path, "r");
     ASSERT_TRUE(fp != NULL);
     while (fgets(line, sizeof(line), fp)) {
-        char *p;
-
         p = line;
         while (*p == ' ' || *p == '\t') {
             ++p;
