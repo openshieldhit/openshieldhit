@@ -46,6 +46,29 @@
 #define OSH_TRANSPORT_THETA_MAX_RAD 0.1
 
 /*
+ * Maximum lateral displacement built up within one substep [cm].
+ *
+ * A substep is modelled as a straight leg plus a single deflection — at a
+ * random hinge, or (boundary-limited steps) at the step end — so the modelled
+ * trajectory can deviate transversally from the true random walk by up to
+ * θ₀(s)·s anywhere strictly inside the step.  Capping the step so that
+ * θ₀(s)·s ≤ this value bounds that deviation everywhere, which is what lets a
+ * detect.dat scoring surface placed strictly inside one homogeneous zone see
+ * the scattering accumulated upstream of it (issue #325); without the cap a
+ * long low-density zone is crossed in one boundary-limited step and every
+ * scorer inside it records an unscattered pencil beam.
+ *
+ * 0.2 mm is a fraction of a typical scoring bin.  The cap only binds where a
+ * step would otherwise be long *and* scattering non-negligible (metre-scale
+ * air paths): in condensed media DELTAE/DEMIN and the zone/voxel boundaries
+ * already force much shorter steps, so it costs nothing there (verified: the
+ * tests/reference water IDD decks take the same number of steps with and
+ * without the cap).  With MSCAT 1 the random hinge is exactly additive, so
+ * shrinking the cap further leaves the scored profile unchanged.
+ */
+#define OSH_TRANSPORT_MCS_LATERAL_MAX_CM 0.02
+
+/*
  * Hard minimum ion kinetic energy [MeV/nucleon].
  * Particles below this threshold are killed regardless of tcut.
  * Set to the runtime SP/range table lower bound OSH_MATERIAL_RUNTIME_EMIN:
@@ -688,11 +711,16 @@ static void ion_step_vacuum(struct ion_step_ctx *ctx) {
 /* ---- Phase 2b: step-length determination --------------------------------- */
 
 /**
- * Determine the substep length as the minimum of three criteria:
+ * Determine the substep length as the minimum of four criteria:
  *   1. boundary_ds     — next geometry boundary in the incident direction
  *   2. ds_csda         — DELTAE fraction of the CSDA range, but never less
  *                        than DEMIN energy loss unless the boundary clips it
  *   3. ds_theta        — maximum step keeping θ₀ ≤ OSH_TRANSPORT_THETA_MAX_RAD
+ *   4. ds_lateral      — maximum step keeping the per-step lateral displacement
+ *                        θ₀·ds ≤ OSH_TRANSPORT_MCS_LATERAL_MAX_CM, so that MCS
+ *                        is resolved along the step rather than lumped into a
+ *                        single deflection a scorer inside the step never sees
+ *                        (issue #325)
  *
  * Sets ctx->preclip_step_len, ctx->preclip_hits_boundary,
  * ctx->preclip_is_csda_limited, ctx->r0, and ctx->e1_target.
@@ -708,6 +736,7 @@ static void ion_step_length(struct ion_step_ctx *ctx,
     double r1_csda;
     double ds_csda;
     double ds_theta;
+    double ds_lateral;
     double z_eff_0;
 
     if (!transport_ctx) {
@@ -750,8 +779,19 @@ static void ion_step_length(struct ion_step_ctx *ctx,
         z_eff_0 = osh_physics_bethe_z_eff(ctx->e0 / ctx->a_proj, (double) ctx->part->z, ctx->a_proj, ctx->mat_z_mean);
         ds_theta = osh_physics_highland_s_theta(
             ctx->e0, ctx->proj_mass_mev, z_eff_0, ctx->rho, ctx->mat_x0_gcm2, OSH_TRANSPORT_THETA_MAX_RAD);
+        /* The log correction is taken at the same macroscopic path scale (r0)
+         * that ion_step_hinge_and_scatter() passes to the sampler, so the cap
+         * and the sampled θ₀ agree on the same Highland evaluation. */
+        ds_lateral = osh_physics_highland_s_lateral(ctx->e0,
+                                                    ctx->proj_mass_mev,
+                                                    z_eff_0,
+                                                    ctx->rho,
+                                                    ctx->r0,
+                                                    ctx->mat_x0_gcm2,
+                                                    OSH_TRANSPORT_MCS_LATERAL_MAX_CM);
     } else {
         ds_theta = 0.0;
+        ds_lateral = 0.0;
     }
 
     ctx->preclip_step_len = ctx->boundary_ds;
@@ -760,6 +800,9 @@ static void ion_step_length(struct ion_step_ctx *ctx,
     }
     if (ds_theta > 0.0 && ds_theta < ctx->preclip_step_len) {
         ctx->preclip_step_len = ds_theta;
+    }
+    if (ds_lateral > 0.0 && ds_lateral < ctx->preclip_step_len) {
+        ctx->preclip_step_len = ds_lateral;
     }
 
     ctx->preclip_hits_boundary = (ctx->boundary_ds - ctx->preclip_step_len <= OSH_TRANSPORT_BOUNDARY_EPS);

@@ -296,6 +296,16 @@ Multiple Coulomb scattering model.
 | 1 | Gaussian (Rossi–Greisen approximation, fast) |
 | 2 | Molière (more accurate; **recommended** for clinical use) |
 
+Scattering is sampled once per transport substep, at a random hinge point along
+it.  Besides [`DELTAE`](#deltae)/[`DEMIN`](#demin) and the geometry boundaries,
+the substep length is capped so that the lateral displacement built up within
+one substep stays below 0.2 mm.  That cap is what keeps the scattered
+trajectory — and therefore anything [`detect.dat`](detect.dat.md) scores part-way
+through a zone — faithful inside long, low-density regions such as air paths,
+where a whole zone would otherwise be crossed in one step.  In condensed media
+`DELTAE`/`DEMIN` and the zone or voxel boundaries already impose shorter steps,
+so the cap costs nothing there.
+
 ### NUCRE
 
 ```
