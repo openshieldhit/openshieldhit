@@ -36,5 +36,6 @@ jobs:
             -not -path './dist/*' \
             -not -path './out/*' \
             -not -path './.git/*' \
+            -not -path './src/thirdparty/*' \
             -print0 \
             | xargs -0 clang-format-19 --dry-run --Werror --style=file
