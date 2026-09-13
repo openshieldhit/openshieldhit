@@ -33,6 +33,15 @@ add_library(osh_thirdparty_mcpl STATIC
 target_include_directories(osh_thirdparty_mcpl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(osh_thirdparty_mcpl PRIVATE ZLIB::ZLIB)
 
+# mcpl.h's MCPL_API expands to __declspec(dllimport) on Windows unless this is
+# defined, since upstream defaults to being consumed as a DLL. We always build
+# a plain static library (see the README.md rationale), so every mcpl.h
+# include — this target's own .c files and any consumer's, e.g.
+# osh_scoring_save_mcpl.c — needs the same define; PUBLIC propagates it to
+# whatever links this target (privately or not), matching how the include
+# directory above is already propagated.
+target_compile_definitions(osh_thirdparty_mcpl PUBLIC mcpl_LIB_IS_STATIC)
+
 # Vendored third-party source: not held to this project's own warning/format rules.
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(osh_thirdparty_mcpl PRIVATE -w)

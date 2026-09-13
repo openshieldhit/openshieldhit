@@ -53,5 +53,5 @@ jobs:
             exit 0
           fi
 
-          git diff --diff-filter=AMRT -U0 "$BASE" "$HEAD" -- src examples tests \
+          git diff --diff-filter=AMRT -U0 "$BASE" "$HEAD" -- src examples tests ':(exclude)src/thirdparty/*' \
             | clang-tidy-diff-19.py -p1 -path build -quiet
