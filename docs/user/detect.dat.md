@@ -98,11 +98,65 @@ Rules and semantics:
   computed from overlapping CSG primitives, so they must be given explicitly; a
   zone with no `Volume` warns and defaults to `1.0 cm3`.
 - The output bin order is exactly the order of the `Zone` lines.
-- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`, `DirtyDose`, `DirtyDoseGy`.
+- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`, `DirtyDose`, `DirtyDoseGy`,
+  and `MCPL` (a phase-space dump rather than a spatial accumulator — its own
+  requirements and syntax are below).
 - `FileFormat BDO` (default) records which transport zone each bin is (`GEO_ZONES`
   tag) for labelling; `FileFormat TEXT` writes one row per zone with a numeric
   zone-index column. The per-zone volume is not stored in either — it is consumed by
   the ÷volume in postprocess, so the saved dose/fluence is already final.
+
+### MCPL phase-space dump — `FileFormat MCPL`
+
+Writes every particle that takes a transport step through a `Zone` to an
+[MCPL](https://mctools.github.io/mcpl/) phase-space file — for resampling in a
+later run, or importing into another Monte Carlo code (Geant4, MCNP, PHITS, …)
+instead of re-simulating the upstream transport. This is the dump/output side;
+importing an MCPL file as a beam source is a separate, not yet implemented,
+feature ([issue #41](https://github.com/openshieldhit/openshieldhit/issues/41)).
+
+```text
+Geometry Zone
+    Name UpstreamPlane
+    Zone Plane1        # a thin slab: most particles cross it in a single step
+
+Output
+    Filename dump.mcpl
+    FileFormat MCPL
+    Geo UpstreamPlane
+    Quantity MCPL
+    MaxRecords 1000000
+```
+
+Rules and semantics:
+
+- `Geometry Zone` is required — MCPL has no Mesh/Cyl form. One record is written
+  per transport step through *any* of the geometry's listed zones, at the step's
+  *exit* point: position, direction, and kinetic energy are the particle's state
+  as it leaves the zone, ready to seed a downstream run. A zone thin enough that
+  a particle almost always crosses it in a single step (a "plane") gives close
+  to one record per particle transit; a thicker zone records every sub-step a
+  particle takes while inside it.
+- `MaxRecords <n>` is **required** on the `Quantity MCPL` line: the number of
+  particle records to pre-allocate storage for. The run stops with an error if
+  more than `n` steps would be recorded — there is no silent truncation or
+  growth mid-run — so size it from the expected fluence through the zone with
+  headroom, not from the primary count alone (a single primary can cross the
+  same zone more than once, and secondaries count too).
+- An `Output` using `FileFormat MCPL` must contain exactly one `Quantity MCPL`
+  page and no other quantity; `Quantity MCPL` in turn requires `FileFormat MCPL`.
+  A `Diff1`/`Diff1Type` differential axis is not supported.
+- Particle-type/energy/generation filters apply the same way as any other
+  quantity, e.g. `Quantity MCPL protonsOnly` records only the particles a
+  `protonsOnly` filter passes.
+- Each record stores position `[cm]`, direction (unit vector), kinetic energy
+  `[MeV]`, statistical weight (`st->wt` — MCPL is the one scorer that does not
+  silently drop particle weight), and the MC particle's PDG code. The MCPL
+  `userflags` field carries the generation number (0 = beam primary, N =
+  Nth-generation secondary); the file's own header comment documents this.
+  Written in double precision. The header also carries an `nstat` `stat:sum:`
+  entry: the total number of primaries the run represents, letting a resample
+  run scale a partial dump back to a per-primary basis.
 
 ### Native plot output — `FileFormat SVG`
 

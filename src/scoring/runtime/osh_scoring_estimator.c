@@ -31,6 +31,11 @@ static struct osh_scoring_estimator const k_tavge = {osh_scoring_estimator_step_
 static struct osh_scoring_estimator const k_dbeta = {osh_scoring_estimator_step_dbeta, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_tbeta = {osh_scoring_estimator_step_tbeta, NULL, postprocess_ratio};
 static struct osh_scoring_estimator const k_nkerma = {NULL, NULL, postprocess_volume};
+/* MCPL has no point meaning (no track to record the state of at a bare
+ * interaction point) and nothing to postprocess (osh_scoring_estimator_step_mcpl
+ * writes finished records directly; the unused acc.data stays at its APPEND
+ * no-op default — see docs/dev/scoring.md §6). */
+static struct osh_scoring_estimator const k_mcpl = {osh_scoring_estimator_step_mcpl, NULL, NULL};
 
 struct osh_scoring_estimator const *osh_scoring_estimator_for(enum osh_scoring_score_kind kind) {
     switch (kind) {
@@ -64,6 +69,8 @@ struct osh_scoring_estimator const *osh_scoring_estimator_for(enum osh_scoring_s
         return &k_tbeta;
     case OSH_SCORING_SCORE_NKERMA:
         return &k_nkerma;
+    case OSH_SCORING_SCORE_MCPL:
+        return &k_mcpl;
     default:
         return NULL;
     }

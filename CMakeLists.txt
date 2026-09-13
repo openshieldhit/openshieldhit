@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14) # FetchContent_MakeAvailable (src/thirdparty/mcpl) needs 3.14
 project(openshieldhit C)
 
 set(CMAKE_C_STANDARD 11)
@@ -140,6 +140,7 @@ if(OSH_ENABLE_SANITIZERS)
 endif()
 
 # ---- Libraries / modules (these create osh_common, osh_random, etc.) ----
+add_subdirectory(src/thirdparty/mcpl)
 add_subdirectory(src/common)
 add_subdirectory(src/random)
 add_subdirectory(src/beam)

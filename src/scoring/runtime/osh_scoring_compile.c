@@ -109,6 +109,9 @@ static enum osh_scoring_score_kind quantity_to_score_kind(char const *quantity) 
     if (strcmp(quantity, "tbeta") == 0) {
         return OSH_SCORING_SCORE_TBETA;
     }
+    if (strcmp(quantity, "mcpl") == 0) {
+        return OSH_SCORING_SCORE_MCPL;
+    }
     return OSH_SCORING_SCORE_UNKNOWN;
 }
 
@@ -317,6 +320,18 @@ enum osh_status osh_scoring_estimate_memory(struct osh_scoring_workspace const *
                 page_bytes = (n <= UINT64_MAX / bytes_per_bin) ? (n * bytes_per_bin) : UINT64_MAX;
             }
 
+            /* MCPL pages additionally pre-allocate a "MaxRecords" append buffer
+             * (osh_scoring_compile()'s dst_page->mcpl_records), separate from and
+             * on top of the bins-sized acc.data above (bins == 1 for MCPL: Zone
+             * geometry with no differential axis, per Phase 2's validation). */
+            if (kind == OSH_SCORING_SCORE_MCPL) {
+                uint64_t const one_record = (uint64_t) sizeof(struct osh_scoring_mcpl_record);
+                uint64_t const n_records = (uint64_t) page->mcpl_max_records;
+                uint64_t const record_bytes =
+                    (n_records <= UINT64_MAX / one_record) ? (n_records * one_record) : UINT64_MAX;
+                page_bytes = (page_bytes <= UINT64_MAX - record_bytes) ? (page_bytes + record_bytes) : UINT64_MAX;
+            }
+
             out->accum_bytes =
                 (out->accum_bytes <= UINT64_MAX - page_bytes) ? (out->accum_bytes + page_bytes) : UINT64_MAX;
             out->npages += 1u;
@@ -415,6 +430,7 @@ static int runtime_supports_score_kind(enum osh_scoring_score_kind score_kind) {
     case OSH_SCORING_SCORE_TAVGE:
     case OSH_SCORING_SCORE_DBETA:
     case OSH_SCORING_SCORE_TBETA:
+    case OSH_SCORING_SCORE_MCPL:
         return 1;
     default:
         return 0;
@@ -940,13 +956,61 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             if (rt->geometries[gidx].geo_kind == OSH_SCORING_GEO_ZONE && score_kind != OSH_SCORING_SCORE_ENERGY
                 && score_kind != OSH_SCORING_SCORE_FLUENCE && score_kind != OSH_SCORING_SCORE_DOSE
                 && score_kind != OSH_SCORING_SCORE_DOSEGY && score_kind != OSH_SCORING_SCORE_DIRTYDOSE
-                && score_kind != OSH_SCORING_SCORE_DIRTYDOSEGY) {
+                && score_kind != OSH_SCORING_SCORE_DIRTYDOSEGY && score_kind != OSH_SCORING_SCORE_MCPL) {
                 OSH_DIAG_ERRORF(diag,
                                 "Scoring output '%s' uses quantity '%s' on Zone geometry '%s'; only Energy, Fluence, "
-                                "Dose, DoseGy, DirtyDose, and DirtyDoseGy are supported for Zone scoring",
+                                "Dose, DoseGy, DirtyDose, DirtyDoseGy, and MCPL are supported for Zone scoring",
                                 ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
                                 ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)",
                                 ws->outputs[i].geometry_name ? ws->outputs[i].geometry_name : "(null)");
+                rc = OSH_ENOTSUP;
+                goto fail;
+            }
+            /* MCPL is a phase-space append stream, not a spatial accumulator: it
+             * needs a Zone (the physical region/plane to dump) and a dedicated
+             * output file it owns exclusively, so require both directions of the
+             * pairing up front rather than discovering a mismatch at save time. */
+            if (score_kind == OSH_SCORING_SCORE_MCPL) {
+                char const *ff = ws->outputs[i].fileformat;
+                if (rt->geometries[gidx].geo_kind != OSH_SCORING_GEO_ZONE) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring output '%s': Quantity MCPL requires Geometry Zone",
+                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+                if (!ff || strcmp(ff, "mcpl") != 0) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring output '%s': Quantity MCPL requires FileFormat MCPL",
+                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+                if (ws->outputs[i].npages != 1u) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring output '%s': an MCPL output must contain exactly one Quantity MCPL page",
+                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+                if (ws->outputs[i].pages[j].mcpl_max_records == 0u) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring output '%s': Quantity MCPL requires MaxRecords > 0",
+                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                    rc = OSH_EINVAL;
+                    goto fail;
+                }
+                if (ws->outputs[i].pages[j].diff_nbins > 0u) {
+                    OSH_DIAG_ERRORF(diag,
+                                    "Scoring output '%s': Quantity MCPL does not support a differential axis",
+                                    ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                    rc = OSH_ENOTSUP;
+                    goto fail;
+                }
+            } else if (ws->outputs[i].fileformat && strcmp(ws->outputs[i].fileformat, "mcpl") == 0) {
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring output '%s': FileFormat MCPL requires Quantity MCPL",
+                                ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
                 rc = OSH_ENOTSUP;
                 goto fail;
             }
@@ -1156,6 +1220,21 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             &dst_page->acc, dst_page->len, dst_page->has_data2, dst_page->variance);
         if (rc != OSH_OK) {
             goto fail;
+        }
+
+        /* MCPL's own append buffer, separate from the generic acc.data above
+         * (Phase 2 already rejected mcpl_max_records == 0 for this score kind).
+         * calloc rather than malloc: mcpl_count == 0 means no record has been
+         * booked, so the buffer's initial content is never read uninitialised. */
+        if (dst_page->score_kind == OSH_SCORING_SCORE_MCPL) {
+            dst_page->acc.mcpl_capacity = src_page->mcpl_max_records;
+            dst_page->acc.mcpl_records = (struct osh_scoring_mcpl_record *) calloc(dst_page->acc.mcpl_capacity,
+                                                                                   sizeof(*dst_page->acc.mcpl_records));
+            dst_page->acc.mcpl_count = (size_t *) calloc(1u, sizeof(*dst_page->acc.mcpl_count));
+            if (!dst_page->acc.mcpl_records || !dst_page->acc.mcpl_count) {
+                rc = OSH_ENOMEM;
+                goto fail;
+            }
         }
 
         if (src_page->nfilter_names > 0u) {

@@ -67,6 +67,12 @@ foreach(test_src ${UNIT_SOURCES})
     set_tests_properties("unit::${test_name}" PROPERTIES LABELS "unit")
 endforeach()
 
+# ---- MCPL round-trip test needs the vendored reader API (osh_scoring links it
+# PRIVATE, so it is not already on the include path from osh_scoring alone) ----
+if(TARGET test_osh_scoring_mcpl)
+    target_link_libraries(test_osh_scoring_mcpl PRIVATE osh_thirdparty_mcpl)
+endif()
+
 # ---- CLI smoke test via the built executable ----
 add_test(NAME "unit::cli::version" COMMAND $<TARGET_FILE:openshieldhit> --version)
 add_test(NAME "unit::cli::help"    COMMAND $<TARGET_FILE:openshieldhit> --help)

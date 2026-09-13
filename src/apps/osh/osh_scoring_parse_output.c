@@ -9,6 +9,7 @@
  * - `Geo <name>`
  * - `Fileformat|Format <name>`
  * - `Quantity <name> [filter_name ...]`
+ * - `MaxRecords <n>` (required for `Quantity MCPL`)
  *
  * Each `Quantity` line creates one page entry and records optional filter-name
  * references for late resolution.
@@ -80,6 +81,12 @@ static enum osh_status output_diff2type(struct osh_scoring_output_def *out,
                                         int nwords,
                                         char const *path,
                                         unsigned int lineno);
+static enum osh_status output_maxrecords(struct osh_scoring_output_def *out,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno);
 
 static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_filename},
                                              {OSH_SCORING_KEY_GEO_REF, output_geo},
@@ -90,6 +97,7 @@ static struct output_entry output_table[] = {{OSH_SCORING_KEY_FILENAME, output_f
                                              {"diff1type", output_diff1type},
                                              {"diff2", output_diff2},
                                              {"diff2type", output_diff2type},
+                                             {"maxrecords", output_maxrecords},
                                              {NULL, NULL}};
 
 /**
@@ -441,5 +449,38 @@ static enum osh_status output_diff2type(struct osh_scoring_output_def *out,
             return OSH_ENOMEM;
         }
     }
+    return OSH_OK;
+}
+
+/**
+ * @brief Parse `MaxRecords <n>`.
+ *
+ * Applies to the most recently added Quantity page. Required for "Quantity MCPL"
+ * (osh_scoring_compile() rejects a value of 0): the pre-allocated capacity, in
+ * particles, of the MCPL phase-space append buffer. Unused by every other
+ * quantity.
+ */
+static enum osh_status output_maxrecords(struct osh_scoring_output_def *out,
+                                         struct osh_diag_sink const *diag,
+                                         char **words,
+                                         int nwords,
+                                         char const *path,
+                                         unsigned int lineno) {
+    double n_d;
+
+    if (out->npages == 0u) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords must follow a Quantity line", path, lineno);
+        return OSH_EPARSE;
+    }
+    if (nwords < 2) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords requires a record count", path, lineno);
+        return OSH_EPARSE;
+    }
+    n_d = strtod(words[1], NULL);
+    if (!(n_d >= 1.0)) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords requires a positive integer", path, lineno);
+        return OSH_EPARSE;
+    }
+    out->pages[out->npages - 1u].mcpl_max_records = (size_t) n_d;
     return OSH_OK;
 }

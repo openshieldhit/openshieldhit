@@ -1,6 +1,7 @@
 #include "material/runtime/osh_material_runtime.h"
 #include "scoring/runtime/osh_scoring_estimator_common.h"
 #include "scoring/runtime/osh_scoring_estimator_internal.h"
+#include "scoring/runtime/osh_scoring_mcpl_record.h"
 
 /**
  * @brief Accumulate energy deposition [MeV] into the ENERGY scorer pages.
@@ -767,6 +768,80 @@ enum osh_status osh_scoring_estimator_step_tbeta(struct osh_scoring_runtime cons
             tbeta_denominator = track_weight;
             osh_score_deposit(acc->data, crossings[j].idx, tbeta_numerator);
             osh_score_deposit(acc->data2, crossings[j].idx, tbeta_denominator);
+        }
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Append one phase-space record per crossing to the MCPL pages'
+ *        append buffers (issue #328).
+ *
+ * @details
+ * Zone geometry — the only geometry MCPL pages compile against — always hands
+ * back exactly one whole-step crossing per step in a listed zone (see
+ * osh_scoring_step.c), so a "plane" zone thin enough that a particle crosses
+ * it in a single step gets exactly one record per transit.
+ *
+ * Position/direction/energy are booked at the step's *exit* point (st->q,
+ * st->w): the particle's state as it leaves the zone, ready to seed a
+ * downstream run. Already in openshieldhit's own cm/MeV units, identical to
+ * MCPL's, so osh_scoring_save_mcpl_output() converts nothing. Weight (st->wt)
+ * and generation (st->gen, 0 = beam primary) are carried through unchanged —
+ * this is the one scorer where particle weight is not silently dropped (see
+ * docs/dev/bug-hunts/2026-07-05-deep-audit.md finding S-1).
+ *
+ * Deposits into acc->mcpl_records/mcpl_count rather than acc->data: MCPL's
+ * cross-run combine rule is concatenation (APPEND), not a sum or ratio, so it
+ * does not use the generic data[]/data2[] machinery every other estimator
+ * shares. score_len is unused; a record's extent is a single point, not a
+ * path-length fraction of the step.
+ */
+enum osh_status osh_scoring_estimator_step_mcpl(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len) {
+    size_t i;
+    size_t j;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+    struct osh_scoring_mcpl_record *rec;
+    (void) score_len;
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        for (j = 0; j < ncross; ++j) {
+            if (crossings[j].idx >= page->diff_stride) {
+                return OSH_ESTATE;
+            }
+            if (!acc->mcpl_records || !acc->mcpl_count) {
+                return OSH_ESTATE; /* not an MCPL accumulator; osh_scoring_compile() always sets both */
+            }
+            if (*acc->mcpl_count >= acc->mcpl_capacity) {
+                /* MaxRecords exhausted: fail loudly rather than dropping
+                 * particles or growing the buffer on the hot path. */
+                return OSH_ESTATE;
+            }
+            rec = &acc->mcpl_records[*acc->mcpl_count];
+            rec->position[0] = st->q[0];
+            rec->position[1] = st->q[1];
+            rec->position[2] = st->q[2];
+            rec->direction[0] = st->w[0];
+            rec->direction[1] = st->w[1];
+            rec->direction[2] = st->w[2];
+            rec->ekin = st->q[3];
+            rec->weight = st->wt;
+            rec->pdgcode = part->pdg;
+            rec->gen = st->gen;
+            *acc->mcpl_count += 1u;
         }
     }
     return OSH_OK;

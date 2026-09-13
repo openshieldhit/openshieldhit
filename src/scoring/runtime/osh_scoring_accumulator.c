@@ -23,6 +23,12 @@ enum osh_status osh_scoring_accumulator_alloc_variance(struct osh_scoring_accumu
     acc->len = len;
     acc->weight = 0.0;
     acc->nbatch = 0u;
+    /* The MCPL append buffer is a separate, later allocation (osh_scoring_compile()
+     * sizes it from detect.dat's "MaxRecords", not from len); reset it here too so
+     * this function fully overwrites acc as documented. */
+    acc->mcpl_records = NULL;
+    acc->mcpl_capacity = 0u;
+    acc->mcpl_count = NULL;
 
     acc->data = (double *) calloc(n, sizeof(*acc->data));
     if (!acc->data) {
@@ -212,6 +218,14 @@ enum osh_status osh_scoring_accumulator_merge(struct osh_scoring_accumulator *ds
     if (variance_inconsistent(dst) || variance_inconsistent(src)) {
         return OSH_EINVAL;
     }
+    /* MCPL's append buffer needs concatenation (mcpl_records[0..count) from each
+     * side, back to back), not the additive/ratio folds below; not implemented
+     * yet (today's single-worker build never calls merge on an MCPL page — see
+     * the field comment in osh_scoring_accumulator.h). Fail loudly rather than
+     * silently dropping one side's records. */
+    if (dst->mcpl_records || src->mcpl_records) {
+        return OSH_ENOTSUP;
+    }
     /* Variance (Welford M2) arrays first — they need dst's pre-merge sums and
      * weight to form the Schubert-Gertz cross-term.  data_var pairs with data,
      * data2_var with data2; both use the per-accumulator history weight.  NULL
@@ -236,6 +250,8 @@ void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc) {
     free(acc->data2);
     free(acc->data_var);
     free(acc->data2_var);
+    free(acc->mcpl_records);
+    free(acc->mcpl_count);
     acc->data = NULL;
     acc->data2 = NULL;
     acc->data_var = NULL;
@@ -243,4 +259,7 @@ void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc) {
     acc->len = 0u;
     acc->weight = 0.0;
     acc->nbatch = 0u;
+    acc->mcpl_records = NULL;
+    acc->mcpl_capacity = 0u;
+    acc->mcpl_count = NULL;
 }
