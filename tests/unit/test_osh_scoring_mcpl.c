@@ -595,6 +595,106 @@ static void test_score_mcpl_honours_page_filters(void) {
     osh_scoring_workspace_free(ws);
 }
 
+/* The MCPL append buffer lives only on the master accumulator set: the private
+ * sets that variance batching and --score-replicas deposit into are built by
+ * osh_scoring_runtime_alloc_accumulator_set(), which allocates the binned
+ * arrays but no record buffer, and osh_scoring_accumulator_merge() refuses to
+ * concatenate records anyway.  Both combinations must therefore be refused
+ * before transport starts, with a message that says why -- not discovered as a
+ * bare OSH_ESTATE out of the hot path on the first crossing.
+ *
+ * The --score-replicas half of the pair lives in osh_simulation_run(), which
+ * needs a whole simulation to exercise; this covers the detect.dat-only half
+ * that osh_scoring_compile() owns, plus the helper both guards share. */
+static void test_compile_rejects_mcpl_with_variance(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+    char const *detect_variance = "Settings\n"
+                                  "    Name withErr\n"
+                                  "    Variance On\n"
+                                  "\n"
+                                  "Geometry Zone\n"
+                                  "    Name UpstreamPlane\n"
+                                  "    Zone Plane1\n"
+                                  "\n"
+                                  "Output\n"
+                                  "    Filename osh_scoring_mcpl_test.dat\n"
+                                  "    FileFormat TEXT\n"
+                                  "    Geo UpstreamPlane\n"
+                                  "    Quantity Energy withErr\n"
+                                  "\n"
+                                  "Output\n"
+                                  "    Filename osh_scoring_mcpl_test.mcpl\n"
+                                  "    FileFormat MCPL\n"
+                                  "    Geo UpstreamPlane\n"
+                                  "    Quantity MCPL\n"
+                                  "    MaxRecords 10\n";
+
+    /* Variance is run-wide: it is enabled on the Energy page, not the MCPL one,
+       and must still be caught. */
+    write_temp_file(path, sizeof(path), detect_variance);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ws != NULL);
+    ws->geometries[0].zone_indices = (size_t *) calloc(1u, sizeof(size_t));
+    ASSERT_TRUE(ws->geometries[0].zone_indices != NULL);
+    ws->geometries[0].zone_indices[0] = 5u;
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_ENOTSUP);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+
+    /* The same detect.dat without Variance On compiles, so the rejection above
+       is about the pairing and not about the two-output shape. */
+    ws = NULL;
+    setup_one_zone_mcpl(k_detect, 5u, &ws, &rt);
+    ASSERT_TRUE(osh_scoring_runtime_has_mcpl_page(&rt) == 1);
+    ASSERT_TRUE(osh_scoring_runtime_tracks_variance(&rt) == 0);
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
+/* The helper both guards are built on must not fire on a runtime with no MCPL
+ * page at all, or every variance/replica run would be refused. */
+static void test_has_mcpl_page_is_false_without_an_mcpl_output(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+    char const *detect_energy = "Geometry Zone\n"
+                                "    Name UpstreamPlane\n"
+                                "    Zone Plane1\n"
+                                "\n"
+                                "Output\n"
+                                "    Filename osh_scoring_mcpl_test.dat\n"
+                                "    FileFormat TEXT\n"
+                                "    Geo UpstreamPlane\n"
+                                "    Quantity Energy\n";
+
+    ASSERT_TRUE(osh_scoring_runtime_has_mcpl_page(NULL) == 0);
+
+    write_temp_file(path, sizeof(path), detect_energy);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    ws->geometries[0].zone_indices = (size_t *) calloc(1u, sizeof(size_t));
+    ASSERT_TRUE(ws->geometries[0].zone_indices != NULL);
+
+    memset(&rt, 0, sizeof(rt));
+    rc = osh_scoring_compile(ws, NULL, &rt);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(osh_scoring_runtime_has_mcpl_page(&rt) == 0);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
 int main(void) {
     test_score_mcpl_books_records_and_enforces_max_records();
     test_save_mcpl_output_round_trips_through_mcpl_reader();
@@ -606,6 +706,8 @@ int main(void) {
     test_estimate_memory_counts_the_mcpl_append_buffer();
     test_score_mcpl_guards_a_corrupt_accumulator();
     test_score_mcpl_honours_page_filters();
+    test_compile_rejects_mcpl_with_variance();
+    test_has_mcpl_page_is_false_without_an_mcpl_output();
     printf("All MCPL scoring tests passed.\n");
     return 0;
 }

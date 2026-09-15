@@ -158,6 +158,18 @@ Rules and semantics:
   entry: the total number of primaries the run represents, letting a resample
   run scale a partial dump back to a per-primary basis.
 
+**Not combinable with variance batching or `--score-replicas`.** Both of those
+score into a *private* accumulator set and fold it into the master afterwards,
+and a phase-space stream cannot be folded that way — its combine rule is
+concatenation, not addition. An `Output` using `Quantity MCPL` is therefore
+rejected up front if any page in the same `detect.dat` carries `Variance On`
+(variance is run-wide, so a `Variance On` page elsewhere still counts), or if
+the run is launched with `--score-replicas`. Both produce a clear error before
+any transport starts. Put the MCPL dump in its own run, or drop the other
+option. Lifting this means teaching the private-set path to carry and
+concatenate the buffer — tracked as
+[issue #331](https://github.com/openshieldhit/openshieldhit/issues/331).
+
 **Build switch.** MCPL support is compiled in by default. It is the only part
 of openshieldhit that bundles third-party code — the MCPL project's own core,
 under the Apache-2.0 licence (see `THIRD_PARTY_NOTICES.md`) — so it can be

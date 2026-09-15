@@ -1506,6 +1506,29 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
         }
     }
 
+    /* Variance batching scores each checkpoint batch into a private accumulator
+     * set and folds it into the master (issue #209).  Those private sets carry
+     * no MCPL append buffer -- osh_scoring_runtime_alloc_accumulator_set() only
+     * allocates the binned arrays -- and osh_scoring_accumulator_merge() refuses
+     * to concatenate records anyway, so an MCPL page in a variance-tracking run
+     * would abort on the first crossing with a bare OSH_ESTATE from the hot
+     * path.  Variance is run-wide (any page enabling it switches every page to
+     * batch scoring), so this is checked here, once, against the finished
+     * runtime rather than per page above.
+     *
+     * Returns directly instead of "goto fail": the scratch that label frees was
+     * already released above and its pointers were not cleared, so jumping there
+     * from here would double-free.  Same reason the ENOMEM paths in this stretch
+     * of the function return directly too. */
+    if (osh_scoring_runtime_has_mcpl_page(rt) && osh_scoring_runtime_tracks_variance(rt)) {
+        OSH_DIAG_ERRORF(diag,
+                        "Quantity MCPL cannot be combined with Variance On: variance batching scores into a private "
+                        "accumulator set, which carries no phase-space append buffer. Drop Variance On, or move the "
+                        "MCPL output to a separate run");
+        osh_scoring_runtime_free(rt);
+        return OSH_ENOTSUP;
+    }
+
     osh_scoring_runtime_finalize_ssets(rt);
     return OSH_OK;
 

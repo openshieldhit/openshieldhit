@@ -212,6 +212,36 @@ static inline int osh_scoring_runtime_tracks_variance(struct osh_scoring_runtime
 }
 
 /**
+ * @brief Does any compiled page book an MCPL phase-space append buffer?
+ *
+ * @details
+ * True when at least one page is a @c Quantity @c MCPL page, so
+ * @ref osh_scoring_compile allocated its @c mcpl_records buffer (issue #328).
+ * The append buffer lives only on the master accumulator set:
+ * @ref osh_scoring_runtime_alloc_accumulator_set builds private sets through
+ * @c osh_scoring_accumulator_alloc_variance(), which allocates the binned
+ * arrays but no record buffer, and @ref osh_scoring_accumulator_merge refuses
+ * to fold one set's records into another's (concatenation is not one of the
+ * additive/ratio rules it implements).  Callers that would route deposits into
+ * a private set — variance batching and --score-replicas — use this to refuse
+ * the combination up front instead of letting the hot-path guard in
+ * osh_scoring_estimator_step_mcpl() abort the run on the first crossing.
+ */
+static inline int osh_scoring_runtime_has_mcpl_page(struct osh_scoring_runtime const *rt) {
+    size_t p;
+
+    if (!rt || rt->npages == 0u || !rt->pages) {
+        return 0;
+    }
+    for (p = 0u; p < rt->npages; ++p) {
+        if (rt->pages[p].score_kind == OSH_SCORING_SCORE_MCPL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
  * @brief Completeness label to stamp on a saved result — never NULL.
  *
  * @details
