@@ -81,7 +81,16 @@ enum osh_status osh_scoring_save_mcpl_output(struct osh_scoring_workspace const 
     /* Known in full at save time (unlike a live/streaming writer that has to
      * reserve this and patch it in once the run finishes): the total primary
      * count this run represents, letting a downstream consumer scale a partial
-     * phase-space dump back to a per-primary basis. */
+     * phase-space dump back to a per-primary basis.
+     *
+     * MCPL standardises no key name for this, so every producer picks its own
+     * (Geant4 phase-space writers commonly use "launched_primaries"); a
+     * consumer reading the wrong key silently mis-scales every downstream
+     * result rather than failing.  Name the key in a header comment as well as
+     * the stat, so the file says what it means without reference to these docs. */
+    mcpl_hdr_add_comment(of,
+                         "nstat (stat:sum): number of beam primaries this run represents; divide tallies derived "
+                         "from these particles by it to get a per-primary result");
     mcpl_hdr_add_stat_sum(of, "nstat", (double) nstat);
 
     memset(&particle, 0, sizeof(particle));

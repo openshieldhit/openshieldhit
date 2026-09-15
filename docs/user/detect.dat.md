@@ -138,11 +138,11 @@ Rules and semantics:
   to one record per particle transit; a thicker zone records every sub-step a
   particle takes while inside it.
 - `MaxRecords <n>` is **required** on the `Quantity MCPL` line: the number of
-  particle records to pre-allocate storage for. The run stops with an error if
-  more than `n` steps would be recorded — there is no silent truncation or
-  growth mid-run — so size it from the expected fluence through the zone with
-  headroom, not from the primary count alone (a single primary can cross the
-  same zone more than once, and secondaries count too).
+  particle records to pre-allocate storage for. The buffer is allocated once,
+  before transport, and never grows — nothing under the scoring hot path
+  allocates — so the run **stops with an error** the moment record `n + 1`
+  would be booked, and no `.mcpl` file is written. There is no silent
+  truncation. Sizing guidance is below.
 - An `Output` using `FileFormat MCPL` must contain exactly one `Quantity MCPL`
   page and no other quantity; `Quantity MCPL` in turn requires `FileFormat MCPL`.
   A `Diff1`/`Diff1Type` differential axis is not supported.
@@ -154,9 +154,62 @@ Rules and semantics:
   silently drop particle weight), and the MC particle's PDG code. The MCPL
   `userflags` field carries the generation number (0 = beam primary, N =
   Nth-generation secondary); the file's own header comment documents this.
-  Written in double precision. The header also carries an `nstat` `stat:sum:`
-  entry: the total number of primaries the run represents, letting a resample
-  run scale a partial dump back to a per-primary basis.
+  Written in double precision.
+
+#### Sizing `MaxRecords`
+
+Overflow is fatal and the buffer never grows, so `MaxRecords` has to cover the
+run's *ceiling*, not its expected yield:
+
+- One record is booked per transport **step** through a listed zone, not per
+  particle — a primary that takes several sub-steps inside the zone contributes
+  several records, and secondaries born upstream contribute their own. A thin
+  "plane" zone keeps this close to one record per transit; a thick zone does
+  not.
+- A record costs `72 B` on a typical 64-bit build, so `MaxRecords 2000000`
+  reserves ~137 MiB. `openshieldhit --dry-run` reports the figure as part of
+  `Scoring memory:`, which is the cheapest way to check a value before
+  committing a long run.
+- A time-limited run (`--max-time`) has no primary count to scale from at all,
+  so size it from an expected rate measured on a short trial run.
+
+If the buffer does fill, the run aborts with a message naming the output and
+the limit:
+
+```text
+[ERROR] scoring: MCPL output 'dump.mcpl' ran out of records after 10 of MaxRecords 10; raise MaxRecords in detect.dat (72 B per record). No MCPL file is written
+```
+
+Streaming records straight to the file (MCPL is an append format, so the
+library supports it) would remove both the parameter and the memory scaling;
+it is deferred because the buffer is also what a future parallel/replica worker
+concatenates at merge time — see
+[issue #331](https://github.com/openshieldhit/openshieldhit/issues/331).
+
+#### A zone is bounded; a crossing surface is not
+
+Worth knowing before comparing an openshieldhit dump against another code's
+phase-space file. `Quantity MCPL` records particles inside a **zone** — a
+bounded region of your `geo.dat`. Most other codes' phase-space writers instead
+record every particle crossing an **unbounded plane or surface**.
+
+The two agree on the particles that stay inside the zone's transverse extent,
+and differ on everything outside it: a particle that scatters out of a beam
+pipe and crosses the same *z* far off-axis appears in a surface dump and not in
+a zone dump. Even a small such population — fractions of a percent — dominates
+radial moments, so a `σ_r` comparison can look wildly inconsistent while the
+core distributions agree. Cut both files on the zone's transverse extent before
+comparing, or widen the zone to cover the surface you are comparing against.
+
+#### The `nstat` header key
+
+MCPL standardises no key for "how many primaries does this file represent", so
+every producer names it itself; Geant4-side writers commonly use
+`launched_primaries`. openshieldhit writes **`nstat`**, matching its own
+`beam.dat` card and BDO field name, as a `stat:sum:` header entry, and repeats
+the meaning in a header comment. A consumer that reads the wrong key does not
+fail — it silently mis-scales every result derived from the file — so check the
+key name when wiring up a reader written for another code.
 
 **Not combinable with variance batching or `--score-replicas`.** Both of those
 score into a *private* accumulator set and fold it into the master afterwards,
