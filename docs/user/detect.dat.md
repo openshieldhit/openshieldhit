@@ -167,9 +167,14 @@ run's *ceiling*, not its expected yield:
   "plane" zone keeps this close to one record per transit; a thick zone does
   not.
 - A record costs `72 B` on a typical 64-bit build, so `MaxRecords 2000000`
-  reserves ~137 MiB. `openshieldhit --dry-run` reports the figure as part of
-  `Scoring memory:`, which is the cheapest way to check a value before
-  committing a long run.
+  reserves ~137 MiB. `openshieldhit --dry-run` reports the figure in its
+  `Scoring memory:` line and refuses a configuration that exceeds the memory
+  budget, which is the cheapest way to check a value before committing a long
+  run.
+- The card must follow the `Quantity MCPL` line it belongs to. Under any other
+  `Quantity` it is rejected rather than ignored, and it is parsed strictly: a
+  value that is not a plain positive whole number (`2.7`, `1e6`, `10junk`, `-1`)
+  is an error, not a silent reinterpretation.
 - A time-limited run (`--max-time`) has no primary count to scale from at all,
   so size it from an expected rate measured on a short trial run.
 
@@ -185,6 +190,17 @@ library supports it) would remove both the parameter and the memory scaling;
 it is deferred because the buffer is also what a future parallel/replica worker
 concatenates at merge time — see
 [issue #331](https://github.com/openshieldhit/openshieldhit/issues/331).
+
+#### If the output file cannot be written
+
+The bundled MCPL writer reports failures by terminating the process rather than
+by returning an error, which is upstream MCPL behaviour and not something
+openshieldhit can intercept without abandoning the library mid-write. The one
+reachable case — an output `Filename` that cannot be opened for writing, or one
+MCPL itself would reject — is therefore checked before the writer is handed the
+file, and ends the run through the normal error path. A failure inside the
+writer after that point (a disk filling up, for instance) still aborts the
+process, losing the other outputs of that save.
 
 #### A zone is bounded; a crossing surface is not
 

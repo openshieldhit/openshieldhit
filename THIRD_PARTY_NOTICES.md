@@ -2,7 +2,10 @@
 
 OpenShieldHIT itself is distributed under the MIT License (see `LICENSE`).
 
-It bundles third-party source code that carries its own, different licence.
+A default build bundles third-party source code that carries its own, different
+licence. Each entry below names the switch that leaves it out, and a build
+configured that way contains none of that entry's code — this file still ships
+so that a recipient can tell which case they have.
 Those licences are **not** superseded by OpenShieldHIT's MIT licence: the
 bundled files remain under the terms below, and this file exists so that every
 recipient of an OpenShieldHIT distribution — source tarball, `.deb`, `.tar.gz`,

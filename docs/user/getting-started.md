@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- CMake ≥ 3.16
+- CMake ≥ 3.21 (what the `CMakePresets.json` workflow below needs; a plain `cmake -B build` works from 3.14)
 - C11 compiler (GCC, Clang, or MSVC)
 - Optional: zlib (compressed `.bdz` output files), libSDL2 (interactive geometry viewers in `examples/`, not needed for the main application)
 - DICOM: no external library needed — openshieldhit includes a minimal self-contained reader/writer

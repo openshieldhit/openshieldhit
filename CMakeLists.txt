@@ -1,4 +1,7 @@
-cmake_minimum_required(VERSION 3.14) # FetchContent_MakeAvailable (src/thirdparty/mcpl) needs 3.14
+# Raised from 3.10: FetchContent_MakeAvailable (src/thirdparty/mcpl) needs 3.14.  This is the
+# floor for a plain `cmake -B build`; the documented preset workflow needs 3.21 (see
+# CMakePresets.json, README.md, CONTRIBUTING.md).
+cmake_minimum_required(VERSION 3.14)
 project(openshieldhit C)
 
 set(CMAKE_C_STANDARD 11)
