@@ -1,6 +1,7 @@
 #include "scoring/save/osh_scoring_save_mcpl.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "mcpl.h"
@@ -31,6 +32,54 @@ static void normalize_direction(double dir[3]) {
     dir[2] *= inv_norm;
 }
 
+/* Longest filename mcpl_create_outfile() accepts, plus room for the ".mcpl" it
+ * appends and the terminator. */
+#define OSH_MCPL_PATH_MAX (4096u + 5u + 1u)
+
+/**
+ * @brief Reproduce the path mcpl_create_outfile() will actually open.
+ *
+ * @details
+ * MCPL appends ".mcpl" to a filename that does not already end in it, and
+ * rejects a few shapes outright (NULL, empty, longer than 4096, a bare
+ * ".mcpl" with no basename) — by calling mcpl_error(), which exits the
+ * process. Applying the same rules here turns those four aborts into an
+ * OSH_EINVAL, and gives the writability probe below the exact path to test
+ * rather than the pre-extension one, which would otherwise leave a stray
+ * empty file next to the real output.
+ *
+ * @returns 1 when @p buf holds the effective path, 0 when @p filename is one
+ *          MCPL would reject or does not fit in @p buf.
+ */
+static int mcpl_effective_path(char const *filename, char *buf, size_t buflen) {
+    size_t n;
+    char const *lastdot;
+    int needs_ext;
+
+    if (!filename || !buf) {
+        return 0;
+    }
+    n = strlen(filename);
+    if (n == 0u || n > 4096u) {
+        return 0;
+    }
+    lastdot = strrchr(filename, '.');
+    if (lastdot == filename && n == 5u) {
+        return 0; /* bare ".mcpl": no basename part */
+    }
+    needs_ext = (!lastdot || strcmp(lastdot, ".mcpl") != 0) ? 1 : 0;
+    if (n + (needs_ext ? 5u : 0u) + 1u > buflen) {
+        return 0;
+    }
+    memcpy(buf, filename, n);
+    if (needs_ext) {
+        memcpy(buf + n, ".mcpl", 6u);
+    } else {
+        buf[n] = '\0';
+    }
+    return 1;
+}
+
 enum osh_status osh_scoring_save_mcpl_output(struct osh_scoring_workspace const *ws,
                                              struct osh_scoring_runtime const *rt,
                                              unsigned long long nstat,
@@ -40,6 +89,8 @@ enum osh_status osh_scoring_save_mcpl_output(struct osh_scoring_workspace const 
     struct osh_scoring_accumulator const *acc;
     mcpl_outfile_t of;
     mcpl_particle_t particle;
+    FILE *probe;
+    char path[OSH_MCPL_PATH_MAX];
     size_t count;
     size_t i;
 
@@ -70,9 +121,27 @@ enum osh_status osh_scoring_save_mcpl_output(struct osh_scoring_workspace const 
 
     /* mcpl_create_outfile()/mcpl_add_particle() have no error-return path: the
      * vendored library aborts the process (mcpl.c's default error handler) on
-     * a failure such as an unwritable path. Accepted upstream MCPL behaviour,
-     * unlike the enum osh_status convention the rest of this codebase uses —
-     * see src/thirdparty/mcpl/README.md. */
+     * any failure. Accepted upstream MCPL behaviour, unlike the enum osh_status
+     * convention the rest of this codebase uses — see
+     * src/thirdparty/mcpl/README.md.
+     *
+     * mcpl_set_error_handler() can replace that handler, but a replacement may
+     * not return, so recovering would mean longjmp-ing out of the library with
+     * its internal allocations and a half-written file still live — a worse
+     * trade than the abort. What is worth catching is the reachable, ordinary
+     * failure: an output path that cannot be opened for writing. Probe it here
+     * (on the same path MCPL will open, extension included) and return
+     * OSH_EIO, so a mistyped or unwritable Filename ends the run through the
+     * normal status path rather than by killing the process. */
+    if (!mcpl_effective_path(out->filename, path, sizeof(path))) {
+        return OSH_EINVAL;
+    }
+    probe = fopen(path, "wb");
+    if (!probe) {
+        return OSH_EIO;
+    }
+    (void) fclose(probe);
+
     of = mcpl_create_outfile(out->filename);
     mcpl_hdr_set_srcname(of, "openshieldhit");
     mcpl_enable_doubleprec(of);
@@ -104,6 +173,11 @@ enum osh_status osh_scoring_save_mcpl_output(struct osh_scoring_workspace const 
         particle.direction[1] = rec->direction[1];
         particle.direction[2] = rec->direction[2];
         normalize_direction(particle.direction);
+        /* mcpl_add_particle() rejects a negative ekin by aborting the process.
+         * A booked record cannot legitimately carry one — st->q[3] is an exit
+         * energy, zero for a particle killed in the step — so this clamp is
+         * unreachable except through an upstream bug, and trades a process
+         * abort for a zero-energy record in that case. */
         particle.ekin = (rec->ekin > 0.0) ? rec->ekin : 0.0;
         particle.weight = rec->weight;
         particle.pdgcode = rec->pdgcode;
