@@ -139,8 +139,23 @@ if(OSH_ENABLE_SANITIZERS)
     endif()
 endif()
 
+# MCPL phase-space I/O (issue #328).  ON by default: it is a first-class output
+# format, and the vendored core builds everywhere with no manual prerequisite.
+# The switch exists because this is the project's only bundled third-party code
+# and the only non-MIT licence in a build — MCPL is Apache-2.0 (see
+# THIRD_PARTY_NOTICES.md).  Apache-2.0 is fine with MIT and with GPLv3 but not
+# with GPLv2-only, so a downstream that must link openshieldhit into a
+# GPLv2-only work can configure -DOSH_ENABLE_MCPL=OFF and get a binary with no
+# Apache-2.0 code in it.  OFF also drops the zlib dependency MCPL's core pulls
+# in.  With the switch OFF, a detect.dat asking for MCPL is rejected at compile
+# time with a clear message rather than failing at save time.
+option(OSH_ENABLE_MCPL "Build MCPL phase-space I/O support (bundles Apache-2.0 third-party code)" ON)
+message(STATUS "MCPL phase-space I/O: ${OSH_ENABLE_MCPL}")
+
 # ---- Libraries / modules (these create osh_common, osh_random, etc.) ----
-add_subdirectory(src/thirdparty/mcpl)
+if(OSH_ENABLE_MCPL)
+    add_subdirectory(src/thirdparty/mcpl)
+endif()
 add_subdirectory(src/common)
 add_subdirectory(src/random)
 add_subdirectory(src/beam)
@@ -205,10 +220,26 @@ install(TARGETS openshieldhit
     RUNTIME DESTINATION bin
 )
 
-# Install documentation
-install(FILES README.md LICENSE
+# Install documentation.  THIRD_PARTY_NOTICES.md ships unconditionally so a
+# binary recipient always learns what is bundled and under which terms.
+install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md
     DESTINATION share/openshieldhit
 )
+
+# Apache-2.0 section 4(a)/4(d): a recipient of a binary that contains the
+# vendored MCPL core must get the licence text and the upstream NOTICE, not
+# just a pointer to them.  Source recipients already have both next to the
+# code; this puts them in the .deb / .tar.gz / .zip as well.
+if(OSH_ENABLE_MCPL)
+    install(FILES src/thirdparty/mcpl/LICENSE
+        DESTINATION share/openshieldhit/licenses
+        RENAME LICENSE.mcpl-apache-2.0
+    )
+    install(FILES src/thirdparty/mcpl/NOTICE.md
+        DESTINATION share/openshieldhit/licenses
+        RENAME NOTICE.mcpl
+    )
+endif()
 
 # ---- CPack Configuration ----
 set(CPACK_PACKAGE_NAME "openshieldhit")
@@ -231,8 +262,14 @@ set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OpenShieldHIT Contributors")
 set(CPACK_DEBIAN_PACKAGE_SECTION "science")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/openshieldhit/openshieldhit")
 
-# RPM package specific settings (optional)
-set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+# RPM package specific settings (optional).  The License field must name every
+# licence present in the package, not just the project's own: a default build
+# bundles the Apache-2.0 MCPL core (see THIRD_PARTY_NOTICES.md).
+if(OSH_ENABLE_MCPL)
+    set(CPACK_RPM_PACKAGE_LICENSE "MIT AND Apache-2.0")
+else()
+    set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+endif()
 
 # Generic tarball settings
 set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)

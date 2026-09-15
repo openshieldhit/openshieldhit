@@ -966,6 +966,22 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 rc = OSH_ENOTSUP;
                 goto fail;
             }
+#ifndef OSH_WITH_MCPL
+            /* Built with -DOSH_ENABLE_MCPL=OFF, so no MCPL writer is linked in
+             * (see src/scoring/CMakeLists.txt).  Reject either spelling here,
+             * at compile time, with a message that names the build switch —
+             * the alternative is a run that transports to completion and only
+             * then fails to write its output. */
+            if (score_kind == OSH_SCORING_SCORE_MCPL
+                || (ws->outputs[i].fileformat && strcmp(ws->outputs[i].fileformat, "mcpl") == 0)) {
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring output '%s' asks for MCPL, but this openshieldhit was built without MCPL "
+                                "support; rebuild with -DOSH_ENABLE_MCPL=ON",
+                                ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
+                rc = OSH_ENOTSUP;
+                goto fail;
+            }
+#endif
             /* MCPL is a phase-space append stream, not a spatial accumulator: it
              * needs a Zone (the physical region/plane to dump) and a dedicated
              * output file it owns exclusively, so require both directions of the

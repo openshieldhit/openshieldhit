@@ -22,3 +22,24 @@ three CI platforms.
 Not vendored: MCPL's own CLI tools (`mcpltool` etc.) and its SSW/PHITS converters
 (`mcpl_extra/`) — neither is needed here, only the C API used directly by
 `osh_scoring_save_mcpl.c`.
+
+## Licence files
+
+`LICENSE` (Apache-2.0) and `NOTICE.md` are upstream's own, vendored alongside the
+source: Apache-2.0 §4(a) and §4(d) require both to travel with any redistribution,
+including binary ones, so the root `CMakeLists.txt` also installs them into
+`share/openshieldhit/licenses/` for the `.deb`/`.tar.gz`/`.zip` packages. The
+root `THIRD_PARTY_NOTICES.md` summarises all of this for a recipient who never
+sees this directory.
+
+Of the four source files only `mcpl.h` is modified (it is generated from
+upstream's `mcpl.h.in` template, as described above); §4(b) requires that to be
+stated, so the file carries a notice block at the top saying so. Re-vendoring a
+newer MCPL means re-applying that block — nothing else here is patched.
+
+## Building without MCPL
+
+This directory is only added to the build when `OSH_ENABLE_MCPL` is `ON`, which
+is the default. `-DOSH_ENABLE_MCPL=OFF` leaves every Apache-2.0 file here
+uncompiled and unlinked; see the option's comment in the root `CMakeLists.txt`
+for why that switch exists.

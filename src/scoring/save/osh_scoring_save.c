@@ -4,9 +4,11 @@
 
 #include "scoring/save/osh_scoring_save_ascii.h"
 #include "scoring/save/osh_scoring_save_bdo2019.h"
-#include "scoring/save/osh_scoring_save_mcpl.h"
 #include "scoring/save/osh_scoring_save_plot.h"
 #include "scoring/save/osh_scoring_save_rtdose.h"
+#ifdef OSH_WITH_MCPL
+#include "scoring/save/osh_scoring_save_mcpl.h"
+#endif
 
 static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
@@ -89,7 +91,14 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
         return osh_scoring_save_plot_output(ws, rt, nstat, output_idx);
     }
     if (fileformat_is_mcpl(fileformat)) {
+#ifdef OSH_WITH_MCPL
         return osh_scoring_save_mcpl_output(ws, rt, nstat, output_idx);
+#else
+        /* Unreachable in practice: osh_scoring_compile() already rejected this
+         * detect.dat when the build has no MCPL support.  Kept as a belt-and-
+         * braces OSH_ENOTSUP so the dispatch stays total. */
+        return OSH_ENOTSUP;
+#endif
     }
 
     return OSH_ENOTSUP;

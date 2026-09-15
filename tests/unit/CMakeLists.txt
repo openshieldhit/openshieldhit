@@ -30,6 +30,13 @@ list(REMOVE_ITEM UNIT_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_cli.c
 )
 
+# The MCPL test calls the vendored writer and reader directly, so it cannot
+# build at all in a -DOSH_ENABLE_MCPL=OFF tree.  Drop it from the glob rather
+# than #ifdef its body away into an empty test binary.
+if(NOT OSH_ENABLE_MCPL)
+    list(REMOVE_ITEM UNIT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test_osh_scoring_mcpl.c)
+endif()
+
 foreach(test_src ${UNIT_SOURCES})
     get_filename_component(test_name ${test_src} NAME_WE)
 

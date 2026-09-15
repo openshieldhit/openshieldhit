@@ -158,6 +158,22 @@ Rules and semantics:
   entry: the total number of primaries the run represents, letting a resample
   run scale a partial dump back to a per-primary basis.
 
+**Build switch.** MCPL support is compiled in by default. It is the only part
+of openshieldhit that bundles third-party code — the MCPL project's own core,
+under the Apache-2.0 licence (see `THIRD_PARTY_NOTICES.md`) — so it can be
+switched off with `cmake -DOSH_ENABLE_MCPL=OFF`, which also drops the zlib
+dependency that core pulls in. A `detect.dat` asking for MCPL is then rejected
+when the scoring setup is compiled, with a message naming the switch, rather
+than failing after the run. Chiefly of interest to anyone who must link
+openshieldhit into a GPLv2-only work, which Apache-2.0 does not permit.
+
+**Citation.** The MCPL authors ask that work using their code cite
+T. Kittelmann *et al.*, "Monte Carlo Particle Lists: MCPL", *Comput. Phys.
+Commun.* **218**, 17-42 (2017),
+[doi:10.1016/j.cpc.2017.04.012](https://doi.org/10.1016/j.cpc.2017.04.012).
+Please cite it alongside openshieldhit itself if you publish work that uses
+these files. The reference is also recorded in `CITATION.cff`.
+
 ### Native plot output — `FileFormat SVG`
 
 > A **quick-look** plot for sanity-checking a result without leaving the

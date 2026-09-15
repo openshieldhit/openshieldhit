@@ -1,3 +1,20 @@
+/******************************************************************************/
+/*                                                                            */
+/*  MODIFICATION NOTICE (Apache License 2.0, section 4(b)) -- added by the    */
+/*  OpenShieldHIT project, which is not affiliated with the MCPL developers.  */
+/*                                                                            */
+/*  This file is NOT upstream MCPL source verbatim.  Upstream ships it as the */
+/*  CMake template mcpl_core/include/mcpl.h.in; this copy was generated from  */
+/*  that template at MCPL v2.2.8 with its single substitution                 */
+/*  @MCPL_HOOK_FOR_ADDING_DEFINES@ resolved to empty, since this build adds   */
+/*  no extra compile-time defines.  This comment block is the only other      */
+/*  change; the MCPL source below it is unmodified.                           */
+/*                                                                            */
+/*  mcpl.c, mcpl_fileutils.c and mcpl_fileutils.h are vendored verbatim and   */
+/*  so carry no such notice.  See ../../../THIRD_PARTY_NOTICES.md and the     */
+/*  LICENSE and NOTICE.md files next to this one.                             */
+/*                                                                            */
+/******************************************************************************/
 
 /******************************************************************************/
 /*                                                                            */

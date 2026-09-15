@@ -163,3 +163,43 @@ jobs:
       # DICOM fixtures are downloaded on demand by the DICOM_FIXTURES setup
       # fixture, same as the main test job.
       run: ctest --test-dir build_asan --output-on-failure
+
+  # -DOSH_ENABLE_MCPL=OFF drops the vendored Apache-2.0 MCPL core (and the zlib
+  # dependency it brings) from the build entirely.  That path exists so a
+  # downstream can produce a binary free of non-MIT code, so it has to keep
+  # working; without a job exercising it, it would silently rot the first time
+  # someone adds an unguarded #include <mcpl.h>.  Ubuntu only — the switch is
+  # platform-independent, and the three-platform coverage above is about
+  # toolchains, not about this flag.
+  build-without-mcpl:
+    name: build without MCPL (-DOSH_ENABLE_MCPL=OFF)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        lfs: false
+
+    - name: Set up CMake
+      uses: jwlawson/actions-setup-cmake@v2.2.0
+
+    - name: Configure project (MCPL off)
+      run: cmake -S . -B build_nomcpl -DCMAKE_BUILD_TYPE=Debug -DOSH_BUILD_EXAMPLES=OFF -DOSH_ENABLE_MCPL=OFF
+
+    - name: Build project (MCPL off)
+      run: cmake --build build_nomcpl --parallel
+
+    - name: Run tests (MCPL off)
+      run: ctest --test-dir build_nomcpl --output-on-failure
+
+    - name: Assert no MCPL or zlib code was linked in
+      run: |
+        if nm -C build_nomcpl/bin/openshieldhit | grep -qi ' mcpl_'; then
+          echo "::error::MCPL symbols present in a -DOSH_ENABLE_MCPL=OFF build"
+          exit 1
+        fi
+        if ldd build_nomcpl/bin/openshieldhit | grep -q 'libz\.'; then
+          echo "::error::zlib linked into a -DOSH_ENABLE_MCPL=OFF build"
+          exit 1
+        fi

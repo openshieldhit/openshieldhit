@@ -69,6 +69,7 @@ Useful cache variables for development:
 ```bash
 -DOSH_RAYTRACE_ALGORITHM=SIMPLE|SIDDON|JACOBS
 -DOSH_VOXEL_LAYOUT=ROW_MAJOR|MORTON8
+-DOSH_ENABLE_MCPL=ON|OFF          # MCPL phase-space I/O (default ON; see Disclaimer and License)
 ```
 
 ## Install
@@ -266,3 +267,5 @@ The detailed implementation roadmap lives in [TODO.md](TODO.md).
 
 # Disclaimer and License
 While conceptually inspired by the application domain of the closed source [SHIELD-HIT12A](https://shieldhit.org), it shares no source code with the original SHIELD-HIT. The architecture, implementation, and code base are completely new and designed according to modern, explicit software engineering principles. Parts of OpenShieldHIT may be reused in SHIELD-HIT12A. OpenShieldHIT is licensed under the MIT License, permitting reuse, modification, and incorporation of its code into other software projects under compatible licensing terms.
+
+A default build additionally bundles one piece of third-party code: the [MCPL](https://mctools.github.io/mcpl/) core (Apache-2.0) under `src/thirdparty/mcpl/`, used for phase-space I/O. It keeps its own licence, which [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) records along with the required attribution and the MCPL authors' citation request. Apache-2.0 combines freely with MIT and with GPLv3, but not with GPLv2-only; configure with `-DOSH_ENABLE_MCPL=OFF` to build with no Apache-2.0 code at all.
