@@ -7,7 +7,10 @@
 #include "common/osh_step.h"
 #include "mcpl.h"
 #include "openshieldhit/const.h"
+#include "openshieldhit/geometry.h"
+#include "openshieldhit/material.h"
 #include "openshieldhit/scoring.h"
+#include "openshieldhit/simulation.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
 #include "scoring/runtime/osh_scoring_accumulator.h"
@@ -303,6 +306,24 @@ static void test_parse_rejects_malformed_max_records(void) {
         /* MaxRecords 0 -- a buffer that can never hold a record. */
         "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
         "Quantity MCPL\n    MaxRecords 0\n",
+        /* Trailing junk: "10junk" must not be read as 10.  This value sizes a
+         * calloc(), so a lenient parse is a silently wrong allocation. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords 10junk\n",
+        /* Not a whole number: "2.7" must not be truncated to 2. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords 2.7\n",
+        /* Float syntax out of size_t range: the old strtod parse converted this
+         * out-of-range double to size_t (undefined behaviour, observed wrapping
+         * to 0) and then blamed the user for "MaxRecords > 0". */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords 1e30\n",
+        /* Negative: strtoull() would happily wrap this to a huge count. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords -1\n",
+        /* Integer too large for size_t. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords 99999999999999999999999\n",
     };
 
     for (i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
@@ -698,9 +719,10 @@ static void test_has_mcpl_page_is_false_without_an_mcpl_output(void) {
 /* A MaxRecords overflow surfaces at the transport call site as a bare
  * OSH_ESTATE, which is indistinguishable there from an internal-invariant
  * violation and names neither MCPL nor the card to raise.  The failure path
- * calls osh_scoring_runtime_mcpl_full_page() to attribute it: NULL while the
- * buffer still has room, the offending page once it is full, with the output
- * filename and the limit reachable from it. */
+ * calls osh_scoring_runtime_mcpl_full_page() to attribute it: NULL until a
+ * crossing is actually refused — an exactly-full buffer has lost nothing and
+ * must not explain an unrelated transport failure — then the offending page,
+ * with the output filename and the limit reachable from it. */
 static void test_mcpl_full_page_attributes_a_maxrecords_overflow(void) {
     struct osh_scoring_workspace *ws = NULL;
     struct osh_scoring_runtime rt;
@@ -728,9 +750,18 @@ static void test_mcpl_full_page_attributes_a_maxrecords_overflow(void) {
             &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
         ASSERT_TRUE(rc == OSH_OK);
     }
-    /* Reported as full as soon as the last slot is taken, i.e. before the
-     * crossing that actually fails: the attribution has to survive being asked
-     * after the run has already unwound. */
+    /* Exactly full, but nothing was refused: a run that ends here has lost no
+     * records, so attributing an unrelated failure to MCPL would be wrong. */
+    ASSERT_TRUE(*rt.pages[0].acc.mcpl_count == rt.pages[0].acc.mcpl_capacity);
+    ASSERT_TRUE(osh_scoring_runtime_mcpl_full_page(&rt) == NULL);
+
+    fill_step(&st, 10.0, 1.0, 0u);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_ESTATE);
+
+    /* Now a crossing really was dropped, and the attribution has to survive
+     * being asked after the run has already unwound. */
     full = osh_scoring_runtime_mcpl_full_page(&rt);
     ASSERT_TRUE(full == &rt.pages[0]);
     ASSERT_TRUE(full->acc.mcpl_capacity == 2u);
@@ -738,14 +769,95 @@ static void test_mcpl_full_page_attributes_a_maxrecords_overflow(void) {
     ASSERT_TRUE(full->output_idx < rt.noutputs);
     ASSERT_TRUE(strcmp(rt.outputs[full->output_idx].filename, "osh_scoring_mcpl_test.mcpl") == 0);
 
-    fill_step(&st, 10.0, 1.0, 0u);
-    rc = osh_scoring_score_step(
-        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
-    ASSERT_TRUE(rc == OSH_ESTATE);
-    ASSERT_TRUE(osh_scoring_runtime_mcpl_full_page(&rt) == &rt.pages[0]);
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
+/* MaxRecords attaches to the Quantity line above it.  Written under the wrong
+ * one it used to be parsed, stored on that page and silently ignored — leaving
+ * the MCPL page it was meant for with no capacity, and the user with a
+ * "requires MaxRecords > 0" error pointing at a card they had clearly written. */
+static void test_compile_rejects_max_records_on_a_non_mcpl_quantity(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    enum osh_status rc;
+    char const *detect = "Geometry Zone\n"
+                         "    Name Z\n"
+                         "    Zone Plane1\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename osh_scoring_mcpl_test.dat\n"
+                         "    FileFormat TEXT\n"
+                         "    Geo Z\n"
+                         "    Quantity Energy\n"
+                         "    MaxRecords 1000\n";
+
+    write_temp_file(path, sizeof(path), detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK); /* the card parses; it is the pairing that is wrong */
+    ws->geometries[0].zone_indices = (size_t *) calloc(1u, sizeof(size_t));
+    ASSERT_TRUE(ws->geometries[0].zone_indices != NULL);
+
+    memset(&rt, 0, sizeof(rt));
+    ASSERT_TRUE(osh_scoring_compile(ws, NULL, &rt) == OSH_EINVAL);
 
     osh_scoring_runtime_free(&rt);
     osh_scoring_workspace_free(ws);
+    remove(path);
+}
+
+/* The Variance On half of the MCPL restriction is visible in detect.dat, so
+ * osh_scoring_compile() rejects it and test_compile_rejects_mcpl_with_variance()
+ * covers it.  --score-replicas needs the CLI flag and the compiled runtime
+ * together, so it is enforced one layer up, in osh_simulation_run() — reached
+ * here with a real simulation over tests/cases/14_minimal_zone.  The refusal
+ * must come back before any transport runs. */
+static void test_simulation_run_rejects_mcpl_with_score_replicas(void) {
+    char geo_path[512];
+    char beam_path[512];
+    char mat_path[512];
+    char detect_path[512];
+    struct osh_geometry_workspace *geo = NULL;
+    struct osh_beam_workspace *beam = NULL;
+    struct osh_material_workspace *mat = NULL;
+    struct osh_scoring_workspace *scoring = NULL;
+    struct osh_simulation *sim = NULL;
+    char const *detect = "Geometry Zone\n"
+                         "    Name DumpPlane\n"
+                         "    Zone 003\n"
+                         "\n"
+                         "Output\n"
+                         "    Filename osh_scoring_mcpl_replicas_test.mcpl\n"
+                         "    FileFormat MCPL\n"
+                         "    Geo DumpPlane\n"
+                         "    Quantity MCPL\n"
+                         "    MaxRecords 16\n";
+
+    snprintf(geo_path, sizeof(geo_path), "%s/tests/cases/14_minimal_zone/geo.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(beam_path, sizeof(beam_path), "%s/tests/cases/14_minimal_zone/beam.dat", OSH_PROJECT_SOURCE_DIR);
+    snprintf(mat_path, sizeof(mat_path), "%s/tests/cases/14_minimal_zone/mat.dat", OSH_PROJECT_SOURCE_DIR);
+    write_temp_file(detect_path, sizeof(detect_path), detect);
+
+    ASSERT_TRUE(osh_geometry_setup_from_path(geo_path, NULL, &geo) == OSH_OK);
+    ASSERT_TRUE(osh_beam_setup_from_path(beam_path, NULL, &beam) == OSH_OK);
+    ASSERT_TRUE(osh_material_setup_from_path(mat_path, NULL, &mat) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_setup_from_path(detect_path, NULL, &scoring) == OSH_OK);
+    ASSERT_TRUE(osh_scoring_resolve_zone_names(scoring, geo, NULL) == OSH_OK);
+
+    beam->nstat = 4u;
+    ASSERT_TRUE(osh_simulation_create(beam, geo, mat, scoring, NULL, &sim) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_set_score_replicas(sim, 2u) == OSH_OK);
+    ASSERT_TRUE(osh_simulation_run(sim) == OSH_ENOTSUP);
+    /* Refused before transport, so nothing was written. */
+    ASSERT_TRUE(remove("osh_scoring_mcpl_replicas_test.mcpl") != 0);
+
+    osh_simulation_free(sim);
+    osh_geometry_workspace_free(geo);
+    osh_beam_workspace_free(beam);
+    osh_material_workspace_free(mat);
+    osh_scoring_workspace_free(scoring);
+    remove(detect_path);
 }
 
 int main(void) {
@@ -762,6 +874,8 @@ int main(void) {
     test_compile_rejects_mcpl_with_variance();
     test_has_mcpl_page_is_false_without_an_mcpl_output();
     test_mcpl_full_page_attributes_a_maxrecords_overflow();
+    test_compile_rejects_max_records_on_a_non_mcpl_quantity();
+    test_simulation_run_rejects_mcpl_with_score_replicas();
     printf("All MCPL scoring tests passed.\n");
     return 0;
 }

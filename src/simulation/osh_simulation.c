@@ -712,7 +712,8 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
                                     : NULL;
             OSH_DIAG_ERRORF(sim->diag,
                             "scoring: MCPL output '%s' ran out of records after %zu of MaxRecords %zu; raise "
-                            "MaxRecords in detect.dat (%zu B per record). No MCPL file is written",
+                            "MaxRecords in detect.dat (%zu B per record). The run is aborted without saving, so "
+                            "this output is written only as far as an earlier periodic dump got",
                             fname ? fname : "(unnamed)",
                             *full->acc.mcpl_count,
                             full->acc.mcpl_capacity,

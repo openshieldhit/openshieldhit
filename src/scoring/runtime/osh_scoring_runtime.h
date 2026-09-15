@@ -242,7 +242,7 @@ static inline int osh_scoring_runtime_has_mcpl_page(struct osh_scoring_runtime c
 }
 
 /**
- * @brief First compiled MCPL page whose append buffer has reached MaxRecords, or NULL.
+ * @brief First compiled MCPL page that had to refuse a record, or NULL.
  *
  * @details
  * Attribution for the one user-fixable failure the MCPL hot path can raise
@@ -252,10 +252,14 @@ static inline int osh_scoring_runtime_has_mcpl_page(struct osh_scoring_runtime c
  * violations that return the same code — and the diagnostics the caller prints
  * around it name transport, not the @c detect.dat card the user has to raise.
  * The failure path calls this afterwards to say which output filled up and at
- * what limit.  Scans @c rt->pages[].acc directly: MCPL never books into a
- * private accumulator set (both paths that build one are refused up front, see
+ * what limit.  Keys off the @c mcpl_overflow flag the handler sets on the
+ * crossing it refused, not off @c mcpl_count reaching @c mcpl_capacity: a run
+ * whose last record exactly fills the buffer has lost nothing, and reporting it
+ * would attach a spurious MCPL explanation to an unrelated transport failure.
+ * Scans @c rt->pages[].acc directly: MCPL never books into a private
+ * accumulator set (both paths that build one are refused up front, see
  * @ref osh_scoring_runtime_has_mcpl_page), so the page's own accumulator is
- * always the buffer that overflowed.  Returns NULL when no MCPL page is full,
+ * always the buffer that overflowed.  Returns NULL when no MCPL page overflowed,
  * i.e. the failure came from somewhere else.
  */
 static inline struct osh_scoring_page_runtime const *
@@ -267,10 +271,10 @@ osh_scoring_runtime_mcpl_full_page(struct osh_scoring_runtime const *rt) {
     }
     for (p = 0u; p < rt->npages; ++p) {
         struct osh_scoring_page_runtime const *page = &rt->pages[p];
-        if (page->score_kind != OSH_SCORING_SCORE_MCPL || !page->acc.mcpl_count) {
+        if (page->score_kind != OSH_SCORING_SCORE_MCPL || !page->acc.mcpl_overflow) {
             continue;
         }
-        if (*page->acc.mcpl_count >= page->acc.mcpl_capacity) {
+        if (*page->acc.mcpl_overflow) {
             return page;
         }
     }

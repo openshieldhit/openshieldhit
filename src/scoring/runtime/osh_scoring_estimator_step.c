@@ -827,7 +827,13 @@ enum osh_status osh_scoring_estimator_step_mcpl(struct osh_scoring_runtime const
             }
             if (*acc->mcpl_count >= acc->mcpl_capacity) {
                 /* MaxRecords exhausted: fail loudly rather than dropping
-                 * particles or growing the buffer on the hot path. */
+                 * particles or growing the buffer on the hot path.  Record that
+                 * it was this, not one of the invariant guards above, that
+                 * returned OSH_ESTATE, so the failure path can name the page and
+                 * the card instead of leaving the user with a bare rc=7. */
+                if (acc->mcpl_overflow) {
+                    *acc->mcpl_overflow = 1;
+                }
                 return OSH_ESTATE;
             }
             rec = &acc->mcpl_records[*acc->mcpl_count];

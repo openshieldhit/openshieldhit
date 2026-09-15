@@ -29,6 +29,7 @@ enum osh_status osh_scoring_accumulator_alloc_variance(struct osh_scoring_accumu
     acc->mcpl_records = NULL;
     acc->mcpl_capacity = 0u;
     acc->mcpl_count = NULL;
+    acc->mcpl_overflow = NULL;
 
     acc->data = (double *) calloc(n, sizeof(*acc->data));
     if (!acc->data) {
@@ -252,6 +253,7 @@ void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc) {
     free(acc->data2_var);
     free(acc->mcpl_records);
     free(acc->mcpl_count);
+    free(acc->mcpl_overflow);
     acc->data = NULL;
     acc->data2 = NULL;
     acc->data_var = NULL;
@@ -262,4 +264,5 @@ void osh_scoring_accumulator_free(struct osh_scoring_accumulator *acc) {
     acc->mcpl_records = NULL;
     acc->mcpl_capacity = 0u;
     acc->mcpl_count = NULL;
+    acc->mcpl_overflow = NULL;
 }

@@ -120,6 +120,14 @@ struct osh_scoring_accumulator {
     struct osh_scoring_mcpl_record *mcpl_records; /* owned; length mcpl_capacity */
     size_t mcpl_capacity;                         /* from detect.dat "MaxRecords" */
     size_t *mcpl_count;                           /* owned, one element: records booked so far */
+    /* Owned, one element: set by osh_scoring_estimator_step_mcpl() on the crossing
+     * it had to refuse because the buffer was full.  Heap-allocated for the same
+     * aliasing reason as mcpl_count.  A full buffer is not the same event as an
+     * overflow — a run whose last record exactly fills it has not lost anything —
+     * so the failure-path attribution keys off this rather than off
+     * mcpl_count == mcpl_capacity, which would also fire for an unrelated
+     * transport failure in an exactly-full run. */
+    int *mcpl_overflow;
 };
 
 /**

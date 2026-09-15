@@ -15,6 +15,8 @@
  * references for late resolution.
  */
 
+#include <ctype.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -455,10 +457,19 @@ static enum osh_status output_diff2type(struct osh_scoring_output_def *out,
 /**
  * @brief Parse `MaxRecords <n>`.
  *
+ * @details
  * Applies to the most recently added Quantity page. Required for "Quantity MCPL"
  * (osh_scoring_compile() rejects a value of 0): the pre-allocated capacity, in
  * particles, of the MCPL phase-space append buffer. Unused by every other
  * quantity.
+ *
+ * Parsed strictly — as an exact unsigned integer that must consume the whole
+ * word, with no float syntax, no sign and no trailing characters — rather than
+ * with the lenient `strtod` several older cards use. This value is multiplied by
+ * sizeof(struct osh_scoring_mcpl_record) and handed to calloc(), so "10junk"
+ * silently meaning 10, "2.7" silently meaning 2, or a double-to-size_t
+ * conversion whose value is out of range (undefined behaviour, observed wrapping
+ * to 0) are all failures worth a diagnostic instead.
  */
 static enum osh_status output_maxrecords(struct osh_scoring_output_def *out,
                                          struct osh_diag_sink const *diag,
@@ -466,7 +477,8 @@ static enum osh_status output_maxrecords(struct osh_scoring_output_def *out,
                                          int nwords,
                                          char const *path,
                                          unsigned int lineno) {
-    double n_d;
+    unsigned long long n;
+    char *endp;
 
     if (out->npages == 0u) {
         OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords must follow a Quantity line", path, lineno);
@@ -476,11 +488,32 @@ static enum osh_status output_maxrecords(struct osh_scoring_output_def *out,
         OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords requires a record count", path, lineno);
         return OSH_EPARSE;
     }
-    n_d = strtod(words[1], NULL);
-    if (!(n_d >= 1.0)) {
-        OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords requires a positive integer", path, lineno);
+    /* strtoull() accepts leading whitespace and a leading '-' (wrapping the
+     * negation around), so reject anything that does not start with a digit
+     * before calling it. */
+    if (!isdigit((unsigned char) words[1][0])) {
+        OSH_DIAG_ERRORF(
+            diag, "%s:%u: MaxRecords requires a positive whole number of records, got '%s'", path, lineno, words[1]);
         return OSH_EPARSE;
     }
-    out->pages[out->npages - 1u].mcpl_max_records = (size_t) n_d;
+    errno = 0;
+    endp = NULL;
+    n = strtoull(words[1], &endp, 10);
+    if (endp == NULL || *endp != '\0') {
+        OSH_DIAG_ERRORF(
+            diag, "%s:%u: MaxRecords requires a positive whole number of records, got '%s'", path, lineno, words[1]);
+        return OSH_EPARSE;
+    }
+    /* Round-trip through size_t rather than comparing against SIZE_MAX, which is
+     * ULLONG_MAX on a 64-bit build and would make the comparison tautological. */
+    if (errno == ERANGE || n != (unsigned long long) (size_t) n) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords value '%s' does not fit in memory", path, lineno, words[1]);
+        return OSH_EPARSE;
+    }
+    if (n == 0ull) {
+        OSH_DIAG_ERRORF(diag, "%s:%u: MaxRecords requires a positive record count", path, lineno);
+        return OSH_EPARSE;
+    }
+    out->pages[out->npages - 1u].mcpl_max_records = (size_t) n;
     return OSH_OK;
 }

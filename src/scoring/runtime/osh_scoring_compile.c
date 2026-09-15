@@ -1029,6 +1029,18 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                                 ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)");
                 rc = OSH_ENOTSUP;
                 goto fail;
+            } else if (ws->outputs[i].pages[j].mcpl_max_records != 0u) {
+                /* MaxRecords attaches to the Quantity line above it, so a card
+                 * written under the wrong one would otherwise be read, stored
+                 * and silently ignored — leaving the MCPL page it was meant for
+                 * with no capacity and the user with no clue why. */
+                OSH_DIAG_ERRORF(diag,
+                                "Scoring output '%s': MaxRecords applies only to a Quantity MCPL page, but follows "
+                                "Quantity '%s'",
+                                ws->outputs[i].filename ? ws->outputs[i].filename : "(unnamed)",
+                                ws->outputs[i].pages[j].quantity ? ws->outputs[i].pages[j].quantity : "(null)");
+                rc = OSH_EINVAL;
+                goto fail;
             }
         }
         geom_page_counts[gidx] += ws->outputs[i].npages;
@@ -1247,7 +1259,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             dst_page->acc.mcpl_records = (struct osh_scoring_mcpl_record *) calloc(dst_page->acc.mcpl_capacity,
                                                                                    sizeof(*dst_page->acc.mcpl_records));
             dst_page->acc.mcpl_count = (size_t *) calloc(1u, sizeof(*dst_page->acc.mcpl_count));
-            if (!dst_page->acc.mcpl_records || !dst_page->acc.mcpl_count) {
+            dst_page->acc.mcpl_overflow = (int *) calloc(1u, sizeof(*dst_page->acc.mcpl_overflow));
+            if (!dst_page->acc.mcpl_records || !dst_page->acc.mcpl_count || !dst_page->acc.mcpl_overflow) {
                 rc = OSH_ENOMEM;
                 goto fail;
             }
