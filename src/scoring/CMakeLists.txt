@@ -38,10 +38,12 @@ target_link_libraries(osh_scoring
 )
 
 # MCPL phase-space I/O (-DOSH_ENABLE_MCPL, ON by default; see the root
-# CMakeLists.txt for why it is switchable).  Everything that includes <mcpl.h>
-# lives in this one file, so switching the feature off drops the save layer and
-# the vendored Apache-2.0 target together and leaves no third-party code in the
-# link.  The osh_scoring_mcpl_record buffer that score_step appends to is plain
+# CMakeLists.txt for why it is switchable).  This library's only <mcpl.h>
+# include lives in that one file, so switching the feature off drops the save
+# layer and the vendored Apache-2.0 target together and leaves no third-party
+# code in the link.  (tests/unit/test_osh_scoring_mcpl.c is the sole other
+# include site anywhere, and drops out of the test glob for the same reason.)
+# The osh_scoring_mcpl_record buffer that score_step appends to is plain
 # openshieldhit data with no MCPL dependency, so it stays compiled either way;
 # osh_scoring_compile() refuses an MCPL detect.dat when OSH_WITH_MCPL is unset,
 # which keeps that buffer unreachable at runtime.  PRIVATE: only this library's
