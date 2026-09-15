@@ -10,11 +10,13 @@
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"
 #include "particle/osh_particle.h"
+#include "scoring/runtime/osh_scoring_accumulator.h"
 #include "scoring/runtime/osh_scoring_compile.h"
 #include "scoring/runtime/osh_scoring_defs.h"
 #include "scoring/runtime/osh_scoring_mcpl_record.h"
 #include "scoring/runtime/osh_scoring_step.h"
 #include "scoring/save/osh_scoring_save.h"
+#include "scoring/save/osh_scoring_save_mcpl.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
     do {                                                                                                               \
@@ -251,6 +253,15 @@ static void test_compile_rejects_malformed_mcpl_output(void) {
         /* Quantity MCPL on a Mesh geometry, not Zone. */
         "Geometry Mesh\n    Name M\n    X -1 1 1\n    Y -1 1 1\n    Z -1 1 1\n\nOutput\n    Filename a\n    "
         "FileFormat MCPL\n    Geo M\n    Quantity MCPL\n    MaxRecords 10\n",
+        /* An MCPL output carrying a second, non-MCPL page.  MCPL is page 0 so
+           this trips the "exactly one page" rule rather than the FileFormat/
+           Quantity pairing rule the second case above covers. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords 10\n    Quantity Energy\n",
+        /* Quantity MCPL with a differential axis: a phase-space stream has no
+           binning for Diff1 to apply to. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords 10\n    Diff1 0.1 200.0 100 LOG\n",
     };
 
     for (i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
@@ -274,10 +285,327 @@ static void test_compile_rejects_malformed_mcpl_output(void) {
     }
 }
 
+/* The MaxRecords card's own parse-time diagnostics, which sit in the app's
+ * detect.dat parser rather than in osh_scoring_compile(): each of these must
+ * fail the parse outright, before any scoring runtime exists. */
+static void test_parse_rejects_malformed_max_records(void) {
+    char path[512];
+    struct osh_scoring_workspace *ws;
+    enum osh_status rc;
+    size_t i;
+    char const *bad[] = {
+        /* MaxRecords before any Quantity line, so there is no page to attach to. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "MaxRecords 10\n    Quantity MCPL\n",
+        /* MaxRecords with no record count. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords\n",
+        /* MaxRecords 0 -- a buffer that can never hold a record. */
+        "Geometry Zone\n    Name Z\n    Zone Plane1\n\nOutput\n    Filename a\n    FileFormat MCPL\n    Geo Z\n    "
+        "Quantity MCPL\n    MaxRecords 0\n",
+    };
+
+    for (i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        ws = NULL;
+        write_temp_file(path, sizeof(path), bad[i]);
+        rc = osh_scoring_setup_from_path(path, NULL, &ws);
+        ASSERT_TRUE(rc != OSH_OK);
+        osh_scoring_workspace_free(ws);
+        remove(path);
+    }
+}
+
+/* osh_scoring_save_mcpl_output() re-checks the shape osh_scoring_compile()
+ * already guarantees rather than trusting its caller, so those guards are
+ * unreachable through the normal path.  Reach them here by handing it bad
+ * arguments and by poking a compiled runtime, so the contract in the header
+ * is actually exercised instead of merely asserted. */
+static void test_save_mcpl_output_rejects_bad_arguments(void) {
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    size_t saved_count;
+    enum osh_status rc;
+
+    ASSERT_TRUE(osh_scoring_save_mcpl_output(NULL, NULL, 1ull, 0u) == OSH_EINVAL);
+
+    setup_one_zone_mcpl(k_detect, 5u, &ws, &rt);
+    ASSERT_TRUE(rt.noutputs == 1u);
+    ASSERT_TRUE(rt.npages == 1u);
+
+    /* output_idx past the end. */
+    rc = osh_scoring_save_mcpl_output(ws, &rt, 1ull, rt.noutputs);
+    ASSERT_TRUE(rc == OSH_EINVAL);
+
+    /* nstat == 0 would make the per-primary normalisation meaningless. */
+    rc = osh_scoring_save_mcpl_output(ws, &rt, 0ull, 0u);
+    ASSERT_TRUE(rc == OSH_EINVAL);
+
+    /* A multi-page output: rejected as unsupported rather than writing page 0
+     * and silently dropping the rest. */
+    rt.outputs[0].npages = 2u;
+    rc = osh_scoring_save_mcpl_output(ws, &rt, 1ull, 0u);
+    ASSERT_TRUE(rc == OSH_ENOTSUP);
+    rt.outputs[0].npages = 1u;
+
+    /* A page that is not an MCPL page at all. */
+    rt.pages[0].score_kind = OSH_SCORING_SCORE_ENERGY;
+    rc = osh_scoring_save_mcpl_output(ws, &rt, 1ull, 0u);
+    ASSERT_TRUE(rc == OSH_ESTATE);
+    rt.pages[0].score_kind = OSH_SCORING_SCORE_MCPL;
+
+    /* A count past the pre-allocated capacity: a hot-path bound-check bug, so
+     * refuse rather than read off the end of the buffer. */
+    saved_count = *rt.pages[0].acc.mcpl_count;
+    *rt.pages[0].acc.mcpl_count = rt.pages[0].acc.mcpl_capacity + 1u;
+    rc = osh_scoring_save_mcpl_output(ws, &rt, 1ull, 0u);
+    ASSERT_TRUE(rc == OSH_ESTATE);
+    *rt.pages[0].acc.mcpl_count = saved_count;
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
+/* mcpl_add_particle() aborts the whole process on a direction vector that is
+ * not unit length, so the save layer normalises every record on the way out.
+ * A degenerate (zero) direction cannot be divided back to unit length, and
+ * maps to +Z instead.  st->w is always a unit vector in practice, so book a
+ * record normally and then zero its direction to reach the fallback. */
+static void test_save_mcpl_output_maps_degenerate_direction_to_z(void) {
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    struct osh_scoring_page_runtime *page;
+    enum osh_status rc;
+    mcpl_file_t f;
+    mcpl_particle_t const *p;
+
+    setup_one_zone_mcpl(k_detect, 5u, &ws, &rt);
+    page = &rt.pages[0];
+
+    memset(&part, 0, sizeof(part));
+    part.pdg = 2212;
+    part.mass = 938.27208816;
+    part.charge = 1;
+    part.z = 1u;
+    part.a = 1u;
+
+    fill_step(&st, 30.0, 1.0, 0u);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(*page->acc.mcpl_count == 1u);
+
+    page->acc.mcpl_records[0].direction[0] = 0.0;
+    page->acc.mcpl_records[0].direction[1] = 0.0;
+    page->acc.mcpl_records[0].direction[2] = 0.0;
+
+    remove("osh_scoring_mcpl_test.mcpl");
+    rc = osh_scoring_save(ws, &rt, 1ull);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    f = mcpl_open_file("osh_scoring_mcpl_test.mcpl");
+    p = mcpl_read(f);
+    ASSERT_TRUE(p != NULL);
+    assert_close(p->direction[0], 0.0);
+    assert_close(p->direction[1], 0.0);
+    assert_close(p->direction[2], 1.0);
+    mcpl_close_file(f);
+    remove("osh_scoring_mcpl_test.mcpl");
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
+/* APPEND's cross-run combine rule is concatenation, which the additive folds
+ * in osh_scoring_accumulator_merge() cannot express.  Merging an accumulator
+ * that carries an MCPL buffer must therefore refuse rather than silently drop
+ * one side's records -- today no caller does it, but a future parallel worker
+ * would. */
+static void test_accumulator_merge_refuses_mcpl_records(void) {
+    struct osh_scoring_accumulator dst;
+    struct osh_scoring_accumulator src;
+    struct osh_scoring_mcpl_record rec;
+    double dst_data[1];
+    double src_data[1];
+    size_t count = 0u;
+
+    memset(&dst, 0, sizeof(dst));
+    memset(&src, 0, sizeof(src));
+    memset(&rec, 0, sizeof(rec));
+    dst_data[0] = 1.0;
+    src_data[0] = 2.0;
+    dst.data = dst_data;
+    src.data = src_data;
+    dst.len = 1u;
+    src.len = 1u;
+
+    /* Baseline: without an MCPL buffer the same pair merges fine, so the
+     * refusal below is about the records and not about the shape. */
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&dst, &src) == OSH_OK);
+
+    src.mcpl_records = &rec;
+    src.mcpl_count = &count;
+    src.mcpl_capacity = 1u;
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&dst, &src) == OSH_ENOTSUP);
+
+    src.mcpl_records = NULL;
+    src.mcpl_count = NULL;
+    src.mcpl_capacity = 0u;
+    dst.mcpl_records = &rec;
+    dst.mcpl_count = &count;
+    dst.mcpl_capacity = 1u;
+    ASSERT_TRUE(osh_scoring_accumulator_merge(&dst, &src) == OSH_ENOTSUP);
+}
+
+/* osh_scoring_estimate_memory() has to account for the MaxRecords append
+ * buffer on top of the usual bins-sized accumulator, since that buffer is the
+ * dominant allocation of an MCPL page and the run-control uses this estimate
+ * to decide whether a setup fits. */
+static void test_estimate_memory_counts_the_mcpl_append_buffer(void) {
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_mem_estimate est;
+    struct osh_scoring_mem_estimate est_no_mcpl;
+    char path[512];
+    enum osh_status rc;
+    /* k_detect's MaxRecords 2, with the Quantity swapped for a plain Energy
+     * page over the same single-zone geometry: same shape, no append buffer. */
+    char const *detect_energy = "Geometry Zone\n"
+                                "    Name UpstreamPlane\n"
+                                "    Zone Plane1\n"
+                                "\n"
+                                "Output\n"
+                                "    Filename osh_scoring_mcpl_test.dat\n"
+                                "    FileFormat TEXT\n"
+                                "    Geo UpstreamPlane\n"
+                                "    Quantity Energy\n";
+
+    write_temp_file(path, sizeof(path), k_detect);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    memset(&est, 0, sizeof(est));
+    rc = osh_scoring_estimate_memory(ws, &est);
+    ASSERT_TRUE(rc == OSH_OK);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+
+    ws = NULL;
+    write_temp_file(path, sizeof(path), detect_energy);
+    rc = osh_scoring_setup_from_path(path, NULL, &ws);
+    ASSERT_TRUE(rc == OSH_OK);
+    memset(&est_no_mcpl, 0, sizeof(est_no_mcpl));
+    rc = osh_scoring_estimate_memory(ws, &est_no_mcpl);
+    ASSERT_TRUE(rc == OSH_OK);
+    osh_scoring_workspace_free(ws);
+    remove(path);
+
+    /* The MCPL page must cost exactly MaxRecords (2) extra records. */
+    ASSERT_TRUE(est.accum_bytes == est_no_mcpl.accum_bytes + 2u * (uint64_t) sizeof(struct osh_scoring_mcpl_record));
+}
+
+/* The MCPL hot path re-checks invariants osh_scoring_compile() establishes, so
+ * a future change that breaks one fails loudly instead of writing through a
+ * null pointer or past the end of the append buffer.  Reach those guards by
+ * corrupting a compiled runtime, since nothing else can produce this state. */
+static void test_score_mcpl_guards_a_corrupt_accumulator(void) {
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct osh_scoring_accumulator *accs;
+    struct osh_scoring_mcpl_record *saved_records;
+    size_t saved_stride;
+    struct particle part;
+    struct step st;
+    enum osh_status rc;
+
+    setup_one_zone_mcpl(k_detect, 5u, &ws, &rt);
+    accs = osh_scoring_runtime_master_accumulators(&rt);
+
+    memset(&part, 0, sizeof(part));
+    part.pdg = 2212;
+    part.mass = 938.27208816;
+    part.charge = 1;
+    part.z = 1u;
+    part.a = 1u;
+    fill_step(&st, 30.0, 1.0, 0u);
+
+    /* A crossing index past the page's stride. */
+    saved_stride = rt.pages[0].diff_stride;
+    rt.pages[0].diff_stride = 0u;
+    rc = osh_scoring_score_step(&rt, accs, osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_ESTATE);
+    rt.pages[0].diff_stride = saved_stride;
+
+    /* An accumulator with no append buffer behind an MCPL page. */
+    saved_records = accs[0].mcpl_records;
+    accs[0].mcpl_records = NULL;
+    rc = osh_scoring_score_step(&rt, accs, osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_ESTATE);
+    accs[0].mcpl_records = saved_records;
+
+    /* Booking still works once the runtime is intact again. */
+    rc = osh_scoring_score_step(&rt, accs, osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(*rt.pages[0].acc.mcpl_count == 1u);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
+/* A filter on a Quantity MCPL line selects which particles reach the phase
+ * space, exactly as it does for any other quantity (documented in
+ * docs/user/detect.dat.md).  A particle the filter rejects must book no
+ * record at all rather than one with a zeroed or partial payload. */
+static void test_score_mcpl_honours_page_filters(void) {
+    char const *detect_filtered = "Filter\n"
+                                  "    Name NeverMatches\n"
+                                  "    Z = 99\n"
+                                  "\n"
+                                  "Geometry Zone\n"
+                                  "    Name UpstreamPlane\n"
+                                  "    Zone Plane1\n"
+                                  "\n"
+                                  "Output\n"
+                                  "    Filename osh_scoring_mcpl_test.mcpl\n"
+                                  "    FileFormat MCPL\n"
+                                  "    Geo UpstreamPlane\n"
+                                  "    Quantity MCPL NeverMatches\n"
+                                  "    MaxRecords 2\n";
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct particle part;
+    struct step st;
+    enum osh_status rc;
+
+    setup_one_zone_mcpl(detect_filtered, 5u, &ws, &rt);
+
+    memset(&part, 0, sizeof(part));
+    part.pdg = 2212;
+    part.mass = 938.27208816;
+    part.charge = 1;
+    part.z = 1u; /* not Z = 99, so NeverMatches rejects it */
+    part.a = 1u;
+
+    fill_step(&st, 30.0, 1.0, 0u);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(*rt.pages[0].acc.mcpl_count == 0u);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
 int main(void) {
     test_score_mcpl_books_records_and_enforces_max_records();
     test_save_mcpl_output_round_trips_through_mcpl_reader();
     test_compile_rejects_malformed_mcpl_output();
+    test_parse_rejects_malformed_max_records();
+    test_save_mcpl_output_rejects_bad_arguments();
+    test_save_mcpl_output_maps_degenerate_direction_to_z();
+    test_accumulator_merge_refuses_mcpl_records();
+    test_estimate_memory_counts_the_mcpl_append_buffer();
+    test_score_mcpl_guards_a_corrupt_accumulator();
+    test_score_mcpl_honours_page_filters();
     printf("All MCPL scoring tests passed.\n");
     return 0;
 }
