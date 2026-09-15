@@ -33,6 +33,14 @@ add_library(osh_thirdparty_mcpl STATIC
 target_include_directories(osh_thirdparty_mcpl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(osh_thirdparty_mcpl PRIVATE ZLIB::ZLIB)
 
+# mcpl.c calls sqrt()/fmax(), so this target needs libm in its own right on
+# platforms that separate it from the C runtime.  In-tree consumers happen to
+# link osh_common, which already pulls in `m`, but relying on that would leave
+# libosh_thirdparty_mcpl.a unlinkable on its own.
+if(UNIX)
+    target_link_libraries(osh_thirdparty_mcpl PRIVATE m)
+endif()
+
 # mcpl.h's MCPL_API expands to __declspec(dllimport) on Windows unless this is
 # defined, since upstream defaults to being consumed as a DLL. We always build
 # a plain static library (see the README.md rationale), so every mcpl.h

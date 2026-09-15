@@ -23,9 +23,13 @@ trap 'rm -f "${before}" "${after}" "${files_list}"' EXIT
 # Snapshot currently modified tracked C/H files before formatting.
 git diff --name-only -- '*.c' '*.h' | sort > "${before}"
 
+# src/thirdparty is vendored verbatim from upstream and is excluded from the
+# clang-format CI job for that reason; reformatting it here would destroy the
+# property that check relies on.
 git ls-files -z -- '*.c' '*.h' \
     ':(exclude)build*/*' \
-    ':(exclude)_temp_shieldhit/*' > "${files_list}"
+    ':(exclude)_temp_shieldhit/*' \
+    ':(exclude)src/thirdparty/*' > "${files_list}"
 
 if [[ ! -s "${files_list}" ]]; then
     echo "No .c/.h files found."
