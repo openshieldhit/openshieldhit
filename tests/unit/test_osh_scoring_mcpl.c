@@ -695,6 +695,59 @@ static void test_has_mcpl_page_is_false_without_an_mcpl_output(void) {
     remove(path);
 }
 
+/* A MaxRecords overflow surfaces at the transport call site as a bare
+ * OSH_ESTATE, which is indistinguishable there from an internal-invariant
+ * violation and names neither MCPL nor the card to raise.  The failure path
+ * calls osh_scoring_runtime_mcpl_full_page() to attribute it: NULL while the
+ * buffer still has room, the offending page once it is full, with the output
+ * filename and the limit reachable from it. */
+static void test_mcpl_full_page_attributes_a_maxrecords_overflow(void) {
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_scoring_runtime rt;
+    struct osh_scoring_page_runtime const *full;
+    struct particle part;
+    struct step st;
+    enum osh_status rc;
+    int i;
+
+    ASSERT_TRUE(osh_scoring_runtime_mcpl_full_page(NULL) == NULL);
+
+    setup_one_zone_mcpl(k_detect, 5u, &ws, &rt); /* MaxRecords 2 */
+    ASSERT_TRUE(osh_scoring_runtime_mcpl_full_page(&rt) == NULL);
+
+    memset(&part, 0, sizeof(part));
+    part.pdg = 2212;
+    part.mass = 938.27208816;
+    part.charge = 1;
+    part.z = 1u;
+    part.a = 1u;
+
+    for (i = 0; i < 2; ++i) {
+        fill_step(&st, 95.0, 1.0, 0u);
+        rc = osh_scoring_score_step(
+            &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+        ASSERT_TRUE(rc == OSH_OK);
+    }
+    /* Reported as full as soon as the last slot is taken, i.e. before the
+     * crossing that actually fails: the attribution has to survive being asked
+     * after the run has already unwound. */
+    full = osh_scoring_runtime_mcpl_full_page(&rt);
+    ASSERT_TRUE(full == &rt.pages[0]);
+    ASSERT_TRUE(full->acc.mcpl_capacity == 2u);
+    ASSERT_TRUE(*full->acc.mcpl_count == 2u);
+    ASSERT_TRUE(full->output_idx < rt.noutputs);
+    ASSERT_TRUE(strcmp(rt.outputs[full->output_idx].filename, "osh_scoring_mcpl_test.mcpl") == 0);
+
+    fill_step(&st, 10.0, 1.0, 0u);
+    rc = osh_scoring_score_step(
+        &rt, osh_scoring_runtime_master_accumulators(&rt), osh_scoring_runtime_master_scratch(&rt), &part, &st);
+    ASSERT_TRUE(rc == OSH_ESTATE);
+    ASSERT_TRUE(osh_scoring_runtime_mcpl_full_page(&rt) == &rt.pages[0]);
+
+    osh_scoring_runtime_free(&rt);
+    osh_scoring_workspace_free(ws);
+}
+
 int main(void) {
     test_score_mcpl_books_records_and_enforces_max_records();
     test_save_mcpl_output_round_trips_through_mcpl_reader();
@@ -708,6 +761,7 @@ int main(void) {
     test_score_mcpl_honours_page_filters();
     test_compile_rejects_mcpl_with_variance();
     test_has_mcpl_page_is_false_without_an_mcpl_output();
+    test_mcpl_full_page_attributes_a_maxrecords_overflow();
     printf("All MCPL scoring tests passed.\n");
     return 0;
 }

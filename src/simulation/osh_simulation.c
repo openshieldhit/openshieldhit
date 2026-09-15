@@ -17,6 +17,7 @@
 #include "openshieldhit/simulation.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "scoring/runtime/osh_scoring_compile.h"
+#include "scoring/runtime/osh_scoring_mcpl_record.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_shadow.h"
 #include "scoring/save/osh_scoring_save.h"
@@ -697,6 +698,26 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
     rc = osh_transport_run(
         &sim->transport_ctx, sim->beam_rt, &sim->geom_rt, &sim->transport_tables, &sim->scoring_runtime);
     if (rc != OSH_OK) {
+        /* Attribute the one transport failure a user can fix from detect.dat
+         * alone: an MCPL page that ran out of MaxRecords returns a bare
+         * OSH_ESTATE from the hot path, which the transport diagnostics report
+         * as "scoring rejected step rc=7" — naming neither MCPL nor the card to
+         * raise, and pointing the reader at their geometry instead (issue #328).
+         * Checked here rather than at the score_step call site because every
+         * transport path funnels through this one return. */
+        struct osh_scoring_page_runtime const *full = osh_scoring_runtime_mcpl_full_page(&sim->scoring_runtime);
+        if (full) {
+            char const *fname = (full->output_idx < sim->scoring_runtime.noutputs)
+                                    ? sim->scoring_runtime.outputs[full->output_idx].filename
+                                    : NULL;
+            OSH_DIAG_ERRORF(sim->diag,
+                            "scoring: MCPL output '%s' ran out of records after %zu of MaxRecords %zu; raise "
+                            "MaxRecords in detect.dat (%zu B per record). No MCPL file is written",
+                            fname ? fname : "(unnamed)",
+                            *full->acc.mcpl_count,
+                            full->acc.mcpl_capacity,
+                            sizeof(struct osh_scoring_mcpl_record));
+        }
         OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: transport failed");
         return rc;
     }

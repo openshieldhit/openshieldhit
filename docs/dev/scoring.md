@@ -360,6 +360,19 @@ the whole point energy deposit (equivalent to a unit-length crossing).
     accumulator carries an `mcpl_records` buffer — a future parallel worker needs
     its own private buffer concatenated onto the master's at merge time, not summed.
 
+    **Overflow attribution.** Once `*mcpl_count` reaches `mcpl_capacity` the handler
+    returns `OSH_ESTATE` — no growth (nothing under `osh_scoring_score_step()`
+    allocates, DEVELOPER.md §10) and no silent drop. That code is also what the
+    handler's two internal-invariant guards return, and the transport call site
+    reports it as `scoring rejected step rc=7`, naming neither MCPL nor the
+    `MaxRecords` card the user has to raise. `osh_simulation_run()` therefore calls
+    `osh_scoring_runtime_mcpl_full_page()` on the transport-failure path and, when a
+    page is full, emits a second diagnostic naming the output file and the limit
+    before the generic `simulation: transport failed`. The helper scans
+    `rt->pages[].acc` directly, which is sound because MCPL never books into a
+    private accumulator set: both paths that build one (`Variance On`,
+    `--score-replicas`) are refused up front.
+
 !!! note "NKERMA is a registry placeholder (deposit not yet wired)"
     The `NKERMA` row is `{NULL, NULL, postprocess_volume}`: it has neither a
     `score_step_` nor a `score_point_` handler, and — unlike every other kind in

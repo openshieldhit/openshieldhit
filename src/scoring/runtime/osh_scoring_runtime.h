@@ -242,6 +242,42 @@ static inline int osh_scoring_runtime_has_mcpl_page(struct osh_scoring_runtime c
 }
 
 /**
+ * @brief First compiled MCPL page whose append buffer has reached MaxRecords, or NULL.
+ *
+ * @details
+ * Attribution for the one user-fixable failure the MCPL hot path can raise
+ * (issue #328): @c osh_scoring_estimator_step_mcpl() returns a bare
+ * @c OSH_ESTATE once @c mcpl_count reaches @c mcpl_capacity, which is
+ * indistinguishable at the transport call site from the two internal-invariant
+ * violations that return the same code — and the diagnostics the caller prints
+ * around it name transport, not the @c detect.dat card the user has to raise.
+ * The failure path calls this afterwards to say which output filled up and at
+ * what limit.  Scans @c rt->pages[].acc directly: MCPL never books into a
+ * private accumulator set (both paths that build one are refused up front, see
+ * @ref osh_scoring_runtime_has_mcpl_page), so the page's own accumulator is
+ * always the buffer that overflowed.  Returns NULL when no MCPL page is full,
+ * i.e. the failure came from somewhere else.
+ */
+static inline struct osh_scoring_page_runtime const *
+osh_scoring_runtime_mcpl_full_page(struct osh_scoring_runtime const *rt) {
+    size_t p;
+
+    if (!rt || rt->npages == 0u || !rt->pages) {
+        return NULL;
+    }
+    for (p = 0u; p < rt->npages; ++p) {
+        struct osh_scoring_page_runtime const *page = &rt->pages[p];
+        if (page->score_kind != OSH_SCORING_SCORE_MCPL || !page->acc.mcpl_count) {
+            continue;
+        }
+        if (*page->acc.mcpl_count >= page->acc.mcpl_capacity) {
+            return page;
+        }
+    }
+    return NULL;
+}
+
+/**
  * @brief Completeness label to stamp on a saved result — never NULL.
  *
  * @details
