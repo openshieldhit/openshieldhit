@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/osh/osh_app_osh.h"
 #include "apps/osh/osh_scoring_parse_internal.h"
 #include "common/osh_diag.h"
+#include "openshieldhit/geometry.h"
 #include "openshieldhit/scoring.h"
 #include "openshieldhit/status.h"
 #include "test_assert.h"
@@ -18,6 +20,7 @@ static void test_inputpath(void);
 static void test_body(void);
 static void test_unknown_key_is_ok(void);
 static void test_error_missing_args(void);
+static void test_missing_zone_volume_warns_only_for_volume_normalized_quantities(void);
 
 /* Split a space-separated string into words in-place.  Returns word count. */
 static int tokenize(char *buf, char **words, int max_words) {
@@ -74,6 +77,7 @@ int main(void) {
     test_body();
     test_unknown_key_is_ok();
     test_error_missing_args();
+    test_missing_zone_volume_warns_only_for_volume_normalized_quantities();
     return 0;
 }
 
@@ -291,4 +295,79 @@ static void test_error_missing_args(void) {
         rc = osh_scoring_parse_geometry_line(&geo, NULL, words, nw, "test", 1, NULL);
         ASSERT_TRUE(rc == OSH_EPARSE);
     }
+}
+
+/* ---- Zone-volume warning scope ------------------------------------------- */
+
+/* Counts WARN-or-worse diagnostics so a test can assert a warning's absence. */
+static void count_warnings(void *user, int level, char const *file, int line, char const *function, char const *msg) {
+    (void) file;
+    (void) line;
+    (void) function;
+    (void) msg;
+    if (level >= OSH_DIAG_LEVEL_WARN) {
+        *(int *) user += 1;
+    }
+}
+
+/* Builds a one-zone scoring workspace whose single Output scores `quantity` on
+ * it, with no Volume card, and returns the number of warnings
+ * osh_scoring_resolve_zone_names() emits for it. */
+static int warnings_for_zone_quantity(char const *quantity) {
+    struct osh_scoring_workspace *ws = NULL;
+    struct osh_geometry_workspace geom;
+    struct osh_geometry_zone zone;
+    struct osh_diag_sink sink;
+    char zone_name[] = "Plane1";
+    int nwarn = 0;
+
+    ASSERT_TRUE(osh_scoring_workspace_create(&ws) == OSH_OK);
+
+    ws->geometries = (struct osh_scoring_geometry_def *) calloc(1u, sizeof(*ws->geometries));
+    ASSERT_TRUE(ws->geometries != NULL);
+    ws->ngeometries = 1u;
+    ws->geometries[0].name = strdup("ZoneGeo");
+    ws->geometries[0].kind = strdup("zone");
+    ws->geometries[0].zone_names = (char **) calloc(1u, sizeof(char *));
+    ASSERT_TRUE(ws->geometries[0].name && ws->geometries[0].kind && ws->geometries[0].zone_names);
+    ws->geometries[0].zone_names[0] = strdup("Plane1");
+    ASSERT_TRUE(ws->geometries[0].zone_names[0] != NULL);
+    ws->geometries[0].nzone_indices = 1u;
+    /* Deliberately no zone_volumes: that is what the warning is about. */
+
+    ws->outputs = (struct osh_scoring_output_def *) calloc(1u, sizeof(*ws->outputs));
+    ASSERT_TRUE(ws->outputs != NULL);
+    ws->noutputs = 1u;
+    ws->outputs[0].filename = strdup("out.dat");
+    ws->outputs[0].geometry_name = strdup("ZoneGeo");
+    ws->outputs[0].pages = (struct osh_scoring_page_def *) calloc(1u, sizeof(*ws->outputs[0].pages));
+    ASSERT_TRUE(ws->outputs[0].filename && ws->outputs[0].geometry_name && ws->outputs[0].pages);
+    ws->outputs[0].npages = 1u;
+    ws->outputs[0].pages[0].quantity = strdup(quantity);
+    ASSERT_TRUE(ws->outputs[0].pages[0].quantity != NULL);
+
+    memset(&geom, 0, sizeof(geom));
+    memset(&zone, 0, sizeof(zone));
+    zone.name = zone_name;
+    geom.zones = &zone;
+    geom.nzones = 1u;
+
+    sink.emit = count_warnings;
+    sink.user = &nwarn;
+    sink.min_level = OSH_DIAG_LEVEL_TRACE;
+
+    ASSERT_TRUE(osh_scoring_resolve_zone_names(ws, &geom, &sink) == OSH_OK);
+    osh_scoring_workspace_free(ws);
+    return nwarn;
+}
+
+/* A Zone with no Volume card only matters to quantities postprocess divides by
+ * the bin volume.  Scoring Energy or an MCPL phase-space dump on it reads no
+ * volume at all, so warning there is noise (issue #328). */
+static void test_missing_zone_volume_warns_only_for_volume_normalized_quantities(void) {
+    ASSERT_TRUE(warnings_for_zone_quantity("dose") == 1);
+    ASSERT_TRUE(warnings_for_zone_quantity("dosegy") == 1);
+    ASSERT_TRUE(warnings_for_zone_quantity("fluence") == 1);
+    ASSERT_TRUE(warnings_for_zone_quantity("energy") == 0);
+    ASSERT_TRUE(warnings_for_zone_quantity("mcpl") == 0);
 }
