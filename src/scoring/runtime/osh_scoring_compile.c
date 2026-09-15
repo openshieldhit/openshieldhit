@@ -1256,6 +1256,14 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
          * booked, so the buffer's initial content is never read uninitialised. */
         if (dst_page->score_kind == OSH_SCORING_SCORE_MCPL) {
             dst_page->acc.mcpl_capacity = src_page->mcpl_max_records;
+            if (dst_page->acc.mcpl_capacity == 0u) {
+                /* Phase 2 above already rejected this, several hundred lines
+                 * away; restate it next to the allocation so the invariant the
+                 * calloc depends on is local and checkable (clang-analyzer
+                 * reads the same distance and reports a 0-byte calloc). */
+                rc = OSH_EINVAL;
+                goto fail;
+            }
             dst_page->acc.mcpl_records = (struct osh_scoring_mcpl_record *) calloc(dst_page->acc.mcpl_capacity,
                                                                                    sizeof(*dst_page->acc.mcpl_records));
             dst_page->acc.mcpl_count = (size_t *) calloc(1u, sizeof(*dst_page->acc.mcpl_count));
