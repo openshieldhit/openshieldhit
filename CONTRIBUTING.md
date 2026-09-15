@@ -9,7 +9,7 @@ For architecture decisions and internal design rationale see [DEVELOPER.md](DEVE
 | Tool | Minimum version | Notes |
 |------|-----------------|-------|
 | C compiler | C11 | GCC, Clang, or MSVC |
-| CMake | 3.15 | |
+| CMake | 3.21 | what `CMakePresets.json` needs; a plain `cmake -B build` works from 3.14 |
 | clang-format | 18+ | for formatting checks |
 | clang-tidy | 18+ | for static analysis |
 | libSDL2 | any | optional, only needed for example programs |

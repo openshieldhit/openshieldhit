@@ -17,6 +17,7 @@
 #include "openshieldhit/simulation.h"
 #include "physics/nuclear/osh_nuclear_handler.h"
 #include "scoring/runtime/osh_scoring_compile.h"
+#include "scoring/runtime/osh_scoring_mcpl_record.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 #include "scoring/runtime/osh_scoring_shadow.h"
 #include "scoring/save/osh_scoring_save.h"
@@ -616,6 +617,25 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
         return OSH_EINVAL;
     }
 
+    /* --score-replicas transports [0, nstat) as N sequential sub-ranges, each
+     * depositing into its own private accumulator set and merging into the
+     * master afterwards.  Those private sets carry no MCPL append buffer, and
+     * osh_scoring_accumulator_merge() refuses to concatenate records in any
+     * case, so an MCPL page would abort on the first crossing with a bare
+     * OSH_ESTATE out of the hot path (issue #328).  Refuse here instead: unlike
+     * the Variance On pairing, which osh_scoring_compile() rejects because it
+     * is visible in detect.dat alone, this one needs the CLI flag and the
+     * compiled scoring runtime together, and this is the first point that has
+     * both.  Still before any transport runs. */
+    if (sim->transport_ctx.params.score_replicas > 0u && osh_scoring_runtime_has_mcpl_page(&sim->scoring_runtime)) {
+        OSH_DIAG_ERRORF(sim->diag,
+                        "%s",
+                        "simulation: --score-replicas cannot be combined with a Quantity MCPL output; each replica "
+                        "scores into a private accumulator set, which carries no phase-space append buffer. Drop "
+                        "--score-replicas, or move the MCPL output to a separate run");
+        return OSH_ENOTSUP;
+    }
+
     /* Variance batching (issue #209): a variance-tracking run needs >= 2 checkpoint
      * batches to have any degrees of freedom.  If the user set no other cadence and
      * no score-replica split, derive a count cadence that yields the internal default
@@ -678,6 +698,27 @@ enum osh_status osh_simulation_run(struct osh_simulation *sim) {
     rc = osh_transport_run(
         &sim->transport_ctx, sim->beam_rt, &sim->geom_rt, &sim->transport_tables, &sim->scoring_runtime);
     if (rc != OSH_OK) {
+        /* Attribute the one transport failure a user can fix from detect.dat
+         * alone: an MCPL page that ran out of MaxRecords returns a bare
+         * OSH_ESTATE from the hot path, which the transport diagnostics report
+         * as "scoring rejected step rc=7" — naming neither MCPL nor the card to
+         * raise, and pointing the reader at their geometry instead (issue #328).
+         * Checked here rather than at the score_step call site because every
+         * transport path funnels through this one return. */
+        struct osh_scoring_page_runtime const *full = osh_scoring_runtime_mcpl_full_page(&sim->scoring_runtime);
+        if (full) {
+            char const *fname = (full->output_idx < sim->scoring_runtime.noutputs)
+                                    ? sim->scoring_runtime.outputs[full->output_idx].filename
+                                    : NULL;
+            OSH_DIAG_ERRORF(sim->diag,
+                            "scoring: MCPL output '%s' ran out of records after %zu of MaxRecords %zu; raise "
+                            "MaxRecords in detect.dat (%zu B per record). The run is aborted without saving, so "
+                            "this output is written only as far as an earlier periodic dump got",
+                            fname ? fname : "(unnamed)",
+                            *full->acc.mcpl_count,
+                            full->acc.mcpl_capacity,
+                            sizeof(struct osh_scoring_mcpl_record));
+        }
         OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: transport failed");
         return rc;
     }

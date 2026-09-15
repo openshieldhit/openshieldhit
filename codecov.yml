@@ -15,6 +15,14 @@ coverage:
         target: 0%
         threshold: 100%
 
+# Vendored upstream source: not ours to test, and large enough to dominate any
+# report it appears in.  The Codecov-side twin of the lcov --remove in
+# .github/workflows/codecov.yml, so a report stays clean even if a future
+# coverage job forgets the lcov filter.  Matches the src/thirdparty exclusions
+# in the clang-format and clang-tidy workflows.
+ignore:
+  - "src/thirdparty/**"
+
 comment:
   layout: "reach,diff,flags,files"
   behavior: default

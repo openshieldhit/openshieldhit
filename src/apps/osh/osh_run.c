@@ -273,16 +273,6 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
 
     parse_s = osh_monotonic_seconds() - t_mark;
 
-    if (opt->validate_only) {
-        if (opt->profile_path && opt->profile_path[0]) {
-            OSH_DIAG_WARNF(opt->diag, "%s", "profile requested with --dry-run; no profile written");
-        }
-        if (out) {
-            fprintf(out, "Validation completed.\n");
-        }
-        goto cleanup;
-    }
-
     /* Resolve the effective dump cadences so the memory check can reserve the
      * snapshot shadow when a periodic dump *will* happen, and
      * osh_simulation_set_dump_control() below can apply the same values.
@@ -312,9 +302,24 @@ enum osh_status osh_run(struct osh_run_options const *opt, FILE *out, FILE *err)
      * osh_simulation_create() allocates any scoring buffers.  When a periodic dump
      * is scheduled, the snapshot shadow is budgeted here too so a scheduled dump
      * is accounted up front, not discovered mid-run (issue #193 budget-reservation
-     * rule); the shadow still allocates lazily at the first dump and is fail-soft. */
+     * rule); the shadow still allocates lazily at the first dump and is fail-soft.
+     *
+     * Ahead of the --dry-run return below on purpose: sizing an allocation-backed
+     * card such as "MaxRecords" against the reported figure is exactly what a dry
+     * run is for, and a configuration that cannot fit should fail validation
+     * rather than pass it and fail the real run. */
     rc = run_check_memory(scoring, opt->mem_budget, scheduled_dump, out, err);
     if (rc != OSH_OK) {
+        goto cleanup;
+    }
+
+    if (opt->validate_only) {
+        if (opt->profile_path && opt->profile_path[0]) {
+            OSH_DIAG_WARNF(opt->diag, "%s", "profile requested with --dry-run; no profile written");
+        }
+        if (out) {
+            fprintf(out, "Validation completed.\n");
+        }
         goto cleanup;
     }
 

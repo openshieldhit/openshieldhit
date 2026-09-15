@@ -44,6 +44,12 @@ jobs:
       run: ctest --test-dir build-coverage --output-on-failure
 
     - name: Capture coverage
+      # src/thirdparty/* is vendored upstream source this project does not own
+      # and does not test: the MCPL core alone is ~6.3k lines, most of it
+      # reader/merge/CLI paths openshieldhit never calls, so leaving it in
+      # swamps the report (it single-handedly dragged PR #329's patch coverage
+      # to 21%).  Excluded here the same way the clang-format and clang-tidy
+      # workflows already exclude it, and again in codecov.yml as a backstop.
       run: |
         lcov --capture \
           --directory build-coverage \
@@ -53,6 +59,7 @@ jobs:
           '*/tests/*' \
           '*/examples/*' \
           '*/generated/*' \
+          '*/src/thirdparty/*' \
           --output-file coverage.info
         lcov --list coverage.info
 
