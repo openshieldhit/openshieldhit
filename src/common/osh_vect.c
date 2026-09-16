@@ -304,23 +304,31 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
      *       {8, 9, 10, 11}          initializers for row indexed by 2
      */
 
-    /* First row: x coordindates and translation vector */
+    /* Rows hold the (S,T,R) basis vectors themselves, because consumers apply
+     * this matrix with osh_ray_transform()/GEMCA's row-dot rule
+     *   p_local[i] = p_universe . row_i - tm[i*4+3]
+     * which needs row_i == basis_i and tm[i*4+3] == basis_i . p to give
+     * p_local = M^T (p_universe - p).  Storing the columns instead (row_i =
+     * i-th components of S,T,R) silently only worked while M was diagonal,
+     * i.e. for bodies whose axis was +z; every off-axis RCC/REC/TRC/ELL then
+     * mapped to the wrong place -- see the x/y crosswire bodies. */
+    /* First row: S basis vector and translation <S,P> */
     tm[0] = s[0];
-    tm[1] = t[0];
-    tm[2] = r_norm[0];
-    tm[3] = osh_vect_dot(p, s); /* length of projection of P on S, <S,P> */
+    tm[1] = s[1];
+    tm[2] = s[2];
+    tm[3] = osh_vect_dot(p, s); /* <S,P> */
 
-    /* Second row: Y coordindates and translation vector */
-    tm[4] = s[1];
+    /* Second row: T basis vector and translation <T,P> */
+    tm[4] = t[0];
     tm[5] = t[1];
-    tm[6] = r_norm[1];
-    tm[7] = osh_vect_dot(p, t); /* length of projection of P on T, <T,P> */
+    tm[6] = t[2];
+    tm[7] = osh_vect_dot(p, t); /* <T,P> */
 
-    /* Third row: Y coordindates and translation vector */
-    tm[8] = s[2];
-    tm[9] = t[2];
+    /* Third row: R basis vector and translation <R/|R|,P> */
+    tm[8] = r_norm[0];
+    tm[9] = r_norm[1];
     tm[10] = r_norm[2];
-    tm[11] = osh_vect_dot(p, r_norm); /* length of projection of P on R, <R/|R|,P> */
+    tm[11] = osh_vect_dot(p, r_norm); /* <R/|R|,P> */
 
     /* Last row */
     tm[12] = 0;
