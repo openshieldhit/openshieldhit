@@ -259,11 +259,11 @@ static __m256i _in_body_avx2(struct osh_gemca_runtime const *rt,
 
     case OSH_COORD_BZALIGN: {
         /*
-         * Full 3×4 affine (row-major 4×4):
-         *   p_local = R · p_universe − t_col
-         *   tx = x·t[0] + y·t[1] + z·t[2] − t[3]
-         *   ty = x·t[4] + y·t[5] + z·t[6] − t[7]
-         *   tz = x·t[8] + y·t[9] + z·t[10] − t[11]
+         * Full 3×4 affine (row-major 4×4), same +t_col rule as BCALIGN above:
+         *   p_local = R · p_universe + t_col
+         *   tx = x·t[0] + y·t[1] + z·t[2] + t[3]
+         *   ty = x·t[4] + y·t[5] + z·t[6] + t[7]
+         *   tz = x·t[8] + y·t[9] + z·t[10] + t[11]
          *
          * Direction vector (no translation):
          *   tux = ux·t[0] + uy·t[1] + uz·t[2]
@@ -283,9 +283,9 @@ static __m256i _in_body_avx2(struct osh_gemca_runtime const *rt,
         __m256d b10 = _mm256_set1_pd(b->t[10]);
         __m256d b11 = _mm256_set1_pd(b->t[11]);
 
-        tx = _mm256_fmadd_pd(vx, b0, _mm256_fmadd_pd(vy, b1, _mm256_fmsub_pd(vz, b2, b3)));
-        ty = _mm256_fmadd_pd(vx, b4, _mm256_fmadd_pd(vy, b5, _mm256_fmsub_pd(vz, b6, b7)));
-        tz = _mm256_fmadd_pd(vx, b8, _mm256_fmadd_pd(vy, b9, _mm256_fmsub_pd(vz, b10, b11)));
+        tx = _mm256_fmadd_pd(vx, b0, _mm256_fmadd_pd(vy, b1, _mm256_fmadd_pd(vz, b2, b3)));
+        ty = _mm256_fmadd_pd(vx, b4, _mm256_fmadd_pd(vy, b5, _mm256_fmadd_pd(vz, b6, b7)));
+        tz = _mm256_fmadd_pd(vx, b8, _mm256_fmadd_pd(vy, b9, _mm256_fmadd_pd(vz, b10, b11)));
         tux = _mm256_fmadd_pd(vux, b0, _mm256_fmadd_pd(vuy, b1, _mm256_mul_pd(vuz, b2)));
         tuy = _mm256_fmadd_pd(vux, b4, _mm256_fmadd_pd(vuy, b5, _mm256_mul_pd(vuz, b6)));
         tuz = _mm256_fmadd_pd(vux, b8, _mm256_fmadd_pd(vuy, b9, _mm256_mul_pd(vuz, b10)));

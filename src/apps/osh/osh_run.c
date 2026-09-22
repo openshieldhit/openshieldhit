@@ -799,6 +799,12 @@ static void _vox_body_build_transform(struct osh_geometry_body const *b, double 
         osh_vect_rot_z(-couch_rad, tb[i]); /* IEC couch: CCW from above; rot_z is CW, so negate */
         osh_vect_rot_y(gantry_rad, tb[i]); /* IEC gantry: around universe Y (cranial-caudal) */
     }
+    /* FIXME: the translation column here has the opposite sign to the one
+     * _setup_vox() writes into body->t, although the rotation rows match.  The
+     * two therefore disagree whenever a[11..13] != 0, putting the CT scoring
+     * grid 2 * M * t_vec away from the transport geometry.  Not corrected here
+     * because it moves scored CT/RTDOSE bins and needs validation against a
+     * deck. */
     for (j = 0; j < 3; j++) {
         for (i = 0; i < 3; i++) {
             t[j * 4 + i] = tb[j][i];

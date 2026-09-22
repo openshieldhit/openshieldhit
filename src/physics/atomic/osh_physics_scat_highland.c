@@ -79,7 +79,7 @@ void osh_physics_highland_scatter(double const v[3], double w[3], double theta0,
         return;
     }
 
-    osh_vect_orthogonal_basis_norm(v, u1, u2);
+    osh_vect_orthonormal_basis(v, u1, u2);
 
     tx = osh_rng_gauss01(rng) * theta0;
     ty = osh_rng_gauss01(rng) * theta0;

@@ -108,6 +108,56 @@ static void test_single_spot_gaussian_sampling(void) {
     cleanup_manual_wb(&wb);
 }
 
+/* A beam travelling along -z lands on the degenerate branch of
+ * osh_vect_orthogonal_basis(), where the transverse basis cannot come from a
+ * cross product and is chosen by hand; a wrong choice there gives a
+ * left-handed frame that mirrors the transverse axes instead of rotating them.
+ * theta = pi is a rotation by pi about the local y axis, so BEAMPOS (x,y,z)
+ * must arrive at (-x, y, -z).  The transverse offset is what makes a mirror
+ * visible -- an on-axis beam is symmetric under it and passes either way. */
+static void test_offset_beam_along_minus_z_is_rotated_not_mirrored(void) {
+    struct beam_workspace wb = {0};
+    struct beam_spot spot = {0};
+    struct ray_v ray = {0};
+    struct osh_rng rng;
+    enum osh_status rc;
+
+    wb.spots = &spot;
+    wb.nspots = 1;
+    wb.primary.pdg = OSH_PART_PDG_PROTON;
+    wb.primary.z = 1u;
+    wb.primary.a = 1u;
+    wb.has_primary = 1;
+    spot.shape = OSH_BEAM_SHAPE_PENCIL;
+    spot.p[0] = 3.0;
+    spot.p[1] = -2.0;
+    spot.p[2] = 5.0;
+    spot.t0 = 80.0;
+
+    wb.shared.theta = OSH_M_PI;
+    wb.shared.phi = 0.0;
+    rc = osh_beam_workspace_prepare(&wb, NULL);
+    ASSERT_TRUE(rc == OSH_OK);
+
+    osh_rng_init(&rng, OSH_RNG_TYPE_PCG32, 7u, 11u);
+    rc = osh_beam_new_primary(&wb, &rng, &ray);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(ray.system == OSH_COORD_UNIVERSE);
+
+    /* Position: rotated about y, not reflected in x. */
+    ASSERT_TRUE(fabs(ray.p[0] - (-spot.p[0])) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[1] - spot.p[1]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.p[2] - (-spot.p[2])) < 1e-12);
+
+    /* Direction: straight down -z. */
+    ASSERT_TRUE(fabs(ray.v[0]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[1]) < 1e-12);
+    ASSERT_TRUE(fabs(ray.v[2] - (-1.0)) < 1e-12);
+
+    cleanup_manual_wb(&wb);
+}
+
 static void test_single_spot_sad_fanout(void) {
     struct beam_workspace wb = {0};
     struct beam_spot spot = {0};
@@ -627,5 +677,6 @@ int main(void) {
     test_sobp_truncation_constants_are_per_spot();
     test_truncation_skipped_for_monoenergetic_spot();
     test_single_spot_gaussian_sampling_unaffected_without_tcut0();
+    test_offset_beam_along_minus_z_is_rotated_not_mirrored();
     return 0;
 }

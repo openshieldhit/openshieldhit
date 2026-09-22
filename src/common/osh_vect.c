@@ -107,7 +107,7 @@ void osh_vect_norm2(double const *u, double *v) {
     return;
 }
 
-/* TODO: new code should use osh_vect_orthogonal_basis_norm instead. */
+/* TODO: new code should use osh_vect_orthonormal_basis instead. */
 void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
 
     int i;
@@ -142,16 +142,20 @@ void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
         /* v = w x u */
         osh_vect_cross(w, u, v);
     } else {
-        if (u[2] < 0) {
+        /*
+           w is collinear with e3, so the cross product above degenerated and u
+           is the zero vector -- it carries no orientation information and must
+           not be tested here.  The sign is decided by w itself:
+
+             w = +e3: the standard basis (u,v) = (e1,e2) is already correct,
+                      since e1 x e2 = +e3 = w.
+             w = -e3: (e1,e2) would be left-handed, because e1 x e2 = +e3 = -w.
+                      Flipping exactly one transverse vector restores
+                      u x v = w; we flip u, giving (-e1) x e2 = -e3 = w.
+         */
+        if (w[2] < 0) {
             sign = -1.;
         }
-        /*
-           If u is oriented in the same direction as e1 (u==e1, as both are unit
-           vectors) then we create a standard basis (u=e1, v=e2, w=e3). If u is
-           oriented in opposite direction as e1(u == -e1, as both are unit
-           vectors) then we choose another basis which has the same orientation
-           as standard basis (u=-e1, v=-e2, w=e3).
-         */
         for (i = 0; i < OSH_VECT_DIM; i++) {
             u[i] = sign * im[0][i];
             v[i] = im[1][i];
@@ -159,7 +163,7 @@ void osh_vect_orthogonal_basis(double const *w, double *u, double *v) {
     }
 }
 
-void osh_vect_orthogonal_basis_norm(double const *w, double *u, double *v) {
+void osh_vect_orthonormal_basis(double const *w, double *u, double *v) {
     double ax = fabs(w[0]);
     double ay = fabs(w[1]);
     double az = fabs(w[2]);
@@ -247,7 +251,7 @@ void osh_vect_matrix4_print(double const *tm) {
     printf("\n");
 }
 
-void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
+void osh_vect_tmatrix_universe_to_frame(double const *origin_universe, double const *axis, double *tm) {
 
     double s[OSH_VECT_DIM];
     double t[OSH_VECT_DIM];
@@ -257,7 +261,7 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
        after normalisation S/|S| T/|T| R/|R| form right-handed basis */
 
     /* calculate unit vector r_norm = R/|R| */
-    osh_vect_norm2(r, r_norm);
+    osh_vect_norm2(axis, r_norm);
 
     osh_vect_orthogonal_basis(r_norm, s, t);
 
@@ -304,31 +308,29 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
      *       {8, 9, 10, 11}          initializers for row indexed by 2
      */
 
-    /* Rows hold the (S,T,R) basis vectors themselves, because consumers apply
-     * this matrix with osh_ray_transform()/GEMCA's row-dot rule
-     *   p_local[i] = p_universe . row_i - tm[i*4+3]
-     * which needs row_i == basis_i and tm[i*4+3] == basis_i . p to give
-     * p_local = M^T (p_universe - p).  Storing the columns instead (row_i =
-     * i-th components of S,T,R) silently only worked while M was diagonal,
-     * i.e. for bodies whose axis was +z; every off-axis RCC/REC/TRC/ELL then
-     * mapped to the wrong place -- see the x/y crosswire bodies. */
-    /* First row: S basis vector and translation <S,P> */
+    /* Rows hold the (S,T,R) basis vectors themselves, so that the standard
+     * affine rule
+     *   p_frame[i] = p_universe . row_i + tm[i*4+3]
+     * with tm[i*4+3] == -<basis_i,P> evaluates p_frame = M^T (p_universe - P).
+     * Rows, not columns: the two coincide only for a diagonal M, i.e. for a
+     * body whose axis is +z. */
+    /* First row: S basis vector and translation -<S,P> */
     tm[0] = s[0];
     tm[1] = s[1];
     tm[2] = s[2];
-    tm[3] = osh_vect_dot(p, s); /* <S,P> */
+    tm[3] = -osh_vect_dot(origin_universe, s); /* -<S,P> */
 
-    /* Second row: T basis vector and translation <T,P> */
+    /* Second row: T basis vector and translation -<T,P> */
     tm[4] = t[0];
     tm[5] = t[1];
     tm[6] = t[2];
-    tm[7] = osh_vect_dot(p, t); /* <T,P> */
+    tm[7] = -osh_vect_dot(origin_universe, t); /* -<T,P> */
 
-    /* Third row: R basis vector and translation <R/|R|,P> */
+    /* Third row: R basis vector and translation -<R/|R|,P> */
     tm[8] = r_norm[0];
     tm[9] = r_norm[1];
     tm[10] = r_norm[2];
-    tm[11] = osh_vect_dot(p, r_norm); /* <R/|R|,P> */
+    tm[11] = -osh_vect_dot(origin_universe, r_norm); /* -<R/|R|,P> */
 
     /* Last row */
     tm[12] = 0;
@@ -337,14 +339,14 @@ void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm) {
     tm[15] = 1;
 }
 
-void osh_vect_setup_tmatrix_bzalign_affine(double const *p_local, double const *r_world, double *tm) {
+void osh_vect_tmatrix_frame_to_universe(double const *origin_frame, double const *axis_universe, double *tm) {
     double s[OSH_VECT_DIM];
     double t[OSH_VECT_DIM];
     double r_norm[OSH_VECT_DIM];
     double p_world[OSH_VECT_DIM];
     int i;
 
-    osh_vect_norm2(r_world, r_norm);
+    osh_vect_norm2(axis_universe, r_norm);
     osh_vect_orthogonal_basis(r_norm, s, t);
     osh_vect_norm(s);
     osh_vect_norm(t);
@@ -363,7 +365,7 @@ void osh_vect_setup_tmatrix_bzalign_affine(double const *p_local, double const *
 
     for (i = 0; i < OSH_VECT_DIM; i++) {
         int j = i * 4;
-        p_world[i] = tm[j] * p_local[0] + tm[j + 1] * p_local[1] + tm[j + 2] * p_local[2];
+        p_world[i] = tm[j] * origin_frame[0] + tm[j + 1] * origin_frame[1] + tm[j + 2] * origin_frame[2];
         tm[j + 3] = p_world[i];
     }
 
@@ -373,13 +375,13 @@ void osh_vect_setup_tmatrix_bzalign_affine(double const *p_local, double const *
     tm[15] = 1.0;
 }
 
-void osh_vect_trans_point_affine(double const *p, double *pt, double const *tm) {
+void osh_vect_trans_point(double const *p, double *pt, double const *tm) {
     pt[0] = p[0] * tm[0] + p[1] * tm[1] + p[2] * tm[2] + tm[3];
     pt[1] = p[0] * tm[4] + p[1] * tm[5] + p[2] * tm[6] + tm[7];
     pt[2] = p[0] * tm[8] + p[1] * tm[9] + p[2] * tm[10] + tm[11];
 }
 
-void osh_vect_trans_vector_affine(double const *v, double *vt, double const *tm) {
+void osh_vect_trans_vector(double const *v, double *vt, double const *tm) {
     vt[0] = v[0] * tm[0] + v[1] * tm[1] + v[2] * tm[2];
     vt[1] = v[0] * tm[4] + v[1] * tm[5] + v[2] * tm[6];
     vt[2] = v[0] * tm[8] + v[1] * tm[9] + v[2] * tm[10];

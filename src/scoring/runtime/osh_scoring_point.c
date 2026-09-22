@@ -60,7 +60,7 @@ enum osh_status osh_scoring_score_point(struct osh_scoring_runtime const *rt,
         } else {
             /* Universe->local rotation (same t[16] layout as score_step). */
             if (geo->has_rotation) {
-                osh_vect_trans_point_affine(st->p, p_local, geo->t);
+                osh_vect_trans_point(st->p, p_local, geo->t);
                 p_at = p_local;
             } else {
                 p_at = st->p;

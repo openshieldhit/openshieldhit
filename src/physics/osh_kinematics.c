@@ -22,7 +22,7 @@ void osh_kinematics_rotate_dir_cos(
         return;
     }
 
-    osh_vect_orthogonal_basis_norm(v, u1, u2);
+    osh_vect_orthonormal_basis(v, u1, u2);
 
     /* w_raw = cos_theta·v + sin_theta·(a·u1 + b·u2) */
     tmp[0] = cos_theta * v[0] + sin_theta * (a * u1[0] + b * u2[0]);

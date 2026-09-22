@@ -50,8 +50,9 @@ int osh_ray_v_transform(struct ray_v const *r, struct ray_v *rt, double const t[
 
     for (i = 0; i < 3; i++) {
         j = i * 4;
-        /* Translation is subtracted — GEMCA/SHIELD-HIT sign convention. */
-        rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] - t[j + 3];
+        /* Standard affine rule: the translation column is added.  Builders
+         * store it already negated where the mapping needs a subtraction. */
+        rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] + t[j + 3];
         rt->v[i] = r->v[0] * t[j] + r->v[1] * t[j + 1] + r->v[2] * t[j + 2];
     }
     rt->p[3] = r->p[3];     /* energy is invariant under coordinate transform */
@@ -66,7 +67,7 @@ int osh_ray_transform(struct ray const *r, struct ray *rt, double const t[16]) {
 
     for (i = 0; i < 3; i++) {
         j = i * 4;
-        rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] - t[j + 3];
+        rt->p[i] = r->p[0] * t[j] + r->p[1] * t[j + 1] + r->p[2] * t[j + 2] + t[j + 3];
         rt->cp[i] = r->cp[0] * t[j] + r->cp[1] * t[j + 1] + r->cp[2] * t[j + 2];
     }
     rt->system = r->system; /* caller should update to the target system after the call */

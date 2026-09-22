@@ -31,7 +31,49 @@ void test_norm(void) {
     ASSERT_TRUE(fabs(osh_vect_len2(v) - 1.0) < OSH_VECT_EPS); /* should be unit vector */
 }
 
-void test_affine_bzalign_transform(void) {
+/* Both orthogonal-basis generators must return a right-handed (S,T,R) triad
+ * for every axis, so that a body's local frame never mirrors its transverse
+ * coordinates.  The +-z cases are the ones that matter: they hit the
+ * degenerate branch of osh_vect_orthogonal_basis(), where the cross product
+ * vanishes and the orientation has to be decided from the axis itself. */
+static void check_right_handed(double const *axis) {
+    double w[3];
+    double u[3];
+    double v[3];
+    double c[3];
+
+    osh_vect_norm2(axis, w);
+
+    osh_vect_orthogonal_basis(w, u, v);
+    osh_vect_norm(u);
+    osh_vect_norm(v);
+    osh_vect_cross(u, v, c);
+    ASSERT_TRUE(osh_vect_dot(c, w) > 1.0 - OSH_VECT_EPS);
+
+    osh_vect_orthonormal_basis(w, u, v);
+    osh_vect_cross(u, v, c);
+    ASSERT_TRUE(osh_vect_dot(c, w) > 1.0 - OSH_VECT_EPS);
+}
+
+void test_orthogonal_basis_right_handed(void) {
+    double const axes[8][3] = {
+        {1.0, 0.0, 0.0},
+        {-1.0, 0.0, 0.0},
+        {0.0, 1.0, 0.0},
+        {0.0, -1.0, 0.0},
+        {0.0, 0.0, 1.0},
+        {0.0, 0.0, -1.0}, /* degenerate branch, the orientation-critical one */
+        {1.0, 1.0, 1.0},
+        {0.3, -0.7, -0.2},
+    };
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        check_right_handed(axes[i]);
+    }
+}
+
+void test_frame_to_universe_transform(void) {
     double p_local[3] = {1.0, 2.0, 3.0};
     double v_local[3] = {0.0, 0.0, 1.0};
     double origin_local[3] = {4.0, 5.0, 6.0};
@@ -40,9 +82,9 @@ void test_affine_bzalign_transform(void) {
     double p_world[3];
     double v_world[3];
 
-    osh_vect_setup_tmatrix_bzalign_affine(origin_local, zdir_world, tm);
-    osh_vect_trans_point_affine(p_local, p_world, tm);
-    osh_vect_trans_vector_affine(v_local, v_world, tm);
+    osh_vect_tmatrix_frame_to_universe(origin_local, zdir_world, tm);
+    osh_vect_trans_point(p_local, p_world, tm);
+    osh_vect_trans_vector(v_local, v_world, tm);
 
     ASSERT_TRUE(fabs(p_world[0] - 5.0) < OSH_VECT_EPS);
     ASSERT_TRUE(fabs(p_world[1] - 7.0) < OSH_VECT_EPS);
@@ -53,21 +95,20 @@ void test_affine_bzalign_transform(void) {
     ASSERT_TRUE(fabs(v_world[2] - 1.0) < OSH_VECT_EPS);
 }
 
-/* The legacy GEMCA BZALIGN builder feeds osh_ray_transform(), which applies
- * each matrix row as a dot product with the world point.  The rows must
- * therefore be the world-space basis vectors S, T, R themselves.  Storing the
- * transposed matrix (row i = i-th component of S, T, R) is invisible while the
- * basis is the identity -- i.e. for every body whose axis is +z -- and only
- * surfaces for off-axis bodies, which is how the x/y crosswire bodies went
- * inert.  This pins the off-axis case down. */
-void test_legacy_bzalign_transform_offaxis(void) {
+/* osh_vect_tmatrix_universe_to_frame() is consumed by osh_ray_transform(),
+ * which applies each matrix row as a dot product with the UNIVERSE point, so
+ * the rows must be the UNIVERSE basis vectors S, T, R themselves.  A
+ * transposed matrix is indistinguishable while the basis is the identity, so
+ * the axis here is off-axis on purpose -- a +z body would pass either way.
+ * The opposite direction is covered by test_frame_to_universe_transform(). */
+void test_universe_to_frame_transform_offaxis(void) {
     double p[3] = {-5.0, 0.0, -52.49}; /* x-wire base, axis along +x */
     double axis[3] = {10.0, 0.0, 0.0};
     double tm[16];
     struct ray in;
     struct ray out;
 
-    osh_vect_setup_tmatrix_bzalign(p, axis, tm);
+    osh_vect_tmatrix_universe_to_frame(p, axis, tm);
 
     /* The base point must land on the local origin. */
     in.p[0] = p[0];
@@ -101,8 +142,9 @@ int main(void) {
     test_dot_product();
     test_cross_product();
     test_norm();
-    test_affine_bzalign_transform();
-    test_legacy_bzalign_transform_offaxis();
+    test_orthogonal_basis_right_handed();
+    test_frame_to_universe_transform();
+    test_universe_to_frame_transform_offaxis();
 
     printf("All tests passed.\n");
     return 0;

@@ -110,8 +110,8 @@ enum osh_status osh_scoring_score_step(struct osh_scoring_runtime const *rt,
          * coordinate frame.  Zone was handled above because it has no local
          * coordinate lookup. */
         if (geo->has_rotation) {
-            osh_vect_trans_point_affine(st->p, p_local, geo->t);
-            osh_vect_trans_vector_affine(score_dir, dir_local, geo->t);
+            osh_vect_trans_point(st->p, p_local, geo->t);
+            osh_vect_trans_vector(score_dir, dir_local, geo->t);
             p_trace = p_local;
             dir_trace = dir_local;
         } else {
