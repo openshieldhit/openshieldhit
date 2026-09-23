@@ -98,11 +98,162 @@ Rules and semantics:
   computed from overlapping CSG primitives, so they must be given explicitly; a
   zone with no `Volume` warns and defaults to `1.0 cm3`.
 - The output bin order is exactly the order of the `Zone` lines.
-- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`, `DirtyDose`, `DirtyDoseGy`.
+- Supported quantities: `Energy`, `Fluence`, `Dose`, `DoseGy`, `DirtyDose`, `DirtyDoseGy`,
+  and `MCPL` (a phase-space dump rather than a spatial accumulator — its own
+  requirements and syntax are below).
 - `FileFormat BDO` (default) records which transport zone each bin is (`GEO_ZONES`
   tag) for labelling; `FileFormat TEXT` writes one row per zone with a numeric
   zone-index column. The per-zone volume is not stored in either — it is consumed by
   the ÷volume in postprocess, so the saved dose/fluence is already final.
+
+### MCPL phase-space dump — `FileFormat MCPL`
+
+Writes every particle that takes a transport step through a `Zone` to an
+[MCPL](https://mctools.github.io/mcpl/) phase-space file — for resampling in a
+later run, or importing into another Monte Carlo code (Geant4, MCNP, PHITS, …)
+instead of re-simulating the upstream transport. This is the dump/output side;
+importing an MCPL file as a beam source is a separate, not yet implemented,
+feature ([issue #41](https://github.com/openshieldhit/openshieldhit/issues/41)).
+
+```text
+Geometry Zone
+    Name UpstreamPlane
+    Zone Plane1        # a thin slab: most particles cross it in a single step
+
+Output
+    Filename dump.mcpl
+    FileFormat MCPL
+    Geo UpstreamPlane
+    Quantity MCPL
+    MaxRecords 1000000
+```
+
+Rules and semantics:
+
+- `Geometry Zone` is required — MCPL has no Mesh/Cyl form. One record is written
+  per transport step through *any* of the geometry's listed zones, at the step's
+  *exit* point: position, direction, and kinetic energy are the particle's state
+  as it leaves the zone, ready to seed a downstream run. A zone thin enough that
+  a particle almost always crosses it in a single step (a "plane") gives close
+  to one record per particle transit; a thicker zone records every sub-step a
+  particle takes while inside it.
+- `MaxRecords <n>` is **required** on the `Quantity MCPL` line: the number of
+  particle records to pre-allocate storage for. The buffer is allocated once,
+  before transport, and never grows — nothing under the scoring hot path
+  allocates — so the run **stops with an error** the moment record `n + 1`
+  would be booked, and no `.mcpl` file is written. There is no silent
+  truncation. Sizing guidance is below.
+- An `Output` using `FileFormat MCPL` must contain exactly one `Quantity MCPL`
+  page and no other quantity; `Quantity MCPL` in turn requires `FileFormat MCPL`.
+  A `Diff1`/`Diff1Type` differential axis is not supported.
+- Particle-type/energy/generation filters apply the same way as any other
+  quantity, e.g. `Quantity MCPL protonsOnly` records only the particles a
+  `protonsOnly` filter passes.
+- Each record stores position `[cm]`, direction (unit vector), kinetic energy
+  `[MeV]`, statistical weight (`st->wt` — MCPL is the one scorer that does not
+  silently drop particle weight), and the MC particle's PDG code. The MCPL
+  `userflags` field carries the generation number (0 = beam primary, N =
+  Nth-generation secondary); the file's own header comment documents this.
+  Written in double precision.
+
+#### Sizing `MaxRecords`
+
+Overflow is fatal and the buffer never grows, so `MaxRecords` has to cover the
+run's *ceiling*, not its expected yield:
+
+- One record is booked per transport **step** through a listed zone, not per
+  particle — a primary that takes several sub-steps inside the zone contributes
+  several records, and secondaries born upstream contribute their own. A thin
+  "plane" zone keeps this close to one record per transit; a thick zone does
+  not.
+- A record costs `72 B` on a typical 64-bit build, so `MaxRecords 2000000`
+  reserves ~137 MiB. `openshieldhit --dry-run` reports the figure in its
+  `Scoring memory:` line and refuses a configuration that exceeds the memory
+  budget, which is the cheapest way to check a value before committing a long
+  run.
+- The card must follow the `Quantity MCPL` line it belongs to. Under any other
+  `Quantity` it is rejected rather than ignored, and it is parsed strictly: a
+  value that is not a plain positive whole number (`2.7`, `1e6`, `10junk`, `-1`)
+  is an error, not a silent reinterpretation.
+- A time-limited run (`--max-time`) has no primary count to scale from at all,
+  so size it from an expected rate measured on a short trial run.
+
+If the buffer does fill, the run aborts with a message naming the output and
+the limit:
+
+```text
+[ERROR] scoring: MCPL output 'dump.mcpl' ran out of records after 10 of MaxRecords 10; raise MaxRecords in detect.dat (72 B per record). No MCPL file is written
+```
+
+Streaming records straight to the file (MCPL is an append format, so the
+library supports it) would remove both the parameter and the memory scaling;
+it is deferred because the buffer is also what a future parallel/replica worker
+concatenates at merge time — see
+[issue #331](https://github.com/openshieldhit/openshieldhit/issues/331).
+
+#### If the output file cannot be written
+
+The bundled MCPL writer reports failures by terminating the process rather than
+by returning an error, which is upstream MCPL behaviour and not something
+openshieldhit can intercept without abandoning the library mid-write. The one
+reachable case — an output `Filename` that cannot be opened for writing, or one
+MCPL itself would reject — is therefore checked before the writer is handed the
+file, and ends the run through the normal error path. A failure inside the
+writer after that point (a disk filling up, for instance) still aborts the
+process, losing the other outputs of that save.
+
+#### A zone is bounded; a crossing surface is not
+
+Worth knowing before comparing an openshieldhit dump against another code's
+phase-space file. `Quantity MCPL` records particles inside a **zone** — a
+bounded region of your `geo.dat`. Most other codes' phase-space writers instead
+record every particle crossing an **unbounded plane or surface**.
+
+The two agree on the particles that stay inside the zone's transverse extent,
+and differ on everything outside it: a particle that scatters out of a beam
+pipe and crosses the same *z* far off-axis appears in a surface dump and not in
+a zone dump. Even a small such population — fractions of a percent — dominates
+radial moments, so a `σ_r` comparison can look wildly inconsistent while the
+core distributions agree. Cut both files on the zone's transverse extent before
+comparing, or widen the zone to cover the surface you are comparing against.
+
+#### The `nstat` header key
+
+MCPL standardises no key for "how many primaries does this file represent", so
+every producer names it itself; Geant4-side writers commonly use
+`launched_primaries`. openshieldhit writes **`nstat`**, matching its own
+`beam.dat` card and BDO field name, as a `stat:sum:` header entry, and repeats
+the meaning in a header comment. A consumer that reads the wrong key does not
+fail — it silently mis-scales every result derived from the file — so check the
+key name when wiring up a reader written for another code.
+
+**Not combinable with variance batching or `--score-replicas`.** Both of those
+score into a *private* accumulator set and fold it into the master afterwards,
+and a phase-space stream cannot be folded that way — its combine rule is
+concatenation, not addition. An `Output` using `Quantity MCPL` is therefore
+rejected up front if any page in the same `detect.dat` carries `Variance On`
+(variance is run-wide, so a `Variance On` page elsewhere still counts), or if
+the run is launched with `--score-replicas`. Both produce a clear error before
+any transport starts. Put the MCPL dump in its own run, or drop the other
+option. Lifting this means teaching the private-set path to carry and
+concatenate the buffer — tracked as
+[issue #331](https://github.com/openshieldhit/openshieldhit/issues/331).
+
+**Build switch.** MCPL support is compiled in by default. It is the only part
+of openshieldhit that bundles third-party code — the MCPL project's own core,
+under the Apache-2.0 licence (see `THIRD_PARTY_NOTICES.md`) — so it can be
+switched off with `cmake -DOSH_ENABLE_MCPL=OFF`, which also drops the zlib
+dependency that core pulls in. A `detect.dat` asking for MCPL is then rejected
+when the scoring setup is compiled, with a message naming the switch, rather
+than failing after the run. Chiefly of interest to anyone who must link
+openshieldhit into a GPLv2-only work, which Apache-2.0 does not permit.
+
+**Citation.** The MCPL authors ask that work using their code cite
+T. Kittelmann *et al.*, "Monte Carlo Particle Lists: MCPL", *Comput. Phys.
+Commun.* **218**, 17-42 (2017),
+[doi:10.1016/j.cpc.2017.04.012](https://doi.org/10.1016/j.cpc.2017.04.012).
+Please cite it alongside openshieldhit itself if you publish work that uses
+these files. The reference is also recorded in `CITATION.cff`.
 
 ### Native plot output — `FileFormat SVG`
 

@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "openshieldhit/status.h"
+#include "scoring/runtime/osh_scoring_mcpl_record.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -92,6 +93,41 @@ struct osh_scoring_accumulator {
     size_t len;
     double weight;             /* Σ history weight (W) of the batches folded in; 0 when variance inactive. */
     unsigned long long nbatch; /* Number of batches folded in (B); error-estimate dof is B − 1. */
+    /* MCPL phase-space append buffer (OSH_SCORING_SCORE_MCPL pages only; NULL/0
+     * for every other score kind). This is APPEND's own storage: X = [x_0, x_1,
+     * ..., x_j] concatenation (docs/dev/scoring.md §5), fundamentally unlike the
+     * additive/ratio SUM/NORM/AVER data[] above, so it lives beside data[] rather
+     * than reusing it. osh_scoring_compile() pre-allocates mcpl_records to
+     * mcpl_capacity entries (the required detect.dat "MaxRecords" card) so
+     * osh_scoring_estimator_step_mcpl() never allocates on the hot path; once
+     * mcpl_count reaches mcpl_capacity it returns OSH_ESTATE (raise MaxRecords)
+     * rather than growing the buffer or silently dropping particles.
+     * osh_scoring_save_mcpl_output() serialises mcpl_records[0..mcpl_count) to
+     * the real .mcpl file once, at save time — no MCPL library call happens on
+     * the hot path. osh_scoring_accumulator_merge() does not fold this array (a
+     * future parallel worker's private accumulator needs its own mcpl_records
+     * concatenated onto the master's at merge time, not summed — tracked as
+     * follow-up, not implemented by today's single-worker build).
+     *
+     * mcpl_count is heap-allocated (one element) rather than a plain size_t: the
+     * serial driver's rt->master_acc shallow-*copies* each page's accumulator
+     * struct (osh_scoring_compile(): "master_acc[i] = pages[i].acc"), which
+     * aliases data/data2 correctly (both copies hold the same pointer *value*,
+     * so writes through either reach the same heap buffer) but would silently
+     * desynchronise a plain scalar field — score_step mutating master_acc[i]'s
+     * copy would never be seen through pages[i].acc. One more level of
+     * indirection makes mcpl_count alias exactly like the data arrays do. */
+    struct osh_scoring_mcpl_record *mcpl_records; /* owned; length mcpl_capacity */
+    size_t mcpl_capacity;                         /* from detect.dat "MaxRecords" */
+    size_t *mcpl_count;                           /* owned, one element: records booked so far */
+    /* Owned, one element: set by osh_scoring_estimator_step_mcpl() on the crossing
+     * it had to refuse because the buffer was full.  Heap-allocated for the same
+     * aliasing reason as mcpl_count.  A full buffer is not the same event as an
+     * overflow — a run whose last record exactly fills it has not lost anything —
+     * so the failure-path attribution keys off this rather than off
+     * mcpl_count == mcpl_capacity, which would also fire for an unrelated
+     * transport failure in an exactly-full run. */
+    int *mcpl_overflow;
 };
 
 /**

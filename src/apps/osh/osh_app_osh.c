@@ -269,6 +269,57 @@ osh_scoring_setup_from_path(char const *path, struct osh_diag_sink const *diag, 
 
 /* ---- Zone scoring name resolution ---------------------------------------- */
 
+/**
+ * @brief Is @p quantity finalised by dividing each bin by its volume?
+ *
+ * @details
+ * The set whose estimator registers `postprocess_volume`/`postprocess_dosegy`
+ * (see `src/scoring/runtime/osh_scoring_estimator.c`), i.e. the quantities for
+ * which a missing per-zone `Volume` card silently changes the saved number.
+ * `Energy` is extensive and `MCPL` is a phase-space dump — neither reads a bin
+ * volume at all, so a Zone geometry carrying only those must not be warned
+ * about (issue #328).  Quantity keywords are lowercased once at parse time.
+ * `NKERMA` also postprocesses by volume but has no `detect.dat` spelling yet
+ * (it is a registry placeholder, see docs/dev/scoring.md), so it is not listed.
+ */
+static int quantity_is_volume_normalized(char const *quantity) {
+    if (!quantity) {
+        return 0;
+    }
+    return strcmp(quantity, "fluence") == 0 || strcmp(quantity, "dose") == 0 || strcmp(quantity, "dosegy") == 0
+           || strcmp(quantity, "dirtydose") == 0 || strcmp(quantity, "dirtydosegy") == 0;
+}
+
+/**
+ * @brief Does any Output page attached to geometry @p gname need a bin volume?
+ *
+ * @details
+ * Scans every Output that references the geometry by name — the same match
+ * `osh_scoring_compile()` makes — and reports whether at least one of its pages
+ * is volume-normalized.  A geometry no Output references yet also yields 0:
+ * `osh_scoring_compile()` is what rejects that, and warning about a volume the
+ * run will never read would be noise either way.
+ */
+static int geometry_needs_zone_volume(struct osh_scoring_workspace const *scoring, char const *gname) {
+    size_t o;
+    size_t p;
+
+    if (!scoring || !gname) {
+        return 0;
+    }
+    for (o = 0u; o < scoring->noutputs; ++o) {
+        if (!scoring->outputs[o].geometry_name || strcmp(scoring->outputs[o].geometry_name, gname) != 0) {
+            continue;
+        }
+        for (p = 0u; p < scoring->outputs[o].npages; ++p) {
+            if (quantity_is_volume_normalized(scoring->outputs[o].pages[p].quantity)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 enum osh_status osh_scoring_resolve_zone_names(struct osh_scoring_workspace *scoring,
                                                struct osh_geometry_workspace const *geom,
                                                struct osh_diag_sink const *diag) {
@@ -282,6 +333,7 @@ enum osh_status osh_scoring_resolve_zone_names(struct osh_scoring_workspace *sco
         struct osh_scoring_geometry_def *geo;
         char const *gname;
         size_t i;
+        int needs_volume;
 
         geo = &scoring->geometries[g];
         if (geo->nzone_indices == 0u || geo->zone_names == NULL) {
@@ -291,6 +343,7 @@ enum osh_status osh_scoring_resolve_zone_names(struct osh_scoring_workspace *sco
         if (!gname) {
             gname = "(unnamed)";
         }
+        needs_volume = geometry_needs_zone_volume(scoring, geo->name);
 
         /* Names -> dense 0-based transport indices; drop any earlier resolution. */
         free(geo->zone_indices);
@@ -318,10 +371,11 @@ enum osh_status osh_scoring_resolve_zone_names(struct osh_scoring_workspace *sco
                                 geo->zone_names[i]);
                 return OSH_EINVAL;
             }
-            if (!(geo->zone_volumes && geo->zone_volumes[i] > 0.0)) {
+            if (needs_volume && !(geo->zone_volumes && geo->zone_volumes[i] > 0.0)) {
                 OSH_DIAG_WARNF(diag,
                                "Scoring Zone geometry '%s': zone '%s' has no Volume card; "
-                               "volume-normalized quantities (Dose/DoseGy) use 1.0 cm3",
+                               "volume-normalized quantities (Fluence/Dose/DoseGy/DirtyDose/DirtyDoseGy) "
+                               "use 1.0 cm3",
                                gname,
                                geo->zone_names[i]);
             }

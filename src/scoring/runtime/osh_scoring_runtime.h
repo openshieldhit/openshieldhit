@@ -212,6 +212,76 @@ static inline int osh_scoring_runtime_tracks_variance(struct osh_scoring_runtime
 }
 
 /**
+ * @brief Does any compiled page book an MCPL phase-space append buffer?
+ *
+ * @details
+ * True when at least one page is a @c Quantity @c MCPL page, so
+ * @ref osh_scoring_compile allocated its @c mcpl_records buffer (issue #328).
+ * The append buffer lives only on the master accumulator set:
+ * @ref osh_scoring_runtime_alloc_accumulator_set builds private sets through
+ * @c osh_scoring_accumulator_alloc_variance(), which allocates the binned
+ * arrays but no record buffer, and @ref osh_scoring_accumulator_merge refuses
+ * to fold one set's records into another's (concatenation is not one of the
+ * additive/ratio rules it implements).  Callers that would route deposits into
+ * a private set — variance batching and --score-replicas — use this to refuse
+ * the combination up front instead of letting the hot-path guard in
+ * osh_scoring_estimator_step_mcpl() abort the run on the first crossing.
+ */
+static inline int osh_scoring_runtime_has_mcpl_page(struct osh_scoring_runtime const *rt) {
+    size_t p;
+
+    if (!rt || rt->npages == 0u || !rt->pages) {
+        return 0;
+    }
+    for (p = 0u; p < rt->npages; ++p) {
+        if (rt->pages[p].score_kind == OSH_SCORING_SCORE_MCPL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * @brief First compiled MCPL page that had to refuse a record, or NULL.
+ *
+ * @details
+ * Attribution for the one user-fixable failure the MCPL hot path can raise
+ * (issue #328): @c osh_scoring_estimator_step_mcpl() returns a bare
+ * @c OSH_ESTATE once @c mcpl_count reaches @c mcpl_capacity, which is
+ * indistinguishable at the transport call site from the two internal-invariant
+ * violations that return the same code — and the diagnostics the caller prints
+ * around it name transport, not the @c detect.dat card the user has to raise.
+ * The failure path calls this afterwards to say which output filled up and at
+ * what limit.  Keys off the @c mcpl_overflow flag the handler sets on the
+ * crossing it refused, not off @c mcpl_count reaching @c mcpl_capacity: a run
+ * whose last record exactly fills the buffer has lost nothing, and reporting it
+ * would attach a spurious MCPL explanation to an unrelated transport failure.
+ * Scans @c rt->pages[].acc directly: MCPL never books into a private
+ * accumulator set (both paths that build one are refused up front, see
+ * @ref osh_scoring_runtime_has_mcpl_page), so the page's own accumulator is
+ * always the buffer that overflowed.  Returns NULL when no MCPL page overflowed,
+ * i.e. the failure came from somewhere else.
+ */
+static inline struct osh_scoring_page_runtime const *
+osh_scoring_runtime_mcpl_full_page(struct osh_scoring_runtime const *rt) {
+    size_t p;
+
+    if (!rt || rt->npages == 0u || !rt->pages) {
+        return NULL;
+    }
+    for (p = 0u; p < rt->npages; ++p) {
+        struct osh_scoring_page_runtime const *page = &rt->pages[p];
+        if (page->score_kind != OSH_SCORING_SCORE_MCPL || !page->acc.mcpl_overflow) {
+            continue;
+        }
+        if (*page->acc.mcpl_overflow) {
+            return page;
+        }
+    }
+    return NULL;
+}
+
+/**
  * @brief Completeness label to stamp on a saved result — never NULL.
  *
  * @details

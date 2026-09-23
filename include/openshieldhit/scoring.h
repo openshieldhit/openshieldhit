@@ -186,6 +186,10 @@ struct osh_scoring_page_def {
      * the diff1 LET/QEFF axis — written as "Diff1Type DEDX in_Si".
      * NULL means use the transport medium (default). */
     char *diff_kind_sset_name; /* Optional Settings name for diff1 axis SP override (owned). */
+    /* "MaxRecords <N>" — required for "Quantity MCPL" pages (0 = unset, a compile-time
+     * error for that quantity); the pre-allocated capacity of the MCPL phase-space
+     * append buffer. Unused by every other quantity. */
+    size_t mcpl_max_records;
 };
 
 /* ---- Geometry ------------------------------------------------------------ */

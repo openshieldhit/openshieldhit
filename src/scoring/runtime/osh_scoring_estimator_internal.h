@@ -124,6 +124,15 @@ enum osh_status osh_scoring_estimator_step_tbeta(struct osh_scoring_runtime cons
                                                  struct step const *st,
                                                  double score_len);
 
+enum osh_status osh_scoring_estimator_step_mcpl(struct osh_scoring_runtime const *rt,
+                                                struct osh_scoring_accumulator *acc_set,
+                                                struct osh_scoring_geometry_score_group const *group,
+                                                struct osh_voxel_crossing const *crossings,
+                                                size_t ncross,
+                                                struct particle const *part,
+                                                struct step const *st,
+                                                double score_len);
+
 enum osh_status osh_scoring_estimator_point_energy(struct osh_scoring_runtime const *rt,
                                                    struct osh_scoring_accumulator *acc_set,
                                                    struct osh_scoring_geometry_score_group const *group,

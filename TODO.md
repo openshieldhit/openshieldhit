@@ -100,7 +100,7 @@ by abrasion and Fermi break-up are banked in the neutron pool and drained by
 
 - [ ] Zone scoring
 - [ ] Alanine detector response
-- [ ] MCPL phase-space output
+- [x] MCPL phase-space output ([#328])
 
 ## CT / Voxel / RTDOSE Workflow
 
@@ -172,3 +172,4 @@ Positioning in `osh_sim` (manual / current design):
 [#207]: https://github.com/openshieldhit/openshieldhit/pull/207
 [#211]: https://github.com/openshieldhit/openshieldhit/issues/211
 [#230]: https://github.com/openshieldhit/openshieldhit/issues/230
+[#328]: https://github.com/openshieldhit/openshieldhit/issues/328

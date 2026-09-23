@@ -24,3 +24,30 @@ abstract: >-
   building a lean, modular Monte Carlo particle transport
   framework in C.
 license: MIT
+references:
+  # OpenShieldHIT bundles the MCPL core (Apache-2.0) for phase-space I/O; the
+  # MCPL authors ask to be cited when their code is used.  See
+  # THIRD_PARTY_NOTICES.md.  Only relevant to work that uses MCPL input/output.
+  - type: article
+    title: 'Monte Carlo Particle Lists: MCPL'
+    authors:
+      - given-names: T.
+        family-names: Kittelmann
+      - given-names: E.
+        family-names: Klinkby
+      - given-names: E. B.
+        family-names: Knudsen
+      - given-names: P.
+        family-names: Willendrup
+      - given-names: X. X.
+        family-names: Cai
+      - given-names: K.
+        family-names: Kanaki
+    journal: Computer Physics Communications
+    volume: 218
+    start: 17
+    end: 42
+    year: 2017
+    doi: 10.1016/j.cpc.2017.04.012
+    url: 'https://github.com/mctools/mcpl'
+    license: Apache-2.0

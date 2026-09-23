@@ -271,7 +271,10 @@ supports two merging paths:
      - `NORM` (DOSE, FLUENCE, ENERGY, …): `X = (sum_j x_j) / (sum_j nstat_j)`
      - `AVER` (DLET, TLET, DQEFF, TQEFF, DAVGE, TAVGE, DBETA, TBETA): `X = (sum_j x_j * nstat_j) / (sum_j nstat_j)`
      - `SUM` (COUNT, …): `X = sum_j x_j`
-     - `APPEND` (MCPL): concatenation
+     - `APPEND` (MCPL): concatenation — MCPL never writes a `.bdo` file (`FileFormat MCPL`
+       is required for `Quantity MCPL`, §6), so combining several runs' `.mcpl` files means
+       concatenating the files themselves (`mcpl_merge_files()` in the MCPL API), not this
+       BDO merge tool
 
 The `OSHBDO_PAG_NORMALIZE` tag records each page's postproc mode so a merge
 tool need not re-derive it from the scorer type.
@@ -327,11 +330,48 @@ at score time and never at save.
 | `DBETA`   | `osh_scoring_estimator_step_dbeta`   | — | `postprocess_ratio` | dose-weighted `(β·w, w)` → `data/data2` |
 | `TBETA`   | `osh_scoring_estimator_step_tbeta`   | — | `postprocess_ratio` | track-weighted `(β·w, w)` → `data/data2` |
 | `NKERMA`  | —                    | — | `postprocess_volume` | (neutron kerma) → ÷volume [MeV/g] |
+| `MCPL`    | `osh_scoring_estimator_step_mcpl` | — | — | one `osh_scoring_mcpl_record` per crossing → append buffer |
 
 **Adding a `Quantity`** = write its handler(s), then add one row to the registry
 in `osh_scoring_estimator.c` and one row to this table. `osh_scoring_estimator_point_dose` guards
 neutral particles (they book energy but no local dose); `osh_scoring_estimator_point_energy` books
 the whole point energy deposit (equivalent to a unit-length crossing).
+
+!!! note "MCPL deposits into its own append buffer, not `data`/`data2` (issue #328)"
+    `MCPL` (`Quantity MCPL`, `FileFormat MCPL`; see `detect.dat.md`) is a phase-space
+    *dump*, not a spatial accumulator: `osh_scoring_estimator_step_mcpl` writes a
+    `struct osh_scoring_mcpl_record` (position, direction, kinetic energy, weight,
+    PDG code, generation) per crossing into `acc->mcpl_records[0..*mcpl_count)` — a
+    buffer pre-allocated at compile time to the page's `MaxRecords` capacity, kept
+    beside (not inside) `acc->data`, since APPEND's cross-run combine rule is
+    *concatenation*, not the additive/ratio rules `data`/`data2` exist for. `data`
+    stays an unused, always-zero one-element array for this score kind — `postprocess_`
+    is `NULL` (nothing to finalise) and `osh_scoring_save_mcpl_output()` (the only
+    code that ever calls into the vendored MCPL writer, `src/thirdparty/mcpl/`)
+    serialises the buffer to a real `.mcpl` file once, at save time. `mcpl_count` is
+    itself heap-allocated (one `size_t`, not a plain scalar): the serial driver's
+    `rt->master_acc` shallow-copies each page's `osh_scoring_accumulator` struct,
+    which aliases `data`/`mcpl_records` correctly (both copies hold the same pointer
+    value) but would silently desynchronise a plain scalar field written through the
+    copy — one more pointer indirection fixes that the same way the data arrays
+    already rely on it. `score_point_` is `NULL`: a bare point interaction has no
+    step direction to record. Single-worker only: `osh_scoring_accumulator_merge()`
+    refuses (`OSH_ENOTSUP`) rather than silently drop one side's records when either
+    accumulator carries an `mcpl_records` buffer — a future parallel worker needs
+    its own private buffer concatenated onto the master's at merge time, not summed.
+
+    **Overflow attribution.** Once `*mcpl_count` reaches `mcpl_capacity` the handler
+    returns `OSH_ESTATE` — no growth (nothing under `osh_scoring_score_step()`
+    allocates, DEVELOPER.md §10) and no silent drop. That code is also what the
+    handler's two internal-invariant guards return, and the transport call site
+    reports it as `scoring rejected step rc=7`, naming neither MCPL nor the
+    `MaxRecords` card the user has to raise. `osh_simulation_run()` therefore calls
+    `osh_scoring_runtime_mcpl_full_page()` on the transport-failure path and, when a
+    page is full, emits a second diagnostic naming the output file and the limit
+    before the generic `simulation: transport failed`. The helper scans
+    `rt->pages[].acc` directly, which is sound because MCPL never books into a
+    private accumulator set: both paths that build one (`Variance On`,
+    `--score-replicas`) are refused up front.
 
 !!! note "NKERMA is a registry placeholder (deposit not yet wired)"
     The `NKERMA` row is `{NULL, NULL, postprocess_volume}`: it has neither a

@@ -6,6 +6,9 @@
 #include "scoring/save/osh_scoring_save_bdo2019.h"
 #include "scoring/save/osh_scoring_save_plot.h"
 #include "scoring/save/osh_scoring_save_rtdose.h"
+#ifdef OSH_WITH_MCPL
+#include "scoring/save/osh_scoring_save_mcpl.h"
+#endif
 
 static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
                                        struct osh_scoring_runtime const *rt,
@@ -15,6 +18,7 @@ static int fileformat_is_ascii(char const *fileformat);
 static int fileformat_is_bdo2019(char const *fileformat);
 static int fileformat_is_rtdose(char const *fileformat);
 static int fileformat_is_plot(char const *fileformat);
+static int fileformat_is_mcpl(char const *fileformat);
 
 enum osh_status osh_scoring_save(struct osh_scoring_workspace const *ws,
                                  struct osh_scoring_runtime const *rt,
@@ -86,6 +90,16 @@ static enum osh_status save_one_output(struct osh_scoring_workspace const *ws,
     if (fileformat_is_plot(fileformat)) {
         return osh_scoring_save_plot_output(ws, rt, nstat, output_idx);
     }
+    if (fileformat_is_mcpl(fileformat)) {
+#ifdef OSH_WITH_MCPL
+        return osh_scoring_save_mcpl_output(ws, rt, nstat, output_idx);
+#else
+        /* Unreachable in practice: osh_scoring_compile() already rejected this
+         * detect.dat when the build has no MCPL support.  Kept as a belt-and-
+         * braces OSH_ENOTSUP so the dispatch stays total. */
+        return OSH_ENOTSUP;
+#endif
+    }
 
     return OSH_ENOTSUP;
 }
@@ -120,4 +134,11 @@ static int fileformat_is_plot(char const *fileformat) {
         return 0;
     }
     return strcmp(fileformat, "svg") == 0;
+}
+
+static int fileformat_is_mcpl(char const *fileformat) {
+    if (!fileformat) {
+        return 0;
+    }
+    return strcmp(fileformat, "mcpl") == 0;
 }
