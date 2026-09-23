@@ -135,19 +135,26 @@ void osh_vect_norm2(double const *u, double *v);
  *  This leads to more stable numerical situations for calculating the cross
  * product later on.
  *
- * @param[in] u - input unit vector
- * @param[out] v - unit vector orthogonal to <u> and <w>
- * @param[out] w - unit vector orthogonal to <u> and <v>
+ * (u,v,w) is right-handed, but u and v are not unit vectors -- the caller must
+ * osh_vect_norm() them if it needs an orthonormal triad, or call
+ * osh_vect_orthonormal_basis(), which returns one directly.
+ *
+ * @param[in]  w - input unit vector
+ * @param[out] u - vector orthogonal to <w> and <v>
+ * @param[out] v - vector orthogonal to <w> and <u>
  *
  * @author Niels Bassler, Leszek Grzanka
  */
 void osh_vect_orthogonal_basis(double const *w, double *u, double *v);
 
 /**
- * @brief Like osh_vect_orthogonal_basis() but uses the least-aligned Cartesian
- * axis (Gram-Schmidt projection) for numerical robustness and returns
- * normalized output vectors.  Preferable over the non-normalized variant for
- * new code.
+ * @brief Like osh_vect_orthogonal_basis(), but the outputs are unit vectors,
+ * so the caller needs no follow-up osh_vect_norm().
+ *
+ * @details Projects out the least-aligned Cartesian axis (Gram-Schmidt) rather
+ * than crossing with e3, which is numerically better conditioned and has no
+ * degenerate case to special-case.  (u,v,w) is right-handed for every @p w.
+ * Preferred over osh_vect_orthogonal_basis() for new code.
  *
  * TODO: migrate gemca callers of osh_vect_orthogonal_basis to this function.
  *
@@ -155,7 +162,7 @@ void osh_vect_orthogonal_basis(double const *w, double *u, double *v);
  * @param[out] u  First transverse unit vector, perpendicular to @p w.
  * @param[out] v  Second transverse unit vector, perpendicular to both.
  */
-void osh_vect_orthogonal_basis_norm(double const *w, double *u, double *v);
+void osh_vect_orthonormal_basis(double const *w, double *u, double *v);
 
 /**
  * @brief
@@ -211,57 +218,64 @@ void osh_vect_print(double const *v);
 void osh_vect_matrix4_print(double const *tm);
 
 /**
- * @brief Builds the transformation matrix osh_COORD_BZALIGN -->
- * osh_COORD_UNIVERSE system.
+ * @brief Builds the UNIVERSE --> frame transformation matrix, where "frame" is
+ * the rotated local system of a body or beam -- OSH_COORD_BZALIGN and
+ * OSH_COORD_PZALIGN, whose consumers apply the full 3x4 affine.
  *
- * @details p will be at (0,0,0) and r will be along Z in the osh_COORD_BZALIGN
- * system.
+ * Not for OSH_COORD_BCALIGN: that tag means a pure translation, and its
+ * consumers add t[3], t[7], t[11] while ignoring the rotation rows entirely
+ * (see the BCALIGN branches in osh_gemca_runtime.c).  A matrix built here
+ * would have its rotation silently dropped.
  *
- * @param[in] p[3] - translation vector
- * @param[in] r[3] - vector for calculating the rotation matrix (not the
- * rotation axis!)
- * @param[out] tm[16] - transformation matrix, which maps e3 (0,0,1) into R
+ * @details @p origin_universe maps to (0,0,0) and @p axis maps onto local +z.
  *
- * @returns
+ * With M = [S|T|R] the local basis expressed in UNIVERSE, this stores M^T:
+ * row i is the basis vector itself, and tm[i*4+3] = -<basis_i,P>, so that the
+ * standard affine rule p_out = M_rows * p_in + t evaluates
+ *   p_frame = M^T (p_universe - P)
+ *
+ * The basis (S,T,R) is always right-handed.  The inverse direction is built by
+ * osh_vect_tmatrix_frame_to_universe(); note that the two take their origin in
+ * different systems -- each takes it in the system it transforms *from*, so
+ * that they compose as exact inverses when P_universe = M * P_frame.
+ *
+ * @param[in] origin_universe[3] - frame origin, in UNIVERSE coordinates
+ * @param[in] axis[3] - vector for calculating the rotation matrix (not the
+ * rotation axis!); need not be normalised
+ * @param[out] tm[16] - transformation matrix, which maps axis onto e3 (0,0,1)
  *
  * @author Niels Bassler
  */
-void osh_vect_setup_tmatrix_bzalign(double *p, double *r, double *tm);
+void osh_vect_tmatrix_universe_to_frame(double const *origin_universe, double const *axis, double *tm);
 
 /**
- * @brief Builds a standard affine matrix mapping beam-local BZ/PZALIGN
- * coordinates to UNIVERSE coordinates.
+ * @brief Builds the frame --> UNIVERSE transformation matrix, i.e. the opposite
+ * direction of osh_vect_tmatrix_universe_to_frame() above.
  *
- * @details The resulting matrix follows the conventional affine form
- *   p_out = R * p_in + t
- * where R columns are the local basis vectors (S,T,Rdir) expressed in
- * UNIVERSE.
+ * @details The columns of M are the local basis vectors (S,T,R) expressed in
+ * UNIVERSE, so the standard affine rule p_out = M * p_in + t evaluates
+ *   p_universe = M * (p_frame + origin_frame)
  *
- * The first argument is the beam origin expressed in beam-local
- * BZ/PZALIGN coordinates, not an already-world-space translation vector.
- * The stored affine translation is derived as:
- *   t = R * p_local
- * so the final matrix maps:
- *   p_universe = R * p_local_sampled + R * p_local_origin
+ * Following the convention above, the origin is given in the system this
+ * matrix transforms *from* -- here the local frame, not UNIVERSE.  The stored
+ * translation is therefore derived as t = M * origin_frame.  Callers holding a
+ * UNIVERSE-space origin must convert it first, or use
+ * osh_vect_tmatrix_universe_to_frame() for the other direction.
  *
- * Callers that already have a desired world-space translation must not pass
- * it directly here unless it first matches this local-origin convention.
- *
- * This is the preferred helper for new code. The legacy
- * osh_vect_setup_tmatrix_bzalign() function above follows the older
- * SHIELD-HIT/GEMCA convention and is kept only for backward compatibility
- * until GEMCA is migrated away from direct matrix-slot inspection.
+ * @param[in] origin_frame[3] - frame origin, in local frame coordinates
+ * @param[in] axis_universe[3] - local +z direction, in UNIVERSE coordinates
+ * @param[out] tm[16] - transformation matrix, which maps e3 (0,0,1) onto axis
  */
-void osh_vect_setup_tmatrix_bzalign_affine(double const *p_local, double const *r_world, double *tm);
+void osh_vect_tmatrix_frame_to_universe(double const *origin_frame, double const *axis_universe, double *tm);
 
 /**
  * @brief Apply a standard affine matrix to a point.
  */
-void osh_vect_trans_point_affine(double const *p, double *pt, double const *tm);
+void osh_vect_trans_point(double const *p, double *pt, double const *tm);
 
 /**
  * @brief Apply only the rotation part of a standard affine matrix to a vector.
  */
-void osh_vect_trans_vector_affine(double const *v, double *vt, double const *tm);
+void osh_vect_trans_vector(double const *v, double *vt, double const *tm);
 
 #endif /* OSH_VECT_H */

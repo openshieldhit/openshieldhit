@@ -606,8 +606,8 @@ static enum osh_status _setup_vox(struct body *b) {
      *   osh_vect_rot_y applies this rotation.
      *
      * Order matters: base first, then couch, then gantry (each row of tb is
-     * rotated sequentially).  The prior code had these SWAPPED (rot_y for couch,
-     * rot_z for gantry), which gave wrong results for any non-zero angle. */
+     * rotated sequentially), as does the axis each maps to -- swapping rot_y
+     * and rot_z here is wrong for any non-zero angle. */
     pp = (b->na >= 18) ? (enum osh_patient_position)(int) b->a[17] : OSH_PP_HFS;
     osh_patient_position_base_rotation(pp, tb);
 
@@ -623,11 +623,11 @@ static enum osh_status _setup_vox(struct body *b) {
         }
     }
 
-    /* osh_ray_transform computes p_local[i] = sum_k p_universe[k]*tb[i][k] - t[i*4+3].
-     * For this to equal (p_universe - t_vec)·tb[i], we need t[i*4+3] = t_vec·tb[i]. */
-    b->t[3] = tx_cm * tb[0][0] + ty_cm * tb[0][1] + tz_cm * tb[0][2];
-    b->t[7] = tx_cm * tb[1][0] + ty_cm * tb[1][1] + tz_cm * tb[1][2];
-    b->t[11] = tx_cm * tb[2][0] + ty_cm * tb[2][1] + tz_cm * tb[2][2];
+    /* osh_ray_transform computes p_local[i] = sum_k p_universe[k]*tb[i][k] + t[i*4+3].
+     * For this to equal (p_universe - t_vec)·tb[i], we need t[i*4+3] = -t_vec·tb[i]. */
+    b->t[3] = -(tx_cm * tb[0][0] + ty_cm * tb[0][1] + tz_cm * tb[0][2]);
+    b->t[7] = -(tx_cm * tb[1][0] + ty_cm * tb[1][1] + tz_cm * tb[1][2]);
+    b->t[11] = -(tx_cm * tb[2][0] + ty_cm * tb[2][1] + tz_cm * tb[2][2]);
 
     /* ----------- Setup surfaces */
     osh_gemca2_add_surfaces(b, nsurfs);
@@ -753,7 +753,7 @@ static int _setup_rcc(struct body *b) {
 
     /* ----------- Setup translation matrix */
     b->coord = OSH_COORD_BZALIGN;
-    osh_vect_setup_tmatrix_bzalign(p, r, b->t);
+    osh_vect_tmatrix_universe_to_frame(p, r, b->t);
 
     /* ----------- Setup surfaces */
     osh_gemca2_add_surfaces(b, nsurfs);
@@ -811,7 +811,7 @@ static int _setup_rec(struct body *b) {
     b->coord = OSH_COORD_BZALIGN;
 
     /* ----------- Setup translation matrix */
-    osh_vect_setup_tmatrix_bzalign(p, r, b->t);
+    osh_vect_tmatrix_universe_to_frame(p, r, b->t);
 
     /* ----------- Setup surfaces */
     osh_gemca2_add_surfaces(b, nsurfs);
@@ -874,7 +874,7 @@ static int _setup_trc(struct body *b) {
 
     /* ----------- Setup translation matrix */
     b->coord = OSH_COORD_BZALIGN;
-    osh_vect_setup_tmatrix_bzalign(p, r, b->t);
+    osh_vect_tmatrix_universe_to_frame(p, r, b->t);
 
     /* ----------- Setup surfaces */
     osh_gemca2_add_surfaces(b, nsurfs);
@@ -936,7 +936,7 @@ static int _setup_ell(struct body *b) {
 
     /* ----------- Setup translation matrix */
     b->coord = OSH_COORD_BZALIGN;
-    osh_vect_setup_tmatrix_bzalign(p, r, b->t);
+    osh_vect_tmatrix_universe_to_frame(p, r, b->t);
 
     /* ----------- Setup surfaces */
     osh_gemca2_add_surfaces(b, nsurfs);

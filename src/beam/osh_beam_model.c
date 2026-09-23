@@ -407,15 +407,15 @@ static int _apply_sad(struct ray_v *ray, struct beam_spot const *spot, struct be
  *   p_universe = R * p_local + t
  *   v_universe = R * v_local
  *
- * This intentionally does NOT use osh_ray_v_transform(), which follows the
- * legacy SHIELD-HIT/GEMCA sign convention for the translation component.
+ * osh_ray_v_transform() applies the same affine rule (translation added), so
+ * the two agree; this helper also retags the ray as OSH_COORD_UNIVERSE.
  * The matrix spot->_tm is built by the post-parse step and already folds in
  * the beam direction (theta, phi) and the BEAMPOS offset.
  *
  * @param[in,out] ray   Ray in PZALIGN on entry; converted to UNIVERSE in place.
  * @param[in]     spot  Provides the 4x4 row-major affine matrix _tm[16],
- *                      as consumed by osh_vect_trans_point_affine() and
- *                      osh_vect_trans_vector_affine().
+ *                      as consumed by osh_vect_trans_point() and
+ *                      osh_vect_trans_vector().
  */
 static void _apply_transform(struct ray_v *ray, double const tm[16]) {
     double p[3];
@@ -424,8 +424,8 @@ static void _apply_transform(struct ray_v *ray, double const tm[16]) {
     osh_vect_copy(ray->p, p);
     osh_vect_copy(ray->v, v);
 
-    osh_vect_trans_point_affine(p, ray->p, tm);
-    osh_vect_trans_vector_affine(v, ray->v, tm);
+    osh_vect_trans_point(p, ray->p, tm);
+    osh_vect_trans_vector(v, ray->v, tm);
 
     ray->system = OSH_COORD_UNIVERSE;
 }

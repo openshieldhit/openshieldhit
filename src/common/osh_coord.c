@@ -136,9 +136,7 @@ int osh_coord_trans_point(double const p[3], double pt[3], double const t[16]) {
     /* this expands the given coordinates to homogeneous coords, and applies affine transformation */
     for (i = 0; i < 3; i++) {
         j = i * 4;
-        /* TODO: subtracting t[j+3] is non-standard — it should be added, with the
-         * corresponding matrix values stored negative. Kept as-is for GEMCA compatibility. */
-        pt[i] = p[0] * t[j] + p[1] * t[j + 1] + p[2] * t[j + 2] - t[j + 3];
+        pt[i] = p[0] * t[j] + p[1] * t[j + 1] + p[2] * t[j + 2] + t[j + 3];
     }
     return 1;
 }
@@ -188,7 +186,7 @@ int osh_coord_trans_pos(struct position const *p, struct position *pt, double co
 
     for (i = 0; i < 3; i++) {
         j = i * 4;
-        pt->p[i] = p->p[0] * t[j] + p->p[1] * t[j + 1] + p->p[2] * t[j + 2] - t[j + 3]; /* position */
+        pt->p[i] = p->p[0] * t[j] + p->p[1] * t[j + 1] + p->p[2] * t[j + 2] + t[j + 3]; /* position */
         pt->v[i] = p->v[0] * t[j] + p->v[1] * t[j + 1] + p->v[2] * t[j + 2];            /* vector, often not needed */
     }
     return 1;

@@ -371,14 +371,16 @@ static int _resolve_primary_particle(struct beam_workspace const *wb, struct par
  *
  * @details
  * Converts the beam direction (theta, phi) to a unit direction vector r,
- * then calls osh_vect_setup_tmatrix_bzalign_affine() to build a 4x4
+ * then calls osh_vect_tmatrix_frame_to_universe() to build a 4x4
  * row-major matrix that maps beam-local PZALIGN coordinates to UNIVERSE:
  *
- *   p_universe = R * p_local + R * spot->p
+ *   p_universe = M * p_local + M * spot->p
  *
- * where R is the 3x3 rotation derived from r and spot->p is the BEAMPOS
- * offset in the local beam frame. The theta == 0 branch skips the
- * trigonometric evaluation for the common no-rotation case.
+ * where M is the 3x3 rotation derived from r.  Following that builder's
+ * convention, spot->p is the BEAMPOS offset expressed in the local beam
+ * frame -- the system the matrix maps *from* -- not a UNIVERSE offset; the
+ * two coincide only while M is the identity.  The theta == 0 branch skips
+ * the trigonometric evaluation for the common no-rotation case.
  *
  * @param[in,out] spot  Spot whose _tm[16] matrix is written.
  * @param[in]     sh    Shared beam parameters providing theta and phi [rad].
@@ -398,7 +400,7 @@ static void _build_spot_tm(struct beam_spot const *spot, const struct beam_share
     }
 
     osh_coord_c2v(cs, r);
-    osh_vect_setup_tmatrix_bzalign_affine(spot->p, r, tm_out);
+    osh_vect_tmatrix_frame_to_universe(spot->p, r, tm_out);
 }
 
 /**

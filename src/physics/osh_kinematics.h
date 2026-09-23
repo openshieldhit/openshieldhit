@@ -30,7 +30,7 @@ struct osh_rng;
  * trigonometry — see osh_kinematics_azimuth().
  *
  * A stable orthonormal transverse basis {u1, u2} is built via
- * osh_vect_orthogonal_basis_norm().  The rotation is:
+ * osh_vect_orthonormal_basis().  The rotation is:
  *   w_raw = cos_theta·v + sin_theta·(a·u1 + b·u2)
  * followed by renormalisation to guard against floating-point drift.
  *

@@ -125,9 +125,9 @@ void osh_ray_c_clear(struct ray_c *r);
  * @details
  * Transforms both the position and direction of @p r using the row-major
  * matrix @p t, writing the result to @p rt.  The translation column
- * (t[3], t[7], t[11]) is subtracted from the position — this is the
- * GEMCA/SHIELD-HIT sign convention; callers must store the translation
- * negated if the standard convention is required.
+ * (t[3], t[7], t[11]) is added to the position, following the standard affine
+ * rule p_out = M * p_in + t used throughout the code base; builders such as
+ * osh_vect_tmatrix_universe_to_frame() store the translation already negated.
  *
  * Energy (p[3]) is copied unchanged; it is invariant under a coordinate
  * transform.  The system field is copied from @p r; the caller should

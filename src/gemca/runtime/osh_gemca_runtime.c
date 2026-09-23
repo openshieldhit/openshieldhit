@@ -590,9 +590,9 @@ static void check_body_batch_indexed_rt(struct osh_gemca_runtime const *rt,
     case OSH_COORD_BZALIGN:
         for (lane = 0; lane < n; ++lane) {
             size_t i = indices[lane];
-            tx[lane] = x[i] * b->t[0] + y[i] * b->t[1] + z[i] * b->t[2] - b->t[3];
-            ty[lane] = x[i] * b->t[4] + y[i] * b->t[5] + z[i] * b->t[6] - b->t[7];
-            tz[lane] = x[i] * b->t[8] + y[i] * b->t[9] + z[i] * b->t[10] - b->t[11];
+            tx[lane] = x[i] * b->t[0] + y[i] * b->t[1] + z[i] * b->t[2] + b->t[3];
+            ty[lane] = x[i] * b->t[4] + y[i] * b->t[5] + z[i] * b->t[6] + b->t[7];
+            tz[lane] = x[i] * b->t[8] + y[i] * b->t[9] + z[i] * b->t[10] + b->t[11];
             tux[lane] = ux[i] * b->t[0] + uy[i] * b->t[1] + uz[i] * b->t[2];
             tuy[lane] = ux[i] * b->t[4] + uy[i] * b->t[5] + uz[i] * b->t[6];
             tuz[lane] = ux[i] * b->t[8] + uy[i] * b->t[9] + uz[i] * b->t[10];
@@ -2104,9 +2104,9 @@ static inline enum osh_status transform_to_local_batch_rt(struct gemca_rt_body c
 
     case OSH_COORD_BZALIGN:
         for (i = 0; i < n; ++i) {
-            tx[i] = x[i] * b->t[0] + y[i] * b->t[1] + z[i] * b->t[2] - b->t[3];
-            ty[i] = x[i] * b->t[4] + y[i] * b->t[5] + z[i] * b->t[6] - b->t[7];
-            tz[i] = x[i] * b->t[8] + y[i] * b->t[9] + z[i] * b->t[10] - b->t[11];
+            tx[i] = x[i] * b->t[0] + y[i] * b->t[1] + z[i] * b->t[2] + b->t[3];
+            ty[i] = x[i] * b->t[4] + y[i] * b->t[5] + z[i] * b->t[6] + b->t[7];
+            tz[i] = x[i] * b->t[8] + y[i] * b->t[9] + z[i] * b->t[10] + b->t[11];
             tux[i] = ux[i] * b->t[0] + uy[i] * b->t[1] + uz[i] * b->t[2];
             tuy[i] = ux[i] * b->t[4] + uy[i] * b->t[5] + uz[i] * b->t[6];
             tuz[i] = ux[i] * b->t[8] + uy[i] * b->t[9] + uz[i] * b->t[10];

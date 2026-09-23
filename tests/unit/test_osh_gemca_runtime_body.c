@@ -200,10 +200,14 @@ static void fill_bzalign_capped_cyl_cases(double *x, double *y, double *z, doubl
 
     idx = 0u;
 
-    /* Inverse map for the chosen BZALIGN matrix:
+    /* Inverse map for the chosen BZALIGN matrix, which stores the translation
+     * negated (standard affine rule, p_local = rows . p_world + t_col):
      * local_x = world_y - 1
      * local_y = -world_x + 2
      * local_z = world_z - 0.5
+     * The first six cases are placed on or just off the body's surfaces and
+     * only probe those boundaries as long as this map holds -- see the
+     * coverage guard in compare_body_batch_with_scalar().
      */
     append_case(x, y, z, ux, uy, uz, &idx, 2.0, 1.0, 1.5, 1.0, 0.0, 0.0);  /* local (0,0,1) */
     append_case(x, y, z, ux, uy, uz, &idx, 2.0, 2.0, 1.5, 0.0, -1.0, 0.0); /* local (1,0,1) on cyl */
@@ -241,6 +245,7 @@ compare_body_batch_with_scalar(struct osh_gemca_runtime const *rt,
     double uy[N_CASES];
     double uz[N_CASES];
     int inside_batch[N_CASES];
+    size_t n_inside = 0u;
     size_t i;
 
     fill_cases(x, y, z, ux, uy, uz);
@@ -261,7 +266,19 @@ compare_body_batch_with_scalar(struct osh_gemca_runtime const *rt,
 
         inside_scalar = reference_in_body(cold_body, &r);
         ASSERT_TRUE(inside_batch[i] == inside_scalar);
+        if (i < N_EDGE_CASES && inside_scalar) {
+            n_inside++;
+        }
     }
+
+    /* Batch and scalar agreeing is not enough: both read the same body->t, so a
+     * wrong transform moves the body out from under the hand-picked cases and
+     * the loop above still passes with all of them outside.  The random cases
+     * cannot catch that -- scattered over +-4 they land inside wherever the
+     * body sits -- so require that the first N_EDGE_CASES, placed on and just
+     * off the surfaces, still straddle the boundary. */
+    ASSERT_TRUE(n_inside > 0u);
+    ASSERT_TRUE(n_inside < N_EDGE_CASES);
 }
 
 static void test_body_batch_matches_scalar(void) {
@@ -327,15 +344,15 @@ static void test_body_batch_matches_scalar(void) {
     rt_bodies[2].t[0] = 0.0;
     rt_bodies[2].t[1] = 1.0;
     rt_bodies[2].t[2] = 0.0;
-    rt_bodies[2].t[3] = 1.0;
+    rt_bodies[2].t[3] = -1.0; /* translation stored negated; added on apply */
     rt_bodies[2].t[4] = -1.0;
     rt_bodies[2].t[5] = 0.0;
     rt_bodies[2].t[6] = 0.0;
-    rt_bodies[2].t[7] = -2.0;
+    rt_bodies[2].t[7] = 2.0;
     rt_bodies[2].t[8] = 0.0;
     rt_bodies[2].t[9] = 0.0;
     rt_bodies[2].t[10] = 1.0;
-    rt_bodies[2].t[11] = 0.5;
+    rt_bodies[2].t[11] = -0.5;
     rt_bodies[2].t[15] = 1.0;
 
     rt_surfaces[7].type = OSH_GEMCA_SURF_CYLZ;
