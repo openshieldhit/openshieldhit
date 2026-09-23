@@ -65,6 +65,31 @@ double osh_physics_highland_s_theta(
     return (x0_gcm2 / rho_gcm3) * ratio * ratio;
 }
 
+double osh_physics_highland_s_lateral(double t_total_mev,
+                                      double mass_mev,
+                                      double z_eff,
+                                      double rho_gcm3,
+                                      double path_scale_gcm2,
+                                      double x0_gcm2,
+                                      double lateral_max_cm) {
+    double theta0_ref; /* theta0 for a 1 cm step in this medium         [rad] */
+
+    if (rho_gcm3 <= 0.0 || lateral_max_cm <= 0.0) {
+        return 0.0;
+    }
+
+    /* theta0 of a 1 cm reference step: the thickness argument is rho * 1 cm.
+     * Because the log correction is taken at path_scale_gcm2 (not at the
+     * substep thickness), theta0(s) = theta0_ref * sqrt(s) exactly, so the
+     * cap below is the exact inverse of theta0(s) * s = lateral_max_cm. */
+    theta0_ref = osh_physics_highland_theta0(t_total_mev, mass_mev, z_eff, rho_gcm3, path_scale_gcm2, x0_gcm2);
+    if (theta0_ref <= 0.0) {
+        return 0.0;
+    }
+
+    return pow(lateral_max_cm / theta0_ref, 2.0 / 3.0);
+}
+
 void osh_physics_highland_scatter(double const v[3], double w[3], double theta0, struct osh_rng *rng) {
     double u1[3]; /* first transverse basis vector ⟂ v          */
     double u2[3]; /* second transverse basis vector ⟂ v         */

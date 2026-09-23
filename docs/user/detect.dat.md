@@ -3,6 +3,16 @@
 `detect.dat` defines scoring geometries, quantities, optional filters/settings,
 and output formats.
 
+A scoring geometry is a **passive** overlay: it records what crosses it but does
+not partition transport.  Zones from [`geo.dat`](geo.dat.md) alone define
+transport boundaries, so a scoring surface can sit strictly inside a single
+homogeneous zone.  Physics is nonetheless resolved along the transport step
+rather than only at zone boundaries: multiple Coulomb scattering is applied at
+substeps short enough that the modelled trajectory stays within 0.2 mm of the
+true one, so a scorer placed part-way through a long, low-density zone (an
+air-filled beam pipe, say) still sees the lateral spread accumulated upstream of
+it.  See [`MSCAT`](beam.dat.md#mscat).
+
 ## Geometry types
 
 ### Mesh
