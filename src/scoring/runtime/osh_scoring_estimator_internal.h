@@ -145,4 +145,18 @@ enum osh_status osh_scoring_estimator_point_dirtydose(struct osh_scoring_runtime
                                                       struct particle const *part,
                                                       struct step const *st);
 
+enum osh_status osh_scoring_estimator_point_dlet(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 size_t spatial_idx,
+                                                 struct particle const *part,
+                                                 struct step const *st);
+
+enum osh_status osh_scoring_estimator_point_tlet(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 size_t spatial_idx,
+                                                 struct particle const *part,
+                                                 struct step const *st);
+
 #endif /* OSH_SCORING_ESTIMATOR_INTERNAL_H */

@@ -481,9 +481,10 @@ def main() -> int:
         ("flu_alpha", "alphas", "C6"),
         ("flu_heavy", "heavy rec (Z>=3)", "C7"),
     ]
-    # Only the track-based species read cleanly; alphas/heavy DLET are dominated
-    # by rare high-LET transported recoils in low-statistics bins, and heavy-recoil
-    # LET is ~0 until point deposits feed LET (score_point energy/dose only today).
+    # Track-based species read cleanly; alphas/heavy DLET are noisier, dominated
+    # by rare high-LET recoils in low-statistics bins.  Heavy-recoil DLET is now
+    # non-zero: point deposits feed the LET averages using the recoil's
+    # birth-energy stopping power as a representative dE/dx (issue #227).
     DLET_SPECIES = [
         ("dlet", "all", "C0"),
         ("dlet_prim", "primary p", "C1"),
@@ -583,9 +584,11 @@ def main() -> int:
                     color="gray",
                 )
             a.tick_params(labelbottom=False)
-            # DLET-all omitted from the residual: OSH's heavy-recoil LET is not yet
-            # scored (point deposits feed dose, not LET), so DLET-all is not
-            # comparable; primary/all-proton DLET are.
+            # DLET-all omitted from the residual: heavy-recoil LET now feeds the
+            # DLET averages via point deposits (issue #227), but its representative
+            # birth-energy dE/dx is not expected to track SH12A's full recoil
+            # transport bin-for-bin; the residual keeps the cleaner
+            # primary/all-proton DLET, where the two codes are directly comparable.
             draw_residual_strip(fig.add_subplot(gs[1, 1], sharex=a), osh_let, sh_let, DLET_SPECIES[1:], zend)
 
             # --- Plateau secondary spectrum (spans lower-right) ---

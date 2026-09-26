@@ -27,10 +27,11 @@ extern "C" {
  * by page filters and differential axes.  @c st->q and @c st->ds are ignored
  * (a point has no exit point or track length); callers may set @c st->q == st->p.
  *
- * Only ENERGY and DOSE/DOSEGY pages receive a point contribution for now.
- * FLUENCE and LET/QEFF have no meaning without a track length and are wired in
- * later via precomputed LETd/LETt-versus-Ekin tables; those page kinds are
- * silently skipped. Mesh (X,Y,Z), Cyl (R,Z), and Zone geometries are supported.
+ * ENERGY, DOSE/DOSEGY, DIRTYDOSE/DIRTYDOSEGY and DLET/TLET pages receive a point
+ * contribution: the LET scorers use the recoil's stopping power at its birth
+ * energy as a representative dE/dx (issue #227).  FLUENCE and DQEFF/TQEFF have no
+ * meaning without a track length and are silently skipped.  Mesh (X,Y,Z),
+ * Cyl (R,Z), and Zone geometries are supported.
  *
  * @param rt       Read-only compiled scoring descriptor.
  * @param acc_set  Mutable accumulator storage (indexed in lockstep with rt->pages).

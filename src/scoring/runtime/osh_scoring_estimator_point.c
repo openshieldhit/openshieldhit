@@ -165,3 +165,132 @@ enum osh_status osh_scoring_estimator_point_dirtydose(struct osh_scoring_runtime
     }
     return OSH_OK;
 }
+
+/**
+ * @brief Point-deposit counterpart of osh_scoring_estimator_step_dlet.
+ *
+ * A sub-threshold recoil or fragment deposits its whole birth energy locally with
+ * no track length (issue #227).  Its representative LET is the stopping power at
+ * the birth energy S(medium, E_birth) * rho, read from the same SP table the step
+ * scorer uses; because @c st->p[3] == st->q[3] on the point path, the shared LET
+ * gather resolves that value at the birth energy (clamped to the table's
+ * low-energy end for very slow recoils).  The dose weight is the whole local
+ * energy release @c st->de, exactly like a track step's per-bin dose weight, so
+ * DLET books (LET * de, de) into (data, data2) and the ratio postprocess yields
+ * LET for an isolated deposit.
+ *
+ * A recoil species with no SP-table column has no representable dE/dx and is
+ * skipped here; ENERGY and DOSE still score it on their own point paths.
+ */
+enum osh_status osh_scoring_estimator_point_dlet(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 size_t spatial_idx,
+                                                 struct particle const *part,
+                                                 struct step const *st) {
+    size_t i;
+    double let_point;        /* LET this page scores for the deposit [MeV/cm] */
+    double dose_weight;      /* whole local energy release [MeV] */
+    double dlet_numerator;   /* LET * dose_weight, booked into acc->data */
+    double dlet_denominator; /* dose_weight, booked into acc->data2 */
+    struct osh_scoring_step_let_ctx let_ctx;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+    /* Mean step energy equals the birth energy here (p[3] == q[3]).  The de/score_len
+     * fallback baked into the gather is unused: we require an SP-table column
+     * (have_proj) below, since a point deposit has no track to derive LET from. */
+    let_ctx = osh_scoring_estimator_step_let_gather(rt, part, st, 1.0);
+    if (!let_ctx.have_proj) {
+        return OSH_OK;
+    }
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        /* A per-page Settings override changes the LET value, honoured by _apply. */
+        let_point = osh_scoring_estimator_step_let_apply(&let_ctx, rt, page);
+        if (!(let_point > 0.0)) {
+            continue;
+        }
+        if (spatial_idx >= page->diff_stride) {
+            return OSH_ESTATE;
+        }
+        /* Dose-weighted LET sample.  Differential axes are not valid for DLET pages,
+         * so spatial_idx is the complete bin index. */
+        dose_weight = st->de;
+        dlet_numerator = let_point * dose_weight;
+        dlet_denominator = dose_weight;
+        osh_score_deposit(acc->data, spatial_idx, dlet_numerator);
+        osh_score_deposit(acc->data2, spatial_idx, dlet_denominator);
+    }
+    return OSH_OK;
+}
+
+/**
+ * @brief Point-deposit counterpart of osh_scoring_estimator_step_tlet.
+ *
+ * Same representative birth-energy LET as osh_scoring_estimator_point_dlet, but
+ * track-averaged.  A stopping recoil traverses an effective track length equal to
+ * its residual range, approximated by de/LET (constant-LET slowing down).  This is
+ * exactly "like a track step" with LET = de/ds, so TLET books
+ * (LET * (de/LET), de/LET) == (de, de/LET) into (data, data2): the ratio
+ * postprocess collapses to LET for an isolated deposit, while the de/LET
+ * denominator gives the correct track-length weight against real track steps and
+ * other recoils sharing the bin (a high-LET, short-range recoil counts less than a
+ * low-LET, long-range one).
+ */
+enum osh_status osh_scoring_estimator_point_tlet(struct osh_scoring_runtime const *rt,
+                                                 struct osh_scoring_accumulator *acc_set,
+                                                 struct osh_scoring_geometry_score_group const *group,
+                                                 size_t spatial_idx,
+                                                 struct particle const *part,
+                                                 struct step const *st) {
+    size_t i;
+    double let_point;        /* LET this page scores for the deposit [MeV/cm] */
+    double track_weight;     /* effective track length de/LET [cm] */
+    double tlet_numerator;   /* LET * track_weight, booked into acc->data */
+    double tlet_denominator; /* track_weight, booked into acc->data2 */
+    struct osh_scoring_step_let_ctx let_ctx;
+    struct osh_scoring_page_runtime const *page;
+    struct osh_scoring_accumulator *acc;
+
+    if (part->z == 0 || part->a == 0 || !(st->rho > 0.0)) {
+        return OSH_OK;
+    }
+    /* See osh_scoring_estimator_point_dlet: birth-energy LET, have_proj required. */
+    let_ctx = osh_scoring_estimator_step_let_gather(rt, part, st, 1.0);
+    if (!let_ctx.have_proj) {
+        return OSH_OK;
+    }
+
+    for (i = 0; i < group->npages; ++i) {
+        page = &rt->pages[group->first_page + i];
+        acc = &acc_set[group->first_page + i];
+        if (!osh_scoring_page_passes_filters(page, part, st)) {
+            continue;
+        }
+        let_point = osh_scoring_estimator_step_let_apply(&let_ctx, rt, page);
+        if (!(let_point > 0.0)) {
+            continue; /* no representable LET -> also avoids the de/LET divide */
+        }
+        if (spatial_idx >= page->diff_stride) {
+            return OSH_ESTATE;
+        }
+        /* Effective track length of a stopping recoil: de/LET (constant-LET range).
+         * Differential axes are not valid for TLET pages, so spatial_idx is the
+         * complete bin index. */
+        track_weight = st->de / let_point;
+        tlet_numerator = let_point * track_weight;
+        tlet_denominator = track_weight;
+        osh_score_deposit(acc->data, spatial_idx, tlet_numerator);
+        osh_score_deposit(acc->data2, spatial_idx, tlet_denominator);
+    }
+    return OSH_OK;
+}
