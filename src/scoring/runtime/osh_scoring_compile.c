@@ -1,5 +1,6 @@
 #include "scoring/runtime/osh_scoring_compile.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +11,7 @@
 #include "openshieldhit/const.h"
 #include "openshieldhit/scoring.h"
 #include "scoring/runtime/osh_scoring_accumulator.h"
+#include "scoring/runtime/osh_scoring_multiformat.h"
 #include "scoring/runtime/osh_scoring_postprocess.h"
 
 /* Scratch record built during the first compile pass; sorted by geometry+kind
@@ -986,6 +988,8 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
 
     ordinal = 0u;
     for (i = 0; i < ws->noutputs; ++i) {
+        char const *primary_format;
+
         out = &rt->outputs[i];
 
         out->filename = strdup(ws->outputs[i].filename);
@@ -993,7 +997,14 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
             rc = OSH_ENOMEM;
             goto fail;
         }
-        out->fileformat = strdup(ws->outputs[i].fileformat ? ws->outputs[i].fileformat : "BDO");
+        /* The block's first requested format (lowercase, as stored by the
+         * parser); an empty list defaults to BDO.  Additional formats become
+         * extra runtime outputs in Phase 7 (issue #308). */
+        primary_format = "bdo";
+        if (ws->outputs[i].nfileformats > 0u) {
+            primary_format = ws->outputs[i].fileformats[0];
+        }
+        out->fileformat = strdup(primary_format);
         if (!out->fileformat) {
             rc = OSH_ENOMEM;
             goto fail;
@@ -1260,6 +1271,17 @@ enum osh_status osh_scoring_compile(struct osh_scoring_workspace const *ws,
                 rt->geometries[i].groups[current_group].score_kind = rt->pages[page_idx].score_kind;
             }
         }
+    }
+
+    /* --- Phase 7: expand multi-format outputs (issue #308). ---
+     * A block that requests several formats writes the *same* scored pages once
+     * per format; osh_scoring_expand_multiformat_outputs() adds one extra runtime
+     * output per additional format, all sharing the block's page indices (a cheap
+     * size_t copy — nothing in rt->pages[] is duplicated), so scoring memory is
+     * independent of the format count.  See osh_scoring_multiformat.c. */
+    rc = osh_scoring_expand_multiformat_outputs(ws, diag, rt);
+    if (rc != OSH_OK) {
+        goto fail;
     }
 
     free(output_geom_idx);

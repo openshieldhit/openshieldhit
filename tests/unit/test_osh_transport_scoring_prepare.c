@@ -65,7 +65,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.geometries[0].groups[1].npages == 2u);
 
     ASSERT_TRUE(strcmp(rt.outputs[0].filename, "NB_msh_energy.bdo") == 0);
-    ASSERT_TRUE(strcmp(rt.outputs[0].fileformat, "BDO") == 0);
+    ASSERT_TRUE(strcmp(rt.outputs[0].fileformat, "bdo") == 0);
     ASSERT_TRUE(rt.outputs[0].geometry_idx == 0u);
     ASSERT_TRUE(rt.outputs[0].npages == 1u);
 
@@ -83,7 +83,7 @@ static void test_compile_fixture_test01_detect(void) {
     ASSERT_TRUE(rt.pages[page_idx].nflat_rules == 0u);
 
     ASSERT_TRUE(strcmp(rt.outputs[1].filename, "NB_msh_fluence.bdo") == 0);
-    ASSERT_TRUE(strcmp(rt.outputs[1].fileformat, "BDO") == 0);
+    ASSERT_TRUE(strcmp(rt.outputs[1].fileformat, "bdo") == 0);
     ASSERT_TRUE(rt.outputs[1].geometry_idx == 0u);
     ASSERT_TRUE(rt.outputs[1].npages == 3u);
     ASSERT_TRUE(rt.outputs[1].page_indices[0] == 1u);

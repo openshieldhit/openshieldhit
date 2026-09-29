@@ -788,9 +788,12 @@ enum osh_status osh_simulation_save(struct osh_simulation const *sim) {
         return OSH_ESTATE;
     }
 
-    rc = osh_scoring_save(sim->scoring, &sim->scoring_runtime, sim->completed_nstat);
+    /* Best-effort save (issue #308): every target is attempted; a failing target
+     * is reported per-file by osh_scoring_save_diag() and the first error is
+     * returned here so the exit status still reflects the partial write. */
+    rc = osh_scoring_save_diag(sim->scoring, &sim->scoring_runtime, sim->completed_nstat, sim->diag);
     if (rc != OSH_OK) {
-        OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: scoring save failed");
+        OSH_DIAG_ERRORF(sim->diag, "%s", "simulation: one or more scoring outputs could not be written");
     }
     return rc;
 }
