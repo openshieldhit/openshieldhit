@@ -393,7 +393,9 @@ static int _postparse_spot_tmin(struct beam_spot const *spot,
     if (part->is_nucleus && part->a > 1u) {
         scale = (double) part->a;
     }
-    if (spot->t0 / scale < OSH_BEAM_TMIN) {
+    /* Compare in total MeV: t0 / A can round below TMIN for a beam exactly at
+     * the threshold (e.g. A = 43), whereas t0 was itself scaled as TMIN * A. */
+    if (spot->t0 < OSH_BEAM_TMIN * scale) {
         OSH_DIAG_ERRORF(diag,
                         "beam spot %zu: kinetic energy %.4g MeV (p0 = %.4g MeV/c) is below the minimum beam energy "
                         "%.4f (MeV/nucleon for ions, MeV otherwise)",

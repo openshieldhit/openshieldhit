@@ -913,6 +913,29 @@ static void test_setup_tmax0_momentum_below_tmin_returns_einval(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+/*
+ * An ion exactly at OSH_BEAM_TMIN is accepted.  For A = 43, (0.1 * 43) / 43
+ * rounds to 0.09999999999999999, so a per-nucleon comparison would reject it.
+ */
+static void test_setup_tmax0_ion_at_tmin_is_accepted(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY 20 43\nTMAX0 0.1\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->primary.a == 43);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 /* TMAX0 is parsed in double precision: digits beyond float's ~7 survive. */
 static void test_setup_tmax0_parses_double_precision(void) {
     char beam_path[512];
@@ -946,6 +969,7 @@ int main(void) {
     test_setup_tmax0_momentum_input_ion();
     test_setup_tmax0_energy_with_momentum_spread();
     test_setup_tmax0_momentum_below_tmin_returns_einval();
+    test_setup_tmax0_ion_at_tmin_is_accepted();
     test_setup_tmax0_parses_double_precision();
     test_setup_primary_invalid_returns_einval();
     test_setup_missing_primary_returns_einval();
