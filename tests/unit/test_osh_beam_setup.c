@@ -5,7 +5,9 @@
 
 #include "apps/osh/osh_app_osh.h"
 #include "beam/osh_beam_prepared.h"
+#include "common/osh_physics.h"
 #include "openshieldhit/status.h"
+#include "particle/osh_particle.h"
 #include "particle/osh_particle_pdg.h"
 
 #define ASSERT_TRUE(cond)                                                                                              \
@@ -828,6 +830,133 @@ static void test_setup_tcut0_missing_argument_returns_eparse(void) {
     ASSERT_TRUE(remove(beam_path) == 0);
 }
 
+/*
+ * Negative TMAX0 value and spread: total momentum p0 and momentum sigma in
+ * MeV/c, neither scaled by A.  T0 and the energy sigma are derived from the
+ * C-12 rest mass (first-order sigma conversion dT/dp = p/E).
+ */
+static void test_setup_tmax0_momentum_input_ion(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    struct particle part;
+    double t0_exp;
+    double tsigma_exp;
+    int rc;
+
+    ASSERT_TRUE(osh_particle_from_pdg(&part, 1000060120));
+    t0_exp = osh_physics_tkin(20000.0, part.mass);
+    tsigma_exp = 50.0 * 20000.0 / (t0_exp + part.mass);
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY 6 12\nTMAX0 -20000.0 -50.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(fabs(wb->spots[0].p0 - 20000.0) < 1e-9);
+    ASSERT_TRUE(fabs(wb->spots[0].psigma - 50.0) < 1e-9);
+    ASSERT_TRUE(fabs(wb->spots[0].t0 - t0_exp) < 1e-9);
+    ASSERT_TRUE(fabs(wb->spots[0].tsigma - tsigma_exp) < 1e-9);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+/* Mixed signs: positive energy with a negative (momentum) spread. */
+static void test_setup_tmax0_energy_with_momentum_spread(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    struct particle part;
+    double p0_exp;
+    double tsigma_exp;
+    int rc;
+
+    ASSERT_TRUE(osh_particle_from_pdg(&part, OSH_PART_PDG_PROTON));
+    p0_exp = osh_physics_momentum(150.0, part.mass);
+    tsigma_exp = 2.0 * p0_exp / (150.0 + part.mass);
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 150.0 -2.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(fabs(wb->spots[0].t0 - 150.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].p0 - p0_exp) < 1e-9);
+    ASSERT_TRUE(fabs(wb->spots[0].psigma - 2.0) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].tsigma - tsigma_exp) < 1e-9);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+/* A momentum input whose kinetic energy falls below OSH_BEAM_TMIN is rejected. */
+static void test_setup_tmax0_momentum_below_tmin_returns_einval(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    /* p0 = 5 MeV/c for a proton is T0 ~ 0.013 MeV, below 0.1 MeV */
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 -5.0\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_EINVAL);
+    ASSERT_TRUE(wb == NULL);
+
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+/*
+ * An ion exactly at OSH_BEAM_TMIN is accepted.  For A = 43, (0.1 * 43) / 43
+ * rounds to 0.09999999999999999, so a per-nucleon comparison would reject it.
+ */
+static void test_setup_tmax0_ion_at_tmin_is_accepted(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY 20 43\nTMAX0 0.1\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(wb->primary.a == 43);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
+/* TMAX0 is parsed in double precision: digits beyond float's ~7 survive. */
+static void test_setup_tmax0_parses_double_precision(void) {
+    char beam_path[512];
+    char beam_text[512];
+    struct osh_beam_workspace *wb = NULL;
+    int rc;
+
+    snprintf(beam_text, sizeof beam_text, "PRIMARY proton\nTMAX0 123.456789012 0.123456789\nBEAMPOS 0.0 0.0 -10.0\n");
+    _write_temp_file(beam_path, sizeof(beam_path), beam_text);
+
+    rc = osh_beam_setup_from_path(beam_path, NULL, &wb);
+
+    ASSERT_TRUE(rc == OSH_OK);
+    ASSERT_TRUE(wb != NULL);
+    ASSERT_TRUE(fabs(wb->spots[0].t0 - 123.456789012) < 1e-12);
+    ASSERT_TRUE(fabs(wb->spots[0].tsigma - 0.123456789) < 1e-12);
+
+    ASSERT_TRUE(osh_beam_workspace_free(wb) == OSH_OK);
+    ASSERT_TRUE(remove(beam_path) == 0);
+}
+
 int main(void) {
     test_beam_spots_set_replace_and_validate();
     test_setup_single_spot_from_beamdat();
@@ -837,6 +966,11 @@ int main(void) {
     test_setup_primary_name_resolves_particle();
     test_setup_primary_pdg_resolves_particle();
     test_setup_primary_za_resolves_ion();
+    test_setup_tmax0_momentum_input_ion();
+    test_setup_tmax0_energy_with_momentum_spread();
+    test_setup_tmax0_momentum_below_tmin_returns_einval();
+    test_setup_tmax0_ion_at_tmin_is_accepted();
+    test_setup_tmax0_parses_double_precision();
     test_setup_primary_invalid_returns_einval();
     test_setup_missing_primary_returns_einval();
     test_setup_unknown_key_returns_eparse();

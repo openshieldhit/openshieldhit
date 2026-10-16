@@ -65,8 +65,17 @@ TMAX0   200.0   2.0    # 200 MeV/nucleon, σ = 2 MeV/nucleon
 TMAX0  -1000.0         # p₀ = 1000 MeV/c
 ```
 
-The spread is an ordinary (untruncated) Gaussian.  Add [`TCUT0`](#tcut0) to
-confine it to a window, e.g. N(60, 5²) MeV restricted to [58, 62] MeV.
+The spread is a standard deviation σ, not a FWHM.  Energies are always sampled
+from a Gaussian in kinetic energy: a momentum spread (negative `spread`) is
+converted once to an energy σ with the first-order relation
+σ_T = σ_p · p₀ / (T₀ + m), which is accurate when σ ≪ T₀.
+
+The Gaussian is untruncated, except that a sampled energy below zero is clamped
+to 0.  Add [`TCUT0`](#tcut0) to confine it to a window, e.g. N(60, 5²) MeV
+restricted to [58, 62] MeV.
+
+The kinetic energy must be at least 0.1 MeV/nucleon (0.1 MeV for non-ions).  This
+also applies to momentum input, checked after T₀ has been derived from p₀.
 
 ### TCUT0
 
