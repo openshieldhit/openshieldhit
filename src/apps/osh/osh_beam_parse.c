@@ -1033,6 +1033,10 @@ static int _parse_stragg(PARSE_HANDLER_ARGS) {
  * complementary quantity using the particle mass, and checks which was given
  * by testing which field is non-zero.
  *
+ * A positive value below OSH_BEAM_TMIN is rejected here, where the line number
+ * is still known.  A momentum value can only be checked once the primary's mass
+ * is known, so that check happens in post-parse (osh_beam.c).
+ *
  * @param[in,out] beam  Unused.
  * @param[in]     oshf  Used for error diagnostics.
  * @param[in]     args  One or two floats: value [spread].
@@ -1041,45 +1045,46 @@ static int _parse_stragg(PARSE_HANDLER_ARGS) {
  */
 static int _parse_tmax0(PARSE_HANDLER_ARGS) {
     struct osh_beam_spot *spot;
-    float _f[2];
+    double _f[2];
 
     (void) beam;
     spot = spot_from_state(state);
     if (!spot) {
         return OSH_ESTATE;
     }
-    _f[0] = 0.0f;
-    _f[1] = 0.0f;
-    if (sscanf(args, "%f %f", &_f[0], &_f[1]) < 1) {
+    _f[0] = 0.0;
+    _f[1] = 0.0;
+    if (sscanf(args, "%lf %lf", &_f[0], &_f[1]) < 1) {
         OSH_DIAG_ERRORF(state->diag, "in %s line %i: parse error '%s'", oshf->filename, oshf->lineno, args);
         return OSH_EPARSE;
     }
 
-    if (_f[0] < 0.0f) {
-        spot->p0 = fabs((double) _f[0]); /* momentum given */
+    if (_f[0] < 0.0) {
+        spot->p0 = fabs(_f[0]); /* momentum given */
         spot->t0 = 0.0;
         spot->t0_per_nucleon = 0;
     } else {
-        spot->t0 = (double) _f[0]; /* energy per nucleon until post-parse for ions */
+        spot->t0 = _f[0]; /* energy per nucleon until post-parse for ions */
         spot->p0 = 0.0;
         spot->t0_per_nucleon = 1;
         if (_f[0] < OSH_BEAM_TMIN) {
-            OSH_DIAG_ERRORF(state->diag,
-                            "in %s line %i: TMAX0 %.4f MeV/nucleon is below the minimum beam energy %.4f MeV/nucleon",
-                            oshf->filename,
-                            oshf->lineno,
-                            (double) _f[0],
-                            OSH_BEAM_TMIN);
+            OSH_DIAG_ERRORF(
+                state->diag,
+                "in %s line %i: TMAX0 %.4f is below the minimum beam energy %.4f (MeV/nucleon for ions, MeV otherwise)",
+                oshf->filename,
+                oshf->lineno,
+                _f[0],
+                OSH_BEAM_TMIN);
             return OSH_EPARSE;
         }
     }
 
-    if (_f[1] < 0.0f) {
-        spot->psigma = fabs((double) _f[1]); /* momentum spread given */
+    if (_f[1] < 0.0) {
+        spot->psigma = fabs(_f[1]); /* momentum spread given */
         spot->tsigma = 0.0;
         spot->tsigma_per_nucleon = 0;
     } else {
-        spot->tsigma = (double) _f[1]; /* energy spread per nucleon until post-parse for ions */
+        spot->tsigma = _f[1]; /* energy spread per nucleon until post-parse for ions */
         spot->psigma = 0.0;
         spot->tsigma_per_nucleon = 1;
     }

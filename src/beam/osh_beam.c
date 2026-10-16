@@ -27,6 +27,10 @@ static int _spot_shape_valid(char shape);
 static int _spot_has_finite_values(struct beam_spot const *spot);
 static int _resolve_primary_particle(struct beam_workspace const *wb, struct particle *part_out);
 static void _postparse_spot_energy(struct beam_spot *spot, struct particle const *part);
+static int _postparse_spot_tmin(struct beam_spot const *spot,
+                                struct particle const *part,
+                                size_t idx,
+                                struct osh_diag_sink const *diag);
 static int _postparse_spot_etrunc(struct beam_spot const *spot,
                                   double lo,
                                   double hi,
@@ -356,6 +360,52 @@ static void _postparse_spot_energy(struct beam_spot *spot, struct particle const
     }
 }
 
+/**
+ * @brief Reject a spot whose kinetic energy is below OSH_BEAM_TMIN.
+ *
+ * @details
+ * The TMAX0 parser rejects a too-low energy directly, but a momentum input
+ * (negative TMAX0) only becomes a kinetic energy once the primary's mass is
+ * known, so it is checked here, after _postparse_spot_energy().  The threshold
+ * is per nucleon for ions (A > 1) and in MeV otherwise, matching TMAX0.
+ *
+ * Spots with neither t0 nor p0 set, or with no resolved primary, are left
+ * alone: they carry no energy to check.
+ *
+ * @param[in] spot  Spot with t0 already in total MeV.
+ * @param[in] part  Resolved primary particle, may be NULL.
+ * @param[in] idx   Zero-based spot index, for the diagnostic.
+ * @param[in] diag  Diagnostic sink, may be NULL.
+ *
+ * @returns OSH_OK if the energy is acceptable, OSH_EINVAL otherwise.
+ */
+static int _postparse_spot_tmin(struct beam_spot const *spot,
+                                struct particle const *part,
+                                size_t idx,
+                                struct osh_diag_sink const *diag) {
+    double scale;
+
+    if (!part || (spot->t0 <= 0.0 && spot->p0 <= 0.0)) {
+        return OSH_OK;
+    }
+
+    scale = 1.0;
+    if (part->is_nucleus && part->a > 1u) {
+        scale = (double) part->a;
+    }
+    if (spot->t0 / scale < OSH_BEAM_TMIN) {
+        OSH_DIAG_ERRORF(diag,
+                        "beam spot %zu: kinetic energy %.4g MeV (p0 = %.4g MeV/c) is below the minimum beam energy "
+                        "%.4f (MeV/nucleon for ions, MeV otherwise)",
+                        idx + 1u,
+                        spot->t0,
+                        spot->p0,
+                        OSH_BEAM_TMIN);
+        return OSH_EINVAL;
+    }
+    return OSH_OK;
+}
+
 static int _resolve_primary_particle(struct beam_workspace const *wb, struct particle *part_out) {
     if (!wb || !part_out || !wb->has_primary) {
         return OSH_EINVAL;
@@ -471,6 +521,7 @@ static int _postparse_spot_etrunc(struct beam_spot const *spot,
  * @details
  * Iterates over all spots and for each:
  *   - derives missing energy/momentum via _postparse_spot_energy()
+ *   - rejects energies below OSH_BEAM_TMIN via _postparse_spot_tmin()
  *   - builds the PZALIGN->UNIVERSE affine matrix via _build_spot_tm()
  *   - when TCUT0 is active, precomputes that spot's truncated-energy
  *     inverse-CDF constants via _postparse_spot_etrunc()
@@ -498,7 +549,8 @@ static int _postparse_spot_etrunc(struct beam_spot const *spot,
  * @param[in]     diag  Diagnostic sink for setup warnings, may be NULL.
  *
  * @returns OSH_OK on success, OSH_ENOMEM on allocation failure,
- *          OSH_EINVAL if any spot weight is negative.
+ *          OSH_EINVAL if any spot weight is negative or any spot energy is
+ *          below OSH_BEAM_TMIN.
  */
 static int _wb_postparse(struct beam_workspace *wb, struct osh_diag_sink const *diag) {
     size_t i;
@@ -576,6 +628,10 @@ static int _wb_postparse(struct beam_workspace *wb, struct osh_diag_sink const *
     etrunc_warned = 0;
     for (i = 0; i < wb->nspots; i++) {
         _postparse_spot_energy(&wb->spots[i], part);
+        rc = _postparse_spot_tmin(&wb->spots[i], part, i, diag);
+        if (rc != OSH_OK) {
+            return rc;
+        }
         _build_spot_tm(&wb->spots[i], &wb->shared, &prepared->tm[i * 16u]);
 
         if (prepared->etrunc) {
